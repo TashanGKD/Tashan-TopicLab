@@ -1,0 +1,211 @@
+/* Google Fonts - Noto Serif SC */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base Styles */
+@layer base {
+  html {
+    font-family: 'Noto Serif SC', STSong, SimSun, serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  body {
+    @apply bg-white text-black antialiased;
+    font-feature-settings: "kern" 1, "liga" 1;
+  }
+  
+  /* Selection */
+  ::selection {
+    @apply bg-black text-white;
+  }
+}
+
+/* Components */
+@layer components {
+  /* Card Base */
+  .card {
+    @apply border border-gray-200 p-6;
+  }
+  
+  /* Button Base */
+  .btn {
+    @apply px-4 py-2 text-sm font-medium transition-all duration-200;
+  }
+  
+  .btn-primary {
+    @apply btn bg-black text-white hover:bg-gray-900;
+  }
+  
+  .btn-secondary {
+    @apply btn border border-gray-200 bg-white text-black hover:border-black;
+  }
+  
+  /* Input Base */
+  .input {
+    @apply w-full border border-gray-200 px-3 py-2 text-sm transition-colors focus:border-black focus:outline-none;
+  }
+  
+  /* Navigation Link */
+  .nav-link {
+    @apply text-sm text-gray-500 transition-colors hover:text-black;
+  }
+  
+  .nav-link-active {
+    @apply nav-link text-black font-medium;
+  }
+}
+
+/* Animations */
+@layer utilities {
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.2; }
+  }
+  
+  .animate-spin {
+    animation: spin 0.8s linear infinite;
+  }
+  
+  .animate-blink {
+    animation: blink 1.2s ease-in-out infinite;
+  }
+  
+  /* Typography Utilities */
+  .prose-serif {
+    font-family: 'Noto Serif SC', STSong, SimSun, serif;
+  }
+  
+  /* Border Utilities */
+  .border-thin {
+    border-width: 0.5px;
+  }
+}
+
+/* Markdown Content Styling - Monochrome */
+.markdown-content {
+  @apply leading-relaxed text-black;
+  font-family: 'Noto Serif SC', STSong, SimSun, serif;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+  @apply mt-8 mb-4 font-bold text-black;
+  font-family: 'Noto Serif SC', STSong, SimSun, serif;
+}
+
+.markdown-content h1 {
+  @apply text-2xl border-b border-black pb-2;
+}
+
+.markdown-content h2 {
+  @apply text-xl border-b border-gray-200 pb-1;
+}
+
+.markdown-content h3 {
+  @apply text-lg;
+}
+
+.markdown-content h4 {
+  @apply text-base;
+}
+
+.markdown-content p {
+  @apply mb-4;
+}
+
+.markdown-content p:last-child {
+  @apply mb-0;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  @apply mb-4 pl-6;
+}
+
+.markdown-content li {
+  @apply mb-2;
+}
+
+.markdown-content a {
+  @apply text-black underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.markdown-content a:hover {
+  text-decoration-thickness: 2px;
+}
+
+.markdown-content code {
+  @apply bg-gray-100 px-1 py-0.5 text-sm;
+  font-family: 'Courier New', Courier, monospace;
+}
+
+.markdown-content pre {
+  @apply bg-gray-900 text-white p-4 mb-4 overflow-x-auto;
+}
+
+.markdown-content pre code {
+  @apply bg-transparent p-0;
+}
+
+.markdown-content blockquote {
+  @apply border-l-2 border-black pl-4 my-4 text-gray-600 italic;
+}
+
+.markdown-content hr {
+  @apply border-t border-gray-200 my-8;
+}
+
+.markdown-content table {
+  @apply w-full border-collapse mb-4 text-sm;
+}
+
+.markdown-content th,
+.markdown-content td {
+  @apply border border-gray-200 px-3 py-2 text-left;
+}
+
+.markdown-content th {
+  @apply bg-gray-50 font-semibold text-black;
+}
+
+.markdown-content td {
+  @apply text-gray-700;
+}
+
+/* Status Badge - Monochrome */
+.status-badge {
+  @apply inline-flex items-center px-2 py-0.5 text-xs border;
+}
+
+.status-badge-default {
+  @apply status-badge border-gray-200 text-gray-600;
+}
+
+.status-badge-active {
+  @apply status-badge border-black text-black;
+}
+
+/* Spinner - Monochrome */
+.spinner {
+  @apply inline-block w-4 h-4 border-2 border-gray-200 border-t-black rounded-full animate-spin;
+}
+
+/* Expert Dot */
+.expert-dot-active {
+  @apply w-2 h-2 rounded-full bg-black animate-blink;
+}

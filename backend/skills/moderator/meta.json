@@ -1,0 +1,36 @@
+{
+  "modes": {
+    "standard": {
+      "id": "standard",
+      "name": "标准圆桌",
+      "description": "平衡的多轮讨论，逐步从发散到收敛",
+      "num_rounds": 5,
+      "convergence_strategy": "开场各抒己见 → 中间回应互动 → 深化讨论 → 最后一轮总结",
+      "prompt_file": "standard.md"
+    },
+    "brainstorm": {
+      "id": "brainstorm",
+      "name": "头脑风暴",
+      "description": "鼓励发散思维，收集尽可能多的创意和可能性",
+      "num_rounds": 5,
+      "convergence_strategy": "发散创意 → 归类整理 → 筛选评估 → 优化方案收敛 → 最后一轮路线图",
+      "prompt_file": "brainstorm.md"
+    },
+    "debate": {
+      "id": "debate",
+      "name": "辩论赛",
+      "description": "对立观点深度碰撞，通过论证和反驳探索真理",
+      "num_rounds": 4,
+      "convergence_strategy": "立场陈述 → 交叉质询与反驳 → 最后一轮总结陈词",
+      "prompt_file": "debate.md"
+    },
+    "review": {
+      "id": "review",
+      "name": "评审会",
+      "description": "严格评审，逐项检查技术可行性、风险、资源和影响",
+      "num_rounds": 5,
+      "convergence_strategy": "逐维度评审（技术/创新/风险/资源/影响）→ 最后一轮综合评分与建议",
+      "prompt_file": "review.md"
+    }
+  }
+}
