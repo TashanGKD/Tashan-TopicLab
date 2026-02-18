@@ -10,6 +10,7 @@ from typing import Any
 
 from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
 
+from app.core.model_pricing import calculate_cost_from_usage
 from .config import get_agent_config
 from .experts import EXPERT_SPECS, build_experts, build_experts_from_workspace
 from .moderator_modes import get_moderator_prompt, prepare_moderator_skill
@@ -94,9 +95,11 @@ async def run_roundtable(
     try:
         async for message in query(prompt=prompt, options=options):
             if isinstance(message, ResultMessage):
-                logger.info(f"Finished: turns={message.num_turns}, cost={message.total_cost_usd}")
+                logger.info(f"Finished: turns={message.num_turns}, cost={message.total_cost_usd}, usage={message.usage}")
                 result_info["num_turns"] = message.num_turns
-                result_info["total_cost_usd"] = message.total_cost_usd
+                # Use custom per-model pricing if configured, otherwise fall back to SDK value
+                custom_cost = calculate_cost_from_usage(model or "", message.usage) if model else None
+                result_info["total_cost_usd"] = custom_cost if custom_cost is not None else message.total_cost_usd
     except Exception as e:
         logger.error(f"Error in query loop: {e}", exc_info=True)
         raise

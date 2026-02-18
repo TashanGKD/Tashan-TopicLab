@@ -372,7 +372,7 @@ export default function TopicDetail() {
                   <span className="text-sm font-serif font-semibold text-black">讨论总结</span>
                   {topic.roundtable_result.cost_usd != null && (
                     <span className="text-xs font-serif text-gray-400">
-                      花费：${topic.roundtable_result.cost_usd.toFixed(4)}
+                      花费：¥{topic.roundtable_result.cost_usd.toFixed(4)}
                     </span>
                   )}
                 </div>
