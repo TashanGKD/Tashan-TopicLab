@@ -34,11 +34,12 @@ jobs:
             REPO_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git"
             if [ ! -d "$REPO_DIR/.git" ]; then
               mkdir -p "$BASE_DIR"
-              git clone "$REPO_URL" "$REPO_DIR"
+              for i in 1 2 3; do git clone "$REPO_URL" "$REPO_DIR" && break || sleep 5; done
             fi
             cd "$REPO_DIR"
             git remote set-url origin "$REPO_URL"
-            git pull
+            for i in 1 2 3; do git fetch origin && break || sleep 5; done
+            git reset --hard origin/main
             docker compose up -d --build
             docker image prune -f
 
