@@ -188,10 +188,10 @@ export default function TopicDetail() {
     }
   }
 
-  const handleStartRoundtable = async () => {
+  const handleStartRoundtable = async (model: string) => {
     if (!id) return
     setStartingRoundtable(true)
-    const req: StartRoundtableRequest = { num_rounds: 5, max_turns: 60, max_budget_usd: 5.0 }
+    const req: StartRoundtableRequest = { num_rounds: 5, max_turns: 60, max_budget_usd: 5.0, model }
     try {
       await roundtableApi.start(id, req)
       setTopic(prev => prev ? { ...prev, roundtable_status: 'running' } : prev)

@@ -98,6 +98,7 @@ class StartRoundtableRequest(BaseModel):
     num_rounds: int = Field(default=5, ge=1, le=10)
     max_turns: int = Field(default=60, ge=10, le=200)
     max_budget_usd: float = Field(default=5.0, ge=0.1, le=50.0)
+    model: str | None = None
 
 
 class RoundtableProgress(BaseModel):

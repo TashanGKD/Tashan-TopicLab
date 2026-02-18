@@ -113,6 +113,7 @@ async def run_roundtable_for_topic(
     expert_names: list[str] | None = None,
     max_turns: int = 60,
     max_budget_usd: float = 5.0,
+    model: str | None = None,
 ) -> dict[str, Any]:
     """Run roundtable for a topic; return discussion_history, summary, cost, etc."""
     from app.core.config import get_workspace_base
@@ -122,6 +123,8 @@ async def run_roundtable_for_topic(
     init_discussion_history(ws_path, topic_title, topic_body)
 
     config = get_agent_config()
+    if model:
+        config = {**config, "model": model}
     topic_text = f"{topic_title}\n\n{topic_body}"
     result_info = await run_roundtable(
         workspace_dir=ws_path,

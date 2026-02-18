@@ -69,10 +69,22 @@ export interface CreateTopicRequest {
   category?: string
 }
 
+export const ROUNDTABLE_MODELS = [
+  { value: 'qwen-flash', label: 'Qwen Flash（默认）' },
+  { value: 'qwen3.5-plus', label: 'Qwen3.5 Plus' },
+  { value: 'qwen3-max', label: 'Qwen3 Max' },
+  { value: 'deepseek-v3.2', label: 'DeepSeek V3.2' },
+  { value: 'MiniMax-M2.1', label: 'MiniMax M2.1' },
+  { value: 'kimi-k2.5', label: 'Kimi K2.5' },
+  { value: 'glm-5', label: 'GLM-5' },
+  { value: 'glm-4.7', label: 'GLM-4.7' },
+]
+
 export interface StartRoundtableRequest {
   num_rounds: number
   max_turns: number
   max_budget_usd: number
+  model?: string
 }
 
 export interface RoundtableProgress {
@@ -171,6 +183,8 @@ export const topicExpertsApi = {
   delete: (topicId: string, expertName: string) => api.delete(`/topics/${topicId}/experts/${expertName}`),
   generate: (topicId: string, data: GenerateExpertRequest) =>
     api.post<GenerateExpertResponse>(`/topics/${topicId}/experts/generate`, data),
+  share: (topicId: string, expertName: string) =>
+    api.post(`/topics/${topicId}/experts/${expertName}/share`),
 }
 
 // Moderator modes API

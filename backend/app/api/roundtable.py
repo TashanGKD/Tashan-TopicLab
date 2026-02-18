@@ -35,6 +35,7 @@ async def run_roundtable_background(
     expert_names: list[str],
     max_turns: int,
     max_budget_usd: float,
+    model: str | None = None,
 ):
     """Background task to run roundtable."""
     try:
@@ -48,6 +49,7 @@ async def run_roundtable_background(
             expert_names=expert_names,
             max_turns=max_turns,
             max_budget_usd=max_budget_usd,
+            model=model,
         )
         logger.info(f"Roundtable completed for topic {topic_id}, result: {result}")
         update_topic_roundtable(
@@ -95,6 +97,7 @@ async def start_roundtable_endpoint(topic_id: str, req: StartRoundtableRequest):
         expert_names=topic.expert_names,
         max_turns=req.max_turns,
         max_budget_usd=req.max_budget_usd,
+        model=req.model,
     ))
 
     return RoundtableStatusResponse(

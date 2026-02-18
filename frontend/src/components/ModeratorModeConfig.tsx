@@ -3,13 +3,14 @@ import {
   ModeratorModeInfo,
   ModeratorModeConfig,
   moderatorModesApi,
+  ROUNDTABLE_MODELS,
 } from '../api/client'
 import { handleApiError, handleApiSuccess } from '../utils/errorHandler'
 
 interface ModeratorModeConfigProps {
   topicId: string
   onModeChange?: () => void
-  onStartRoundtable?: () => Promise<void>
+  onStartRoundtable?: (model: string) => Promise<void>
   isStarting?: boolean
   isRunning?: boolean
   isCompleted?: boolean
@@ -35,6 +36,7 @@ export default function ModeratorModeConfigComponent({
   const [showCustomDialog, setShowCustomDialog] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [generating, setGenerating] = useState(false)
+  const [selectedModel, setSelectedModel] = useState(ROUNDTABLE_MODELS[0].value)
 
   useEffect(() => {
     loadPresetModes()
@@ -201,16 +203,31 @@ export default function ModeratorModeConfigComponent({
       )}
 
       {onStartRoundtable ? (
-        <button
-          onClick={async () => {
-            await handleSaveMode()
-            await onStartRoundtable()
-          }}
-          disabled={isStarting || isRunning}
-          className="bg-gray-900 hover:bg-black text-white px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
-        >
-          {isStarting ? '启动中...' : isRunning ? '运行中...' : isCompleted ? '重新启动' : '启动讨论'}
-        </button>
+        <>
+          <div className="mb-4">
+            <label className={labelClass}>推理模型</label>
+            <select
+              className={inputClass}
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              disabled={isStarting || isRunning}
+            >
+              {ROUNDTABLE_MODELS.map((m) => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={async () => {
+              await handleSaveMode()
+              await onStartRoundtable(selectedModel)
+            }}
+            disabled={isStarting || isRunning}
+            className="bg-gray-900 hover:bg-black text-white px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+          >
+            {isStarting ? '启动中...' : isRunning ? '运行中...' : isCompleted ? '重新启动' : '启动讨论'}
+          </button>
+        </>
       ) : (
         <button onClick={handleSaveMode} className="bg-gray-900 hover:bg-black text-white px-4 py-2 text-sm font-medium transition-colors">
           保存模式配置
