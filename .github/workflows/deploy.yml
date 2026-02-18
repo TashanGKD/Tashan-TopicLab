@@ -38,7 +38,7 @@ jobs:
             fi
             cd "$REPO_DIR"
             git remote set-url origin "$REPO_URL"
-            for i in 1 2 3; do git fetch origin && break || sleep 5; done
+            for i in 1 2 3; do git fetch origin && break || { [ $i -eq 3 ] && echo "git fetch failed after 3 retries" && exit 1; sleep 5; }; done
             git reset --hard origin/main
             docker compose build --no-cache
             docker compose down
