@@ -40,7 +40,9 @@ jobs:
             git remote set-url origin "$REPO_URL"
             for i in 1 2 3; do git fetch origin && break || sleep 5; done
             git reset --hard origin/main
-            docker compose up -d --build
+            docker compose build --no-cache
+            docker compose down
+            docker compose up -d
             docker image prune -f
 
             # 从 .env 读取前端端口，默认 3000
