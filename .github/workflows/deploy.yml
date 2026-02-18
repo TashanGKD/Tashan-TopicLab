@@ -1,0 +1,69 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: deploy-${{ github.repository }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to Server
+        uses: appleboy/ssh-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: GITHUB_TOKEN,REPO
+          timeout: 30m
+          command_timeout: 30m
+          script: |
+            set -euo pipefail
+            BASE_DIR="${{ secrets.DEPLOY_PATH || '/var/www/github-actions/repos' }}"
+            REPO_NAME=$(basename "$REPO")
+            REPO_DIR="$BASE_DIR/$REPO_NAME"
+            REPO_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git"
+            if [ ! -d "$REPO_DIR/.git" ]; then
+              mkdir -p "$BASE_DIR"
+              git clone "$REPO_URL" "$REPO_DIR"
+            fi
+            cd "$REPO_DIR"
+            git remote set-url origin "$REPO_URL"
+            git pull
+            docker compose up -d --build
+            docker image prune -f
+
+            # 从 .env 读取前端端口，默认 3000
+            FRONTEND_PORT=$(grep -E '^FRONTEND_PORT=' .env 2>/dev/null | cut -d= -f2 || echo 3000)
+
+            # 写入 nginx location 配置
+            printf '%s\n' \
+              'location /topic-lab/ {' \
+              "    proxy_pass http://127.0.0.1:${FRONTEND_PORT}/topic-lab/;" \
+              '    proxy_set_header Host $host;' \
+              '    proxy_set_header X-Real-IP $remote_addr;' \
+              '    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' \
+              '}' \
+              '' \
+              'location /api/ {' \
+              "    proxy_pass http://127.0.0.1:${FRONTEND_PORT}/api/;" \
+              '    proxy_set_header Host $host;' \
+              '    proxy_set_header X-Real-IP $remote_addr;' \
+              '    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' \
+              '}' \
+              | sudo tee /etc/nginx/conf.d/topic-lab.conf > /dev/null
+            sudo nginx -t && sudo nginx -s reload
+
+            echo "--------------------------------------------"
+            echo "Frontend: http://${{ secrets.DEPLOY_HOST }}/topic-lab"
+            echo "Commit:   ${{ github.sha }}"
+            echo "--------------------------------------------"
