@@ -45,22 +45,17 @@ jobs:
             # 从 .env 读取前端端口，默认 3000
             FRONTEND_PORT=$(grep -E '^FRONTEND_PORT=' .env 2>/dev/null | cut -d= -f2 || echo 3000)
 
-            # 写入 nginx location 配置
+            # 写入 nginx snippet（仅 location 块，由 tashan.chat server 块 include）
+            mkdir -p /etc/nginx/snippets
             printf '%s\n' \
-              'location /topic-lab/ {' \
+              'location ^~ /topic-lab/ {' \
               "    proxy_pass http://127.0.0.1:${FRONTEND_PORT}/topic-lab/;" \
               '    proxy_set_header Host $host;' \
               '    proxy_set_header X-Real-IP $remote_addr;' \
               '    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' \
+              '    proxy_set_header X-Forwarded-Proto $scheme;' \
               '}' \
-              '' \
-              'location /api/ {' \
-              "    proxy_pass http://127.0.0.1:${FRONTEND_PORT}/api/;" \
-              '    proxy_set_header Host $host;' \
-              '    proxy_set_header X-Real-IP $remote_addr;' \
-              '    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' \
-              '}' \
-              | sudo tee /etc/nginx/conf.d/topic-lab.conf > /dev/null
+              | sudo tee /etc/nginx/snippets/topic-lab.conf > /dev/null
             sudo nginx -t && sudo nginx -s reload
 
             echo "--------------------------------------------"
