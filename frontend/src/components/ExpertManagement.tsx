@@ -112,10 +112,16 @@ export default function ExpertManagement({ topicId, onExpertsChange }: ExpertMan
     }
   }
 
-  const handleEdit = (expert: TopicExpert) => {
+  const handleEdit = async (expert: TopicExpert) => {
     setSelectedExpert(expert)
     setEditContent('')
     setShowEditDialog(true)
+    try {
+      const res = await topicExpertsApi.getContent(topicId, expert.name)
+      setEditContent(res.data.role_content)
+    } catch (err) {
+      handleApiError(err, '加载专家内容失败')
+    }
   }
 
   const handleSaveEdit = async () => {
@@ -130,6 +136,17 @@ export default function ExpertManagement({ topicId, onExpertsChange }: ExpertMan
       handleApiSuccess('专家更新成功')
     } catch (err: any) {
       handleApiError(err, '更新失败')
+    }
+  }
+
+  const handleShare = async (expert: TopicExpert) => {
+    if (!confirm(`将「${expert.label}」分享到平台预设库？所有用户均可添加此专家。`)) return
+    try {
+      await topicExpertsApi.share(topicId, expert.name)
+      await loadPresetExperts()
+      handleApiSuccess(`「${expert.label}」已共享到平台`)
+    } catch (err: any) {
+      handleApiError(err, '分享失败')
     }
   }
 
@@ -166,6 +183,13 @@ export default function ExpertManagement({ topicId, onExpertsChange }: ExpertMan
               className="text-gray-400 hover:text-black text-xs transition-colors"
             >
               编辑
+            </button>
+            <button
+              onClick={() => handleShare(expert)}
+              className="text-gray-400 hover:text-blue-600 text-xs transition-colors"
+              title="分享到平台预设库"
+            >
+              共享
             </button>
             <button
               onClick={() => handleDelete(expert.name)}

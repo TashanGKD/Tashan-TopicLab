@@ -95,7 +95,7 @@ async def run_expert_reply(
     user_question: str,
     reply_post_id: str,
     reply_created_at: str,
-    max_turns: int = 50,
+    max_turns: int = 100,
     max_budget_usd: float = 10.0,
 ) -> dict[str, Any]:
     """Launch an expert agent that reads workspace context and writes its reply.

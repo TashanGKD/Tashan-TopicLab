@@ -1,5 +1,6 @@
 """Topic-level experts management API endpoints."""
 
+import json
 import shutil
 from pathlib import Path
 
@@ -200,6 +201,76 @@ def delete_topic_expert(topic_id: str, expert_name: str):
     update_topic(topic_id, TopicUpdate(expert_names=[n for n in topic.expert_names if n != expert_name]))
 
     return {"message": "Expert deleted", "expert_name": expert_name}
+
+
+@router.get("/{topic_id}/experts/{expert_name}/content")
+def get_topic_expert_content(topic_id: str, expert_name: str):
+    """Get the role content of a topic expert."""
+    topic = get_topic(topic_id)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    ws_base = get_workspace_base()
+    ws_path = ws_base / "topics" / topic_id
+    role_file = ws_path / "agents" / expert_name / "role.md"
+
+    if not role_file.exists():
+        raise HTTPException(status_code=404, detail=f"Expert not found: {expert_name}")
+
+    return {"role_content": role_file.read_text(encoding="utf-8")}
+
+
+@router.post("/{topic_id}/experts/{expert_name}/share", response_model=TopicExpertResponse)
+def share_expert_to_platform(topic_id: str, expert_name: str):
+    """Share a topic-level expert to the platform preset library."""
+    topic = get_topic(topic_id)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    # Bug fix 1: reject if name already exists in global preset library
+    if expert_name in EXPERT_SPECS:
+        raise HTTPException(
+            status_code=409,
+            detail=f"全局专家库中已存在名为「{expert_name}」的专家，无法覆盖"
+        )
+
+    ws_base = get_workspace_base()
+    ws_path = ws_base / "topics" / topic_id
+    role_file = ws_path / "agents" / expert_name / "role.md"
+
+    if not role_file.exists():
+        raise HTTPException(status_code=404, detail=f"Expert not found: {expert_name}")
+
+    experts = get_topic_experts(ws_path)
+    expert_meta = next((e for e in experts if e["name"] == expert_name), None)
+    if not expert_meta:
+        raise HTTPException(status_code=404, detail="Expert metadata not found")
+
+    # Write role file to global skills/experts/
+    skills_dir = _get_skills_dir()
+    experts_dir = skills_dir / "experts"
+    skill_file_name = f"{expert_name}.md"
+    (experts_dir / skill_file_name).write_text(role_file.read_text(encoding="utf-8"), encoding="utf-8")
+
+    # Update meta.json (store filename only, _load_expert_specs adds "experts/" prefix)
+    meta_path = experts_dir / "meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta["experts"][expert_name] = {
+        "name": expert_name,
+        "label": expert_meta["label"],
+        "skill_file": skill_file_name,
+        "description": expert_meta["description"],
+    }
+    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # Bug fix 3: must include "experts/" prefix to match how _load_expert_specs formats it
+    EXPERT_SPECS[expert_name] = {
+        "skill_file": f"experts/{skill_file_name}",
+        "description": expert_meta["description"],
+        "label": expert_meta["label"],
+    }
+
+    return {"message": "Expert shared to platform successfully", "expert_name": expert_name}
 
 
 @router.post("/{topic_id}/experts/generate", response_model=GenerateExpertActionResponse)

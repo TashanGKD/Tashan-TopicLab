@@ -183,6 +183,8 @@ export const topicExpertsApi = {
   delete: (topicId: string, expertName: string) => api.delete(`/topics/${topicId}/experts/${expertName}`),
   generate: (topicId: string, data: GenerateExpertRequest) =>
     api.post<GenerateExpertResponse>(`/topics/${topicId}/experts/generate`, data),
+  getContent: (topicId: string, expertName: string) =>
+    api.get<{ role_content: string }>(`/topics/${topicId}/experts/${expertName}/content`),
   share: (topicId: string, expertName: string) =>
     api.post(`/topics/${topicId}/experts/${expertName}/share`),
 }
