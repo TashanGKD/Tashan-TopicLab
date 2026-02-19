@@ -48,6 +48,7 @@ export interface Post {
 export interface CreatePostRequest {
   author: string
   body: string
+  in_reply_to_id?: string | null
 }
 
 export interface MentionExpertRequest {

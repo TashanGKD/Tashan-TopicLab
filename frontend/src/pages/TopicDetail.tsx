@@ -71,8 +71,10 @@ export default function TopicDetail() {
   const discussionStartRef = useRef<number | null>(null)
   const [activeNavId, setActiveNavId] = useState<string>('')
   const [showConfig, setShowConfig] = useState(false)
+  const [replyingTo, setReplyingTo] = useState<Post | null>(null)
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const pendingRepliesRef = useRef<Set<string>>(new Set())
+  const formRef = useRef<HTMLFormElement | null>(null)
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
@@ -157,6 +159,13 @@ export default function TopicDetail() {
     } catch { /* ignore */ }
   }
 
+  const handleReplyToPost = (post: Post) => {
+    setReplyingTo(post)
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 100)
+  }
+
   const handleSubmitPost = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!id || !postText.trim()) return
@@ -164,6 +173,7 @@ export default function TopicDetail() {
     const mentionMatch = postText.match(/@(\w+)/)
     const mentionedName = mentionMatch?.[1]
     const mentionedExpert = topicExperts.find(e => e.name === mentionedName)
+    const inReplyToId = replyingTo?.id ?? null
 
     setSubmitting(true)
     try {
@@ -172,14 +182,20 @@ export default function TopicDetail() {
           author: 'user',
           body: postText,
           expert_name: mentionedExpert.name,
+          in_reply_to_id: inReplyToId,
         })
         pendingRepliesRef.current.add(res.data.reply_post_id)
         handleApiSuccess(`已向 ${mentionedExpert.label} 提问，等待回复中…`)
       } else {
-        await postsApi.create(id, { author: 'user', body: postText })
+        await postsApi.create(id, {
+          author: 'user',
+          body: postText,
+          in_reply_to_id: inReplyToId,
+        })
         handleApiSuccess('发送成功')
       }
       setPostText('')
+      setReplyingTo(null)
       await loadPosts(id)
     } catch (err) {
       handleApiError(err, '发送失败')
@@ -477,10 +493,33 @@ export default function TopicDetail() {
               )}
             </h2>
 
-            <PostThread posts={posts} />
+            <PostThread
+              posts={posts}
+              onReply={handleReplyToPost}
+              canReply={topic.status === 'open'}
+            />
 
             {topic.status === 'open' ? (
-              <form onSubmit={handleSubmitPost} className="mt-6 pt-4 border-t border-gray-100">
+              <form
+                ref={formRef}
+                onSubmit={handleSubmitPost}
+                className="mt-6 pt-4 border-t border-gray-100"
+              >
+                {replyingTo && (
+                  <div className="mb-3 pl-3 border-l-2 border-gray-300 bg-gray-50 py-2 pr-3 rounded-r text-sm flex items-center justify-between">
+                    <span className="text-gray-600">
+                      回复 <strong>{replyingTo.author_type === 'agent' ? (replyingTo.expert_label ?? replyingTo.author) : replyingTo.author}</strong>
+                      {replyingTo.body.length > 40 && `: ${replyingTo.body.slice(0, 40)}...`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setReplyingTo(null)}
+                      className="text-xs text-gray-400 hover:text-gray-600"
+                    >
+                      取消
+                    </button>
+                  </div>
+                )}
                 <MentionTextarea
                   value={postText}
                   onChange={setPostText}
