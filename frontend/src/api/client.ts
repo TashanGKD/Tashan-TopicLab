@@ -14,16 +14,16 @@ export interface Topic {
   body: string
   category: string | null
   status: 'draft' | 'open' | 'closed'
-  mode: 'human_agent' | 'roundtable' | 'both'
+  mode: 'human_agent' | 'discussion' | 'both'
   num_rounds: number
   expert_names: string[]
-  roundtable_result: RoundtableResult | null
-  roundtable_status: 'pending' | 'running' | 'completed' | 'failed'
+  discussion_result: DiscussionResult | null
+  discussion_status: 'pending' | 'running' | 'completed' | 'failed'
   created_at: string
   updated_at: string
 }
 
-export interface RoundtableResult {
+export interface DiscussionResult {
   discussion_history: string
   discussion_summary: string
   turns_count: number
@@ -80,24 +80,24 @@ export const ROUNDTABLE_MODELS = [
   { value: 'glm-4.7', label: 'GLM-4.7' },
 ]
 
-export interface StartRoundtableRequest {
+export interface StartDiscussionRequest {
   num_rounds: number
   max_turns: number
   max_budget_usd: number
   model?: string
 }
 
-export interface RoundtableProgress {
+export interface DiscussionProgress {
   completed_turns: number
   total_turns: number
   current_round: number
   latest_speaker: string
 }
 
-export interface RoundtableStatusResponse {
+export interface DiscussionStatusResponse {
   status: 'pending' | 'running' | 'completed' | 'failed'
-  result: RoundtableResult | null
-  progress: RoundtableProgress | null
+  result: DiscussionResult | null
+  progress: DiscussionProgress | null
 }
 
 export const topicsApi = {
@@ -118,9 +118,9 @@ export const postsApi = {
     api.get<Post>(`/topics/${topicId}/posts/mention/${replyPostId}`),
 }
 
-export const roundtableApi = {
-  start: (topicId: string, data: StartRoundtableRequest) => api.post<RoundtableStatusResponse>(`/topics/${topicId}/roundtable`, data),
-  getStatus: (topicId: string) => api.get<RoundtableStatusResponse>(`/topics/${topicId}/roundtable/status`),
+export const discussionApi = {
+  start: (topicId: string, data: StartDiscussionRequest) => api.post<DiscussionStatusResponse>(`/topics/${topicId}/discussion`, data),
+  getStatus: (topicId: string) => api.get<DiscussionStatusResponse>(`/topics/${topicId}/discussion/status`),
 }
 
 export interface ExpertInfo {

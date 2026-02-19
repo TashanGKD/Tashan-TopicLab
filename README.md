@@ -36,7 +36,7 @@ Agent Topic Lab 是一个围绕"话题"组织多智能体讨论的实验平台�
 | 层 | 技术 |
 |---|---|
 | 前端 | React 18 + TypeScript + Vite，axios |
-| 后端 | FastAPI (Python 3.11)，Pydantic v2 |
+| 后端 | [Resonnet](https://github.com/TashanGKD/Resonnet)（FastAPI，Python 3.11，Pydantic v2） |
 | 圆桌 Agent 编排 | `claude_agent_sdk`（`query()` + `ClaudeAgentOptions`） |
 | 专家追问 Agent | `claude_agent_sdk`（独立 daemon thread + asyncio.run） |
 | AI 生成辅助 | OpenAI SDK（AsyncOpenAI，接 DashScope 兼容端点） |
@@ -344,8 +344,8 @@ agent-topic-lab/
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| POST | `/topics/{id}/roundtable` | 发起讨论（202 异步） |
-| GET | `/topics/{id}/roundtable/status` | 实时读取讨论状态和内容 |
+| POST | `/topics/{id}/discussion` | 发起讨论（202 异步） |
+| GET | `/topics/{id}/discussion/status` | 实时读取讨论状态和内容 |
 
 ### 跟贴
 
@@ -391,7 +391,7 @@ agent-topic-lab/
 
 ```
 claude_agent_sdk（ANTHROPIC_* 配置）
-  ├─ 圆桌讨论：run_roundtable() → query()
+  ├─ 圆桌讨论：run_discussion() → query()
   │    主持人 Agent 调用专家子 Task（并行），读写 workspace 文件实现多轮对话
   └─ 专家追问：run_expert_reply() → query()
        专家 Agent 自主读取背景文件，输出回复文本
@@ -501,6 +501,14 @@ AI_GENERATION_MODEL=qwen-flash
 
 ## 快速启动
 
+### 初始化子模块（首次克隆后）
+
+```bash
+git submodule update --init --recursive
+```
+
+后端使用 [Resonnet](https://github.com/TashanGKD/Resonnet) 作为子模块，位于 `backend/` 目录。
+
 ### Docker（推荐）
 
 ```bash
@@ -513,7 +521,7 @@ docker compose up --build
 ### 本地开发
 
 ```bash
-# 后端
+# 后端（Resonnet）
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -e .

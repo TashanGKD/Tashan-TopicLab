@@ -4,14 +4,14 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
   topicsApi,
-  roundtableApi,
+  discussionApi,
   topicExpertsApi,
   postsApi,
   Topic,
   TopicExpert,
   Post,
-  StartRoundtableRequest,
-  RoundtableProgress,
+  StartDiscussionRequest,
+  DiscussionProgress,
 } from '../api/client'
 import ExpertManagement from '../components/ExpertManagement'
 import ModeratorModeConfig from '../components/ModeratorModeConfig'
@@ -64,11 +64,11 @@ export default function TopicDetail() {
   const [posts, setPosts] = useState<Post[]>([])
   const [postText, setPostText] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [startingRoundtable, setStartingRoundtable] = useState(false)
+  const [startingDiscussion, setStartingDiscussion] = useState(false)
   const [polling, setPolling] = useState(false)
-  const [progress, setProgress] = useState<RoundtableProgress | null>(null)
+  const [progress, setProgress] = useState<DiscussionProgress | null>(null)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
-  const roundtableStartRef = useRef<number | null>(null)
+  const discussionStartRef = useRef<number | null>(null)
   const [activeNavId, setActiveNavId] = useState<string>('')
   const [showConfig, setShowConfig] = useState(false)
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
@@ -84,7 +84,7 @@ export default function TopicDetail() {
   }, [id])
 
   useEffect(() => {
-    if (topic?.roundtable_status === 'running' && !polling) {
+    if (topic?.discussion_status === 'running' && !polling) {
       setPolling(true)
       startPolling()
     }
@@ -94,23 +94,23 @@ export default function TopicDetail() {
         pollIntervalRef.current = null
       }
     }
-  }, [topic?.roundtable_status])
+  }, [topic?.discussion_status])
 
   // Local elapsed timer — no backend round-trip needed
   useEffect(() => {
-    if (topic?.roundtable_status !== 'running') {
-      roundtableStartRef.current = null
+    if (topic?.discussion_status !== 'running') {
+      discussionStartRef.current = null
       setElapsedSeconds(0)
       return
     }
-    if (!roundtableStartRef.current) {
-      roundtableStartRef.current = Date.now()
+    if (!discussionStartRef.current) {
+      discussionStartRef.current = Date.now()
     }
     const timer = setInterval(() => {
-      setElapsedSeconds(Math.floor((Date.now() - roundtableStartRef.current!) / 1000))
+      setElapsedSeconds(Math.floor((Date.now() - discussionStartRef.current!) / 1000))
     }, 1000)
     return () => clearInterval(timer)
-  }, [topic?.roundtable_status])
+  }, [topic?.discussion_status])
 
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -188,20 +188,20 @@ export default function TopicDetail() {
     }
   }
 
-  const handleStartRoundtable = async (model: string) => {
+  const handleStartDiscussion = async (model: string) => {
     if (!id) return
-    setStartingRoundtable(true)
-    const req: StartRoundtableRequest = { num_rounds: 5, max_turns: 60, max_budget_usd: 5.0, model }
+    setStartingDiscussion(true)
+    const req: StartDiscussionRequest = { num_rounds: 5, max_turns: 60, max_budget_usd: 5.0, model }
     try {
-      await roundtableApi.start(id, req)
-      setTopic(prev => prev ? { ...prev, roundtable_status: 'running' } : prev)
+      await discussionApi.start(id, req)
+      setTopic(prev => prev ? { ...prev, discussion_status: 'running' } : prev)
       setPolling(true)
       startPolling()
       handleApiSuccess('讨论已启动')
     } catch (err) {
       handleApiError(err, '启动讨论失败')
     } finally {
-      setStartingRoundtable(false)
+      setStartingDiscussion(false)
     }
   }
 
@@ -209,11 +209,11 @@ export default function TopicDetail() {
     if (!id || pollIntervalRef.current) return
     pollIntervalRef.current = setInterval(async () => {
       try {
-        const res = await roundtableApi.getStatus(id)
+        const res = await discussionApi.getStatus(id)
         setTopic(prev => prev ? {
           ...prev,
-          roundtable_status: res.data.status,
-          roundtable_result: res.data.result,
+          discussion_status: res.data.status,
+          discussion_result: res.data.result,
         } : prev)
         if (res.data.progress) setProgress(res.data.progress)
         if (res.data.status === 'completed' || res.data.status === 'failed') {
@@ -231,15 +231,15 @@ export default function TopicDetail() {
 
   const parseDiscussionHistory = (history: string): DiscussionPost[] => {
     const items: DiscussionPost[] = []
-    // Split on section headings (lookahead) to avoid being fooled by --- inside content
-    const sections = history.split(/(?=^## 第\d+轮 - )/m)
+    // Support both formats: "## 第N轮 - " (legacy) and "## Round N - " (Resonnet)
+    const sections = history.split(/(?=^## (?:第\d+轮|Round \d+) - )/m)
     for (const section of sections) {
       const trimmed = section.trim()
       if (!trimmed) continue
-      const match = trimmed.match(/^## 第(\d+)轮 - (.+)$/m)
+      const match = trimmed.match(/^## (?:第(\d+)轮|Round (\d+)) - (.+)$/m)
       if (match) {
-        const round = parseInt(match[1])
-        const expertLabel = match[2].trim()
+        const round = parseInt(match[1] || match[2])
+        const expertLabel = match[3].trim()
         // Content starts after the heading line
         const headingEnd = trimmed.indexOf('\n')
         const content = headingEnd !== -1
@@ -255,16 +255,22 @@ export default function TopicDetail() {
   }
 
   const getExpertKey = (label: string): string => {
+    // Chinese labels
     if (label.includes('物理')) return 'physicist'
     if (label.includes('生物')) return 'biologist'
     if (label.includes('计算机')) return 'computer_scientist'
     if (label.includes('伦理')) return 'ethicist'
+    // English labels (Resonnet topic-lab)
+    if (/physics|physicist/i.test(label)) return 'physicist'
+    if (/biology|biologist/i.test(label)) return 'biologist'
+    if (/computer|science/i.test(label)) return 'computer_scientist'
+    if (/ethic|sociolog/i.test(label)) return 'ethicist'
     return 'default'
   }
 
   const getNavigationItems = (discussionPosts: DiscussionPost[]): NavigationItem[] => {
     const items: NavigationItem[] = []
-    if (topic?.roundtable_result?.discussion_summary) {
+    if (topic?.discussion_result?.discussion_summary) {
       items.push({ type: 'summary', label: '讨论总结', id: 'summary-section' })
     }
     const rounds = [...new Set(discussionPosts.map(p => p.round))].sort((a, b) => a - b)
@@ -298,18 +304,18 @@ export default function TopicDetail() {
     </div>
   )
 
-  const discussionHistory = topic.roundtable_result?.discussion_history || ''
+  const discussionHistory = topic.discussion_result?.discussion_history || ''
   const discussionPosts = parseDiscussionHistory(discussionHistory)
   const navItems = getNavigationItems(discussionPosts)
-  const hasDiscussion = !!(topic.roundtable_result || topic.roundtable_status === 'running')
+  const hasDiscussion = !!(topic.discussion_result || topic.discussion_status === 'running')
   const postsByRound: Record<number, DiscussionPost[]> = {}
   for (const post of discussionPosts) {
     if (!postsByRound[post.round]) postsByRound[post.round] = []
     postsByRound[post.round].push(post)
   }
 
-  const isRoundtableMode = topic.mode === 'roundtable' || topic.mode === 'both'
-  const modeLabel = topic.mode === 'roundtable' ? '圆桌' : topic.mode === 'both' ? '混合' : '人机'
+  const isDiscussionMode = topic.mode === 'discussion' || topic.mode === 'both'
+  const modeLabel = topic.mode === 'discussion' ? '圆桌' : topic.mode === 'both' ? '混合' : '人机'
 
   return (
     <div className="bg-white min-h-screen">
@@ -330,7 +336,7 @@ export default function TopicDetail() {
           <div className="flex items-center gap-3 text-sm text-gray-400 mb-4">
             <span>模式：{modeLabel}</span>
             {topic.category && <span>· 分类：{topic.category}</span>}
-            {isRoundtableMode && (
+            {isDiscussionMode && (
               <>
                 <span>·</span>
                 <button
@@ -344,16 +350,16 @@ export default function TopicDetail() {
           </div>
 
           {/* Collapsible config panel */}
-          {isRoundtableMode && showConfig && (
+          {isDiscussionMode && showConfig && (
             <div className="border-l-2 border-gray-100 pl-5 py-2 mb-8">
               <ExpertManagement topicId={id!} onExpertsChange={() => { loadTopic(id!); loadTopicExperts(id!) }} />
               <ModeratorModeConfig
                 topicId={id!}
                 onModeChange={() => loadTopic(id!)}
-                onStartRoundtable={handleStartRoundtable}
-                isStarting={startingRoundtable}
+                onStartDiscussion={handleStartDiscussion}
+                isStarting={startingDiscussion}
                 isRunning={polling}
-                isCompleted={topic.roundtable_status === 'completed'}
+                isCompleted={topic.discussion_status === 'completed'}
               />
             </div>
           )}
@@ -361,7 +367,7 @@ export default function TopicDetail() {
           <div className="border-t border-gray-100 my-8" />
 
           {/* Discussion summary */}
-          {topic.roundtable_result?.discussion_summary && (
+          {topic.discussion_result?.discussion_summary && (
             <div
               id="summary-section"
               ref={el => { sectionRefs.current['summary-section'] = el }}
@@ -370,21 +376,21 @@ export default function TopicDetail() {
               <div className="border-l-2 border-black pl-4 py-2">
                 <div className="flex items-center gap-3 mb-3">
                   <span className="text-sm font-serif font-semibold text-black">讨论总结</span>
-                  {topic.roundtable_result.cost_usd != null && (
+                  {topic.discussion_result.cost_usd != null && (
                     <span className="text-xs font-serif text-gray-400">
-                      花费：¥{topic.roundtable_result.cost_usd.toFixed(4)}
+                      花费：¥{topic.discussion_result.cost_usd.toFixed(4)}
                     </span>
                   )}
                 </div>
                 <div className="markdown-content text-sm text-gray-700 font-serif">
-                  {renderMarkdown(topic.roundtable_result.discussion_summary)}
+                  {renderMarkdown(topic.discussion_result.discussion_summary)}
                 </div>
               </div>
             </div>
           )}
 
           {/* In-page progress indicator */}
-          {topic.roundtable_status === 'running' && (
+          {topic.discussion_status === 'running' && (
             <div className="mb-8 border border-gray-200 p-5">
               <div className="flex items-center gap-3 mb-4">
                 <span className="spinner" />

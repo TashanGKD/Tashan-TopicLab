@@ -10,7 +10,7 @@ import { handleApiError, handleApiSuccess } from '../utils/errorHandler'
 interface ModeratorModeConfigProps {
   topicId: string
   onModeChange?: () => void
-  onStartRoundtable?: (model: string) => Promise<void>
+  onStartDiscussion?: (model: string) => Promise<void>
   isStarting?: boolean
   isRunning?: boolean
   isCompleted?: boolean
@@ -22,7 +22,7 @@ const labelClass = 'block text-sm font-semibold text-gray-700 mb-1'
 export default function ModeratorModeConfigComponent({
   topicId,
   onModeChange,
-  onStartRoundtable,
+  onStartDiscussion,
   isStarting = false,
   isRunning = false,
   isCompleted = false,
@@ -202,7 +202,7 @@ export default function ModeratorModeConfigComponent({
         </div>
       )}
 
-      {onStartRoundtable ? (
+      {onStartDiscussion ? (
         <>
           <div className="mb-4">
             <label className={labelClass}>推理模型</label>
@@ -220,7 +220,7 @@ export default function ModeratorModeConfigComponent({
           <button
             onClick={async () => {
               await handleSaveMode()
-              await onStartRoundtable(selectedModel)
+              await onStartDiscussion(selectedModel)
             }}
             disabled={isStarting || isRunning}
             className="bg-gray-900 hover:bg-black text-white px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
