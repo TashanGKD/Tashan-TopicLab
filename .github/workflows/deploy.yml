@@ -19,11 +19,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
+          DEPLOY_ENV: ${{ secrets.DEPLOY_ENV }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: GITHUB_TOKEN,REPO
+          envs: GITHUB_TOKEN,REPO,DEPLOY_ENV
           timeout: 30m
           command_timeout: 30m
           script: |
@@ -34,19 +35,28 @@ jobs:
             REPO_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git"
             if [ ! -d "$REPO_DIR/.git" ]; then
               mkdir -p "$BASE_DIR"
-              for i in 1 2 3; do git clone "$REPO_URL" "$REPO_DIR" && break || sleep 5; done
+              for i in 1 2 3; do git clone --recurse-submodules "$REPO_URL" "$REPO_DIR" && break || sleep 5; done
             fi
             cd "$REPO_DIR"
             git remote set-url origin "$REPO_URL"
             for i in 1 2 3; do git fetch origin && break || { [ $i -eq 3 ] && echo "git fetch failed after 3 retries" && exit 1; sleep 5; }; done
             git reset --hard origin/main
+            git config submodule.backend.url "https://x-access-token:${GITHUB_TOKEN}@github.com/TashanGKD/Resonnet.git"
+            git submodule update --init --recursive
+
+            if [ -z "${DEPLOY_ENV:-}" ]; then
+              echo "::error::DEPLOY_ENV secret is not set. Add it in repo Settings → Secrets."
+              exit 1
+            fi
+            echo "$DEPLOY_ENV" > .env
+
             docker compose build --no-cache
             docker compose down
             docker compose up -d
             docker image prune -f
 
-            # 从 .env 读取前端端口，默认 3000
-            FRONTEND_PORT=$(grep -E '^FRONTEND_PORT=' .env 2>/dev/null | cut -d= -f2 || echo 3000)
+            # 从 .env 读取前端端口，默认 3000（去除首尾空格和 CRLF，避免 nginx 配置异常）
+            FRONTEND_PORT=$(grep -E '^FRONTEND_PORT=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d ' \r' || echo 3000)
 
             # 写入 nginx snippet（仅 location 块，由 tashan.chat server 块 include）
             mkdir -p /etc/nginx/snippets

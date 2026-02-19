@@ -40,6 +40,8 @@ build/
 *~
 
 # Project
+.env
+.env.deploy
 
 backend/workspace/
 frontend/.vite/
