@@ -73,7 +73,7 @@ git submodule update --init --recursive
 ### 2. Docker（推荐）
 
 ```bash
-cp .env.example .env   # 填入 API key
+cp .env.example .env   # 填入 API key；backend 优先加载项目根 .env
 ./scripts/docker-compose-local.sh      # 默认执行 up -d --build --force-recreate
 # 前端: http://localhost:3000
 # 后端: http://localhost:8000
@@ -127,7 +127,7 @@ npm run dev   # http://localhost:3000
 - **Discussion**：`POST /topics/{id}/discussion`（支持 `skill_list`、`mcp_server_ids`），`GET /topics/{id}/discussion/status`
 - **Posts**：`GET/POST /topics/{id}/posts`，`POST .../posts/mention`，`GET .../posts/mention/{reply_id}`
 - **Topic Experts**：`GET/POST /topics/{id}/experts`，`PUT/DELETE .../experts/{name}`，`POST .../experts/generate`
-- **Moderator Modes**：`GET /moderator-modes`，`GET/PUT /topics/{id}/moderator-mode`，`POST .../moderator-mode/generate`
+- **讨论方式**：`GET /moderator-modes`，`GET /moderator-modes/assignable`，`GET/PUT /topics/{id}/moderator-mode`，`POST .../moderator-mode/generate`
 - **Experts**：`GET /experts`，`GET/PUT /experts/{name}`
 - **MCP**：`GET /mcp/assignable/categories`，`GET /mcp/assignable`，`GET /mcp/assignable/{id}/content`
 
@@ -140,7 +140,7 @@ npm run dev   # http://localhost:3000
 欢迎贡献！详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 - **代码**：遵循项目风格，新逻辑需有对应测试
-- **Skill 贡献**（无需改代码）：在 `backend/skills/scenarios/topic-lab/` 下新增专家或主持人模式
+- **Skill 贡献**（无需改代码）：专家在 `backend/skills/scenarios/topic-lab/experts/`，讨论方式在 `backend/skills/moderator_modes/`
 
 ---
 

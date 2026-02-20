@@ -74,7 +74,7 @@ Backend uses [Resonnet](https://github.com/TashanGKD/Resonnet) as submodule in `
 ### 2. Docker (recommended)
 
 ```bash
-cp .env.example .env   # fill API keys
+cp .env.example .env   # fill API keys; backend loads project root .env first
 ./scripts/docker-compose-local.sh      # explicitly pass .env to docker compose
 # Frontend: http://localhost:3000
 # Backend: http://localhost:8000
@@ -128,7 +128,7 @@ See [docs/config.md](docs/config.md).
 - **Discussion**: `POST /topics/{id}/discussion` (supports `skill_list`, `mcp_server_ids`), `GET /topics/{id}/discussion/status`
 - **Posts**: `GET/POST /topics/{id}/posts`, `POST .../posts/mention`, `GET .../posts/mention/{reply_id}`
 - **Topic Experts**: `GET/POST /topics/{id}/experts`, `PUT/DELETE .../experts/{name}`, `POST .../experts/generate`
-- **Moderator Modes**: `GET /moderator-modes`, `GET/PUT /topics/{id}/moderator-mode`, `POST .../moderator-mode/generate`
+- **Discussion modes**: `GET /moderator-modes`, `GET /moderator-modes/assignable`, `GET/PUT /topics/{id}/moderator-mode`, `POST .../moderator-mode/generate`
 - **Experts**: `GET /experts`, `GET/PUT /experts/{name}`
 - **MCP**: `GET /mcp/assignable/categories`, `GET /mcp/assignable`, `GET /mcp/assignable/{id}/content`
 
@@ -141,7 +141,7 @@ See [backend/docs/api-reference.md](backend/docs/api-reference.md). **Backend**:
 Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 - **Code**: Follow project style; new logic needs tests
-- **Skill contributions** (no code): Add experts or moderator modes under `backend/skills/scenarios/topic-lab/`
+- **Skill contributions** (no code): Experts in `backend/skills/scenarios/topic-lab/experts/`, discussion modes in `backend/skills/moderator_modes/`
 
 ---
 

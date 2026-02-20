@@ -7,6 +7,7 @@ import ExpertList from './pages/ExpertList'
 import ExpertEdit from './pages/ExpertEdit'
 import SkillLibrary from './pages/SkillLibrary'
 import MCPLibrary from './pages/MCPLibrary'
+import ModeratorModeLibrary from './pages/ModeratorModeLibrary'
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
           <Route path="/experts/:name/edit" element={<ExpertEdit />} />
           <Route path="/skills" element={<SkillLibrary />} />
           <Route path="/mcp" element={<MCPLibrary />} />
+          <Route path="/moderator-modes" element={<ModeratorModeLibrary />} />
         </Routes>
       </main>
     </>

@@ -255,6 +255,25 @@ export interface SetModeratorModeRequest {
   custom_prompt?: string | null
 }
 
+/** Assignable moderator mode (from skills/moderator_modes/, for library grid) */
+export interface AssignableModeratorMode {
+  id: string
+  source?: string
+  name: string
+  description?: string
+  category?: string
+  category_name?: string
+  num_rounds?: number
+  convergence_strategy?: string
+}
+
+export interface ListAssignableModeratorModeParams {
+  category?: string
+  fields?: 'minimal' | 'full'
+  limit?: number
+  offset?: number
+}
+
 export const moderatorModesApi = {
   listPresets: () => api.get<ModeratorModeInfo[]>('/moderator-modes'),
   getConfig: (topicId: string) => api.get<ModeratorModeConfig>(`/topics/${topicId}/moderator-mode`),
@@ -262,6 +281,18 @@ export const moderatorModesApi = {
     api.put<ModeratorModeConfig>(`/topics/${topicId}/moderator-mode`, data),
   generate: (topicId: string, data: { prompt: string }) =>
     api.post(`/topics/${topicId}/moderator-mode/generate`, data),
+  listAssignable: (params?: ListAssignableModeratorModeParams) => {
+    const searchParams = new URLSearchParams()
+    if (params?.category) searchParams.set('category', params.category)
+    if (params?.fields) searchParams.set('fields', params.fields)
+    if (params?.limit != null) searchParams.set('limit', String(params.limit))
+    if (params?.offset != null) searchParams.set('offset', String(params.offset))
+    const qs = searchParams.toString()
+    return api.get<AssignableModeratorMode[]>(`/moderator-modes/assignable${qs ? `?${qs}` : ''}`)
+  },
+  listCategories: () => api.get<AssignableCategory[]>('/moderator-modes/assignable/categories'),
+  getContent: (modeId: string) =>
+    api.get<{ content: string }>(`/moderator-modes/assignable/${encodeURIComponent(modeId)}/content`),
 }
 
 // MCP assignable API (read-only, from skills/mcps/)

@@ -1,0 +1,117 @@
+import { useState } from 'react'
+import { moderatorModesApi, AssignableModeratorMode } from '../api/client'
+import ModeratorModeGrid from './ModeratorModeGrid'
+import ModeratorModeDetailModal from './ModeratorModeDetailModal'
+
+export interface ModeratorModeSelectorProps {
+  value: string
+  onChange: (modeId: string) => void
+  placeholder?: string
+  maxHeight?: string
+}
+
+const CUSTOM_MODE: AssignableModeratorMode = {
+  id: 'custom',
+  name: '自定义模式',
+  description: '手动编写主持人提示词',
+  source: 'custom',
+}
+
+export default function ModeratorModeSelector({
+  value,
+  onChange,
+  placeholder = '搜索讨论方式名称、描述、分类...',
+  maxHeight = '320px',
+}: ModeratorModeSelectorProps) {
+  const [detailMode, setDetailMode] = useState<AssignableModeratorMode | null>(null)
+  const [detailContent, setDetailContent] = useState<string | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+
+  const valueAsArray = value && value !== 'custom' ? [value] : []
+  const handleChange = (ids: string[]) => {
+    onChange(ids[0] || 'standard')
+  }
+
+  const openModeDetail = async (m: AssignableModeratorMode) => {
+    if (m.id === 'custom') return
+    setDetailMode(m)
+    setDetailContent(null)
+    setDetailLoading(true)
+    try {
+      const res = await moderatorModesApi.getContent(m.id)
+      setDetailContent(res.data.content)
+    } catch {
+      setDetailContent('（加载失败）')
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  const closeModeDetail = () => {
+    setDetailMode(null)
+    setDetailContent(null)
+  }
+
+  const selectCustom = () => {
+    onChange('custom')
+  }
+
+  return (
+    <>
+      {value === 'custom' && (
+        <div className="flex flex-wrap gap-2 p-3 bg-gray-50 rounded-lg border border-gray-100 mb-3">
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide w-full mb-1">
+            已选讨论方式
+          </span>
+          <span className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white">
+            <span className="text-sm font-serif font-medium text-black">{CUSTOM_MODE.name}</span>
+            <button
+              type="button"
+              onClick={() => onChange('standard')}
+              className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-sm font-medium text-gray-400 hover:text-black hover:bg-gray-200 transition-colors"
+              aria-label="取消选择"
+            >
+              ×
+            </button>
+          </span>
+        </div>
+      )}
+
+      <ModeratorModeGrid
+        mode="select"
+        layout="embed"
+        value={valueAsArray}
+        onChange={handleChange}
+        placeholder={placeholder}
+        maxHeight={maxHeight}
+        onModeClick={openModeDetail}
+      />
+
+      {/* 自定义模式选项 */}
+      <div className="mt-3 p-3 border border-gray-200 rounded-xl">
+        <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">其他</div>
+        <button
+          type="button"
+          onClick={selectCustom}
+          className={`inline-flex flex-col gap-1 px-4 py-3 rounded-lg border-2 transition-colors min-w-[200px] max-w-[280px] text-left ${
+            value === 'custom'
+              ? 'border-gray-900 bg-gray-50'
+              : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
+          }`}
+        >
+          <span className="text-sm font-serif font-medium text-black">{CUSTOM_MODE.name}</span>
+          <span className="text-xs text-gray-500">{CUSTOM_MODE.description}</span>
+        </button>
+      </div>
+
+      {detailMode && (
+        <ModeratorModeDetailModal
+          mode={detailMode}
+          content={detailContent}
+          loading={detailLoading}
+          onClose={closeModeDetail}
+        />
+      )}
+    </>
+  )
+}

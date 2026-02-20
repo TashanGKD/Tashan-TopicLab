@@ -43,7 +43,7 @@ Please maintain a respectful and inclusive environment. Maintainers may take nec
 git submodule update --init --recursive
 
 # Backend
-cd backend && pip install -e . && cp .env.example .env
+cd backend && pip install -e . && cp .env.example .env   # or place .env at project root
 uvicorn main:app --reload --port 8000
 
 # Frontend (separate terminal)
@@ -61,7 +61,7 @@ cd frontend && npm install && npm run dev
 You can contribute without modifying backend code:
 
 - **Expert roles**: Add `.md` under `backend/skills/scenarios/topic-lab/experts/`, register in `meta.json`
-- **Moderator modes**: Add `.md` under `backend/skills/scenarios/topic-lab/moderator/`, register in `meta.json`
+- **Discussion modes**: Add `.md` under `backend/skills/moderator_modes/default/`, register in `default/meta.json` (same structure as assignable_skills)
 
 See [backend/skills/README.md](backend/skills/README.md).
 

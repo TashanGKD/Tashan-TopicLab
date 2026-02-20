@@ -8,6 +8,7 @@ import {
 import { handleApiError, handleApiSuccess } from '../utils/errorHandler'
 import MCPServerSelector from './MCPServerSelector'
 import SkillSelector from './SkillSelector'
+import ModeratorModeSelector from './ModeratorModeSelector'
 
 interface ModeratorModeConfigProps {
   topicId: string
@@ -87,14 +88,14 @@ export default function ModeratorModeConfigComponent({
       })
       await loadCurrentConfig()
       onModeChange?.()
-      handleApiSuccess('主持人模式已更新')
+      handleApiSuccess('讨论方式已更新')
     } catch (err: any) {
       handleApiError(err, '保存失败')
     }
   }
 
   const handleGenerateMode = async () => {
-    if (!aiPrompt.trim()) { handleApiError({ message: '请输入主持人模式描述' }, '请输入主持人模式描述'); return }
+    if (!aiPrompt.trim()) { handleApiError({ message: '请输入讨论方式描述' }, '请输入讨论方式描述'); return }
     if (aiPrompt.trim().length < 10) { handleApiError({ message: '模式描述至少需要 10 个字符' }, '模式描述至少需要 10 个字符'); return }
     setGenerating(true)
     try {
@@ -122,7 +123,7 @@ export default function ModeratorModeConfigComponent({
 
   return (
     <div className="mb-6">
-      <h3 className="font-semibold text-gray-900 mb-4">主持人模式</h3>
+      <h3 className="font-semibold text-gray-900 mb-4">讨论方式</h3>
 
       {/* Current mode display */}
       <div className="p-4 border border-gray-200 mb-4 bg-gray-50">
@@ -131,54 +132,15 @@ export default function ModeratorModeConfigComponent({
         <div className="text-xs font-serif text-gray-400">轮数：{currentConfig?.num_rounds} 轮</div>
       </div>
 
-      {/* Mode selector cards */}
+      {/* Mode selector - same style as SkillSelector */}
       <div className="mb-4">
-        <label className={labelClass}>选择主持人模式</label>
-        <div className="flex flex-col gap-2">
-          {presetModes.map((mode) => (
-            <label
-              key={mode.id}
-              className={`flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${
-                selectedModeId === mode.id
-                  ? 'border-gray-900 bg-gray-50'
-                  : 'border-gray-100 bg-gray-50 hover:border-gray-200'
-              }`}
-            >
-              <input
-                type="radio"
-                name="modeId"
-                value={mode.id}
-                checked={selectedModeId === mode.id}
-                onChange={() => setSelectedModeId(mode.id)}
-                className="mt-0.5 accent-gray-900"
-              />
-              <div>
-                <div className="text-sm font-medium text-gray-900">{mode.name}</div>
-                <div className="text-xs text-gray-500">{mode.description}</div>
-              </div>
-            </label>
-          ))}
-          <label
-            className={`flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${
-              selectedModeId === 'custom'
-                ? 'border-gray-900 bg-gray-50'
-                : 'border-gray-100 bg-gray-50 hover:border-gray-200'
-            }`}
-          >
-            <input
-              type="radio"
-              name="modeId"
-              value="custom"
-              checked={selectedModeId === 'custom'}
-              onChange={() => setSelectedModeId('custom')}
-              className="mt-0.5 accent-gray-900"
-            />
-            <div>
-              <div className="text-sm font-medium text-gray-900">自定义模式</div>
-              <div className="text-xs text-gray-500">手动编写主持人提示词</div>
-            </div>
-          </label>
-        </div>
+        <label className={labelClass}>选择讨论方式</label>
+        <p className="text-xs text-gray-500 mb-2">点击 + 选择模式，选中的模式会用于本次讨论。</p>
+        <ModeratorModeSelector
+          value={selectedModeId}
+          onChange={setSelectedModeId}
+          maxHeight="320px"
+        />
       </div>
 
       {/* Num rounds */}

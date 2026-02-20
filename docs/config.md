@@ -2,7 +2,7 @@
 
 ## Environment Variables
 
-Config file: `backend/.env` (copy from `backend/.env.example` and edit).
+Config file: `.env` at project root (or `backend/.env`). The backend loads project root `./.env` first when backend is a submodule. Copy from `.env.example` or `backend/.env.example` and edit.
 
 ### 1. Claude Agent SDK (Discussion orchestration, expert reply)
 

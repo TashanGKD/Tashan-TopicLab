@@ -17,12 +17,22 @@ export default function TopNav() {
           <Link
             to="/"
             className={`text-sm font-serif transition-all ${
-              isActive('/') && !isActive('/topics') && !isActive('/experts') && !isActive('/skills') && !isActive('/mcp')
+              isActive('/') && !isActive('/topics') && !isActive('/experts') && !isActive('/skills') && !isActive('/mcp') && !isActive('/moderator-modes')
                 ? 'text-black font-medium'
                 : 'text-gray-500 hover:text-black'
             }`}
           >
             话题列表
+          </Link>
+          <Link
+            to="/moderator-modes"
+            className={`text-sm font-serif transition-all ${
+              isActive('/moderator-modes')
+                ? 'text-black font-medium'
+                : 'text-gray-500 hover:text-black'
+            }`}
+          >
+            讨论方式库
           </Link>
           <Link
             to="/experts"
