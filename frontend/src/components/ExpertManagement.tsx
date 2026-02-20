@@ -38,7 +38,7 @@ export default function ExpertManagement({ topicId, onExpertsChange }: ExpertMan
       const res = await topicExpertsApi.list(topicId)
       setExperts(res.data)
     } catch (err) {
-      handleApiError(err, '加载专家列表失败')
+      handleApiError(err, '加载角色列表失败')
     } finally {
       setLoading(false)
     }
@@ -49,7 +49,7 @@ export default function ExpertManagement({ topicId, onExpertsChange }: ExpertMan
       const res = await expertsApi.list()
       setPresetExperts(res.data)
     } catch (err) {
-      handleApiError(err, '加载预设专家失败')
+      handleApiError(err, '加载预设角色失败')
     }
   }
 
@@ -61,15 +61,15 @@ export default function ExpertManagement({ topicId, onExpertsChange }: ExpertMan
       setSelectedPreset('')
       await loadExperts()
       onExpertsChange?.()
-      handleApiSuccess('专家添加成功')
+      handleApiSuccess('角色添加成功')
     } catch (err: any) {
-      handleApiError(err, '添加专家失败')
+      handleApiError(err, '添加角色失败')
     }
   }
 
   const handleAddCustom = async () => {
     if (!customName || !customLabel || !customDescription || !customContent) {
-      alert('请先生成专家信息或填写所有字段')
+      alert('请先生成角色信息或填写所有字段')
       return
     }
     try {
@@ -84,16 +84,16 @@ export default function ExpertManagement({ topicId, onExpertsChange }: ExpertMan
       setCustomName(''); setCustomLabel(''); setCustomDescription(''); setCustomContent('')
       await loadExperts()
       onExpertsChange?.()
-      handleApiSuccess('自定义专家创建成功')
+      handleApiSuccess('自定义角色创建成功')
     } catch (err: any) {
-      handleApiError(err, '创建专家失败')
+      handleApiError(err, '创建角色失败')
     }
   }
 
   const handleGenerateExpert = async () => {
-    if (!customLabel.trim()) { handleApiError({ message: '请输入专家标签' }, '请输入专家标签'); return }
-    if (!customDescription.trim()) { handleApiError({ message: '请输入专家简介' }, '请输入专家简介'); return }
-    if (customDescription.trim().length < 10) { handleApiError({ message: '专家简介至少需要 10 个字符' }, '专家简介至少需要 10 个字符'); return }
+    if (!customLabel.trim()) { handleApiError({ message: '请输入角色标签' }, '请输入角色标签'); return }
+    if (!customDescription.trim()) { handleApiError({ message: '请输入角色简介' }, '请输入角色简介'); return }
+    if (customDescription.trim().length < 10) { handleApiError({ message: '角色简介至少需要 10 个字符' }, '角色简介至少需要 10 个字符'); return }
 
     setGenerating(true)
     try {
@@ -120,7 +120,7 @@ export default function ExpertManagement({ topicId, onExpertsChange }: ExpertMan
       const res = await topicExpertsApi.getContent(topicId, expert.name)
       setEditContent(res.data.role_content)
     } catch (err) {
-      handleApiError(err, '加载专家内容失败')
+      handleApiError(err, '加载角色内容失败')
     }
   }
 
@@ -133,14 +133,14 @@ export default function ExpertManagement({ topicId, onExpertsChange }: ExpertMan
       setEditContent('')
       await loadExperts()
       onExpertsChange?.()
-      handleApiSuccess('专家更新成功')
+      handleApiSuccess('角色更新成功')
     } catch (err: any) {
       handleApiError(err, '更新失败')
     }
   }
 
   const handleShare = async (expert: TopicExpert) => {
-    if (!confirm(`将「${expert.label}」分享到平台预设库？所有用户均可添加此专家。`)) return
+    if (!confirm(`将「${expert.label}」分享到平台预设库？所有用户均可添加此角色。`)) return
     try {
       await topicExpertsApi.share(topicId, expert.name)
       await loadPresetExperts()
@@ -151,12 +151,12 @@ export default function ExpertManagement({ topicId, onExpertsChange }: ExpertMan
   }
 
   const handleDelete = async (expertName: string) => {
-    if (!confirm(`确定删除专家 "${expertName}" 吗？`)) return
+    if (!confirm(`确定删除角色 "${expertName}" 吗？`)) return
     try {
       await topicExpertsApi.delete(topicId, expertName)
       await loadExperts()
       onExpertsChange?.()
-      handleApiSuccess('专家删除成功')
+      handleApiSuccess('角色删除成功')
     } catch (err: any) {
       handleApiError(err, '删除失败')
     }
@@ -166,11 +166,11 @@ export default function ExpertManagement({ topicId, onExpertsChange }: ExpertMan
 
   return (
     <div className="mb-6">
-      <h3 className="font-serif font-semibold text-black mb-4">专家库</h3>
+      <h3 className="font-serif font-semibold text-black mb-4">角色库</h3>
 
       <div className="mb-4 flex flex-wrap gap-2">
         {experts.length === 0 && (
-          <p className="text-sm font-serif text-gray-400">暂无专家，请添加</p>
+          <p className="text-sm font-serif text-gray-400">暂无角色，请添加</p>
         )}
         {experts.map((expert) => (
           <div
@@ -212,7 +212,7 @@ export default function ExpertManagement({ topicId, onExpertsChange }: ExpertMan
           onClick={() => { setAddMode('custom'); setShowAddDialog(true) }}
           className="bg-black px-4 py-2 text-sm font-serif text-white hover:bg-gray-900 transition-colors"
         >
-          创建新专家
+          创建新角色
         </button>
       </div>
 
@@ -226,12 +226,12 @@ export default function ExpertManagement({ topicId, onExpertsChange }: ExpertMan
             onClick={e => e.stopPropagation()}
           >
             <h3 className="font-serif font-semibold text-black mb-6">
-              {addMode === 'preset' ? '从预设添加专家' : '创建新专家'}
+              {addMode === 'preset' ? '从预设添加角色' : '创建新角色'}
             </h3>
 
             {addMode === 'preset' ? (
               <>
-                <label className={labelClass}>选择预设专家</label>
+                <label className={labelClass}>选择预设角色</label>
                 <select
                   className={`${inputClass} mb-4`}
                   value={selectedPreset}
@@ -252,11 +252,11 @@ export default function ExpertManagement({ topicId, onExpertsChange }: ExpertMan
             ) : (
               <>
                 <div className="mb-4">
-                  <label className={labelClass}>专家标签（中文）*</label>
+                  <label className={labelClass}>角色标签（中文）*</label>
                   <input className={inputClass} placeholder="例如：经济学家" value={customLabel} onChange={e => setCustomLabel(e.target.value)} />
                 </div>
                 <div className="mb-4">
-                  <label className={labelClass}>专家简介*</label>
+                  <label className={labelClass}>角色简介*</label>
                   <input className={inputClass} placeholder="例如：专注于 AI 对经济的影响" value={customDescription} onChange={e => setCustomDescription(e.target.value)} />
                 </div>
 
@@ -271,7 +271,7 @@ export default function ExpertManagement({ topicId, onExpertsChange }: ExpertMan
                 </div>
 
                 <div className="mb-4">
-                  <label className={labelClass}>专家名称（英文）</label>
+                  <label className={labelClass}>角色名称（英文）</label>
                   <input className={inputClass} placeholder="AI 自动生成，也可手动输入" value={customName} onChange={e => setCustomName(e.target.value)} />
                 </div>
                 <div className="mb-4">
@@ -290,7 +290,7 @@ export default function ExpertManagement({ topicId, onExpertsChange }: ExpertMan
                     className="bg-black text-white px-4 py-2 text-sm font-serif hover:bg-gray-900 transition-colors disabled:opacity-50"
                     disabled={!customName || !customLabel || !customDescription || !customContent}
                   >
-                    创建专家
+                    创建角色
                   </button>
                   <button onClick={() => setShowAddDialog(false)} className="border border-gray-200 px-4 py-2 text-sm font-serif text-black hover:border-black transition-colors">取消</button>
                 </div>
@@ -309,7 +309,7 @@ export default function ExpertManagement({ topicId, onExpertsChange }: ExpertMan
             className="bg-white p-6 max-w-xl w-[90%] max-h-[80vh] overflow-auto border border-gray-200"
             onClick={e => e.stopPropagation()}
           >
-            <h3 className="font-serif font-semibold text-black mb-4">编辑专家：{selectedExpert.label}</h3>
+            <h3 className="font-serif font-semibold text-black mb-4">编辑角色：{selectedExpert.label}</h3>
 
             <label className={labelClass}>角色定义（Markdown）</label>
             <textarea

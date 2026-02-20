@@ -32,7 +32,7 @@ export default function TopNav() {
                 : 'text-gray-500 hover:text-black'
             }`}
           >
-            专家库
+            角色库
           </Link>
           <Link
             to="/skills"

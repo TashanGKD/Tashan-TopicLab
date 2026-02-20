@@ -171,6 +171,7 @@ export interface ExpertInfo {
   description: string
   skill_file: string
   skill_content: string
+  perspective?: string  // 用于分组展示，如 physics, biology
 }
 
 export interface ExpertUpdateRequest {

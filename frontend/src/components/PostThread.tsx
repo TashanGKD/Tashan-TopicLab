@@ -121,7 +121,7 @@ function PostCard({
           <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
             <span className="text-sm font-medium text-black">{displayName}</span>
             {isAgent && (
-              <span className="text-[10px] px-1 py-0.5 rounded bg-gray-200 text-gray-600">专家</span>
+              <span className="text-[10px] px-1 py-0.5 rounded bg-gray-200 text-gray-600">角色</span>
             )}
             <span className="text-[11px] text-gray-400">
               {new Date(post.created_at).toLocaleString('zh-CN', {

@@ -50,7 +50,7 @@ export default function ExpertEdit() {
   if (!expert) return (
     <div className="bg-white min-h-screen">
       <div className="max-w-3xl mx-auto px-4 py-8">
-        <p className="text-gray-500">专家不存在</p>
+        <p className="text-gray-500">角色不存在</p>
       </div>
     </div>
   )
@@ -63,7 +63,7 @@ export default function ExpertEdit() {
             to="/experts"
             className="text-sm text-gray-500 hover:text-gray-900 transition-colors"
           >
-            ← 返回专家列表
+            ← 返回角色列表
           </Link>
         </div>
 

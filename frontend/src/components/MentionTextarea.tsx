@@ -13,7 +13,7 @@ export default function MentionTextarea({
   value,
   onChange,
   experts,
-  placeholder = '发表帖子… 输入 @ 可提及专家',
+  placeholder = '发表帖子… 输入 @ 可提及角色',
   disabled = false,
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)

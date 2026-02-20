@@ -340,7 +340,7 @@ export default function TopicDetail() {
   }
 
   const isDiscussionMode = topic.mode === 'discussion' || topic.mode === 'both'
-  const modeLabel = topic.mode === 'discussion' ? '圆桌' : topic.mode === 'both' ? '混合' : '人机'
+  const modeLabel = topic.mode === 'discussion' ? '话题' : topic.mode === 'both' ? '混合' : '人机'
 
   return (
     <div className="bg-white min-h-screen">
@@ -368,7 +368,7 @@ export default function TopicDetail() {
                   onClick={() => setShowConfig(v => !v)}
                   className="text-sm font-serif font-medium text-black border border-black px-3 py-1 hover:bg-black hover:text-white transition-colors"
                 >
-                  圆桌配置 <span className="inline-block w-3 text-center">{showConfig ? '▲' : '▼'}</span>
+                  话题配置 <span className="inline-block w-3 text-center">{showConfig ? '▲' : '▼'}</span>
                 </button>
               </>
             )}
@@ -439,7 +439,7 @@ export default function TopicDetail() {
                     <span>
                       {progress.completed_turns > 0
                         ? `${progress.latest_speaker} 已完成发言`
-                        : '等待专家开始发言...'}
+                        : '等待角色开始发言...'}
                     </span>
                     <span>{progress.completed_turns} / {progress.total_turns} 轮次</span>
                   </div>
@@ -448,7 +448,7 @@ export default function TopicDetail() {
                   )}
                 </>
               ) : (
-                <p className="text-xs text-gray-400">主持人正在协调专家，请稍候...</p>
+                <p className="text-xs text-gray-400">主持人正在协调角色，请稍候...</p>
               )}
             </div>
           )}
@@ -456,7 +456,7 @@ export default function TopicDetail() {
           {/* Roundtable discussion rounds - multi-column: 2+ on desktop, 1 on mobile */}
           {Object.keys(postsByRound).length > 0 && (
             <div className="mb-8">
-              <h2 className="text-base font-semibold text-gray-900 mb-1">圆桌讨论</h2>
+              <h2 className="text-base font-semibold text-gray-900 mb-1">话题讨论</h2>
               <div className="grid grid-cols-1 gap-6 mt-4">
               {Object.keys(postsByRound).map(roundKey => {
                 const round = parseInt(roundKey)
@@ -479,7 +479,7 @@ export default function TopicDetail() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-2">
                             <span className="text-sm font-semibold text-gray-900">{post.expertName}</span>
-                            <span className="text-[10px] border border-gray-200 text-gray-400 px-1">专家</span>
+                            <span className="text-[10px] border border-gray-200 text-gray-400 px-1">角色</span>
                           </div>
                           <div className="markdown-content text-sm text-gray-700">
                             {renderMarkdown(post.content)}
@@ -503,7 +503,7 @@ export default function TopicDetail() {
             <h2 className="text-base font-semibold text-gray-900 mb-1">
               跟贴 ({posts.length})
               {topicExperts.length > 0 && (
-                <span className="text-xs font-normal text-gray-400 ml-2">— 输入 @ 可追问专家</span>
+                <span className="text-xs font-normal text-gray-400 ml-2">— 输入 @ 可追问角色</span>
               )}
             </h2>
 

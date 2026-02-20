@@ -73,10 +73,10 @@ export default function TopicList() {
                   {topic.body.slice(0, 150)}{topic.body.length > 150 ? '...' : ''}
                 </p>
                 <div className="flex items-center gap-4 text-xs font-serif text-gray-400">
-                  <span>模式: {topic.mode === 'discussion' ? '圆桌' : topic.mode === 'both' ? '混合' : '人机'}</span>
+                  <span>模式: {topic.mode === 'discussion' ? '话题' : topic.mode === 'both' ? '混合' : '人机'}</span>
                   {topic.discussion_status !== 'pending' && (
                     <span>
-                      圆桌: {topic.discussion_status === 'running' ? '运行中' : topic.discussion_status === 'completed' ? '已完成' : '失败'}
+                      话题: {topic.discussion_status === 'running' ? '运行中' : topic.discussion_status === 'completed' ? '已完成' : '失败'}
                     </span>
                   )}
                 </div>

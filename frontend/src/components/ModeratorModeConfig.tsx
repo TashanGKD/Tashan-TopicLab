@@ -215,8 +215,8 @@ export default function ModeratorModeConfigComponent({
       {onStartDiscussion ? (
         <>
           <div className="mb-4">
-            <label className={labelClass}>可选技能（主持人将分配给专家）</label>
-            <p className="text-xs text-gray-500 mb-2">点击 + 将技能加入话题，选中的技能会拷贝到工作区供主持人分配给各专家。</p>
+            <label className={labelClass}>可选技能（主持人将分配给角色）</label>
+            <p className="text-xs text-gray-500 mb-2">点击 + 将技能加入话题，选中的技能会拷贝到工作区供主持人分配给各角色。</p>
             <SkillSelector value={selectedSkillIds} onChange={setSelectedSkillIds} maxHeight="320px" />
           </div>
           <div className="mb-4">
@@ -266,8 +266,8 @@ export default function ModeratorModeConfigComponent({
             <code className="block bg-gray-900 text-gray-100 rounded-lg p-3 text-xs font-mono mb-4">
               {'{topic}'} - 话题标题{'\n'}
               {'{ws_abs}'} - 工作目录路径{'\n'}
-              {'{expert_names_str}'} - 专家名称列表{'\n'}
-              {'{num_experts}'} - 专家数量{'\n'}
+              {'{expert_names_str}'} - 角色名称列表{'\n'}
+              {'{num_experts}'} - 角色数量{'\n'}
               {'{num_rounds}'} - 轮数
             </code>
 
