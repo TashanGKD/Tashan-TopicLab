@@ -13,8 +13,7 @@ import {
   StartDiscussionRequest,
   DiscussionProgress,
 } from '../api/client'
-import ExpertManagement from '../components/ExpertManagement'
-import ModeratorModeConfig from '../components/ModeratorModeConfig'
+import TopicConfigTabs from '../components/TopicConfigTabs'
 import ResizableToc from '../components/ResizableToc'
 import PostThread from '../components/PostThread'
 import MentionTextarea from '../components/MentionTextarea'
@@ -73,7 +72,6 @@ export default function TopicDetail() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const discussionStartRef = useRef<number | null>(null)
   const [activeNavId, setActiveNavId] = useState<string>('')
-  const [showConfig, setShowConfig] = useState(false)
   const [replyingTo, setReplyingTo] = useState<Post | null>(null)
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const pendingRepliesRef = useRef<Set<string>>(new Set())
@@ -345,7 +343,6 @@ export default function TopicDetail() {
   }
 
   const isDiscussionMode = topic.mode === 'discussion' || topic.mode === 'both'
-  const modeLabel = topic.mode === 'discussion' ? '话题' : topic.mode === 'both' ? '混合' : '人机'
 
   return (
     <div className="bg-white min-h-screen">
@@ -360,31 +357,17 @@ export default function TopicDetail() {
               <StatusBadge status={topic.status} />
             </div>
           </div>
-          <div className="markdown-content text-gray-700 mb-4">{renderMarkdown(topic.body)}</div>
 
-          {/* Meta info row */}
-          <div className="flex items-center gap-3 text-sm text-gray-400 mb-4">
-            <span>模式：{modeLabel}</span>
-            {topic.category && <span>· 分类：{topic.category}</span>}
-            {isDiscussionMode && (
-              <>
-                <span>·</span>
-                <button
-                  onClick={() => setShowConfig(v => !v)}
-                  className="text-sm font-serif font-medium text-black border border-black px-3 py-1 hover:bg-black hover:text-white transition-colors"
-                >
-                  话题配置 <span className="inline-block w-3 text-center">{showConfig ? '▲' : '▼'}</span>
-                </button>
-              </>
-            )}
-          </div>
-
-          {/* Collapsible config panel */}
-          {isDiscussionMode && showConfig && (
-            <div className="border-l-2 border-gray-100 pl-5 py-2 mb-8">
-              <ExpertManagement topicId={id!} onExpertsChange={() => { loadTopic(id!); loadTopicExperts(id!) }} />
-              <ModeratorModeConfig
+          {/* Topic config - always visible for discussion mode */}
+          {isDiscussionMode ? (
+            <div className="border-l-2 border-gray-100 pl-5 py-2 mb-6">
+              <TopicConfigTabs
                 topicId={id!}
+                topicBody={topic.body}
+                onExpertsChange={() => {
+                  loadTopic(id!)
+                  loadTopicExperts(id!)
+                }}
                 onModeChange={() => loadTopic(id!)}
                 onStartDiscussion={handleStartDiscussion}
                 isStarting={startingDiscussion}
@@ -393,6 +376,8 @@ export default function TopicDetail() {
                 initialSkillIds={initialSkillIds}
               />
             </div>
+          ) : (
+            <div className="markdown-content text-gray-700 mb-4">{renderMarkdown(topic.body)}</div>
           )}
 
           <div className="border-t border-gray-100 my-8" />
@@ -422,7 +407,7 @@ export default function TopicDetail() {
 
           {/* In-page progress indicator */}
           {topic.discussion_status === 'running' && (
-            <div className="mb-8 border border-gray-200 p-5">
+            <div className="mb-8 border border-gray-200 rounded-lg p-5">
               <div className="flex items-center gap-3 mb-4">
                 <span className="spinner" />
                 <span className="text-sm font-semibold text-gray-900">话题讨论进行中</span>
@@ -484,7 +469,7 @@ export default function TopicDetail() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-2">
                             <span className="text-sm font-semibold text-gray-900">{post.expertName}</span>
-                            <span className="text-[10px] border border-gray-200 text-gray-400 px-1">角色</span>
+                            <span className="text-[10px] border border-gray-200 rounded text-gray-400 px-1">角色</span>
                           </div>
                           <div className="markdown-content text-sm text-gray-700">
                             {renderMarkdown(post.content)}
@@ -547,7 +532,7 @@ export default function TopicDetail() {
                 />
                 <button
                   type="submit"
-                  className="mt-2 bg-black text-white px-4 py-2 text-sm font-serif hover:bg-gray-900 transition-colors disabled:opacity-50"
+                  className="mt-2 bg-black text-white px-4 py-2 rounded-lg text-sm font-serif hover:bg-gray-900 transition-colors disabled:opacity-50"
                   disabled={submitting || !postText.trim()}
                 >
                   {submitting ? '发送中...' : '发送'}

@@ -22,6 +22,7 @@ type MCPGridProps = (MCPGridViewProps | MCPGridSelectProps) & {
   layout?: 'page' | 'embed'
   placeholder?: string
   maxHeight?: string
+  fillHeight?: boolean
 }
 
 export default function MCPGrid(props: MCPGridProps) {
@@ -29,6 +30,7 @@ export default function MCPGrid(props: MCPGridProps) {
     layout = 'page',
     placeholder = '搜索 MCP 服务器名称、描述、分类...',
     maxHeight = '400px',
+    fillHeight = false,
   } = props
 
   const sectionIdPrefix = layout === 'embed' ? 'mcp-section' : 'section'
@@ -141,15 +143,27 @@ export default function MCPGrid(props: MCPGridProps) {
     </>
   )
 
+  const isFill = layout === 'embed' && fillHeight
+  const rootClass = isFill ? 'flex flex-col h-full min-h-0' : 'space-y-3'
+  const gridHeightStyle = isFill ? undefined : (layout === 'embed' ? { maxHeight } : undefined)
+
+  const searchInput = (
+    <input
+      type="text"
+      placeholder={placeholder}
+      value={search}
+      onChange={(e) => setSearch(e.target.value)}
+      className={
+        isFill
+          ? 'w-full flex-shrink-0 bg-gray-50 border-0 border-b border-gray-100 rounded-none px-3 py-2 text-sm font-serif placeholder-gray-400 focus:outline-none focus:ring-0 focus:border-gray-300'
+          : 'w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm font-serif placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-transparent'
+      }
+    />
+  )
+
   return (
-    <div className="space-y-3">
-      <input
-        type="text"
-        placeholder={placeholder}
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm font-serif placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-transparent"
-      />
+    <div className={rootClass}>
+      {!isFill && searchInput}
 
       {props.mode === 'select' && selectedMcps.length > 0 && (
         <div className="flex flex-wrap gap-2 p-3 bg-gray-50 rounded-lg border border-gray-100">
@@ -174,15 +188,15 @@ export default function MCPGrid(props: MCPGridProps) {
 
       {!loading && filteredMcps.length > 0 && (
         <div
-          className={`flex ${layout === 'embed' ? 'gap-0 border border-gray-200 rounded-xl overflow-hidden' : 'gap-8'}`}
-          style={layout === 'embed' ? { maxHeight } : undefined}
+          className={`flex ${layout === 'embed' ? 'gap-0 border border-gray-200 rounded-lg overflow-hidden' : 'gap-8'} ${isFill ? 'flex-1 min-h-0' : ''}`}
+          style={gridHeightStyle}
         >
           <div className={layout === 'embed' ? 'hidden sm:flex flex-shrink-0' : 'hidden md:flex flex-shrink-0'}>
             <ResizableToc
               defaultWidth={layout === 'embed' ? 128 : 176}
               minWidth={layout === 'embed' ? 100 : 120}
               maxWidth={layout === 'embed' ? 280 : 360}
-              maxHeight={layout === 'embed' ? maxHeight : 'calc(100vh - 6rem)'}
+              maxHeight={layout === 'embed' ? (isFill ? '100%' : maxHeight) : 'calc(100vh - 6rem)'}
               className={layout === 'page' ? 'sticky top-20 self-start' : ''}
             >
               <SourceCategoryToc
@@ -195,9 +209,14 @@ export default function MCPGrid(props: MCPGridProps) {
             </ResizableToc>
           </div>
           <div
-            className={`flex-1 min-w-0 ${layout === 'embed' ? 'overflow-auto pl-3' : ''}`}
-            style={layout === 'embed' ? { maxHeight } : undefined}
+            className={`flex-1 min-w-0 flex flex-col min-h-0 ${layout === 'embed' ? 'pl-3' : ''}`}
           >
+            {layout === 'embed' && isFill && (
+              <div className="flex-shrink-0">{searchInput}</div>
+            )}
+            <div
+              className={`flex-1 min-h-0 ${layout === 'embed' ? 'overflow-auto' : ''}`}
+            >
             {layout === 'page' ? (
               <div className="space-y-8">
                 {sourceOrder.map((source) => {
@@ -206,7 +225,7 @@ export default function MCPGrid(props: MCPGridProps) {
                     a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)
                   )
                   return (
-                    <div key={source} className="border border-gray-200 rounded-xl overflow-hidden">
+                    <div key={source} className="border border-gray-200 rounded-lg overflow-hidden">
                       <div
                         id={`source-${source}`}
                         ref={(el) => { sectionRefs.current[`source-${source}`] = el }}
@@ -267,6 +286,7 @@ export default function MCPGrid(props: MCPGridProps) {
             ) : (
               renderGridContent()
             )}
+            </div>
           </div>
         </div>
       )}

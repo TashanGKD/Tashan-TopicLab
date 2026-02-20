@@ -8,6 +8,7 @@ export interface SkillSelectorProps {
   onChange: (ids: string[]) => void
   placeholder?: string
   maxHeight?: string
+  fillHeight?: boolean
 }
 
 export default function SkillSelector({
@@ -15,6 +16,7 @@ export default function SkillSelector({
   onChange,
   placeholder = '搜索技能名称、描述、分类...',
   maxHeight = '400px',
+  fillHeight = false,
 }: SkillSelectorProps) {
   const [detailSkill, setDetailSkill] = useState<AssignableSkill | null>(null)
   const [detailContent, setDetailContent] = useState<string | null>(null)
@@ -47,7 +49,8 @@ export default function SkillSelector({
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        maxHeight={maxHeight}
+        maxHeight={fillHeight ? undefined : maxHeight}
+        fillHeight={fillHeight}
         onSkillClick={openSkillDetail}
       />
       {detailSkill && (

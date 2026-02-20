@@ -126,7 +126,7 @@ export default function ModeratorModeConfigComponent({
       <h3 className="font-semibold text-gray-900 mb-4">讨论方式</h3>
 
       {/* Current mode display */}
-      <div className="p-4 border border-gray-200 mb-4 bg-gray-50">
+      <div className="p-4 border border-gray-200 rounded-lg mb-4 bg-gray-50">
         <div className="font-serif font-semibold text-black mb-1 text-sm">当前模式：{currentMode?.name}</div>
         <div className="text-sm font-serif text-gray-600 mb-1">{currentMode?.description}</div>
         <div className="text-xs font-serif text-gray-400">轮数：{currentConfig?.num_rounds} 轮</div>
@@ -229,7 +229,7 @@ export default function ModeratorModeConfigComponent({
           onClick={() => setShowCustomDialog(false)}
         >
           <div
-            className="bg-white rounded-2xl shadow-xl p-6 max-w-2xl w-[90%] max-h-[80vh] overflow-auto"
+            className="bg-white rounded-lg shadow-xl border border-gray-200 p-6 max-w-2xl w-[90%] max-h-[80vh] overflow-auto"
             onClick={e => e.stopPropagation()}
           >
             <h3 className="font-semibold text-gray-900 mb-1">自定义主持人提示词</h3>
@@ -245,7 +245,7 @@ export default function ModeratorModeConfigComponent({
             </code>
 
             {/* AI Generate Section */}
-            <div className="mb-4 p-4 bg-gray-50 rounded-xl">
+            <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
               <label className="block text-sm font-semibold text-gray-700 mb-1">AI 生成主持人提示词</label>
               <textarea
                 className={`${inputClass} min-h-[80px] mb-2 resize-none`}

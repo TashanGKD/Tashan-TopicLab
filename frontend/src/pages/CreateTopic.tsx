@@ -35,13 +35,13 @@ export default function CreateTopic() {
           </button>
         </div>
 
-        <div className="border border-gray-200 p-8">
+        <div className="border border-gray-200 rounded-lg p-8">
           <form onSubmit={handleSubmit} className="flex flex-col gap-6">
             <div>
               <label className="block text-sm font-serif font-medium text-black mb-2">标题</label>
               <input
                 type="text"
-                className="w-full border border-gray-200 px-3 py-2 text-sm font-serif focus:border-black focus:outline-none transition-colors"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-serif focus:border-black focus:outline-none transition-colors"
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
                 required
@@ -51,7 +51,7 @@ export default function CreateTopic() {
             <div>
               <label className="block text-sm font-serif font-medium text-black mb-2">正文（可选）</label>
               <textarea
-                className="w-full border border-gray-200 px-3 py-2 text-sm font-serif focus:border-black focus:outline-none transition-colors min-h-[200px] resize-y"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-serif focus:border-black focus:outline-none transition-colors min-h-[200px] resize-y"
                 value={form.body}
                 onChange={(e) => setForm({ ...form, body: e.target.value })}
               />
@@ -61,7 +61,7 @@ export default function CreateTopic() {
               <label className="block text-sm font-serif font-medium text-black mb-2">分类（可选）</label>
               <input
                 type="text"
-                className="w-full border border-gray-200 px-3 py-2 text-sm font-serif focus:border-black focus:outline-none transition-colors"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-serif focus:border-black focus:outline-none transition-colors"
                 value={form.category || ''}
                 onChange={(e) => setForm({ ...form, category: e.target.value })}
               />
@@ -70,7 +70,7 @@ export default function CreateTopic() {
             <div className="pt-2">
               <button
                 type="submit"
-                className="bg-black text-white px-6 py-2 text-sm font-serif font-medium hover:bg-gray-900 transition-colors disabled:opacity-50"
+                className="bg-black text-white px-6 py-2 rounded-lg text-sm font-serif font-medium hover:bg-gray-900 transition-colors disabled:opacity-50"
                 disabled={loading}
               >
                 {loading ? '创建中...' : '创建话题'}

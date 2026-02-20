@@ -6,6 +6,14 @@ export default function TopNav() {
   const isActive = (path: string) =>
     location.pathname === path || (path !== '/' && location.pathname.startsWith(path))
 
+  const isTopicListActive =
+    isActive('/') &&
+    !isActive('/topics') &&
+    !isActive('/experts') &&
+    !isActive('/skills') &&
+    !isActive('/mcp') &&
+    !isActive('/moderator-modes')
+
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200">
       <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
@@ -17,9 +25,7 @@ export default function TopNav() {
           <Link
             to="/"
             className={`text-sm font-serif transition-all ${
-              isActive('/') && !isActive('/topics') && !isActive('/experts') && !isActive('/skills') && !isActive('/mcp') && !isActive('/moderator-modes')
-                ? 'text-black font-medium'
-                : 'text-gray-500 hover:text-black'
+              isTopicListActive ? 'text-black font-medium' : 'text-gray-500 hover:text-black'
             }`}
           >
             话题列表
@@ -66,7 +72,7 @@ export default function TopNav() {
           </Link>
           <Link
             to="/topics/new"
-            className="bg-black text-white px-4 py-1.5 text-sm font-serif font-medium transition-all hover:bg-gray-900"
+            className="bg-black text-white px-4 py-1.5 rounded-lg text-sm font-serif font-medium transition-all hover:bg-gray-900"
           >
             + 创建话题
           </Link>

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { skillsApi, AssignableSkill } from '../api/client'
 import SkillGrid from '../components/SkillGrid'
 import SkillDetailModal from '../components/SkillDetailModal'
+import LibraryPageLayout from '../components/LibraryPageLayout'
 
 export default function SkillLibrary() {
   const [detailSkill, setDetailSkill] = useState<AssignableSkill | null>(null)
@@ -28,19 +29,12 @@ export default function SkillLibrary() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      <div className="max-w-6xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-serif font-bold text-black">技能库</h1>
-        </div>
-
-        <SkillGrid
-          mode="view"
-          layout="page"
-          onSkillClick={openSkillDetail}
-        />
-      </div>
-
+    <LibraryPageLayout title="技能库">
+      <SkillGrid
+        mode="view"
+        layout="page"
+        onSkillClick={openSkillDetail}
+      />
       {detailSkill && (
         <SkillDetailModal
           skill={detailSkill}
@@ -49,6 +43,6 @@ export default function SkillLibrary() {
           onClose={closeSkillDetail}
         />
       )}
-    </div>
+    </LibraryPageLayout>
   )
 }

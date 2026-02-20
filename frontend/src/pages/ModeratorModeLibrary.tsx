@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { moderatorModesApi, AssignableModeratorMode } from '../api/client'
 import ModeratorModeGrid from '../components/ModeratorModeGrid'
 import ModeratorModeDetailModal from '../components/ModeratorModeDetailModal'
+import LibraryPageLayout from '../components/LibraryPageLayout'
 
 export default function ModeratorModeLibrary() {
   const [detailMode, setDetailMode] = useState<AssignableModeratorMode | null>(null)
@@ -28,19 +29,12 @@ export default function ModeratorModeLibrary() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      <div className="max-w-6xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-serif font-bold text-black">讨论方式库</h1>
-        </div>
-
-        <ModeratorModeGrid
-          mode="view"
-          layout="page"
-          onModeClick={openModeDetail}
-        />
-      </div>
-
+    <LibraryPageLayout title="讨论方式库">
+      <ModeratorModeGrid
+        mode="view"
+        layout="page"
+        onModeClick={openModeDetail}
+      />
       {detailMode && (
         <ModeratorModeDetailModal
           mode={detailMode}
@@ -49,6 +43,6 @@ export default function ModeratorModeLibrary() {
           onClose={closeModeDetail}
         />
       )}
-    </div>
+    </LibraryPageLayout>
   )
 }

@@ -64,7 +64,7 @@ export default function TopicList() {
         <div className="flex flex-col gap-4">
           {topics.map((topic) => (
             <Link key={topic.id} to={`/topics/${topic.id}`}>
-              <div className="border border-gray-200 p-6 hover:border-black transition-colors">
+              <div className="border border-gray-200 rounded-lg p-6 hover:border-black transition-colors">
                 <div className="flex items-start justify-between mb-3">
                   <h3 className="text-base font-serif font-semibold text-black">{topic.title}</h3>
                   <StatusBadge status={topic.status} />

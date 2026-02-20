@@ -35,7 +35,7 @@ export default function SourceCategoryToc({
 
   return (
     <nav className={`text-sm ${className}`}>
-      <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">目录</div>
+      <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-2 py-1 mb-3">目录</div>
       <ul className="space-y-1">
         {nodes.map((node) => (
           <li key={node.id}>

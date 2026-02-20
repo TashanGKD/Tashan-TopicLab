@@ -52,7 +52,7 @@ export default function ExpertGrid(props: ExpertGridProps) {
 
       {!loading && filteredExperts.length > 0 && (
         <div
-          className={`flex ${layout === 'embed' ? 'gap-0 border border-gray-200 rounded-xl overflow-hidden' : 'gap-8'}`}
+          className={`flex ${layout === 'embed' ? 'gap-0 border border-gray-200 rounded-lg overflow-hidden' : 'gap-8'}`}
           style={layout === 'embed' ? { maxHeight } : undefined}
         >
           <div
@@ -94,7 +94,7 @@ export default function ExpertGrid(props: ExpertGridProps) {
                   return (
                     <div
                       key={source}
-                      className="border border-gray-200 rounded-xl overflow-hidden"
+                      className="border border-gray-200 rounded-lg overflow-hidden"
                     >
                       <div
                         id={`source-${source}`}

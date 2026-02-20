@@ -8,6 +8,7 @@ export interface MCPServerSelectorProps {
   onChange: (ids: string[]) => void
   placeholder?: string
   maxHeight?: string
+  fillHeight?: boolean
 }
 
 export default function MCPServerSelector({
@@ -15,6 +16,7 @@ export default function MCPServerSelector({
   onChange,
   placeholder = '搜索 MCP 服务器名称、描述、分类...',
   maxHeight = '320px',
+  fillHeight = false,
 }: MCPServerSelectorProps) {
   const [detailMcp, setDetailMcp] = useState<AssignableMCP | null>(null)
   const [detailContent, setDetailContent] = useState<string | null>(null)
@@ -47,7 +49,8 @@ export default function MCPServerSelector({
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        maxHeight={maxHeight}
+        maxHeight={fillHeight ? undefined : maxHeight}
+        fillHeight={fillHeight}
         onMcpClick={openMcpDetail}
       />
       {detailMcp && (

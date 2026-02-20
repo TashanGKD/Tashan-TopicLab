@@ -110,7 +110,7 @@ export default function MentionTextarea({
       />
 
       {showDropdown && filteredExperts.length > 0 && (
-        <div className="absolute bottom-full left-0 z-50 bg-white border border-gray-200 rounded-xl shadow-lg min-w-[220px] overflow-hidden mb-1">
+        <div className="absolute bottom-full left-0 z-50 bg-white border border-gray-200 rounded-lg shadow-lg min-w-[220px] overflow-hidden mb-1">
           {filteredExperts.map((expert, idx) => (
             <div
               key={expert.name}

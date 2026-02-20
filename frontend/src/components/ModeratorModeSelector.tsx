@@ -8,20 +8,19 @@ export interface ModeratorModeSelectorProps {
   onChange: (modeId: string) => void
   placeholder?: string
   maxHeight?: string
+  fillHeight?: boolean
+  hideSelectedChips?: boolean
 }
 
-const CUSTOM_MODE: AssignableModeratorMode = {
-  id: 'custom',
-  name: '自定义模式',
-  description: '手动编写主持人提示词',
-  source: 'custom',
-}
+const CUSTOM_MODE = { id: 'custom', name: '自定义模式' }
 
 export default function ModeratorModeSelector({
   value,
   onChange,
   placeholder = '搜索讨论方式名称、描述、分类...',
   maxHeight = '320px',
+  fillHeight = false,
+  hideSelectedChips = false,
 }: ModeratorModeSelectorProps) {
   const [detailMode, setDetailMode] = useState<AssignableModeratorMode | null>(null)
   const [detailContent, setDetailContent] = useState<string | null>(null)
@@ -33,7 +32,6 @@ export default function ModeratorModeSelector({
   }
 
   const openModeDetail = async (m: AssignableModeratorMode) => {
-    if (m.id === 'custom') return
     setDetailMode(m)
     setDetailContent(null)
     setDetailLoading(true)
@@ -52,13 +50,9 @@ export default function ModeratorModeSelector({
     setDetailContent(null)
   }
 
-  const selectCustom = () => {
-    onChange('custom')
-  }
-
   return (
     <>
-      {value === 'custom' && (
+      {!hideSelectedChips && value === 'custom' && (
         <div className="flex flex-wrap gap-2 p-3 bg-gray-50 rounded-lg border border-gray-100 mb-3">
           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide w-full mb-1">
             已选讨论方式
@@ -83,26 +77,11 @@ export default function ModeratorModeSelector({
         value={valueAsArray}
         onChange={handleChange}
         placeholder={placeholder}
-        maxHeight={maxHeight}
+        maxHeight={fillHeight ? undefined : maxHeight}
+        fillHeight={fillHeight}
         onModeClick={openModeDetail}
+        hideSelectedChips={hideSelectedChips}
       />
-
-      {/* 自定义模式选项 */}
-      <div className="mt-3 p-3 border border-gray-200 rounded-xl">
-        <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">其他</div>
-        <button
-          type="button"
-          onClick={selectCustom}
-          className={`inline-flex flex-col gap-1 px-4 py-3 rounded-lg border-2 transition-colors min-w-[200px] max-w-[280px] text-left ${
-            value === 'custom'
-              ? 'border-gray-900 bg-gray-50'
-              : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
-          }`}
-        >
-          <span className="text-sm font-serif font-medium text-black">{CUSTOM_MODE.name}</span>
-          <span className="text-xs text-gray-500">{CUSTOM_MODE.description}</span>
-        </button>
-      </div>
 
       {detailMode && (
         <ModeratorModeDetailModal

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { mcpApi, AssignableMCP } from '../api/client'
 import MCPGrid from '../components/MCPGrid'
 import MCPDetailModal from '../components/MCPDetailModal'
+import LibraryPageLayout from '../components/LibraryPageLayout'
 
 export default function MCPLibrary() {
   const [detailMcp, setDetailMcp] = useState<AssignableMCP | null>(null)
@@ -28,19 +29,12 @@ export default function MCPLibrary() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      <div className="max-w-6xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-serif font-bold text-black">MCP 库</h1>
-        </div>
-
-        <MCPGrid
-          mode="view"
-          layout="page"
-          onMcpClick={openMcpDetail}
-        />
-      </div>
-
+    <LibraryPageLayout title="MCP 库">
+      <MCPGrid
+        mode="view"
+        layout="page"
+        onMcpClick={openMcpDetail}
+      />
       {detailMcp && (
         <MCPDetailModal
           mcp={detailMcp}
@@ -49,6 +43,6 @@ export default function MCPLibrary() {
           onClose={closeMcpDetail}
         />
       )}
-    </div>
+    </LibraryPageLayout>
   )
 }

@@ -71,12 +71,51 @@
     50% { opacity: 0.2; }
   }
   
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  
   .animate-spin {
     animation: spin 0.8s linear infinite;
   }
   
   .animate-blink {
     animation: blink 1.2s ease-in-out infinite;
+  }
+  
+  .animate-fade-in {
+    animation: fadeIn 0.15s ease-out;
+  }
+
+  @keyframes slideInFromRight {
+    from {
+      opacity: 0.6;
+      transform: translateX(12%);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes slideInFromLeft {
+    from {
+      opacity: 0.6;
+      transform: translateX(-12%);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  .animate-slide-in-right {
+    animation: slideInFromRight 0.2s ease-out;
+  }
+
+  .animate-slide-in-left {
+    animation: slideInFromLeft 0.2s ease-out;
   }
   
   /* Typography Utilities */

@@ -7,7 +7,7 @@ interface ExpertManagementProps {
   onExpertsChange?: () => void
 }
 
-const inputClass = 'w-full border border-gray-200 px-3 py-2 text-sm font-serif focus:border-black focus:outline-none'
+const inputClass = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-serif focus:border-black focus:outline-none'
 const labelClass = 'block text-sm font-serif font-medium text-black mb-2'
 
 export default function ExpertManagement({ topicId, onExpertsChange }: ExpertManagementProps) {
@@ -162,38 +162,45 @@ export default function ExpertManagement({ topicId, onExpertsChange }: ExpertMan
     }
   }
 
-  if (loading) return <p className="text-gray-500 text-sm font-serif">加载中...</p>
+  if (loading) return <p className="text-gray-500 text-sm">加载中...</p>
 
   return (
-    <div className="mb-6">
-      <h3 className="font-serif font-semibold text-black mb-4">角色库</h3>
+    <div className="space-y-4">
+      <p className="text-xs text-gray-500 mb-2">
+        点击下方按钮从预设添加或创建新角色，选中的角色会参与讨论。
+      </p>
 
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2">
         {experts.length === 0 && (
-          <p className="text-sm font-serif text-gray-400">暂无角色，请添加</p>
+          <p className="text-sm text-gray-400">暂无角色，请添加</p>
         )}
         {experts.map((expert) => (
           <div
             key={expert.name}
-            className="flex items-center gap-2 border border-gray-200 px-3 py-1"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 transition-colors min-w-[140px]"
           >
-            <span className="text-sm font-serif text-black">{expert.label}</span>
+            <span className="text-sm font-serif font-medium text-black truncate flex-1 min-w-0">
+              {expert.label}
+            </span>
             <button
               onClick={() => handleEdit(expert)}
-              className="text-gray-400 hover:text-black text-xs transition-colors"
+              className="text-gray-400 hover:text-black text-xs transition-colors flex-shrink-0"
             >
               编辑
             </button>
             <button
               onClick={() => handleShare(expert)}
-              className="text-gray-400 hover:text-blue-600 text-xs transition-colors"
+              className="text-gray-400 hover:text-blue-600 text-xs transition-colors flex-shrink-0"
               title="分享到平台预设库"
             >
               共享
             </button>
             <button
-              onClick={() => handleDelete(expert.name)}
-              className="text-gray-400 hover:text-black text-xs transition-colors"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleDelete(expert.name)
+              }}
+              className="text-gray-400 hover:text-black text-xs transition-colors flex-shrink-0"
             >
               删除
             </button>
@@ -204,13 +211,13 @@ export default function ExpertManagement({ topicId, onExpertsChange }: ExpertMan
       <div className="flex gap-2">
         <button
           onClick={() => { setAddMode('preset'); setShowAddDialog(true) }}
-          className="border border-gray-200 px-4 py-2 text-sm font-serif text-black hover:border-black transition-colors"
+          className="flex-1 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
         >
           从预设添加
         </button>
         <button
           onClick={() => { setAddMode('custom'); setShowAddDialog(true) }}
-          className="bg-black px-4 py-2 text-sm font-serif text-white hover:bg-gray-900 transition-colors"
+          className="flex-1 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
         >
           创建新角色
         </button>
@@ -222,7 +229,7 @@ export default function ExpertManagement({ topicId, onExpertsChange }: ExpertMan
           onClick={() => setShowAddDialog(false)}
         >
           <div
-            className="bg-white p-6 max-w-lg w-[90%] max-h-[80vh] overflow-auto border border-gray-200"
+            className="bg-white p-6 max-w-lg w-[90%] max-h-[80vh] overflow-auto border border-gray-200 rounded-lg"
             onClick={e => e.stopPropagation()}
           >
             <h3 className="font-serif font-semibold text-black mb-6">
@@ -246,7 +253,7 @@ export default function ExpertManagement({ topicId, onExpertsChange }: ExpertMan
                 </select>
                 <div className="flex gap-2">
                   <button onClick={handleAddPreset} className="bg-black text-white px-4 py-2 text-sm font-serif hover:bg-gray-900 transition-colors">添加</button>
-                  <button onClick={() => setShowAddDialog(false)} className="border border-gray-200 px-4 py-2 text-sm font-serif text-black hover:border-black transition-colors">取消</button>
+                  <button onClick={() => setShowAddDialog(false)} className="border border-gray-200 rounded-lg px-4 py-2 text-sm font-serif text-black hover:border-black transition-colors">取消</button>
                 </div>
               </>
             ) : (
@@ -292,7 +299,7 @@ export default function ExpertManagement({ topicId, onExpertsChange }: ExpertMan
                   >
                     创建角色
                   </button>
-                  <button onClick={() => setShowAddDialog(false)} className="border border-gray-200 px-4 py-2 text-sm font-serif text-black hover:border-black transition-colors">取消</button>
+                  <button onClick={() => setShowAddDialog(false)} className="border border-gray-200 rounded-lg px-4 py-2 text-sm font-serif text-black hover:border-black transition-colors">取消</button>
                 </div>
               </>
             )}
@@ -306,7 +313,7 @@ export default function ExpertManagement({ topicId, onExpertsChange }: ExpertMan
           onClick={() => setShowEditDialog(false)}
         >
           <div
-            className="bg-white p-6 max-w-xl w-[90%] max-h-[80vh] overflow-auto border border-gray-200"
+            className="bg-white p-6 max-w-xl w-[90%] max-h-[80vh] overflow-auto border border-gray-200 rounded-lg"
             onClick={e => e.stopPropagation()}
           >
             <h3 className="font-serif font-semibold text-black mb-4">编辑角色：{selectedExpert.label}</h3>
@@ -321,7 +328,7 @@ export default function ExpertManagement({ topicId, onExpertsChange }: ExpertMan
 
             <div className="flex gap-2">
               <button onClick={handleSaveEdit} className="bg-black text-white px-4 py-2 text-sm font-serif hover:bg-gray-900 transition-colors">保存</button>
-              <button onClick={() => setShowEditDialog(false)} className="border border-gray-200 px-4 py-2 text-sm font-serif text-black hover:border-black transition-colors">取消</button>
+              <button onClick={() => setShowEditDialog(false)} className="border border-gray-200 rounded-lg px-4 py-2 text-sm font-serif text-black hover:border-black transition-colors">取消</button>
             </div>
           </div>
         </div>

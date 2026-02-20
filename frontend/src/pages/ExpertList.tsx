@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { ExpertInfo } from '../api/client'
 import ExpertGrid from '../components/ExpertGrid'
 import ExpertDetailModal from '../components/ExpertDetailModal'
+import LibraryPageLayout from '../components/LibraryPageLayout'
 
 export default function ExpertList() {
   const [detailExpert, setDetailExpert] = useState<ExpertInfo | null>(null)
@@ -20,15 +21,8 @@ export default function ExpertList() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      <div className="max-w-6xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-serif font-bold text-black">角色库</h1>
-        </div>
-
-        <ExpertGrid onExpertClick={openExpertDetail} />
-      </div>
-
+    <LibraryPageLayout title="角色库">
+      <ExpertGrid onExpertClick={openExpertDetail} />
       {detailExpert && (
         <ExpertDetailModal
           expert={detailExpert}
@@ -37,6 +31,6 @@ export default function ExpertList() {
           onClose={closeExpertDetail}
         />
       )}
-    </div>
+    </LibraryPageLayout>
   )
 }
