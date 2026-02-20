@@ -86,6 +86,8 @@ export interface StartDiscussionRequest {
   max_turns: number
   max_budget_usd: number
   model?: string
+  /** 启用的工具列表，如 Read, Write, Edit, Glob, Grep, Task, WebFetch, WebSearch。不传则使用默认全量 */
+  allowed_tools?: string[]
 }
 
 export interface DiscussionProgress {
