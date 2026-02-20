@@ -22,7 +22,7 @@ export default function ExpertList() {
 
   return (
     <LibraryPageLayout title="角色库">
-      <ExpertGrid onExpertClick={openExpertDetail} />
+      <ExpertGrid mode="view" onExpertClick={openExpertDetail} />
       {detailExpert && (
         <ExpertDetailModal
           expert={detailExpert}

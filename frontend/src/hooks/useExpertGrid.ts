@@ -4,7 +4,6 @@ import {
   groupBySourceAndCategory,
   filterExpertsBySearch,
   getExpertSectionId as getSectionId,
-  perspectiveDisplayName,
 } from '../utils/experts'
 
 export interface UseExpertGridOptions {
@@ -50,9 +49,7 @@ export function useExpertGrid(options: UseExpertGridOptions = {}) {
       )
       t[source] = catKeys.map((catId) => {
         const items = cats[catId]
-        const catName = items[0]?.perspective
-          ? perspectiveDisplayName(items[0].perspective)
-          : catId || '研究员'
+        const catName = items[0]?.category_name || catId || '学者'
         const sectionId = `${sectionIdPrefix}-${source}-${catId || '_'}`.replace(/\s+/g, '-')
         return { id: sectionId, label: catName }
       })

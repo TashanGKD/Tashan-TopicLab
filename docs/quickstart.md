@@ -18,6 +18,7 @@ git submodule update --init --recursive
 cp .env.example .env
 # Edit .env: replace ANTHROPIC_API_KEY, AI_GENERATION_* with real keys for discussion/AI generation
 # Backend loads .env from project root first; fallback to backend/.env
+# No scenario config: experts, moderator modes, skills, MCP load from libs/
 
 # 3. Start (explicitly pass .env to docker compose)
 ./scripts/docker-compose-local.sh
@@ -35,7 +36,7 @@ cp .env.example .env
 cd backend
 uv run pip install -e .   # or: python -m venv .venv && source .venv/bin/activate && pip install -e .
 cp .env.example .env     # or place .env at project root; backend loads project root first
-# Edit .env with API keys
+# Edit .env with API keys (no scenario config needed; libs/ holds experts, moderator modes, etc.)
 uvicorn main:app --reload --port 8000
 ```
 

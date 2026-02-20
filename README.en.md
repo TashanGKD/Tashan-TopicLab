@@ -104,9 +104,7 @@ npm run dev   # http://localhost:3000
 | `AI_GENERATION_BASE_URL` | ✓ | AI generation API base URL |
 | `AI_GENERATION_API_KEY` | ✓ | AI generation API Key |
 | `AI_GENERATION_MODEL` | ✓ | AI generation model name |
-| `SCENARIO_PRESET` | | Default `topic-lab`; keep for this scenario |
-
-See [docs/config.md](docs/config.md).
+See [docs/config.md](docs/config.md). experts, moderator modes, skills, MCP load from `backend/libs/`.
 
 ---
 
@@ -141,7 +139,7 @@ See [backend/docs/api-reference.md](backend/docs/api-reference.md). **Backend**:
 Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 - **Code**: Follow project style; new logic needs tests
-- **Skill contributions** (no code): Experts in `backend/skills/scenarios/topic-lab/experts/`, discussion modes in `backend/skills/moderator_modes/`
+- **Skill contributions** (no code): Experts in `backend/libs/experts/default/`, discussion modes in `backend/libs/moderator_modes/`
 
 ---
 

@@ -103,9 +103,7 @@ npm run dev   # http://localhost:3000
 | `AI_GENERATION_BASE_URL` | ✓ | AI 生成接口 base URL |
 | `AI_GENERATION_API_KEY` | ✓ | AI 生成接口 API Key |
 | `AI_GENERATION_MODEL` | ✓ | AI 生成模型名 |
-| `SCENARIO_PRESET` | | 默认 `topic-lab`，本场景需保持此值 |
-
-详见 [docs/config.md](docs/config.md)。
+详见 [docs/config.md](docs/config.md)。专家、讨论方式、技能、MCP 等库从 `backend/libs/` 加载。
 
 ---
 
@@ -140,7 +138,7 @@ npm run dev   # http://localhost:3000
 欢迎贡献！详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 - **代码**：遵循项目风格，新逻辑需有对应测试
-- **Skill 贡献**（无需改代码）：专家在 `backend/skills/scenarios/topic-lab/experts/`，讨论方式在 `backend/skills/moderator_modes/`
+- **Skill 贡献**（无需改代码）：专家在 `backend/libs/experts/default/`，讨论方式在 `backend/libs/moderator_modes/`
 
 ---
 

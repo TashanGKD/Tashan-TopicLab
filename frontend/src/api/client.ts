@@ -177,7 +177,9 @@ export interface ExpertInfo {
   description: string
   skill_file: string
   skill_content: string
-  perspective?: string  // 用于分组展示，如 physics, biology
+  perspective?: string  // 学科视角，如 physics, biology
+  category?: string  // 分类 id，用于分组（与 skills/mcps 一致）
+  category_name?: string  // 分类显示名
 }
 
 export interface ExpertUpdateRequest {

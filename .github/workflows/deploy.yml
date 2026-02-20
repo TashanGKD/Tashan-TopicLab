@@ -48,8 +48,8 @@ jobs:
             for i in 1 2 3; do git fetch origin && break || { [ $i -eq 3 ] && echo "git fetch failed after 3 retries" && exit 1; sleep 5; }; done
             git reset --hard origin/main
             git submodule update --init backend
-            git config -f .git/modules/backend/config submodule.skills/assignable_skills/_submodules/ai-research.url "https://x-access-token:${SUBMODULE_AUTH}@github.com/Orchestra-Research/AI-Research-SKILLs.git"
-            git config -f .git/modules/backend/config submodule.skills/assignable_skills/_submodules/anthropics.url "https://x-access-token:${SUBMODULE_AUTH}@github.com/anthropics/skills.git"
+            git config -f .git/modules/backend/config submodule.libs/assignable_skills/_submodules/ai-research.url "https://x-access-token:${SUBMODULE_AUTH}@github.com/Orchestra-Research/AI-Research-SKILLs.git"
+            git config -f .git/modules/backend/config submodule.libs/assignable_skills/_submodules/anthropics.url "https://x-access-token:${SUBMODULE_AUTH}@github.com/anthropics/skills.git"
             git submodule sync --recursive
             git submodule update --init --recursive
 

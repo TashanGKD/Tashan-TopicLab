@@ -92,7 +92,7 @@ Before submitting:
 | Backend agent logic | `backend/app/agent/*.py` | + integration tests if Agent SDK |
 | Backend config | `backend/app/core/config.py` | + `docs/config.md` |
 | Backend schemas | `backend/app/models/schemas.py` | |
-| Skills (no code) | `backend/skills/scenarios/topic-lab/experts/` or `backend/skills/moderator_modes/default/` | Add `.md`, register in `meta.json` / `default/meta.json` |
+| Skills (no code) | `backend/libs/experts/default/` or `backend/libs/moderator_modes/default/` | Add `.md`, register in `default/meta.json` |
 
 ## Submodule Notes
 

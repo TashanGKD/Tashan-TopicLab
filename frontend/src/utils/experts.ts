@@ -1,12 +1,12 @@
 import type { ExpertInfo } from '../api/client'
 
-/** 按 perspective 分组：source 固定为 default，category 为 perspective */
+/** 按 category 分组，与 skills/mcps 一致 */
 export function groupBySourceAndCategory(experts: ExpertInfo[]) {
   const bySource: Record<string, Record<string, ExpertInfo[]>> = {}
   for (const e of experts) {
     const src = 'default'
     if (!bySource[src]) bySource[src] = {}
-    const cat = e.perspective || ''
+    const cat = e.category || ''
     if (!bySource[src][cat]) bySource[src][cat] = []
     bySource[src][cat].push(e)
   }
@@ -37,10 +37,12 @@ export function filterExpertsBySearch(experts: ExpertInfo[], search: string) {
       e.name.toLowerCase().includes(q) ||
       e.label.toLowerCase().includes(q) ||
       (e.description || '').toLowerCase().includes(q) ||
-      (e.perspective || '').toLowerCase().includes(q)
+      (e.perspective || '').toLowerCase().includes(q) ||
+      (e.category_name || '').toLowerCase().includes(q) ||
+      (e.category || '').toLowerCase().includes(q)
   )
 }
 
 export function getExpertSectionId(expert: ExpertInfo, prefix = 'section') {
-  return `${prefix}-default-${expert.perspective || '_'}`.replace(/\s+/g, '-')
+  return `${prefix}-default-${expert.category || '_'}`.replace(/\s+/g, '-')
 }

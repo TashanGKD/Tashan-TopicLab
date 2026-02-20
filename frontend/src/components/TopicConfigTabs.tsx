@@ -148,8 +148,8 @@ export default function TopicConfigTabs({
       id: 'experts' as ConfigTabId,
       label: '角色',
       content: (
-        <div className="overflow-auto min-h-0">
-          <ExpertManagement topicId={topicId} onExpertsChange={onExpertsChange} />
+        <div className="h-full flex flex-col min-h-0 overflow-hidden">
+          <ExpertManagement topicId={topicId} onExpertsChange={onExpertsChange} fillHeight />
         </div>
       ),
     },

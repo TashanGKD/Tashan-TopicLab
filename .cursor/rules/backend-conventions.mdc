@@ -40,5 +40,5 @@ When working on the backend submodule (`backend/`), follow these conventions.
 ## 6. Path Conventions
 
 - In backend docs and Cursor skills, use paths **relative to backend root**:
-  - `skills/assignable_skills/`, `scripts/import_skill_repo.sh`, `docs/`
+  - `libs/assignable_skills/`, `scripts/import_skill_repo.sh`, `docs/`
 - When backend is used as submodule, parent docs may reference `backend/docs/...`.

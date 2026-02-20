@@ -30,13 +30,9 @@ Used for:
 
 **Note**: Both configs are strictly separate; do not mix them.
 
-### 3. Scenario preset (optional, default topic-lab)
+### 3. Libraries
 
-```bash
-SCENARIO_PRESET=topic-lab
-```
-
-This frontend depends on the `topic-lab` scenario (experts, moderator modes, prompts). If unset, Resonnet defaults to `topic-lab`.
+All libraries (experts, moderator_modes, mcps, assignable_skills, prompts) are loaded from `backend/libs/`. No scenario preset.
 
 ### 4. Workspace (optional)
 
@@ -48,7 +44,7 @@ Topic workspace root directory.
 
 ### 5. MCP 库 (只读)
 
-MCP 服务器在 `backend/skills/mcps/` 中配置，与技能库结构一致。MCP 库页面 `/mcp` 只读展示，话题讨论时可选择启用的 MCP。仅接受 npm、uvx、remote。参见 [backend/docs/mcp-config.md](backend/docs/mcp-config.md)。
+MCP 服务器在 `backend/libs/mcps/` 中配置，与技能库结构一致。MCP 库页面 `/mcp` 只读展示，话题讨论时可选择启用的 MCP。仅接受 npm、uvx、remote。参见 [backend/docs/mcp-config.md](backend/docs/mcp-config.md)。
 
 ## Rules
 

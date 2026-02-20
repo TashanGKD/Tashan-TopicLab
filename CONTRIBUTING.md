@@ -60,10 +60,11 @@ cd frontend && npm install && npm run dev
 
 You can contribute without modifying backend code:
 
-- **Expert roles**: Add `.md` under `backend/skills/scenarios/topic-lab/experts/`, register in `meta.json`
-- **Discussion modes**: Add `.md` under `backend/skills/moderator_modes/default/`, register in `default/meta.json` (same structure as assignable_skills)
+- **Expert roles**: Add `.md` under `backend/libs/experts/default/`, register in `default/meta.json`
+- **Discussion modes**: Add `.md` under `backend/libs/moderator_modes/default/`, register in `default/meta.json` (same structure as assignable_skills)
+- **AI prompts**: Override files in `backend/libs/prompts/` to change generation, discussion, or @mention behavior
 
-See [backend/skills/README.md](backend/skills/README.md).
+See [backend/libs/README.md](backend/libs/README.md).
 
 ## Documentation
 
