@@ -57,13 +57,9 @@ export default function TopicConfigTabs({
     moderatorModesApi.listAssignable().then((r) => setAssignableModes(Array.isArray(r.data) ? r.data : [])).catch(() => {})
   }, [topicId])
 
-  useEffect(() => {
-    if (initialSkillIds?.length) {
-      setSelectedSkillIds(initialSkillIds)
-    }
-  }, [topicId, initialSkillIds])
 
   const skipNextSaveRef = useRef(false)
+  const skipNextPrefsSaveRef = useRef(false)
   useEffect(() => {
     if (skipNextSaveRef.current) {
       skipNextSaveRef.current = false
@@ -74,13 +70,41 @@ export default function TopicConfigTabs({
     }
   }, [selectedModeId, numRounds])
 
+  const savePrefs = async () => {
+    try {
+      await moderatorModesApi.setConfig(topicId, {
+        mode_id: selectedModeId,
+        num_rounds: numRounds,
+        custom_prompt: selectedModeId === 'custom' ? customPrompt : null,
+        skill_list: selectedSkillIds,
+        mcp_server_ids: selectedMcpIds,
+        model: selectedModel,
+      })
+    } catch (err: unknown) {
+      handleApiError(err, '保存配置失败')
+    }
+  }
+  useEffect(() => {
+    if (skipNextPrefsSaveRef.current) {
+      skipNextPrefsSaveRef.current = false
+      return
+    }
+    if (!modeLoading) {
+      savePrefs()
+    }
+  }, [selectedSkillIds, selectedMcpIds, selectedModel])
+
   const loadCurrentConfig = async () => {
     try {
       const res = await moderatorModesApi.getConfig(topicId)
       skipNextSaveRef.current = true
+      skipNextPrefsSaveRef.current = true
       setSelectedModeId(res.data.mode_id)
       setNumRounds(res.data.num_rounds)
       setCustomPrompt(res.data.custom_prompt || '')
+      setSelectedSkillIds(res.data.skill_list?.length ? res.data.skill_list : (initialSkillIds || []))
+      setSelectedMcpIds(res.data.mcp_server_ids || [])
+      if (res.data.model) setSelectedModel(res.data.model)
     } catch (err) {
       handleApiError(err, '加载主持人配置失败')
     } finally {

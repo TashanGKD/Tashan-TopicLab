@@ -266,12 +266,18 @@ export interface ModeratorModeConfig {
   mode_id: string
   num_rounds: number
   custom_prompt: string | null
+  skill_list?: string[]
+  mcp_server_ids?: string[]
+  model?: string | null
 }
 
 export interface SetModeratorModeRequest {
   mode_id: string
   num_rounds: number
   custom_prompt?: string | null
+  skill_list?: string[]
+  mcp_server_ids?: string[]
+  model?: string | null
 }
 
 /** Assignable moderator mode (from skills/moderator_modes/, for library grid) */
