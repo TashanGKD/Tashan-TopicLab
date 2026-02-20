@@ -21,6 +21,10 @@ export interface Topic {
   discussion_status: 'pending' | 'running' | 'completed' | 'failed'
   created_at: string
   updated_at: string
+  /** 讨论方式 ID，由 API 从 config/moderator_mode.json 填充 */
+  moderator_mode_id?: string | null
+  /** 讨论方式显示名，由 API 填充 */
+  moderator_mode_name?: string | null
 }
 
 export interface DiscussionResult {
