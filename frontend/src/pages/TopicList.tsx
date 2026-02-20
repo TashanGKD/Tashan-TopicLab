@@ -73,6 +73,7 @@ export default function TopicList() {
                   {topic.body.slice(0, 150)}{topic.body.length > 150 ? '...' : ''}
                 </p>
                 <div className="flex items-center gap-4 text-xs font-serif text-gray-400">
+                  <span>创建于 {new Date(topic.created_at).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
                   <span>模式: {topic.mode === 'discussion' ? '话题' : topic.mode === 'both' ? '混合' : '人机'}</span>
                   {topic.discussion_status !== 'pending' && (
                     <span>
