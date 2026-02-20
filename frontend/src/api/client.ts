@@ -90,6 +90,8 @@ export interface StartDiscussionRequest {
   allowed_tools?: string[]
   /** 可选的 skill 列表（id），从全局 skill 库拷贝到工作区，供主持人分配给专家 */
   skill_list?: string[]
+  /** 可选的 MCP 服务器 ID 列表，从全局 mcp.json 拷贝到话题工作区 */
+  mcp_server_ids?: string[]
 }
 
 export interface AssignableSkill {
@@ -260,6 +262,38 @@ export const moderatorModesApi = {
     api.put<ModeratorModeConfig>(`/topics/${topicId}/moderator-mode`, data),
   generate: (topicId: string, data: { prompt: string }) =>
     api.post(`/topics/${topicId}/moderator-mode/generate`, data),
+}
+
+// MCP assignable API (read-only, from skills/mcps/)
+export interface AssignableMCP {
+  id: string
+  source?: string
+  name: string
+  description?: string
+  category?: string
+  category_name?: string
+}
+
+export interface ListAssignableMCPParams {
+  category?: string
+  fields?: 'minimal' | 'full'
+  limit?: number
+  offset?: number
+}
+
+export const mcpApi = {
+  listAssignable: (params?: ListAssignableMCPParams) => {
+    const searchParams = new URLSearchParams()
+    if (params?.category) searchParams.set('category', params.category)
+    if (params?.fields) searchParams.set('fields', params.fields)
+    if (params?.limit != null) searchParams.set('limit', String(params.limit))
+    if (params?.offset != null) searchParams.set('offset', String(params.offset))
+    const qs = searchParams.toString()
+    return api.get<AssignableMCP[]>(`/mcp/assignable${qs ? `?${qs}` : ''}`)
+  },
+  listCategories: () => api.get<AssignableCategory[]>('/mcp/assignable/categories'),
+  getContent: (mcpId: string) =>
+    api.get<{ content: string }>(`/mcp/assignable/${encodeURIComponent(mcpId)}/content`),
 }
 
 export default api

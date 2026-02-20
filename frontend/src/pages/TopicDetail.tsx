@@ -207,7 +207,11 @@ export default function TopicDetail() {
     }
   }
 
-  const handleStartDiscussion = async (model: string, skillList?: string[]) => {
+  const handleStartDiscussion = async (
+    model: string,
+    skillList?: string[],
+    mcpServerIds?: string[]
+  ) => {
     if (!id) return
     setStartingDiscussion(true)
     const req: StartDiscussionRequest = {
@@ -216,6 +220,7 @@ export default function TopicDetail() {
       max_budget_usd: 5.0,
       model,
       skill_list: skillList && skillList.length > 0 ? skillList : undefined,
+      mcp_server_ids: mcpServerIds && mcpServerIds.length > 0 ? mcpServerIds : undefined,
     }
     try {
       await discussionApi.start(id, req)

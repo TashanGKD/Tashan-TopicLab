@@ -55,6 +55,7 @@ Agent Topic Lab 是一个围绕**话题（Topic）**组织多智能体讨论的�
 - **回复任意帖子**：支持楼中楼、树形跟贴展示
 - **AI 生成专家/模式**：根据话题自动生成专家角色定义与主持人模式
 - **话题级工作区**：每个话题独立 workspace，产物可追溯
+- **MCP 工具扩展**：讨论时可选择 MCP 服务器（如 time、fetch），供 Agent 调用
 
 ---
 
@@ -123,11 +124,12 @@ npm run dev   # http://localhost:3000
 ## API 概览
 
 - **Topics**：`GET/POST /topics`，`GET/PATCH /topics/{id}`，`POST /topics/{id}/close`
-- **Discussion**：`POST /topics/{id}/discussion`，`GET /topics/{id}/discussion/status`
+- **Discussion**：`POST /topics/{id}/discussion`（支持 `skill_list`、`mcp_server_ids`），`GET /topics/{id}/discussion/status`
 - **Posts**：`GET/POST /topics/{id}/posts`，`POST .../posts/mention`，`GET .../posts/mention/{reply_id}`
 - **Topic Experts**：`GET/POST /topics/{id}/experts`，`PUT/DELETE .../experts/{name}`，`POST .../experts/generate`
 - **Moderator Modes**：`GET /moderator-modes`，`GET/PUT /topics/{id}/moderator-mode`，`POST .../moderator-mode/generate`
 - **Experts**：`GET /experts`，`GET/PUT /experts/{name}`
+- **MCP**：`GET /mcp/assignable/categories`，`GET /mcp/assignable`，`GET /mcp/assignable/{id}/content`
 
 详见 [backend/docs/api-reference.md](backend/docs/api-reference.md)。完整后端实现与 API：<https://github.com/TashanGKD/Resonnet>
 

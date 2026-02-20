@@ -17,7 +17,7 @@ export default function TopNav() {
           <Link
             to="/"
             className={`text-sm font-serif transition-all ${
-              isActive('/') && !isActive('/topics') && !isActive('/experts') && !isActive('/skills')
+              isActive('/') && !isActive('/topics') && !isActive('/experts') && !isActive('/skills') && !isActive('/mcp')
                 ? 'text-black font-medium'
                 : 'text-gray-500 hover:text-black'
             }`}
@@ -43,6 +43,16 @@ export default function TopNav() {
             }`}
           >
             技能库
+          </Link>
+          <Link
+            to="/mcp"
+            className={`text-sm font-serif transition-all ${
+              isActive('/mcp')
+                ? 'text-black font-medium'
+                : 'text-gray-500 hover:text-black'
+            }`}
+          >
+            MCP 库
           </Link>
           <Link
             to="/topics/new"

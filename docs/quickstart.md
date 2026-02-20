@@ -56,8 +56,9 @@ Frontend default: http://localhost:3000, API proxy to http://localhost:8000.
 2. Click "Create topic", enter title and description
 3. On topic detail, add experts (from presets or AI-generated)
 4. Select discussion mode (standard, brainstorm, etc.)
-5. Click "Start discussion", wait for rounds to complete
-6. Post in the thread; type `@expert_name` to trigger expert reply
+5. (Optional) Select skills and MCP servers for the discussion
+6. Click "Start discussion", wait for rounds to complete
+7. Post in the thread; type `@expert_name` to trigger expert reply
 
 ## Troubleshooting
 

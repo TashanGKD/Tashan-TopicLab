@@ -46,6 +46,10 @@ WORKSPACE_BASE=./workspace
 
 Topic workspace root directory.
 
+### 5. MCP 库 (只读)
+
+MCP 服务器在 `backend/skills/mcps/` 中配置，与技能库结构一致。MCP 库页面 `/mcp` 只读展示，话题讨论时可选择启用的 MCP。仅接受 npm、uvx、remote。参见 [backend/docs/mcp-config.md](backend/docs/mcp-config.md)。
+
 ## Rules
 
 1. **Do not mix the two API configs**: `ANTHROPIC_*` for Claude Agent SDK, `AI_GENERATION_*` for OpenAI-compatible API

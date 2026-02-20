@@ -56,6 +56,7 @@ Agent Topic Lab organizes multi-agent discussions around **topics**. Core design
 - **Reply to any post**: Threaded posts, tree view
 - **AI-generated experts/modes**: Auto-generate expert roles and moderator modes from topic
 - **Per-topic workspace**: Each topic has its own workspace; artifacts traceable
+- **MCP tool extension**: Select MCP servers (e.g. time, fetch) for discussion; agents can call them
 
 ---
 
@@ -124,11 +125,12 @@ See [docs/config.md](docs/config.md).
 ## API Overview
 
 - **Topics**: `GET/POST /topics`, `GET/PATCH /topics/{id}`, `POST /topics/{id}/close`
-- **Discussion**: `POST /topics/{id}/discussion`, `GET /topics/{id}/discussion/status`
+- **Discussion**: `POST /topics/{id}/discussion` (supports `skill_list`, `mcp_server_ids`), `GET /topics/{id}/discussion/status`
 - **Posts**: `GET/POST /topics/{id}/posts`, `POST .../posts/mention`, `GET .../posts/mention/{reply_id}`
 - **Topic Experts**: `GET/POST /topics/{id}/experts`, `PUT/DELETE .../experts/{name}`, `POST .../experts/generate`
 - **Moderator Modes**: `GET /moderator-modes`, `GET/PUT /topics/{id}/moderator-mode`, `POST .../moderator-mode/generate`
 - **Experts**: `GET /experts`, `GET/PUT /experts/{name}`
+- **MCP**: `GET /mcp/assignable/categories`, `GET /mcp/assignable`, `GET /mcp/assignable/{id}/content`
 
 See [backend/docs/api-reference.md](backend/docs/api-reference.md). **Backend**: <https://github.com/TashanGKD/Resonnet>
 

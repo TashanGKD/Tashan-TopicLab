@@ -6,12 +6,13 @@ import {
   ROUNDTABLE_MODELS,
 } from '../api/client'
 import { handleApiError, handleApiSuccess } from '../utils/errorHandler'
+import MCPServerSelector from './MCPServerSelector'
 import SkillSelector from './SkillSelector'
 
 interface ModeratorModeConfigProps {
   topicId: string
   onModeChange?: () => void
-  onStartDiscussion?: (model: string, skillList?: string[]) => Promise<void>
+  onStartDiscussion?: (model: string, skillList?: string[], mcpServerIds?: string[]) => Promise<void>
   isStarting?: boolean
   isRunning?: boolean
   isCompleted?: boolean
@@ -41,6 +42,7 @@ export default function ModeratorModeConfigComponent({
   const [generating, setGenerating] = useState(false)
   const [selectedModel, setSelectedModel] = useState(ROUNDTABLE_MODELS[0].value)
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([])
+  const [selectedMcpIds, setSelectedMcpIds] = useState<string[]>([])
 
   useEffect(() => {
     loadPresetModes()
@@ -220,6 +222,11 @@ export default function ModeratorModeConfigComponent({
             <SkillSelector value={selectedSkillIds} onChange={setSelectedSkillIds} maxHeight="320px" />
           </div>
           <div className="mb-4">
+            <label className={labelClass}>可选 MCP 服务器</label>
+            <p className="text-xs text-gray-500 mb-2">选择要启用的 MCP 服务器，选中的会拷贝到话题工作区。</p>
+            <MCPServerSelector value={selectedMcpIds} onChange={setSelectedMcpIds} maxHeight="320px" />
+          </div>
+          <div className="mb-4">
             <label className={labelClass}>推理模型</label>
             <select
               className={inputClass}
@@ -235,7 +242,11 @@ export default function ModeratorModeConfigComponent({
           <button
             onClick={async () => {
               await handleSaveMode()
-              await onStartDiscussion(selectedModel, selectedSkillIds.length > 0 ? selectedSkillIds : undefined)
+              await onStartDiscussion(
+                selectedModel,
+                selectedSkillIds.length > 0 ? selectedSkillIds : undefined,
+                selectedMcpIds.length > 0 ? selectedMcpIds : undefined
+              )
             }}
             disabled={isStarting || isRunning}
             className="bg-gray-900 hover:bg-black text-white px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
