@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useCallback } from 'react'
 import { skillsApi, AssignableSkill } from '../api/client'
+import { useResourceDetail } from '../hooks/useResourceDetail'
 import SkillGrid from './SkillGrid'
 import SkillDetailModal from './SkillDetailModal'
 
@@ -18,28 +19,12 @@ export default function SkillSelector({
   maxHeight = '400px',
   fillHeight = false,
 }: SkillSelectorProps) {
-  const [detailSkill, setDetailSkill] = useState<AssignableSkill | null>(null)
-  const [detailContent, setDetailContent] = useState<string | null>(null)
-  const [detailLoading, setDetailLoading] = useState(false)
-
-  const openSkillDetail = async (s: AssignableSkill) => {
-    setDetailSkill(s)
-    setDetailContent(null)
-    setDetailLoading(true)
-    try {
-      const res = await skillsApi.getContent(s.id)
-      setDetailContent(res.data.content)
-    } catch {
-      setDetailContent('（加载失败）')
-    } finally {
-      setDetailLoading(false)
-    }
-  }
-
-  const closeSkillDetail = () => {
-    setDetailSkill(null)
-    setDetailContent(null)
-  }
+  const fetchContent = useCallback(async (s: AssignableSkill) => {
+    const res = await skillsApi.getContent(s.id)
+    return res.data.content
+  }, [])
+  const { detailItem: detailSkill, detailContent, detailLoading, openDetail: openSkillDetail, closeDetail: closeSkillDetail } =
+    useResourceDetail(fetchContent)
 
   return (
     <>

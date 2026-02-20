@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useCallback } from 'react'
 import { mcpApi, AssignableMCP } from '../api/client'
+import { useResourceDetail } from '../hooks/useResourceDetail'
 import MCPGrid from './MCPGrid'
 import MCPDetailModal from './MCPDetailModal'
 
@@ -18,28 +19,12 @@ export default function MCPServerSelector({
   maxHeight = '320px',
   fillHeight = false,
 }: MCPServerSelectorProps) {
-  const [detailMcp, setDetailMcp] = useState<AssignableMCP | null>(null)
-  const [detailContent, setDetailContent] = useState<string | null>(null)
-  const [detailLoading, setDetailLoading] = useState(false)
-
-  const openMcpDetail = async (m: AssignableMCP) => {
-    setDetailMcp(m)
-    setDetailContent(null)
-    setDetailLoading(true)
-    try {
-      const res = await mcpApi.getContent(m.id)
-      setDetailContent(res.data.content)
-    } catch {
-      setDetailContent('（加载失败）')
-    } finally {
-      setDetailLoading(false)
-    }
-  }
-
-  const closeMcpDetail = () => {
-    setDetailMcp(null)
-    setDetailContent(null)
-  }
+  const fetchContent = useCallback(async (m: AssignableMCP) => {
+    const res = await mcpApi.getContent(m.id)
+    return res.data.content
+  }, [])
+  const { detailItem: detailMcp, detailContent, detailLoading, openDetail: openMcpDetail, closeDetail: closeMcpDetail } =
+    useResourceDetail(fetchContent)
 
   return (
     <>

@@ -161,25 +161,34 @@ export default function MCPGrid(props: MCPGridProps) {
     />
   )
 
+  const selectedChipsSection =
+    props.mode === 'select' && selectedMcps.length > 0 ? (
+      <div
+        className={
+          layout === 'embed' && filteredMcps.length > 0
+            ? 'flex flex-wrap gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex-shrink-0'
+            : 'flex flex-wrap gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200'
+        }
+      >
+        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide w-full mb-1">
+          已选 MCP 服务器（点击跳转）
+        </span>
+        {selectedMcps.map((m) => (
+          <MCPChip
+            key={m.id}
+            mcp={m}
+            onRemove={() => removeMcp!(m.id)}
+            onClick={() => scrollToSection(getMcpSectionId(m))}
+          />
+        ))}
+      </div>
+    ) : null
+
   return (
     <div className={rootClass}>
       {!isFill && searchInput}
 
-      {props.mode === 'select' && selectedMcps.length > 0 && (
-        <div className="flex flex-wrap gap-2 p-3 bg-gray-50 rounded-lg border border-gray-100">
-          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide w-full mb-1">
-            已选 MCP 服务器（点击跳转）
-          </span>
-          {selectedMcps.map((m) => (
-            <MCPChip
-              key={m.id}
-              mcp={m}
-              onRemove={() => removeMcp!(m.id)}
-              onClick={() => scrollToSection(getMcpSectionId(m))}
-            />
-          ))}
-        </div>
-      )}
+      {selectedChipsSection && !(layout === 'embed' && filteredMcps.length > 0) && selectedChipsSection}
 
       {loading && <p className="text-gray-400 font-serif text-sm">加载中...</p>}
       {!loading && filteredMcps.length === 0 && (
@@ -188,9 +197,23 @@ export default function MCPGrid(props: MCPGridProps) {
 
       {!loading && filteredMcps.length > 0 && (
         <div
-          className={`flex ${layout === 'embed' ? 'gap-0 border border-gray-200 rounded-lg overflow-hidden' : 'gap-8'} ${isFill ? 'flex-1 min-h-0' : ''}`}
+          className={
+            layout === 'embed' && selectedChipsSection
+              ? `flex flex-col border border-gray-200 rounded-lg overflow-hidden ${isFill ? 'flex-1 min-h-0' : ''}`
+              : `flex ${layout === 'embed' ? 'gap-0 border border-gray-200 rounded-lg overflow-hidden' : 'gap-8'} ${isFill ? 'flex-1 min-h-0' : ''}`
+          }
           style={gridHeightStyle}
         >
+          {layout === 'embed' && selectedChipsSection && selectedChipsSection}
+          <div
+            className={
+              layout === 'embed' && selectedChipsSection
+                ? 'flex flex-1 min-h-0 min-w-0'
+                : layout === 'embed'
+                  ? 'flex gap-0 flex-1 min-h-0'
+                  : 'flex gap-8 flex-1 min-h-0'
+            }
+          >
           <div className={layout === 'embed' ? 'hidden sm:flex flex-shrink-0' : 'hidden md:flex flex-shrink-0'}>
             <ResizableToc
               defaultWidth={layout === 'embed' ? 128 : 176}
@@ -287,6 +310,7 @@ export default function MCPGrid(props: MCPGridProps) {
               renderGridContent()
             )}
             </div>
+          </div>
           </div>
         </div>
       )}

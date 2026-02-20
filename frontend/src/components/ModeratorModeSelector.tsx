@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useCallback } from 'react'
 import { moderatorModesApi, AssignableModeratorMode } from '../api/client'
+import { useResourceDetail } from '../hooks/useResourceDetail'
 import ModeratorModeGrid from './ModeratorModeGrid'
 import ModeratorModeDetailModal from './ModeratorModeDetailModal'
 
@@ -22,32 +23,16 @@ export default function ModeratorModeSelector({
   fillHeight = false,
   hideSelectedChips = false,
 }: ModeratorModeSelectorProps) {
-  const [detailMode, setDetailMode] = useState<AssignableModeratorMode | null>(null)
-  const [detailContent, setDetailContent] = useState<string | null>(null)
-  const [detailLoading, setDetailLoading] = useState(false)
+  const fetchContent = useCallback(async (m: AssignableModeratorMode) => {
+    const res = await moderatorModesApi.getContent(m.id)
+    return res.data.content
+  }, [])
+  const { detailItem: detailMode, detailContent, detailLoading, openDetail: openModeDetail, closeDetail: closeModeDetail } =
+    useResourceDetail(fetchContent)
 
   const valueAsArray = value && value !== 'custom' ? [value] : []
   const handleChange = (ids: string[]) => {
     onChange(ids[0] || 'standard')
-  }
-
-  const openModeDetail = async (m: AssignableModeratorMode) => {
-    setDetailMode(m)
-    setDetailContent(null)
-    setDetailLoading(true)
-    try {
-      const res = await moderatorModesApi.getContent(m.id)
-      setDetailContent(res.data.content)
-    } catch {
-      setDetailContent('（加载失败）')
-    } finally {
-      setDetailLoading(false)
-    }
-  }
-
-  const closeModeDetail = () => {
-    setDetailMode(null)
-    setDetailContent(null)
   }
 
   return (

@@ -157,33 +157,42 @@ export default function ExpertGrid(props: ExpertGridProps) {
     />
   )
 
+  const selectedChipsSection =
+    props.mode === 'select' && (props as ExpertGridSelectProps).selectedExperts.length > 0 ? (
+      <div
+        className={
+          layout === 'embed' && filteredExperts.length > 0
+            ? 'flex flex-wrap gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex-shrink-0'
+            : 'flex flex-wrap gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200'
+        }
+      >
+        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide w-full mb-1">
+          已选角色（点击跳转）
+        </span>
+        {(props as ExpertGridSelectProps).selectedExperts.map((e) => (
+          <ExpertChip
+            key={e.name}
+            expert={e}
+            onRemove={() => {
+              const p = props as ExpertGridSelectProps
+              p.onChange(p.value.filter((x) => x !== e.name))
+            }}
+            onEdit={(props as ExpertGridSelectProps).onEdit ? () => (props as ExpertGridSelectProps).onEdit!(e.name) : undefined}
+            onShare={(props as ExpertGridSelectProps).onShare ? () => (props as ExpertGridSelectProps).onShare!(e.name) : undefined}
+            onClick={() => {
+              const full = expertByName[e.name]
+              scrollToSection(getExpertSectionId(full || { name: e.name, perspective: '' } as ExpertInfo))
+            }}
+          />
+        ))}
+      </div>
+    ) : null
+
   return (
     <div className={rootClass}>
       {!isFill && searchInput}
 
-      {props.mode === 'select' && (props as ExpertGridSelectProps).selectedExperts.length > 0 && (
-        <div className="flex flex-wrap gap-2 p-3 bg-gray-50 rounded-lg border border-gray-100">
-          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide w-full mb-1">
-            已选角色（点击跳转）
-          </span>
-          {(props as ExpertGridSelectProps).selectedExperts.map((e) => (
-            <ExpertChip
-              key={e.name}
-              expert={e}
-              onRemove={() => {
-                const p = props as ExpertGridSelectProps
-                p.onChange(p.value.filter((x) => x !== e.name))
-              }}
-              onEdit={(props as ExpertGridSelectProps).onEdit ? () => (props as ExpertGridSelectProps).onEdit!(e.name) : undefined}
-              onShare={(props as ExpertGridSelectProps).onShare ? () => (props as ExpertGridSelectProps).onShare!(e.name) : undefined}
-              onClick={() => {
-                const full = expertByName[e.name]
-                scrollToSection(getExpertSectionId(full || { name: e.name, perspective: '' } as ExpertInfo))
-              }}
-            />
-          ))}
-        </div>
-      )}
+      {selectedChipsSection && !(layout === 'embed' && filteredExperts.length > 0) && selectedChipsSection}
 
       {loading && <p className="text-gray-400 font-serif text-sm">加载中...</p>}
       {!loading && filteredExperts.length === 0 && (
@@ -194,9 +203,23 @@ export default function ExpertGrid(props: ExpertGridProps) {
 
       {!loading && filteredExperts.length > 0 && (
         <div
-          className={`flex ${layout === 'embed' ? 'gap-0 border border-gray-200 rounded-lg overflow-hidden' : 'gap-8'} ${isFill ? 'flex-1 min-h-0' : ''}`}
+          className={
+            layout === 'embed' && selectedChipsSection
+              ? `flex flex-col border border-gray-200 rounded-lg overflow-hidden ${isFill ? 'flex-1 min-h-0' : ''}`
+              : `flex ${layout === 'embed' ? 'gap-0 border border-gray-200 rounded-lg overflow-hidden' : 'gap-8'} ${isFill ? 'flex-1 min-h-0' : ''}`
+          }
           style={gridHeightStyle}
         >
+          {layout === 'embed' && selectedChipsSection && selectedChipsSection}
+          <div
+            className={
+              layout === 'embed' && selectedChipsSection
+                ? 'flex flex-1 min-h-0 min-w-0'
+                : layout === 'embed'
+                  ? 'flex gap-0 flex-1 min-h-0'
+                  : 'flex gap-8 flex-1 min-h-0'
+            }
+          >
           <div className={layout === 'embed' ? 'hidden sm:flex flex-shrink-0' : 'hidden md:flex flex-shrink-0'}>
             <ResizableToc
               defaultWidth={layout === 'embed' ? 128 : 176}
@@ -292,6 +315,7 @@ export default function ExpertGrid(props: ExpertGridProps) {
                 renderGridContent(props, grouped, sourceOrder, sectionIdPrefix, sectionRefs)
               )}
             </div>
+          </div>
           </div>
         </div>
       )}

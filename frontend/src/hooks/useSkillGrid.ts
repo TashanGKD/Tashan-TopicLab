@@ -1,10 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback } from 'react'
 import { skillsApi, AssignableSkill } from '../api/client'
-import {
-  groupBySourceAndCategory,
-  filterSkillsBySearch,
-  getSkillSectionId as getSectionId,
-} from '../utils/skills'
+import { useResourceGrid } from './useResourceGrid'
+import { filterSkillsBySearch } from '../utils/skills'
 
 export interface UseSkillGridOptions {
   sectionIdPrefix?: string
@@ -12,71 +9,31 @@ export interface UseSkillGridOptions {
 
 export function useSkillGrid(options: UseSkillGridOptions = {}) {
   const { sectionIdPrefix = 'section' } = options
-  const [skills, setSkills] = useState<AssignableSkill[]>([])
-  const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
-
-  useEffect(() => {
-    skillsApi
-      .listAssignable()
-      .then((res) => setSkills(Array.isArray(res.data) ? res.data : []))
-      .catch(() => setSkills([]))
-      .finally(() => setLoading(false))
-  }, [])
-
-  const filteredSkills = useMemo(
-    () => filterSkillsBySearch(skills, search),
-    [skills, search]
-  )
-
-  const grouped = useMemo(() => groupBySourceAndCategory(filteredSkills), [filteredSkills])
-
-  const sourceOrder = useMemo(
+  const listItems = useCallback(
     () =>
-      Object.keys(grouped).sort((a, b) =>
-        a === 'default' ? -1 : b === 'default' ? 1 : a.localeCompare(b)
-      ),
-    [grouped]
+      skillsApi
+        .listAssignable()
+        .then((res) => (Array.isArray(res.data) ? res.data : []))
+        .catch(() => []),
+    []
   )
-
-  const tocTree = useMemo(() => {
-    const t: Record<string, { id: string; label: string }[]> = {}
-    for (const source of sourceOrder) {
-      const cats = grouped[source]
-      const catKeys = Object.keys(cats).sort((a, b) =>
-        a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)
-      )
-      t[source] = catKeys.map((catId) => {
-        const items = cats[catId]
-        const catName = items[0]?.category_name || catId || '未分类'
-        const sectionId = `${sectionIdPrefix}-${source}-${catId || '_'}`.replace(/\s+/g, '-')
-        return { id: sectionId, label: catName }
-      })
-    }
-    return t
-  }, [grouped, sourceOrder, sectionIdPrefix])
-
-  const scrollToSection = (id: string) => {
-    const el = sectionRefs.current[id]
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }
-
-  const getSkillSectionId = (skill: AssignableSkill) =>
-    getSectionId(skill, sectionIdPrefix)
-
+  const result = useResourceGrid<AssignableSkill>({
+    sectionIdPrefix,
+    listItems,
+    filterBySearch: filterSkillsBySearch,
+  })
   return {
-    skills: filteredSkills,
-    allSkills: skills,
-    filteredSkills,
-    grouped,
-    sourceOrder,
-    loading,
-    search,
-    setSearch,
-    tocTree,
-    sectionRefs,
-    scrollToSection,
-    getSkillSectionId,
+    skills: result.items,
+    allSkills: result.allItems,
+    filteredSkills: result.items,
+    grouped: result.grouped,
+    sourceOrder: result.sourceOrder,
+    loading: result.loading,
+    search: result.search,
+    setSearch: result.setSearch,
+    tocTree: result.tocTree,
+    sectionRefs: result.sectionRefs,
+    scrollToSection: result.scrollToSection,
+    getSkillSectionId: result.getItemSectionId,
   }
 }

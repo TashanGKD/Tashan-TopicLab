@@ -11,9 +11,11 @@ export interface TabPanelProps {
   activeId: string
   onChange: (id: string) => void
   className?: string
+  /** 当 activeId 等于此值时，内容区高度随内容变化；否则使用统一固定高度 */
+  autoHeightTabId?: string
 }
 
-export default function TabPanel({ tabs, activeId, onChange, className = '' }: TabPanelProps) {
+export default function TabPanel({ tabs, activeId, onChange, className = '', autoHeightTabId }: TabPanelProps) {
   const activeTab = tabs.find((t) => t.id === activeId) ?? tabs[0]
   const prevIndexRef = useRef(-1)
   const currentIndex = tabs.findIndex((t) => t.id === activeId)
@@ -48,9 +50,26 @@ export default function TabPanel({ tabs, activeId, onChange, className = '' }: T
           </button>
         ))}
       </div>
-      <div className="h-[400px] overflow-hidden">
-        <div key={activeId} className={`h-full flex flex-col min-h-0 ${animateClass}`}>
-          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+      <div
+        className={
+          activeId === autoHeightTabId ? 'h-auto' : 'h-[400px] overflow-hidden'
+        }
+      >
+        <div
+          key={activeId}
+          className={
+            activeId === autoHeightTabId
+              ? animateClass
+              : `h-full flex flex-col min-h-0 ${animateClass}`
+          }
+        >
+          <div
+            className={
+              activeId === autoHeightTabId
+                ? ''
+                : 'flex-1 min-h-0 overflow-hidden flex flex-col'
+            }
+          >
             {activeTab?.content}
           </div>
         </div>

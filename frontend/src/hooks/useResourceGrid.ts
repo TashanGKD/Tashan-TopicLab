@@ -1,36 +1,34 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { expertsApi, ExpertInfo } from '../api/client'
-import {
-  groupBySourceAndCategory,
-  filterExpertsBySearch,
-  getExpertSectionId as getSectionId,
-} from '../utils/experts'
+import type { ResourceItem } from '../utils/resourceUtils'
+import { groupBySourceAndCategory } from '../utils/resourceUtils'
 
-export interface UseExpertGridOptions {
+export interface UseResourceGridOptions<T extends ResourceItem> {
   sectionIdPrefix?: string
+  listItems: () => Promise<T[]>
+  filterBySearch: (items: T[], search: string) => T[]
 }
 
-export function useExpertGrid(options: UseExpertGridOptions = {}) {
-  const { sectionIdPrefix = 'section' } = options
-  const [experts, setExperts] = useState<ExpertInfo[]>([])
+/**
+ * 通用资源 Grid Hook，供 useSkillGrid、useMCPGrid、useModeratorModeGrid 复用。
+ * 消除 list + filter + group + toc 的重复逻辑。
+ */
+export function useResourceGrid<T extends ResourceItem>(options: UseResourceGridOptions<T>) {
+  const { sectionIdPrefix = 'section', listItems, filterBySearch } = options
+  const [items, setItems] = useState<T[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   useEffect(() => {
-    expertsApi
-      .list({ fields: 'minimal' })
-      .then((res) => setExperts(Array.isArray(res.data) ? res.data : []))
-      .catch(() => setExperts([]))
+    listItems()
+      .then((data) => setItems(Array.isArray(data) ? data : []))
+      .catch(() => setItems([]))
       .finally(() => setLoading(false))
-  }, [])
+  }, [listItems])
 
-  const filteredExperts = useMemo(
-    () => filterExpertsBySearch(experts, search),
-    [experts, search]
-  )
+  const filteredItems = useMemo(() => filterBySearch(items, search), [items, search, filterBySearch])
 
-  const grouped = useMemo(() => groupBySourceAndCategory(filteredExperts), [filteredExperts])
+  const grouped = useMemo(() => groupBySourceAndCategory(filteredItems), [filteredItems])
 
   const sourceOrder = useMemo(
     () =>
@@ -48,8 +46,8 @@ export function useExpertGrid(options: UseExpertGridOptions = {}) {
         a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)
       )
       t[source] = catKeys.map((catId) => {
-        const items = cats[catId]
-        const catName = items[0]?.category_name || catId || '学者'
+        const groupItems = cats[catId]
+        const catName = groupItems[0]?.category_name || catId || '未分类'
         const sectionId = `${sectionIdPrefix}-${source}-${catId || '_'}`.replace(/\s+/g, '-')
         return { id: sectionId, label: catName }
       })
@@ -62,12 +60,12 @@ export function useExpertGrid(options: UseExpertGridOptions = {}) {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 
-  const getExpertSectionId = (expert: ExpertInfo) => getSectionId(expert, sectionIdPrefix)
+  const getItemSectionId = (item: T) =>
+    `${sectionIdPrefix}-${item.source || 'default'}-${item.category || '_'}`.replace(/\s+/g, '-')
 
   return {
-    experts: filteredExperts,
-    allExperts: experts,
-    filteredExperts,
+    items: filteredItems,
+    allItems: items,
     grouped,
     sourceOrder,
     loading,
@@ -76,6 +74,6 @@ export function useExpertGrid(options: UseExpertGridOptions = {}) {
     tocTree,
     sectionRefs,
     scrollToSection,
-    getExpertSectionId,
+    getItemSectionId,
   }
 }

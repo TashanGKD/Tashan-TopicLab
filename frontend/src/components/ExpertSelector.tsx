@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useCallback } from 'react'
 import { expertsApi } from '../api/client'
+import { useResourceDetail } from '../hooks/useResourceDetail'
 import ExpertGrid from './ExpertGrid'
 import ExpertDetailModal from './ExpertDetailModal'
 import type { ExpertInfo } from '../api/client'
@@ -27,23 +28,12 @@ export default function ExpertSelector({
   placeholder = '搜索角色名称、描述、领域...',
   fillHeight = false,
 }: ExpertSelectorProps) {
-  const [detailExpert, setDetailExpert] = useState<ExpertInfo | null>(null)
-  const [detailContent, setDetailContent] = useState<string | null>(null)
-  const [detailLoading, setDetailLoading] = useState(false)
-
-  const openExpertDetail = async (expert: ExpertInfo) => {
-    setDetailExpert(expert)
-    setDetailContent(null)
-    setDetailLoading(true)
-    try {
-      const res = await expertsApi.get(expert.name)
-      setDetailContent(res.data.skill_content || '')
-    } catch {
-      setDetailContent('（加载失败）')
-    } finally {
-      setDetailLoading(false)
-    }
-  }
+  const fetchContent = useCallback(async (expert: ExpertInfo) => {
+    const res = await expertsApi.get(expert.name)
+    return res.data.skill_content || ''
+  }, [])
+  const { detailItem: detailExpert, detailContent, detailLoading, openDetail: openExpertDetail, closeDetail } =
+    useResourceDetail(fetchContent)
 
   const handleChange = async (newNames: string[]) => {
     const toAdd = newNames.filter((n) => !value.includes(n))
@@ -76,7 +66,7 @@ export default function ExpertSelector({
           expert={detailExpert}
           content={detailContent}
           loading={detailLoading}
-          onClose={() => setDetailExpert(null)}
+          onClose={closeDetail}
         />
       )}
     </>

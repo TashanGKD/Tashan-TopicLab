@@ -1,36 +1,21 @@
 import type { AssignableModeratorMode } from '../api/client'
+import {
+  groupBySourceAndCategory,
+  getSectionId,
+  createFilterBySearch,
+  sourceDisplayName,
+} from './resourceUtils'
 
-export function groupBySourceAndCategory(modes: AssignableModeratorMode[]) {
-  const bySource: Record<string, Record<string, AssignableModeratorMode[]>> = {}
-  for (const m of modes) {
-    const src = m.source || 'default'
-    if (!bySource[src]) bySource[src] = {}
-    const cat = m.category || ''
-    if (!bySource[src][cat]) bySource[src][cat] = []
-    bySource[src][cat].push(m)
-  }
-  return bySource
-}
+export { groupBySourceAndCategory, sourceDisplayName }
 
-export function sourceDisplayName(source: string) {
-  if (source === 'default') return '内置'
-  return source
-}
+const filterModeratorModesBySearchImpl = createFilterBySearch<AssignableModeratorMode>((m) => [
+  m.name,
+  m.description,
+  m.category_name,
+  m.category,
+  m.source,
+  m.convergence_strategy,
+])
+export const filterModeratorModesBySearch = filterModeratorModesBySearchImpl
 
-export function filterModeratorModesBySearch(modes: AssignableModeratorMode[], search: string) {
-  if (!search.trim()) return modes
-  const q = search.trim().toLowerCase()
-  return modes.filter(
-    (m) =>
-      m.name.toLowerCase().includes(q) ||
-      (m.description || '').toLowerCase().includes(q) ||
-      (m.category_name || '').toLowerCase().includes(q) ||
-      (m.category || '').toLowerCase().includes(q) ||
-      (m.source || '').toLowerCase().includes(q) ||
-      (m.convergence_strategy || '').toLowerCase().includes(q)
-  )
-}
-
-export function getModeratorModeSectionId(mode: AssignableModeratorMode, prefix = 'section') {
-  return `${prefix}-${mode.source || 'default'}-${mode.category || '_'}`.replace(/\s+/g, '-')
-}
+export const getModeratorModeSectionId = getSectionId

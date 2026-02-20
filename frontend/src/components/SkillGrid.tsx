@@ -161,25 +161,34 @@ export default function SkillGrid(props: SkillGridProps) {
     />
   )
 
+  const selectedChipsSection =
+    props.mode === 'select' && selectedSkills.length > 0 ? (
+      <div
+        className={
+          layout === 'embed' && filteredSkills.length > 0
+            ? 'flex flex-wrap gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex-shrink-0'
+            : 'flex flex-wrap gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200'
+        }
+      >
+        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide w-full mb-1">
+          已选技能（点击跳转）
+        </span>
+        {selectedSkills.map((s) => (
+          <SkillChip
+            key={s.id}
+            skill={s}
+            onRemove={() => removeSkill!(s.id)}
+            onClick={() => scrollToSection(getSkillSectionId(s))}
+          />
+        ))}
+      </div>
+    ) : null
+
   return (
     <div className={rootClass}>
       {!isFill && searchInput}
 
-      {props.mode === 'select' && selectedSkills.length > 0 && (
-        <div className="flex flex-wrap gap-2 p-3 bg-gray-50 rounded-lg border border-gray-100">
-          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide w-full mb-1">
-            已选技能（点击跳转）
-          </span>
-          {selectedSkills.map((s) => (
-            <SkillChip
-              key={s.id}
-              skill={s}
-              onRemove={() => removeSkill!(s.id)}
-              onClick={() => scrollToSection(getSkillSectionId(s))}
-            />
-          ))}
-        </div>
-      )}
+      {selectedChipsSection && !(layout === 'embed' && filteredSkills.length > 0) && selectedChipsSection}
 
       {loading && <p className="text-gray-400 font-serif text-sm">加载中...</p>}
       {!loading && filteredSkills.length === 0 && (
@@ -188,9 +197,23 @@ export default function SkillGrid(props: SkillGridProps) {
 
       {!loading && filteredSkills.length > 0 && (
         <div
-          className={`flex ${layout === 'embed' ? 'gap-0 border border-gray-200 rounded-lg overflow-hidden' : 'gap-8'} ${isFill ? 'flex-1 min-h-0' : ''}`}
+          className={
+            layout === 'embed' && selectedChipsSection
+              ? `flex flex-col border border-gray-200 rounded-lg overflow-hidden ${isFill ? 'flex-1 min-h-0' : ''}`
+              : `flex ${layout === 'embed' ? 'gap-0 border border-gray-200 rounded-lg overflow-hidden' : 'gap-8'} ${isFill ? 'flex-1 min-h-0' : ''}`
+          }
           style={gridHeightStyle}
         >
+          {layout === 'embed' && selectedChipsSection && selectedChipsSection}
+          <div
+            className={
+              layout === 'embed' && selectedChipsSection
+                ? 'flex flex-1 min-h-0 min-w-0'
+                : layout === 'embed'
+                  ? 'flex gap-0 flex-1 min-h-0'
+                  : 'flex gap-8 flex-1 min-h-0'
+            }
+          >
           <div className={layout === 'embed' ? 'hidden sm:flex flex-shrink-0' : 'hidden md:flex flex-shrink-0'}>
             <ResizableToc
               defaultWidth={layout === 'embed' ? 128 : 176}
@@ -276,6 +299,7 @@ export default function SkillGrid(props: SkillGridProps) {
               renderGridContent()
             )}
             </div>
+          </div>
           </div>
         </div>
       )}

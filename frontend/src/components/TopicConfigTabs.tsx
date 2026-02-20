@@ -139,7 +139,7 @@ export default function TopicConfigTabs({
       id: 'detail' as ConfigTabId,
       label: '话题详情',
       content: (
-        <div className="markdown-content text-gray-700 overflow-auto min-h-0">
+        <div className="markdown-content text-gray-700">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{topicBody || '暂无内容'}</ReactMarkdown>
         </div>
       ),
@@ -253,7 +253,7 @@ export default function TopicConfigTabs({
           <div>
             <p className="text-xs text-gray-500 mb-2">选择推理模型。</p>
             <select
-              className={inputClass}
+              className={`${inputClass} max-w-xs`}
               value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
               disabled={isStarting || isRunning}
@@ -269,7 +269,7 @@ export default function TopicConfigTabs({
             <button
               onClick={handleStartDiscussion}
               disabled={isStarting || isRunning}
-              className="bg-gray-900 hover:bg-black text-white px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+              className="bg-gray-900 hover:bg-black text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
             >
               {isStarting ? '启动中...' : isRunning ? '运行中...' : isCompleted ? '重新启动' : '启动讨论'}
             </button>
@@ -285,6 +285,7 @@ export default function TopicConfigTabs({
         tabs={tabs}
         activeId={activeTabId}
         onChange={(id) => setActiveTabId(id as ConfigTabId)}
+        autoHeightTabId="detail"
       />
       {/* Custom prompt dialog */}
       {showCustomDialog && (

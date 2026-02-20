@@ -49,6 +49,6 @@ export function handleApiError(err: any, defaultMessage: string = '操作失败'
   return errorMessage
 }
 
-export function handleApiSuccess(message: string) {
-  toast.success(message)
+export function handleApiSuccess(_message: string) {
+  // 成功提示已关闭，不再显示 toast
 }
