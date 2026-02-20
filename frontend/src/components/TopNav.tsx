@@ -17,7 +17,7 @@ export default function TopNav() {
           <Link
             to="/"
             className={`text-sm font-serif transition-all ${
-              isActive('/') && !isActive('/topics') && !isActive('/experts')
+              isActive('/') && !isActive('/topics') && !isActive('/experts') && !isActive('/skills')
                 ? 'text-black font-medium'
                 : 'text-gray-500 hover:text-black'
             }`}
@@ -32,7 +32,17 @@ export default function TopNav() {
                 : 'text-gray-500 hover:text-black'
             }`}
           >
-            专家管理
+            专家库
+          </Link>
+          <Link
+            to="/skills"
+            className={`text-sm font-serif transition-all ${
+              isActive('/skills')
+                ? 'text-black font-medium'
+                : 'text-gray-500 hover:text-black'
+            }`}
+          >
+            技能库
           </Link>
           <Link
             to="/topics/new"

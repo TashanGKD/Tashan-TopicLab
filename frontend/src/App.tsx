@@ -5,6 +5,7 @@ import CreateTopic from './pages/CreateTopic'
 import TopicDetail from './pages/TopicDetail'
 import ExpertList from './pages/ExpertList'
 import ExpertEdit from './pages/ExpertEdit'
+import SkillLibrary from './pages/SkillLibrary'
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
           <Route path="/topics/:id" element={<TopicDetail />} />
           <Route path="/experts" element={<ExpertList />} />
           <Route path="/experts/:name/edit" element={<ExpertEdit />} />
+          <Route path="/skills" element={<SkillLibrary />} />
         </Routes>
       </main>
     </>

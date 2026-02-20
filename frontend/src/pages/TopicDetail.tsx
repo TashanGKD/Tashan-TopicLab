@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useLocation } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
@@ -15,6 +15,7 @@ import {
 } from '../api/client'
 import ExpertManagement from '../components/ExpertManagement'
 import ModeratorModeConfig from '../components/ModeratorModeConfig'
+import ResizableToc from '../components/ResizableToc'
 import PostThread from '../components/PostThread'
 import MentionTextarea from '../components/MentionTextarea'
 import { handleApiError, handleApiSuccess } from '../utils/errorHandler'
@@ -58,6 +59,8 @@ function StatusBadge({ status }: { status: string }) {
 
 export default function TopicDetail() {
   const { id } = useParams<{ id: string }>()
+  const location = useLocation()
+  const initialSkillIds = (location.state as { skillList?: string[] } | null)?.skillList
   const [topic, setTopic] = useState<Topic | null>(null)
   const [loading, setLoading] = useState(true)
   const [topicExperts, setTopicExperts] = useState<TopicExpert[]>([])
@@ -204,10 +207,16 @@ export default function TopicDetail() {
     }
   }
 
-  const handleStartDiscussion = async (model: string) => {
+  const handleStartDiscussion = async (model: string, skillList?: string[]) => {
     if (!id) return
     setStartingDiscussion(true)
-    const req: StartDiscussionRequest = { num_rounds: 5, max_turns: 60, max_budget_usd: 5.0, model }
+    const req: StartDiscussionRequest = {
+      num_rounds: 5,
+      max_turns: 60,
+      max_budget_usd: 5.0,
+      model,
+      skill_list: skillList && skillList.length > 0 ? skillList : undefined,
+    }
     try {
       await discussionApi.start(id, req)
       setTopic(prev => prev ? { ...prev, discussion_status: 'running' } : prev)
@@ -302,7 +311,7 @@ export default function TopicDetail() {
   const scrollToSection = (sectionId: string) => {
     const element = sectionRefs.current[sectionId]
     if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' })
       setActiveNavId(sectionId)
     }
   }
@@ -335,7 +344,7 @@ export default function TopicDetail() {
 
   return (
     <div className="bg-white min-h-screen">
-      <div className="max-w-[1100px] mx-auto px-6 py-6 flex gap-8">
+      <div className="max-w-[1280px] mx-auto px-6 py-6 flex gap-8">
         {/* Main content */}
         <div className="flex-1 min-w-0">
 
@@ -376,6 +385,7 @@ export default function TopicDetail() {
                 isStarting={startingDiscussion}
                 isRunning={polling}
                 isCompleted={topic.discussion_status === 'completed'}
+                initialSkillIds={initialSkillIds}
               />
             </div>
           )}
@@ -387,7 +397,7 @@ export default function TopicDetail() {
             <div
               id="summary-section"
               ref={el => { sectionRefs.current['summary-section'] = el }}
-              className="mb-8"
+              className="mb-8 scroll-mt-6"
             >
               <div className="border-l-2 border-black pl-4 py-2">
                 <div className="flex items-center gap-3 mb-3">
@@ -410,7 +420,7 @@ export default function TopicDetail() {
             <div className="mb-8 border border-gray-200 p-5">
               <div className="flex items-center gap-3 mb-4">
                 <span className="spinner" />
-                <span className="text-sm font-semibold text-gray-900">圆桌讨论进行中</span>
+                <span className="text-sm font-semibold text-gray-900">话题讨论进行中</span>
                 {elapsedSeconds > 0 && (
                   <span className="text-xs text-gray-400 ml-auto">
                     已运行 {Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, '0')}
@@ -443,10 +453,11 @@ export default function TopicDetail() {
             </div>
           )}
 
-          {/* Roundtable discussion rounds */}
+          {/* Roundtable discussion rounds - multi-column: 2+ on desktop, 1 on mobile */}
           {Object.keys(postsByRound).length > 0 && (
             <div className="mb-8">
               <h2 className="text-base font-semibold text-gray-900 mb-1">圆桌讨论</h2>
+              <div className="grid grid-cols-1 gap-6 mt-4">
               {Object.keys(postsByRound).map(roundKey => {
                 const round = parseInt(roundKey)
                 const roundPosts = postsByRound[round]
@@ -455,6 +466,7 @@ export default function TopicDetail() {
                     key={round}
                     id={`round-section-${round}`}
                     ref={el => { sectionRefs.current[`round-section-${round}`] = el }}
+                    className="min-w-0 w-full scroll-mt-6"
                   >
                     <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider py-3 border-b border-gray-100">
                       第 {round} 轮
@@ -478,6 +490,7 @@ export default function TopicDetail() {
                   </div>
                 )
               })}
+              </div>
             </div>
           )}
 
@@ -485,6 +498,7 @@ export default function TopicDetail() {
           <div
             id="posts-section"
             ref={el => { sectionRefs.current['posts-section'] = el }}
+            className="scroll-mt-6"
           >
             <h2 className="text-base font-semibold text-gray-900 mb-1">
               跟贴 ({posts.length})
@@ -544,7 +558,7 @@ export default function TopicDetail() {
 
         {/* Right navigation sidebar */}
         {hasDiscussion && navItems.length > 0 && (
-          <div className="w-48 flex-shrink-0 sticky top-20 self-start hidden lg:block">
+          <ResizableToc defaultWidth={192} side="right" className="sticky top-20 self-start hidden lg:flex">
             <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
               目录
             </div>
@@ -561,7 +575,7 @@ export default function TopicDetail() {
                 {item.label}
               </div>
             ))}
-          </div>
+          </ResizableToc>
         )}
       </div>
 

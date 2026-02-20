@@ -1,0 +1,44 @@
+---
+description: Backend (Resonnet) conventions — docs location, language, naming, skills submodule
+globs: backend/**/*
+alwaysApply: false
+---
+
+# Backend Conventions
+
+When working on the backend submodule (`backend/`), follow these conventions.
+
+## 1. Documentation Location
+
+- **All backend-related docs** live in `backend/docs/`, not in the parent repo `docs/`.
+- Add new docs under `backend/docs/` and update `backend/docs/README.md` index.
+
+## 2. Documentation Language
+
+- **All docs in English** except the main Chinese README (`backend/README.md`).
+- `backend/README.en.md` is the English README.
+
+## 3. Doc Filenames
+
+- Use **kebab-case** for all files under `backend/docs/`:
+  - ✅ `assignable-skills-flow.md`, `import-skill-repo.md`, `skills-submodule-guide.md`
+  - ❌ `ASSIGNABLE_SKILLS_FLOW.md`, `ImportSkillRepo.md`
+
+## 4. README Updates
+
+- When adding or changing docs, update:
+  - `backend/README.md` (Chinese) — 文档 section
+  - `backend/README.en.md` — Documentation section
+  - `backend/docs/README.md` — Document index table
+
+## 5. Skills Submodule & Assignable Skills
+
+- **Add/modify skill libraries**: See `backend/.cursor/skills/skills-submodule-guide/SKILL.md` or `backend/docs/skills-submodule-guide.md`.
+- **Meta architecture**: Main `meta.json` = sources registry only; each source has `{source}/meta.json` with `skills_dir`, categories + skills. No symlinks; runtime resolves to `_submodules/{source}/{skills_dir}/...`.
+- **Import script**: From backend root: `./scripts/import_skill_repo.sh <url> [source]`. When backend is a submodule, run from repo root: `./backend/scripts/import_skill_repo.sh`.
+
+## 6. Path Conventions
+
+- In backend docs and Cursor skills, use paths **relative to backend root**:
+  - `skills/assignable_skills/`, `scripts/import_skill_repo.sh`, `docs/`
+- When backend is used as submodule, parent docs may reference `backend/docs/...`.

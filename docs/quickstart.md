@@ -16,10 +16,10 @@ git submodule update --init --recursive
 
 # 2. Configure environment
 cp .env.example .env
-# Merge vars from backend/.env.example (ANTHROPIC_*, AI_GENERATION_*), then edit
+# Edit .env: replace ANTHROPIC_API_KEY, AI_GENERATION_* with real keys for discussion/AI generation
 
-# 3. Start
-docker compose up --build
+# 3. Start (explicitly pass .env to docker compose)
+./scripts/docker-compose-local.sh
 ```
 
 - Frontend: http://localhost:3000

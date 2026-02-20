@@ -88,6 +88,30 @@ export interface StartDiscussionRequest {
   model?: string
   /** 启用的工具列表，如 Read, Write, Edit, Glob, Grep, Task, WebFetch, WebSearch。不传则使用默认全量 */
   allowed_tools?: string[]
+  /** 可选的 skill 列表（id），从全局 skill 库拷贝到工作区，供主持人分配给专家 */
+  skill_list?: string[]
+}
+
+export interface AssignableSkill {
+  id: string
+  source?: string
+  name: string
+  description?: string
+  category?: string
+  category_name?: string
+}
+
+export interface ListAssignableParams {
+  category?: string
+  fields?: 'minimal' | 'full'
+  limit?: number
+  offset?: number
+}
+
+export interface AssignableCategory {
+  id: string
+  name: string
+  description: string
 }
 
 export interface DiscussionProgress {
@@ -124,6 +148,21 @@ export const postsApi = {
 export const discussionApi = {
   start: (topicId: string, data: StartDiscussionRequest) => api.post<DiscussionStatusResponse>(`/topics/${topicId}/discussion`, data),
   getStatus: (topicId: string) => api.get<DiscussionStatusResponse>(`/topics/${topicId}/discussion/status`),
+}
+
+export const skillsApi = {
+  listAssignable: (params?: ListAssignableParams) => {
+    const searchParams = new URLSearchParams()
+    if (params?.category) searchParams.set('category', params.category)
+    if (params?.fields) searchParams.set('fields', params.fields)
+    if (params?.limit != null) searchParams.set('limit', String(params.limit))
+    if (params?.offset != null) searchParams.set('offset', String(params.offset))
+    const qs = searchParams.toString()
+    return api.get<AssignableSkill[]>(`/skills/assignable${qs ? `?${qs}` : ''}`)
+  },
+  listCategories: () => api.get<AssignableCategory[]>('/skills/assignable/categories'),
+  getContent: (skillId: string) =>
+    api.get<{ content: string }>(`/skills/assignable/${encodeURIComponent(skillId)}/content`),
 }
 
 export interface ExpertInfo {

@@ -72,8 +72,8 @@ git submodule update --init --recursive
 ### 2. Docker（推荐）
 
 ```bash
-cp backend/.env.example backend/.env   # 填入 API key
-docker compose up --build
+cp .env.example .env   # 填入 API key
+./scripts/docker-compose-local.sh      # 默认执行 up -d --build --force-recreate
 # 前端: http://localhost:3000
 # 后端: http://localhost:8000
 ```

@@ -73,8 +73,8 @@ Backend uses [Resonnet](https://github.com/TashanGKD/Resonnet) as submodule in `
 ### 2. Docker (recommended)
 
 ```bash
-cp backend/.env.example backend/.env   # fill API keys
-docker compose up --build
+cp .env.example .env   # fill API keys
+./scripts/docker-compose-local.sh      # explicitly pass .env to docker compose
 # Frontend: http://localhost:3000
 # Backend: http://localhost:8000
 ```

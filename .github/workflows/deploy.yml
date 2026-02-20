@@ -20,11 +20,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           DEPLOY_ENV: ${{ secrets.DEPLOY_ENV }}
+          SUBMODULE_TOKEN: ${{ secrets.SUBMODULE_TOKEN }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: GITHUB_TOKEN,REPO,DEPLOY_ENV
+          envs: GITHUB_TOKEN,REPO,DEPLOY_ENV,SUBMODULE_TOKEN
           timeout: 30m
           command_timeout: 30m
           script: |
@@ -39,9 +40,17 @@ jobs:
             fi
             cd "$REPO_DIR"
             git remote set-url origin "$REPO_URL"
+            # Configure submodule URLs before fetch; otherwise fetch uses cached SSH URL and fails
+            SUBMODULE_AUTH="${SUBMODULE_TOKEN:-$GITHUB_TOKEN}"
+            BACKEND_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/TashanGKD/Resonnet.git"
+            git config submodule.backend.url "$BACKEND_URL"
+            [ -d .git/modules/backend ] && git config -f .git/modules/backend/config remote.origin.url "$BACKEND_URL"
             for i in 1 2 3; do git fetch origin && break || { [ $i -eq 3 ] && echo "git fetch failed after 3 retries" && exit 1; sleep 5; }; done
             git reset --hard origin/main
-            git config submodule.backend.url "https://x-access-token:${GITHUB_TOKEN}@github.com/TashanGKD/Resonnet.git"
+            git submodule update --init backend
+            git config -f .git/modules/backend/config submodule.skills/assignable_skills/_submodules/ai-research.url "https://x-access-token:${SUBMODULE_AUTH}@github.com/Orchestra-Research/AI-Research-SKILLs.git"
+            git config -f .git/modules/backend/config submodule.skills/assignable_skills/_submodules/anthropics.url "https://x-access-token:${SUBMODULE_AUTH}@github.com/anthropics/skills.git"
+            git submodule sync --recursive
             git submodule update --init --recursive
 
             if [ -z "${DEPLOY_ENV:-}" ]; then
@@ -55,10 +64,10 @@ jobs:
             docker compose up -d
             docker image prune -f
 
-            # 从 .env 读取前端端口，默认 3000（去除首尾空格和 CRLF，避免 nginx 配置异常）
+            # Read frontend port from .env (default 3000); trim whitespace/CRLF to avoid nginx config issues
             FRONTEND_PORT=$(grep -E '^FRONTEND_PORT=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d ' \r' || echo 3000)
 
-            # 写入 nginx snippet（仅 location 块，由 tashan.chat server 块 include）
+            # Write nginx snippet (location block only, included by tashan.chat server block)
             mkdir -p /etc/nginx/snippets
             printf '%s\n' \
               'location ^~ /topic-lab/ {' \

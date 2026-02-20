@@ -1,19 +1,21 @@
 import { useState, useEffect } from 'react'
 import {
-  ModeratorModeInfo,
   ModeratorModeConfig,
+  ModeratorModeInfo,
   moderatorModesApi,
   ROUNDTABLE_MODELS,
 } from '../api/client'
 import { handleApiError, handleApiSuccess } from '../utils/errorHandler'
+import SkillSelector from './SkillSelector'
 
 interface ModeratorModeConfigProps {
   topicId: string
   onModeChange?: () => void
-  onStartDiscussion?: (model: string) => Promise<void>
+  onStartDiscussion?: (model: string, skillList?: string[]) => Promise<void>
   isStarting?: boolean
   isRunning?: boolean
   isCompleted?: boolean
+  initialSkillIds?: string[]
 }
 
 const inputClass = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-transparent'
@@ -26,6 +28,7 @@ export default function ModeratorModeConfigComponent({
   isStarting = false,
   isRunning = false,
   isCompleted = false,
+  initialSkillIds,
 }: ModeratorModeConfigProps) {
   const [presetModes, setPresetModes] = useState<ModeratorModeInfo[]>([])
   const [currentConfig, setCurrentConfig] = useState<ModeratorModeConfig | null>(null)
@@ -37,11 +40,18 @@ export default function ModeratorModeConfigComponent({
   const [aiPrompt, setAiPrompt] = useState('')
   const [generating, setGenerating] = useState(false)
   const [selectedModel, setSelectedModel] = useState(ROUNDTABLE_MODELS[0].value)
+  const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([])
 
   useEffect(() => {
     loadPresetModes()
     loadCurrentConfig()
   }, [topicId])
+
+  useEffect(() => {
+    if (initialSkillIds?.length) {
+      setSelectedSkillIds(initialSkillIds)
+    }
+  }, [topicId, initialSkillIds])
 
   const loadPresetModes = async () => {
     try {
@@ -205,6 +215,11 @@ export default function ModeratorModeConfigComponent({
       {onStartDiscussion ? (
         <>
           <div className="mb-4">
+            <label className={labelClass}>可选技能（主持人将分配给专家）</label>
+            <p className="text-xs text-gray-500 mb-2">点击 + 将技能加入话题，选中的技能会拷贝到工作区供主持人分配给各专家。</p>
+            <SkillSelector value={selectedSkillIds} onChange={setSelectedSkillIds} maxHeight="320px" />
+          </div>
+          <div className="mb-4">
             <label className={labelClass}>推理模型</label>
             <select
               className={inputClass}
@@ -220,7 +235,7 @@ export default function ModeratorModeConfigComponent({
           <button
             onClick={async () => {
               await handleSaveMode()
-              await onStartDiscussion(selectedModel)
+              await onStartDiscussion(selectedModel, selectedSkillIds.length > 0 ? selectedSkillIds : undefined)
             }}
             disabled={isStarting || isRunning}
             className="bg-gray-900 hover:bg-black text-white px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"

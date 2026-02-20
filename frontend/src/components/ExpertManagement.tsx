@@ -166,7 +166,7 @@ export default function ExpertManagement({ topicId, onExpertsChange }: ExpertMan
 
   return (
     <div className="mb-6">
-      <h3 className="font-serif font-semibold text-black mb-4">专家管理</h3>
+      <h3 className="font-serif font-semibold text-black mb-4">专家库</h3>
 
       <div className="mb-4 flex flex-wrap gap-2">
         {experts.length === 0 && (
