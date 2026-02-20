@@ -109,6 +109,7 @@ export interface AssignableSkill {
 
 export interface ListAssignableParams {
   category?: string
+  q?: string
   fields?: 'minimal' | 'full'
   limit?: number
   offset?: number
@@ -160,6 +161,7 @@ export const skillsApi = {
   listAssignable: (params?: ListAssignableParams) => {
     const searchParams = new URLSearchParams()
     if (params?.category) searchParams.set('category', params.category)
+    if (params?.q) searchParams.set('q', params.q)
     if (params?.fields) searchParams.set('fields', params.fields)
     if (params?.limit != null) searchParams.set('limit', String(params.limit))
     if (params?.offset != null) searchParams.set('offset', String(params.offset))
@@ -186,9 +188,20 @@ export interface ExpertUpdateRequest {
   skill_content: string
 }
 
+export interface ListExpertsParams {
+  fields?: 'minimal' | 'full'
+}
+
 export const expertsApi = {
-  list: () => api.get<ExpertInfo[]>('/experts'),
+  list: (params?: ListExpertsParams) => {
+    const searchParams = new URLSearchParams()
+    if (params?.fields) searchParams.set('fields', params.fields)
+    const qs = searchParams.toString()
+    return api.get<ExpertInfo[]>(`/experts${qs ? `?${qs}` : ''}`)
+  },
   get: (name: string) => api.get<ExpertInfo>(`/experts/${name}`),
+  getContent: (name: string) =>
+    api.get<{ content: string }>(`/experts/${encodeURIComponent(name)}/content`),
   update: (name: string, data: ExpertUpdateRequest) => api.put<ExpertInfo>(`/experts/${name}`, data),
 }
 
@@ -275,6 +288,7 @@ export interface AssignableModeratorMode {
 
 export interface ListAssignableModeratorModeParams {
   category?: string
+  q?: string
   fields?: 'minimal' | 'full'
   limit?: number
   offset?: number
@@ -290,6 +304,7 @@ export const moderatorModesApi = {
   listAssignable: (params?: ListAssignableModeratorModeParams) => {
     const searchParams = new URLSearchParams()
     if (params?.category) searchParams.set('category', params.category)
+    if (params?.q) searchParams.set('q', params.q)
     if (params?.fields) searchParams.set('fields', params.fields)
     if (params?.limit != null) searchParams.set('limit', String(params.limit))
     if (params?.offset != null) searchParams.set('offset', String(params.offset))
@@ -313,6 +328,7 @@ export interface AssignableMCP {
 
 export interface ListAssignableMCPParams {
   category?: string
+  q?: string
   fields?: 'minimal' | 'full'
   limit?: number
   offset?: number
@@ -322,6 +338,7 @@ export const mcpApi = {
   listAssignable: (params?: ListAssignableMCPParams) => {
     const searchParams = new URLSearchParams()
     if (params?.category) searchParams.set('category', params.category)
+    if (params?.q) searchParams.set('q', params.q)
     if (params?.fields) searchParams.set('fields', params.fields)
     if (params?.limit != null) searchParams.set('limit', String(params.limit))
     if (params?.offset != null) searchParams.set('offset', String(params.offset))
@@ -331,6 +348,11 @@ export const mcpApi = {
   listCategories: () => api.get<AssignableCategory[]>('/mcp/assignable/categories'),
   getContent: (mcpId: string) =>
     api.get<{ content: string }>(`/mcp/assignable/${encodeURIComponent(mcpId)}/content`),
+}
+
+// Libs admin API (cache invalidation for hot-reload)
+export const libsApi = {
+  invalidateCache: () => api.post<{ message: string }>('/libs/invalidate-cache'),
 }
 
 export default api

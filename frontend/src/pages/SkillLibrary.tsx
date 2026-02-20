@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { skillsApi, AssignableSkill } from '../api/client'
+import { useCallback, useState } from 'react'
+import { skillsApi, libsApi, AssignableSkill } from '../api/client'
 import SkillGrid from '../components/SkillGrid'
 import SkillDetailModal from '../components/SkillDetailModal'
 import LibraryPageLayout from '../components/LibraryPageLayout'
@@ -8,6 +8,16 @@ export default function SkillLibrary() {
   const [detailSkill, setDetailSkill] = useState<AssignableSkill | null>(null)
   const [detailContent, setDetailContent] = useState<string | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
+
+  const handleRefresh = useCallback(async () => {
+    try {
+      await libsApi.invalidateCache()
+      setRefreshKey((k) => k + 1)
+    } catch {
+      // ignore
+    }
+  }, [])
 
   const openSkillDetail = async (s: AssignableSkill) => {
     setDetailSkill(s)
@@ -29,8 +39,20 @@ export default function SkillLibrary() {
   }
 
   return (
-    <LibraryPageLayout title="技能库">
+    <LibraryPageLayout
+      title="技能库"
+      actions={
+        <button
+          type="button"
+          onClick={handleRefresh}
+          className="text-sm text-gray-600 hover:text-black border border-gray-300 hover:border-black px-3 py-1.5 rounded"
+        >
+          刷新库
+        </button>
+      }
+    >
       <SkillGrid
+        key={refreshKey}
         mode="view"
         layout="page"
         onSkillClick={openSkillDetail}

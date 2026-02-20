@@ -29,8 +29,8 @@ export default function ExpertSelector({
   fillHeight = false,
 }: ExpertSelectorProps) {
   const fetchContent = useCallback(async (expert: ExpertInfo) => {
-    const res = await expertsApi.get(expert.name)
-    return res.data.skill_content || ''
+    const res = await expertsApi.getContent(expert.name)
+    return res.data.content || ''
   }, [])
   const { detailItem: detailExpert, detailContent, detailLoading, openDetail: openExpertDetail, closeDetail } =
     useResourceDetail(fetchContent)
