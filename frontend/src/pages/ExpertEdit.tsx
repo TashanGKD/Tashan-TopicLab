@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { expertsApi, ExpertInfo } from '../api/client'
 
-const inputClass = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-400'
-const labelClass = 'block text-sm font-medium text-gray-700 mb-1'
+const inputClass = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-serif focus:border-black focus:outline-none transition-colors'
+const labelClass = 'block text-sm font-serif font-medium text-black mb-1'
 
 export default function ExpertEdit() {
   const { name } = useParams<{ name: string }>()
@@ -84,14 +84,14 @@ export default function ExpertEdit() {
           <div className="flex gap-3">
             <button
               onClick={handleSave}
-              className="bg-gray-900 hover:bg-black text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              className="bg-black text-white px-4 py-2 rounded-lg text-sm font-serif font-medium hover:bg-gray-900 transition-colors disabled:opacity-50"
               disabled={saving}
             >
               {saving ? '保存中...' : '保存'}
             </button>
             <button
               onClick={() => navigate('/experts')}
-              className="border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 px-4 py-2 text-sm transition-colors"
+              className="border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 px-4 py-2 text-sm font-serif transition-colors"
             >
               取消
             </button>

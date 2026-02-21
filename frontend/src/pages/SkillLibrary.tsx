@@ -45,7 +45,8 @@ export default function SkillLibrary() {
         <button
           type="button"
           onClick={handleRefresh}
-          className="text-sm text-gray-600 hover:text-black border border-gray-300 hover:border-black px-3 py-1.5 rounded"
+          className="text-sm font-serif text-gray-600 hover:text-black border border-gray-200 hover:border-black px-3 py-1.5 rounded-lg transition-colors"
+          aria-label="刷新技能库"
         >
           刷新库
         </button>

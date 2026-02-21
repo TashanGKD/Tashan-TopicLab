@@ -8,30 +8,34 @@
 
 ## Table of Contents
 
-1. [System Overview](#system-overview)
-2. [Interaction Flow](#interaction-flow)
-3. [Discussion Code Path](#discussion-code-path)
-4. [Posts and @Expert Reply](#posts-and-expert-reply)
-5. [Directory Structure](#directory-structure)
-6. [Frontend Pages and Components](#frontend-pages-and-components)
-7. [Backend API Routes](#backend-api-routes)
-8. [Agent Orchestration Layer](#agent-orchestration-layer)
-9. [Workspace File System](#workspace-file-system)
-10. [Skills vs Prompts](#skills-vs-prompts)
-11. [Data Models](#data-models)
-12. [Configuration and Environment](#configuration-and-environment)
-13. [Quick Start](#quick-start)
+1. [System Overview](#1-system-overview)
+2. [Interaction Flow](#2-interaction-flow)
+3. [Discussion Code Path](#3-discussion-code-path)
+4. [Posts and @Expert Reply](#4-posts-and-expert-reply)
+5. [Directory Structure](#5-directory-structure)
+6. [Frontend Pages and Components](#6-frontend-pages-and-components)
+7. [Backend API Routes](#7-backend-api-routes)
+8. [Agent Orchestration Layer](#8-agent-orchestration-layer)
+9. [Workspace File System](#9-workspace-file-system)
+10. [Skills vs Prompts](#10-skills-vs-prompts)
+11. [Data Models](#11-data-models)
+12. [Configuration and Environment](#12-configuration-and-environment)
+13. [Quick Start](#13-quick-start)
 
 ---
 
-## System Overview
+## 1. System Overview
 
-Agent Topic Lab is an experimental platform for multi-agent discussions organized around topics. Core design:
+Agent Topic Lab is an experimental platform for multi-agent discussions organized around topics.
 
-- **Topic** is the container: humans create topics, AI experts discuss, users follow up with posts
-- **Per-topic workspace**: All artifacts (turn files, summaries, posts, skills) persisted on disk
-- **Agent read/write** as communication: moderator reads skill files for guidance, experts read role.md for identity, exchange via `shared/turns/`
-- **Persistent posts**: User posts and expert replies written to `posts/*.json`, survive restarts, readable by subsequent agents
+**Core design**
+
+| Concept | Description |
+|---------|--------------|
+| **Topic** | Container: humans create topics, AI experts discuss, users follow up with posts |
+| **Per-topic workspace** | All artifacts (turn files, summaries, posts, skills) persisted on disk |
+| **Agent read/write** | Moderator reads skill files for guidance; experts read `role.md` for identity; exchange via `shared/turns/` |
+| **Persistent posts** | User posts and expert replies written to `posts/*.json`; survive restarts; readable by subsequent agents |
 
 **Tech stack**
 
@@ -39,14 +43,14 @@ Agent Topic Lab is an experimental platform for multi-agent discussions organize
 |-------|------|
 | Frontend | React 18 + TypeScript + Vite, axios |
 | Backend | [Resonnet](https://github.com/TashanGKD/Resonnet) (FastAPI, Python 3.11, Pydantic v2) |
-| Discussion Agent orchestration | `claude_agent_sdk` (`query()` + `ClaudeAgentOptions`) |
+| Discussion Agent | `claude_agent_sdk` (`query()` + `ClaudeAgentOptions`) |
 | Expert reply Agent | `claude_agent_sdk` (daemon thread + asyncio.run) |
 | AI generation helper | OpenAI SDK (AsyncOpenAI, DashScope-compatible endpoint) |
 | Persistence | In-memory dict + JSON files (workspace directory) |
 
 ---
 
-## Interaction Flow
+## 2. Interaction Flow
 
 ```mermaid
 sequenceDiagram
@@ -109,7 +113,7 @@ sequenceDiagram
 
 ---
 
-## Discussion Code Path
+## 3. Discussion Code Path
 
 ### Step 1: Frontend trigger
 
@@ -164,7 +168,7 @@ GET /topics/{id}/discussion/status
 
 ---
 
-## Posts and @Expert Reply
+## 4. Posts and @Expert Reply
 
 ### Overview
 
@@ -176,7 +180,7 @@ Users can post in a topic. Typing `@` shows the topic's expert list; selecting a
 GET  /topics/{id}/posts                    — All posts (asc by created_at)
 POST /topics/{id}/posts                    — Create human post
 POST /topics/{id}/posts/mention            — @expert reply (202 async)
-GET  /topics/{id}/posts/mention/{reply_id} — Poll reply status
+GET  /topics/{id}/posts/mention/{reply_id}  — Poll reply status
 ```
 
 ### Expert Reply Agent design
@@ -217,7 +221,7 @@ Background: threading.Thread(daemon=True) + asyncio.run()
 
 ---
 
-## Directory Structure
+## 5. Directory Structure
 
 ```
 agent-topic-lab/
@@ -225,29 +229,41 @@ agent-topic-lab/
 │   ├── App.tsx                        Route definitions
 │   ├── api/client.ts                  axios + API type definitions
 │   ├── pages/
-│   │   ├── TopicList.tsx               Topic list
-│   │   ├── TopicDetail.tsx             Topic detail + discussion + posts
-│   │   ├── CreateTopic.tsx             Create topic
-│   │   ├── ExpertList.tsx              Global expert management
-│   │   └── ExpertEdit.tsx              Edit expert skill file
+│   │   ├── TopicList.tsx              Topic list
+│   │   ├── TopicDetail.tsx            Topic detail + discussion + posts
+│   │   ├── CreateTopic.tsx            Create topic
+│   │   ├── ExpertList.tsx             Global expert management
+│   │   ├── ExpertEdit.tsx             Edit expert skill file
+│   │   ├── SkillLibrary.tsx           Skill library (view, select)
+│   │   ├── MCPLibrary.tsx             MCP server library
+│   │   └── ModeratorModeLibrary.tsx   Moderator mode library
 │   └── components/
-│       ├── PostThread.tsx              Post list (quotes, pending spinner)
-│       ├── MentionTextarea.tsx         @completion input
-│       ├── ExpertManagement.tsx        Topic-level expert CRUD (incl. AI gen)
-│       └── ModeratorModeConfig.tsx     Discussion mode config (incl. AI gen)
+│       ├── PostThread.tsx             Post list (quotes, pending spinner)
+│       ├── MentionTextarea.tsx        @completion input
+│       ├── ExpertManagement.tsx       Topic-level expert CRUD (incl. AI gen)
+│       ├── ModeratorModeConfig.tsx    Discussion mode config (incl. AI gen)
+│       ├── TopicConfigTabs.tsx         Topic config (experts, skills, MCP, mode)
+│       ├── SkillGrid.tsx              Skill selector grid
+│       ├── MCPGrid.tsx                MCP selector grid
+│       ├── ExpertGrid.tsx             Expert selector grid
+│       ├── ModeratorModeGrid.tsx      Moderator mode selector grid
+│       ├── StatusBadge.tsx            Topic status badge
+│       └── ResourceDetailModal.tsx    Shared detail modal
 │
 ├── backend/   ← [Resonnet](https://github.com/TashanGKD/Resonnet) submodule
-│   ├── main.py                         FastAPI entry, route registration
-│   ├── app/api/                        topics, discussion, posts, experts, moderator_modes
-│   ├── app/agent/                      discussion, expert_reply, workspace, generation
+│   ├── main.py                        FastAPI entry, route registration
+│   ├── app/api/                       topics, discussion, posts, experts, moderator_modes
+│   ├── app/agent/                     discussion, expert_reply, workspace, generation
 │   ├── skills/                        experts, moderator presets
 │   ├── prompts/                       moderator, expert_reply, generation templates
-│   └── workspace/topics/{topic_id}/    Runtime workspace
+│   └── workspace/topics/{topic_id}/   Runtime workspace
 ```
 
 ---
 
-## Frontend Pages and Components
+## 6. Frontend Pages and Components
+
+> **Design guide**: See [FRONTEND_DESIGN_GUIDE.md](./FRONTEND_DESIGN_GUIDE.md) for colors, typography, components, motion, and accessibility.
 
 ### Routes (App.tsx)
 
@@ -258,12 +274,15 @@ agent-topic-lab/
 | `/topics/:id` | `TopicDetail` | Topic detail (discussion + posts) |
 | `/experts` | `ExpertList` | Global expert management |
 | `/experts/:name/edit` | `ExpertEdit` | Edit expert skill file |
+| `/skills` | `SkillLibrary` | Skill library |
+| `/mcp` | `MCPLibrary` | MCP server library |
+| `/moderator-modes` | `ModeratorModeLibrary` | Moderator mode library |
 
 ### PostThread.tsx
 
-- Show all posts (human + expert) ascending by `created_at`
+- Renders all posts (human + expert) ascending by `created_at`
 - Reply posts show original post quote (author + excerpt)
-- `status=pending` → spinner; `status=failed` → red message; `status=completed` → Markdown render
+- `status=pending` → spinner; `status=failed` → error message; `status=completed` → Markdown render
 
 ### MentionTextarea.tsx
 
@@ -271,9 +290,22 @@ agent-topic-lab/
 - Keyboard/click select → Insert `@expert_name`
 - Submit: valid @mention → `postsApi.mention()`; else → `postsApi.create()`
 
+### Mobile Responsiveness
+
+| Area | Adaptation |
+|------|-------------|
+| **TopNav** | Collapses to hamburger menu on small screens (&lt;768px); keeps "+ Create" button |
+| **Layout** | Responsive padding `px-4 sm:px-6`; `viewport-fit=cover` + `safe-area-inset-*` for notch/home indicator |
+| **TopicDetail** | Horizontal scroll TOC on mobile instead of sidebar; tighter discussion card spacing |
+| **TabPanel** | Tab bar scrolls horizontally to avoid wrapping on small screens |
+| **PostThread / MentionTextarea** | Reply button 44px tap target; @ dropdown adapts to narrow viewport |
+| **LibraryPageLayout** | Title and actions stack vertically on small screens |
+
+Breakpoints: `sm` 640px, `md` 768px, `lg` 1024px (Tailwind defaults).
+
 ---
 
-## Backend API Routes
+## 7. Backend API Routes
 
 Backend implemented in [Resonnet](https://github.com/TashanGKD/Resonnet).
 
@@ -309,7 +341,7 @@ See [Resonnet API reference](https://github.com/TashanGKD/Resonnet) and `backend
 
 ---
 
-## Agent Orchestration Layer
+## 8. Agent Orchestration Layer
 
 ### Two AI call paths
 
@@ -333,10 +365,10 @@ OpenAI SDK AsyncOpenAI (AI_GENERATION_* config)
 
 ---
 
-## Workspace File System
+## 9. Workspace File System
 
 | File | Written when | Read when |
-|------|-------------|-----------|
+|------|--------------|-----------|
 | `topic.json` | Create/update topic | Loaded at startup |
 | `posts/{ts}_{uuid}.json` | Post / agent reply | GET /posts, poll /posts/mention |
 | `agents/{name}/role.md` | Add/update expert | Start discussion, expert reply |
@@ -348,7 +380,7 @@ OpenAI SDK AsyncOpenAI (AI_GENERATION_* config)
 
 ---
 
-## Skills vs Prompts
+## 10. Skills vs Prompts
 
 ```
 skills/         ← Agent runtime skill files
@@ -366,7 +398,7 @@ prompts/        ← LLM injection templates
 
 ---
 
-## Data Models
+## 11. Data Models
 
 ### Post
 
@@ -401,7 +433,7 @@ class Topic(BaseModel):
 
 ---
 
-## Configuration and Environment
+## 12. Configuration and Environment
 
 **`backend/.env`**
 
@@ -421,7 +453,7 @@ Two configs strictly separate: `ANTHROPIC_*` for `claude_agent_sdk`; `AI_GENERAT
 
 ---
 
-## Quick Start
+## 13. Quick Start
 
 ### Init submodule (after first clone)
 

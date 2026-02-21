@@ -137,6 +137,7 @@ function PostCard({
               type="button"
               onClick={() => onReply(post)}
               className="text-xs text-gray-400 hover:text-black px-2 py-1.5 -mr-2 rounded touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
+              aria-label={`回复 ${displayName}`}
             >
               回复
             </button>

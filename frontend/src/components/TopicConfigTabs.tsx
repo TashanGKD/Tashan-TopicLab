@@ -190,7 +190,7 @@ export default function TopicConfigTabs({
               <span className="text-sm text-gray-700">讨论轮数</span>
               <input
                 type="number"
-                className="w-14 border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+                className="w-14 border border-gray-200 rounded-lg px-2 py-1.5 text-sm font-serif focus:border-black focus:outline-none transition-colors"
                 min={1}
                 max={999}
                 value={numRounds}
@@ -293,7 +293,7 @@ export default function TopicConfigTabs({
             <button
               onClick={handleStartDiscussion}
               disabled={isStarting || isRunning}
-              className="bg-gray-900 hover:bg-black text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              className="bg-black text-white px-4 py-2 rounded-lg text-sm font-serif font-medium hover:bg-gray-900 transition-colors disabled:opacity-50"
             >
               {isStarting ? '启动中...' : isRunning ? '运行中...' : isCompleted ? '重新启动' : '启动讨论'}
             </button>
@@ -360,7 +360,7 @@ export default function TopicConfigTabs({
                   await handleSaveMode()
                   setShowCustomDialog(false)
                 }}
-                className="bg-gray-900 hover:bg-black text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                className="bg-black text-white px-4 py-2 rounded-lg text-sm font-serif font-medium hover:bg-gray-900 transition-colors"
               >
                 完成
               </button>

@@ -100,7 +100,8 @@ export default function MentionTextarea({
     <div className="relative">
       <textarea
         ref={textareaRef}
-        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-serif focus:border-black focus:outline-none transition-colors resize-none"
+        aria-label="发表帖子，输入 @ 可提及角色"
         value={value}
         onChange={handleInput}
         onKeyDown={handleKeyDown}
@@ -119,11 +120,11 @@ export default function MentionTextarea({
                 idx === dropdownIndex ? 'bg-gray-50' : 'bg-white hover:bg-gray-50'
               }`}
             >
-              <span className="w-7 h-7 rounded-full bg-indigo-500 text-white flex items-center justify-center text-xs font-semibold flex-shrink-0">
+              <span className="w-7 h-7 rounded-full bg-black text-white flex items-center justify-center text-xs font-serif flex-shrink-0">
                 {expert.label.charAt(0)}
               </span>
               <div>
-                <div className="text-sm font-medium text-gray-900">{expert.label}</div>
+                <div className="text-sm font-serif font-medium text-black">{expert.label}</div>
                 <div className="text-xs text-gray-400">@{expert.name}</div>
               </div>
             </div>

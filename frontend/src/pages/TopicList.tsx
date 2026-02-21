@@ -2,26 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { topicsApi, Topic } from '../api/client'
 import { handleApiError } from '../utils/errorHandler'
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    open: 'bg-green-50 text-green-700',
-    closed: 'bg-gray-100 text-gray-500',
-    running: 'bg-blue-50 text-blue-600',
-    completed: 'bg-gray-100 text-gray-600',
-  }
-  const labels: Record<string, string> = {
-    open: '开放',
-    closed: '关闭',
-    running: '运行中',
-    completed: '已完成',
-  }
-  return (
-    <span className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full ${styles[status] ?? 'bg-gray-100 text-gray-500'}`}>
-      {labels[status] ?? status}
-    </span>
-  )
-}
+import StatusBadge from '../components/StatusBadge'
 
 export default function TopicList() {
   const [topics, setTopics] = useState<Topic[]>([])

@@ -20,8 +20,8 @@ interface ModeratorModeConfigProps {
   initialSkillIds?: string[]
 }
 
-const inputClass = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-transparent'
-const labelClass = 'block text-sm font-semibold text-gray-700 mb-1'
+const inputClass = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-serif focus:border-black focus:outline-none transition-colors'
+const labelClass = 'block text-sm font-serif font-medium text-black mb-1'
 
 export default function ModeratorModeConfigComponent({
   topicId,
@@ -211,13 +211,13 @@ export default function ModeratorModeConfigComponent({
               )
             }}
             disabled={isStarting || isRunning}
-            className="bg-gray-900 hover:bg-black text-white px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+            className="bg-black text-white px-4 py-2 text-sm font-serif font-medium hover:bg-gray-900 transition-colors disabled:opacity-50"
           >
             {isStarting ? '启动中...' : isRunning ? '运行中...' : isCompleted ? '重新启动' : '启动讨论'}
           </button>
         </>
       ) : (
-        <button onClick={handleSaveMode} className="bg-gray-900 hover:bg-black text-white px-4 py-2 text-sm font-medium transition-colors">
+        <button onClick={handleSaveMode} className="bg-black text-white px-4 py-2 text-sm font-serif font-medium hover:bg-gray-900 transition-colors">
           保存模式配置
         </button>
       )}
@@ -272,7 +272,7 @@ export default function ModeratorModeConfigComponent({
             />
 
             <div className="flex gap-2">
-              <button onClick={() => setShowCustomDialog(false)} className="bg-gray-900 hover:bg-black text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">完成</button>
+              <button onClick={() => setShowCustomDialog(false)} className="bg-black text-white px-4 py-2 rounded-lg text-sm font-serif font-medium hover:bg-gray-900 transition-colors">完成</button>
               <button onClick={() => setShowCustomDialog(false)} className="bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">取消</button>
             </div>
           </div>

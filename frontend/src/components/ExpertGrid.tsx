@@ -73,7 +73,7 @@ function renderGridContent(
                     <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">
                       {catName}
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
                       {items.map((e) =>
                         !isSelect ? (
                           <ExpertCard
@@ -169,8 +169,8 @@ export default function ExpertGrid(props: ExpertGridProps) {
       onChange={(e) => setSearch(e.target.value)}
       className={
         isFill
-          ? 'w-full flex-shrink-0 bg-gray-50 border-0 border-b border-gray-100 rounded-none px-3 py-2 text-sm font-serif placeholder-gray-400 focus:outline-none focus:ring-0 focus:border-gray-300'
-          : 'w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm font-serif placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-transparent'
+          ? 'w-full flex-shrink-0 bg-gray-50 border-0 border-b border-gray-100 rounded-none px-3 py-2 text-sm font-serif placeholder-gray-400 focus:outline-none focus:border-gray-300 transition-colors'
+          : 'w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm font-serif placeholder-gray-400 focus:border-black focus:outline-none transition-colors'
       }
     />
   )
@@ -300,7 +300,7 @@ export default function ExpertGrid(props: ExpertGridProps) {
                                 <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
                                   {catName}
                                 </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
                                   {items.map((e) =>
                                     mode === 'view' ? (
                                       <ExpertCard

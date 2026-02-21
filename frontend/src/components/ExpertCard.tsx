@@ -135,6 +135,7 @@ export function ExpertChip({
               type="button"
               onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v) }}
               className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-200 text-xs"
+              aria-label="更多"
               title="更多"
             >
               ⋮

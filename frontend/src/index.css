@@ -27,41 +27,6 @@
   }
 }
 
-/* Components */
-@layer components {
-  /* Card Base */
-  .card {
-    @apply border border-gray-200 p-6;
-  }
-  
-  /* Button Base */
-  .btn {
-    @apply px-4 py-2 text-sm font-medium transition-all duration-200;
-  }
-  
-  .btn-primary {
-    @apply btn bg-black text-white hover:bg-gray-900;
-  }
-  
-  .btn-secondary {
-    @apply btn border border-gray-200 bg-white text-black hover:border-black;
-  }
-  
-  /* Input Base */
-  .input {
-    @apply w-full border border-gray-200 px-3 py-2 text-sm transition-colors focus:border-black focus:outline-none;
-  }
-  
-  /* Navigation Link */
-  .nav-link {
-    @apply text-sm text-gray-500 transition-colors hover:text-black;
-  }
-  
-  .nav-link-active {
-    @apply nav-link text-black font-medium;
-  }
-}
-
 /* Animations */
 @layer utilities {
   @keyframes spin {

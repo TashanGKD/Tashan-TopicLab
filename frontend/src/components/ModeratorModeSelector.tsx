@@ -38,7 +38,7 @@ export default function ModeratorModeSelector({
   return (
     <>
       {!hideSelectedChips && value === 'custom' && (
-        <div className="flex flex-wrap gap-2 p-3 bg-gray-50 rounded-lg border border-gray-100 mb-3">
+        <div className="flex flex-wrap gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200 mb-3">
           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide w-full mb-1">
             已选讨论方式
           </span>

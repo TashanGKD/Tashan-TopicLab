@@ -17,6 +17,7 @@ import TopicConfigTabs from '../components/TopicConfigTabs'
 import ResizableToc from '../components/ResizableToc'
 import PostThread from '../components/PostThread'
 import MentionTextarea from '../components/MentionTextarea'
+import StatusBadge from '../components/StatusBadge'
 import { handleApiError, handleApiSuccess } from '../utils/errorHandler'
 
 interface DiscussionPost {
@@ -35,26 +36,6 @@ interface NavigationItem {
 }
 
 const POLL_INTERVAL_MS = 2000
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    open: 'bg-green-50 text-green-700',
-    closed: 'bg-gray-100 text-gray-500',
-    running: 'bg-blue-50 text-blue-600',
-    completed: 'bg-gray-100 text-gray-600',
-  }
-  const labels: Record<string, string> = {
-    open: '开放',
-    closed: '关闭',
-    running: '运行中',
-    completed: '已完成',
-  }
-  return (
-    <span className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full ${styles[status] ?? 'bg-gray-100 text-gray-500'}`}>
-      {labels[status] ?? status}
-    </span>
-  )
-}
 
 export default function TopicDetail() {
   const { id } = useParams<{ id: string }>()
@@ -443,7 +424,7 @@ export default function TopicDetail() {
                 <>
                   <div className="w-full h-1 bg-gray-100 mb-3">
                     <div
-                      className="h-1 bg-gray-900 transition-all duration-500"
+                      className="h-1 bg-black transition-all duration-500"
                       style={{ width: `${Math.min(100, (progress.completed_turns / progress.total_turns) * 100)}%` }}
                     />
                   </div>
@@ -485,7 +466,7 @@ export default function TopicDetail() {
                     </div>
                     {roundPosts.map(post => (
                       <div key={post.id} className="flex gap-3 sm:gap-4 py-4 sm:py-5 border-b border-gray-100">
-                        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gray-900 text-white flex items-center justify-center text-xs font-semibold flex-shrink-0">
+                        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-black text-white flex items-center justify-center text-xs font-serif flex-shrink-0">
                           {post.expertName.charAt(0)}
                         </div>
                         <div className="flex-1 min-w-0">
