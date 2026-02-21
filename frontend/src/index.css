@@ -11,11 +11,14 @@
     font-family: 'Noto Serif SC', STSong, SimSun, serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    -webkit-tap-highlight-color: transparent;
   }
   
   body {
     @apply bg-white text-black antialiased;
     font-feature-settings: "kern" 1, "liga" 1;
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
   }
   
   /* Selection */
@@ -126,6 +129,23 @@
   /* Border Utilities */
   .border-thin {
     border-width: 0.5px;
+  }
+  
+  /* Mobile / Safe Area */
+  .safe-area-inset-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  
+  .touch-manipulation {
+    touch-action: manipulation;
+  }
+  
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
   }
 }
 

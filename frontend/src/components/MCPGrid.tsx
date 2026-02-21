@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useMCPGrid } from '../hooks/useMCPGrid'
 import SourceCategoryToc from './SourceCategoryToc'
 import ResizableToc from './ResizableToc'
+import MobileSourceCategoryToc from './MobileSourceCategoryToc'
 import MCPCard, { MCPChip } from './MCPCard'
 import { sourceDisplayName } from '../utils/mcps'
 import type { AssignableMCP } from '../api/client'
@@ -54,6 +55,23 @@ export default function MCPGrid(props: MCPGridProps) {
   )
 
   const mcpById = useMemo(() => Object.fromEntries(allMcps.map((m) => [m.id, m])), [allMcps])
+
+  const mobileTocData = useMemo(() => {
+    const sources = sourceOrder.map((s) => ({
+      id: `source-${s}`,
+      label: sourceDisplayName(s),
+    }))
+    const categoriesBySource: Record<string, { id: string; label: string; sourceId: string }[]> = {}
+    for (const source of sourceOrder) {
+      const sid = `source-${source}`
+      categoriesBySource[sid] = (tocTree[source] || []).map((c) => ({
+        id: c.id,
+        label: c.label,
+        sourceId: sid,
+      }))
+    }
+    return { sources, categoriesBySource }
+  }, [tocTree, sourceOrder])
 
   const selectedMcps =
     props.mode === 'select'
@@ -108,7 +126,7 @@ export default function MCPGrid(props: MCPGridProps) {
                     <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">
                       {catName}
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2">
                       {items.map((m) =>
                         props.mode === 'view' ? (
                           <MCPCard
@@ -166,7 +184,7 @@ export default function MCPGrid(props: MCPGridProps) {
       <div
         className={
           layout === 'embed' && filteredMcps.length > 0
-            ? 'flex flex-wrap gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex-shrink-0'
+            ? 'flex flex-wrap gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex-shrink-0 max-h-28 overflow-y-auto overflow-x-hidden'
             : 'flex flex-wrap gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200'
         }
       >
@@ -208,13 +226,13 @@ export default function MCPGrid(props: MCPGridProps) {
           <div
             className={
               layout === 'embed' && selectedChipsSection
-                ? 'flex flex-1 min-h-0 min-w-0'
+                ? 'flex flex-1 min-h-0 min-w-0 overflow-x-hidden items-start'
                 : layout === 'embed'
-                  ? 'flex gap-0 flex-1 min-h-0'
-                  : 'flex gap-8 flex-1 min-h-0'
+                  ? 'flex gap-0 flex-1 min-h-0 min-w-0 overflow-x-hidden items-start'
+                  : 'flex gap-8 flex-1 min-h-0 min-w-0 overflow-x-hidden items-start'
             }
           >
-          <div className={layout === 'embed' ? 'hidden sm:flex flex-shrink-0' : 'hidden md:flex flex-shrink-0'}>
+          <div className={layout === 'embed' ? 'hidden sm:flex flex-shrink-0 self-start' : 'hidden md:flex flex-shrink-0 self-start'}>
             <ResizableToc
               defaultWidth={layout === 'embed' ? 128 : 176}
               minWidth={layout === 'embed' ? 100 : 120}
@@ -236,6 +254,15 @@ export default function MCPGrid(props: MCPGridProps) {
           >
             {layout === 'embed' && isFill && (
               <div className="flex-shrink-0">{searchInput}</div>
+            )}
+            {mobileTocData.sources.length > 0 && (
+              <MobileSourceCategoryToc
+                sources={mobileTocData.sources}
+                categoriesBySource={mobileTocData.categoriesBySource}
+                sourceOrder={sourceOrder}
+                onNavigate={scrollToSection}
+                visibleClass={layout === 'embed' ? 'sm:hidden' : 'md:hidden'}
+              />
             )}
             <div
               className={`flex-1 min-h-0 ${layout === 'embed' ? 'overflow-auto' : ''}`}
@@ -273,7 +300,7 @@ export default function MCPGrid(props: MCPGridProps) {
                               <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
                                 {catName}
                               </div>
-                              <div className="flex flex-wrap gap-2">
+                              <div className="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2">
                                 {items.map((m) =>
                                   props.mode === 'view' ? (
                                     <MCPCard

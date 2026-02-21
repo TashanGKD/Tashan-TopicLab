@@ -13,7 +13,7 @@ function App() {
   return (
     <>
       <TopNav />
-      <main className="pt-14">
+      <main className="pt-14 pb-[env(safe-area-inset-bottom)] min-h-screen">
         <Routes>
           <Route path="/" element={<TopicList />} />
           <Route path="/topics/new" element={<CreateTopic />} />

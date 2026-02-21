@@ -34,13 +34,13 @@ export default function TabPanel({ tabs, activeId, onChange, className = '', aut
 
   return (
     <div className={className}>
-      <div className="flex gap-1 border-b border-gray-200 mb-4">
+      <div className="flex gap-1 border-b border-gray-200 mb-4 overflow-x-auto scrollbar-hide -mx-1 px-1">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => onChange(tab.id)}
-            className={`px-4 py-2.5 text-sm font-serif transition-colors -mb-px ${
+            className={`px-3 sm:px-4 py-2.5 text-sm font-serif transition-colors -mb-px flex-shrink-0 touch-manipulation ${
               activeId === tab.id
                 ? 'text-black font-medium border-b-2 border-black'
                 : 'text-gray-500 hover:text-gray-700 border-b-2 border-transparent'

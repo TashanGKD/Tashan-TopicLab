@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { ExpertInfo } from '../api/client'
 
-const CARD_CLASS = 'inline-flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors min-w-[180px] max-w-[280px]'
+const CARD_CLASS = 'flex sm:inline-flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors w-full min-w-0 sm:min-w-[180px] sm:max-w-[280px] sm:w-auto'
 
 interface ExpertCardViewProps {
   expert: ExpertInfo
@@ -30,7 +30,7 @@ export default function ExpertCard(props: ExpertCardProps) {
       <button
         type="button"
         onClick={() => onClick(expert)}
-        className="inline-flex flex-col gap-1 px-4 py-3 rounded-lg border border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 transition-colors min-w-[200px] max-w-[280px] text-left cursor-pointer"
+        className="flex flex-col gap-1 px-4 py-3 rounded-lg border border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 transition-colors w-full min-w-0 sm:min-w-[200px] sm:max-w-[280px] sm:w-auto text-left cursor-pointer"
       >
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-full bg-black text-white flex items-center justify-center font-serif text-xs flex-shrink-0">
@@ -122,11 +122,12 @@ export function ExpertChip({
       tabIndex={0}
       onClick={onClick}
       onKeyDown={(e) => e.key === 'Enter' && onClick?.()}
-      className={`${CARD_CLASS} bg-white hover:border-gray-400 hover:bg-gray-50 cursor-pointer relative`}
+      title={expert.label}
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs bg-gray-100 border border-gray-200 hover:bg-gray-200 cursor-pointer relative sm:flex sm:gap-2 sm:px-3 sm:py-2 sm:rounded-lg sm:min-w-[180px] sm:max-w-[280px] sm:w-auto sm:bg-white sm:hover:border-gray-400 sm:hover:bg-gray-50"
     >
-      <div className="flex-1 min-w-0 text-left">
-        <span className="text-sm font-serif font-medium text-black block truncate">{expert.label}</span>
-      </div>
+      <span className="flex-1 min-w-0 text-left truncate max-w-[100px] sm:max-w-none font-serif font-medium text-black">
+        {expert.label}
+      </span>
       <div className="flex items-center gap-0.5 flex-shrink-0">
         {(onEdit || onShare) && (
           <div className="relative">
@@ -171,7 +172,7 @@ export function ExpertChip({
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onRemove() }}
-          className="w-7 h-7 rounded-full flex items-center justify-center text-sm font-medium text-gray-400 hover:text-black hover:bg-gray-200 transition-colors"
+          className="w-5 h-5 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-xs sm:text-sm font-medium text-gray-400 hover:text-black hover:bg-gray-200 transition-colors touch-manipulation"
           aria-label="移除"
         >
           ×

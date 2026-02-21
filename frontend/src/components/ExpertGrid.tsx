@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useExpertGrid } from '../hooks/useExpertGrid'
 import SourceCategoryToc from './SourceCategoryToc'
 import ResizableToc from './ResizableToc'
+import MobileSourceCategoryToc from './MobileSourceCategoryToc'
 import ExpertCard, { ExpertChip } from './ExpertCard'
 import { sourceDisplayName } from '../utils/experts'
 import type { ExpertInfo } from '../api/client'
@@ -72,7 +73,7 @@ function renderGridContent(
                     <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">
                       {catName}
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2">
                       {items.map((e) =>
                         !isSelect ? (
                           <ExpertCard
@@ -139,6 +140,23 @@ export default function ExpertGrid(props: ExpertGridProps) {
 
   const expertByName = useMemo(() => Object.fromEntries(allExperts.map((e) => [e.name, e])), [allExperts])
 
+  const mobileTocData = useMemo(() => {
+    const sources = sourceOrder.map((s) => ({
+      id: `source-${s}`,
+      label: sourceDisplayName(s),
+    }))
+    const categoriesBySource: Record<string, { id: string; label: string; sourceId: string }[]> = {}
+    for (const source of sourceOrder) {
+      const sid = `source-${source}`
+      categoriesBySource[sid] = (tocTree[source] || []).map((c) => ({
+        id: c.id,
+        label: c.label,
+        sourceId: sid,
+      }))
+    }
+    return { sources, categoriesBySource }
+  }, [tocTree, sourceOrder])
+
   const isFill = layout === 'embed' && fillHeight
   const rootClass = isFill ? 'flex flex-col h-full min-h-0' : 'space-y-3'
   const gridHeightStyle = isFill ? undefined : layout === 'embed' ? { maxHeight } : undefined
@@ -162,7 +180,7 @@ export default function ExpertGrid(props: ExpertGridProps) {
       <div
         className={
           layout === 'embed' && filteredExperts.length > 0
-            ? 'flex flex-wrap gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex-shrink-0'
+            ? 'flex flex-wrap gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex-shrink-0 max-h-28 overflow-y-auto overflow-x-hidden'
             : 'flex flex-wrap gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200'
         }
       >
@@ -214,13 +232,13 @@ export default function ExpertGrid(props: ExpertGridProps) {
           <div
             className={
               layout === 'embed' && selectedChipsSection
-                ? 'flex flex-1 min-h-0 min-w-0'
+                ? 'flex flex-1 min-h-0 min-w-0 overflow-x-hidden items-start'
                 : layout === 'embed'
-                  ? 'flex gap-0 flex-1 min-h-0'
-                  : 'flex gap-8 flex-1 min-h-0'
+                  ? 'flex gap-0 flex-1 min-h-0 min-w-0 overflow-x-hidden items-start'
+                  : 'flex gap-8 flex-1 min-h-0 min-w-0 overflow-x-hidden items-start'
             }
           >
-          <div className={layout === 'embed' ? 'hidden sm:flex flex-shrink-0' : 'hidden md:flex flex-shrink-0'}>
+          <div className={layout === 'embed' ? 'hidden sm:flex flex-shrink-0 self-start' : 'hidden md:flex flex-shrink-0 self-start'}>
             <ResizableToc
               defaultWidth={layout === 'embed' ? 128 : 176}
               minWidth={layout === 'embed' ? 100 : 120}
@@ -239,6 +257,15 @@ export default function ExpertGrid(props: ExpertGridProps) {
           </div>
           <div className={`flex-1 min-w-0 flex flex-col min-h-0 ${layout === 'embed' ? 'pl-3' : ''}`}>
             {layout === 'embed' && isFill && <div className="flex-shrink-0">{searchInput}</div>}
+            {mobileTocData.sources.length > 0 && (
+              <MobileSourceCategoryToc
+                sources={mobileTocData.sources}
+                categoriesBySource={mobileTocData.categoriesBySource}
+                sourceOrder={sourceOrder}
+                onNavigate={scrollToSection}
+                visibleClass={layout === 'embed' ? 'sm:hidden' : 'md:hidden'}
+              />
+            )}
             <div className={`flex-1 min-h-0 ${layout === 'embed' ? 'overflow-auto' : ''}`}>
               {layout === 'page' ? (
                 <div className="space-y-8">
@@ -273,7 +300,7 @@ export default function ExpertGrid(props: ExpertGridProps) {
                                 <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
                                   {catName}
                                 </div>
-                                <div className="flex flex-wrap gap-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2">
                                   {items.map((e) =>
                                     mode === 'view' ? (
                                       <ExpertCard

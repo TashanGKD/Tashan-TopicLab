@@ -1,7 +1,7 @@
 import type { AssignableModeratorMode } from '../api/client'
 import { sourceDisplayName } from '../utils/moderatorModes'
 
-const CARD_CLASS = 'inline-flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors min-w-[180px] max-w-[280px]'
+const CARD_CLASS = 'flex sm:inline-flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors w-full min-w-0 sm:min-w-[180px] sm:max-w-[280px] sm:w-auto'
 
 interface ModeratorModeCardViewProps {
   mode: AssignableModeratorMode
@@ -27,7 +27,7 @@ export default function ModeratorModeCard(props: ModeratorModeCardViewProps | Mo
       <button
         type="button"
         onClick={() => props.onClick(mode)}
-        className="inline-flex flex-col gap-1 px-4 py-3 rounded-lg border border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 transition-colors min-w-[200px] max-w-[280px] text-left cursor-pointer"
+        className="flex flex-col gap-1 px-4 py-3 rounded-lg border border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 transition-colors w-full min-w-0 sm:min-w-[200px] sm:max-w-[280px] sm:w-auto text-left cursor-pointer"
       >
         <span className="text-sm font-serif font-medium text-black block truncate">{mode.name}</span>
         {mode.description && (
@@ -95,19 +95,20 @@ export function ModeratorModeChip({
   onRemove: () => void
   onClick: () => void
 }) {
+  const meta = `${sourceDisplayName(mode.source || 'default')}${(mode.category_name || mode.category) ? ` · ${mode.category_name || mode.category}` : ''}`
   return (
     <span
       role="button"
       tabIndex={0}
       onClick={onClick}
       onKeyDown={(e) => e.key === 'Enter' && onClick()}
-      className={`${CARD_CLASS} bg-white hover:border-gray-400 hover:bg-gray-50 cursor-pointer`}
+      title={meta ? `${mode.name} · ${meta}` : mode.name}
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs bg-gray-100 border border-gray-200 hover:bg-gray-200 cursor-pointer sm:flex sm:gap-2 sm:px-3 sm:py-2 sm:rounded-lg sm:min-w-[180px] sm:max-w-[280px] sm:w-auto sm:bg-white sm:hover:border-gray-400 sm:hover:bg-gray-50"
     >
-      <div className="flex-1 min-w-0 text-left">
-        <span className="text-sm font-serif font-medium text-black block truncate">{mode.name}</span>
-        <span className="text-[10px] text-gray-400">
-          {sourceDisplayName(mode.source || 'default')}
-          {(mode.category_name || mode.category) && ` · ${mode.category_name || mode.category}`}
+      <div className="flex-1 min-w-0 text-left flex flex-col sm:block">
+        <span className="font-serif font-medium text-black truncate max-w-[100px] sm:max-w-none sm:block">{mode.name}</span>
+        <span className="hidden sm:block text-[10px] text-gray-400">
+          {meta}
         </span>
       </div>
       <button
@@ -116,7 +117,7 @@ export function ModeratorModeChip({
           e.stopPropagation()
           onRemove()
         }}
-        className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-sm font-medium text-gray-400 hover:text-black hover:bg-gray-200 transition-colors"
+        className="flex-shrink-0 w-5 h-5 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-xs sm:text-sm font-medium text-gray-400 hover:text-black hover:bg-gray-200 transition-colors touch-manipulation"
         aria-label="移除"
       >
         ×

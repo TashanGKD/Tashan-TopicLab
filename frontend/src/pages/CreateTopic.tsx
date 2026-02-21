@@ -24,9 +24,9 @@ export default function CreateTopic() {
 
   return (
     <div className="min-h-screen bg-white">
-      <div className="max-w-2xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-12">
-          <h1 className="text-2xl font-serif font-bold text-black">创建话题</h1>
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8 sm:mb-12">
+          <h1 className="text-xl sm:text-2xl font-serif font-bold text-black">创建话题</h1>
           <button
             onClick={() => navigate('/')}
             className="text-sm font-serif text-gray-500 hover:text-black transition-colors"
@@ -35,7 +35,7 @@ export default function CreateTopic() {
           </button>
         </div>
 
-        <div className="border border-gray-200 rounded-lg p-8">
+        <div className="border border-gray-200 rounded-lg p-4 sm:p-8">
           <form onSubmit={handleSubmit} className="flex flex-col gap-6">
             <div>
               <label className="block text-sm font-serif font-medium text-black mb-2">标题</label>

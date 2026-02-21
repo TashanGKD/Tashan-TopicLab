@@ -346,21 +346,21 @@ export default function TopicDetail() {
 
   return (
     <div className="bg-white min-h-screen">
-      <div className="max-w-[1280px] mx-auto px-6 py-6 flex gap-8">
+      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-4 sm:py-6 flex flex-col lg:flex-row gap-6 lg:gap-8">
         {/* Main content */}
         <div className="flex-1 min-w-0">
 
           {/* Topic title & actions */}
-          <div className="flex justify-between items-start mb-6">
-            <h1 className="text-2xl font-serif font-bold text-black flex-1">{topic.title}</h1>
-            <div className="flex items-center gap-2 ml-4">
+          <div className="flex flex-row items-start justify-between gap-2 mb-4 sm:mb-6">
+            <h1 className="text-xl sm:text-2xl font-serif font-bold text-black flex-1 min-w-0">{topic.title}</h1>
+            <div className="flex items-center gap-2 flex-shrink-0">
               <StatusBadge status={topic.status} />
             </div>
           </div>
 
           {/* Topic config - always visible for discussion mode */}
           {isDiscussionMode ? (
-            <div className="border-l-2 border-gray-100 pl-5 py-2 mb-6">
+            <div className="border-l-2 border-gray-100 pl-4 sm:pl-5 py-2 mb-4 sm:mb-6">
               <TopicConfigTabs
                 topicId={id!}
                 topicBody={topic.body}
@@ -380,7 +380,29 @@ export default function TopicDetail() {
             <div className="markdown-content text-gray-700 mb-4">{renderMarkdown(topic.body)}</div>
           )}
 
-          <div className="border-t border-gray-100 my-8" />
+          <div className="border-t border-gray-100 my-6 sm:my-8" />
+
+          {/* Mobile TOC - horizontal scroll, sticky */}
+          {hasDiscussion && navItems.length > 0 && (
+            <div className="lg:hidden sticky top-14 z-40 -mx-4 sm:-mx-6 px-4 sm:px-6 py-2 -mt-2 mb-4 bg-white/95 backdrop-blur border-b border-gray-100 overflow-x-auto scrollbar-hide">
+              <div className="flex gap-2 min-w-max">
+                {navItems.map(item => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => scrollToSection(item.id)}
+                    className={`text-xs px-3 py-1.5 rounded-full whitespace-nowrap transition-colors touch-manipulation ${
+                      activeNavId === item.id
+                        ? 'bg-black text-white font-medium'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Discussion summary */}
           {topic.discussion_result?.discussion_summary && (
@@ -407,12 +429,12 @@ export default function TopicDetail() {
 
           {/* In-page progress indicator */}
           {topic.discussion_status === 'running' && (
-            <div className="mb-8 border border-gray-200 rounded-lg p-5">
-              <div className="flex items-center gap-3 mb-4">
+            <div className="mb-6 sm:mb-8 border border-gray-200 rounded-lg p-4 sm:p-5">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-4">
                 <span className="spinner" />
                 <span className="text-sm font-semibold text-gray-900">话题讨论进行中</span>
                 {elapsedSeconds > 0 && (
-                  <span className="text-xs text-gray-400 ml-auto">
+                  <span className="text-xs text-gray-400 sm:ml-auto w-full sm:w-auto">
                     已运行 {Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, '0')}
                   </span>
                 )}
@@ -462,8 +484,8 @@ export default function TopicDetail() {
                       第 {round} 轮
                     </div>
                     {roundPosts.map(post => (
-                      <div key={post.id} className="flex gap-4 py-5 border-b border-gray-100">
-                        <div className="w-8 h-8 rounded-full bg-gray-900 text-white flex items-center justify-center text-xs font-semibold flex-shrink-0">
+                      <div key={post.id} className="flex gap-3 sm:gap-4 py-4 sm:py-5 border-b border-gray-100">
+                        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gray-900 text-white flex items-center justify-center text-xs font-semibold flex-shrink-0">
                           {post.expertName.charAt(0)}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -546,9 +568,9 @@ export default function TopicDetail() {
           </div>
         </div>
 
-        {/* Right navigation sidebar */}
+        {/* Right navigation sidebar - desktop */}
         {hasDiscussion && navItems.length > 0 && (
-          <ResizableToc defaultWidth={192} side="right" className="sticky top-20 self-start hidden lg:flex">
+          <ResizableToc defaultWidth={192} side="right" className="sticky top-20 self-start hidden lg:flex flex-shrink-0">
             <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
               目录
             </div>

@@ -136,7 +136,7 @@ function PostCard({
             <button
               type="button"
               onClick={() => onReply(post)}
-              className="text-xs text-gray-400 hover:text-black px-1.5 py-0.5"
+              className="text-xs text-gray-400 hover:text-black px-2 py-1.5 -mr-2 rounded touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
             >
               回复
             </button>
@@ -144,7 +144,7 @@ function PostCard({
         </div>
 
         {/* Body */}
-        <div className="markdown-content text-sm text-gray-700 leading-relaxed pl-8">
+        <div className="markdown-content text-sm text-gray-700 leading-relaxed pl-6 sm:pl-8">
           {isPending ? (
             <div className="flex items-center gap-2 text-gray-400 text-xs">
               <span className="w-3 h-3 border-2 border-gray-200 border-t-black rounded-full animate-spin" />
