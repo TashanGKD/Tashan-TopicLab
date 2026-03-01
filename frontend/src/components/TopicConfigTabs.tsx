@@ -44,6 +44,11 @@ export default function TopicConfigTabs({
   const [numRounds, setNumRounds] = useState(5)
   const [customPrompt, setCustomPrompt] = useState('')
   const [showCustomDialog, setShowCustomDialog] = useState(false)
+  const [showShareDialog, setShowShareDialog] = useState(false)
+  const [shareModeId, setShareModeId] = useState('')
+  const [shareName, setShareName] = useState('')
+  const [shareDescription, setShareDescription] = useState('')
+  const [sharing, setSharing] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [generating, setGenerating] = useState(false)
 
@@ -127,13 +132,39 @@ export default function TopicConfigTabs({
     }
   }
 
+  const handleShareMode = async () => {
+    const modeId = shareModeId.trim().toLowerCase().replace(/\s+/g, '_')
+    if (!modeId || !/^[a-z0-9_]+$/.test(modeId)) {
+      handleApiError({ message: '请输入有效的模式 ID（仅小写字母、数字、下划线）' }, '分享失败')
+      return
+    }
+    setSharing(true)
+    try {
+      await moderatorModesApi.share(topicId, {
+        mode_id: modeId,
+        name: shareName.trim() || undefined,
+        description: shareDescription.trim() || undefined,
+      })
+      setShowShareDialog(false)
+      setShareModeId('')
+      setShareName('')
+      setShareDescription('')
+      moderatorModesApi.listAssignable().then((r) => setAssignableModes(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+      handleApiSuccess('已共享到讨论方式库')
+    } catch (err: unknown) {
+      handleApiError(err, '分享失败')
+    } finally {
+      setSharing(false)
+    }
+  }
+
   const handleGenerateMode = async () => {
     if (!aiPrompt.trim()) {
       handleApiError({ message: '请输入讨论方式描述' }, '请输入讨论方式描述')
       return
     }
-    if (aiPrompt.trim().length < 10) {
-      handleApiError({ message: '模式描述至少需要 10 个字符' }, '模式描述至少需要 10 个字符')
+    if (!aiPrompt.trim()) {
+      handleApiError({ message: '请输入模式描述' }, '请输入模式描述')
       return
     }
     setGenerating(true)
@@ -192,7 +223,7 @@ export default function TopicConfigTabs({
                 type="number"
                 className="w-14 border border-gray-200 rounded-lg px-2 py-1.5 text-sm font-serif focus:border-black focus:outline-none transition-colors"
                 min={1}
-                max={999}
+                max={20}
                 value={numRounds}
                 onChange={(e) => setNumRounds(parseInt(e.target.value) || 1)}
               />
@@ -271,11 +302,15 @@ export default function TopicConfigTabs({
     },
     {
       id: 'model' as ConfigTabId,
-      label: '话题讨论',
+      label: 'AI讨论',
+      highlight: true,
       content: (
         <div className="space-y-4 overflow-auto min-h-0">
           <div>
-            <p className="text-xs text-gray-500 mb-2">选择推理模型。</p>
+            <p className="text-sm text-gray-600 mb-3">
+              启动前请确认：<strong>角色</strong>、<strong>讨论方式</strong>、<strong>技能</strong>等是否已配置好；也可使用默认配置。选择推理模型后即可开始。
+            </p>
+            <p className="text-xs text-gray-500 mb-2">选择推理模型</p>
             <select
               className={`${inputClass} max-w-xs`}
               value={selectedModel}
@@ -293,7 +328,7 @@ export default function TopicConfigTabs({
             <button
               onClick={handleStartDiscussion}
               disabled={isStarting || isRunning}
-              className="bg-black text-white px-4 py-2 rounded-lg text-sm font-serif font-medium hover:bg-gray-900 transition-colors disabled:opacity-50"
+              className="border border-gray-300 bg-gray-100 text-gray-800 px-4 py-2 rounded-lg text-sm font-serif font-medium hover:bg-gray-200 hover:border-gray-400 transition-colors disabled:opacity-60 disabled:bg-gray-50 disabled:border-gray-200 disabled:text-gray-400"
             >
               {isStarting ? '启动中...' : isRunning ? '运行中...' : isCompleted ? '重新启动' : '启动讨论'}
             </button>
@@ -305,6 +340,21 @@ export default function TopicConfigTabs({
 
   return (
     <>
+      {/* 当不在 AI 讨论 标签且未发起过讨论时，显示快捷入口（移动端该标签可能被横向滚动遮挡） */}
+      {activeTabId !== 'model' && onStartDiscussion && !isRunning && !isCompleted && (
+        <div className="mb-3">
+          <button
+            type="button"
+            onClick={() => setActiveTabId('model')}
+            className="w-full md:w-auto md:inline-flex flex items-center justify-center gap-2 py-2 px-4 rounded-lg border border-gray-300 bg-gray-100 text-gray-800 text-sm font-medium hover:bg-gray-200 hover:border-gray-400 active:bg-gray-300 transition-colors"
+          >
+            <span>启动 AI 讨论</span>
+            <svg className="w-4 h-4 text-gray-500 animate-nudge-right" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17l5-5-5-5M6 17l5-5-5-5" />
+            </svg>
+          </button>
+        </div>
+      )}
       <TabPanel
         tabs={tabs}
         activeId={activeTabId}
@@ -341,7 +391,7 @@ export default function TopicConfigTabs({
               <button
                 onClick={handleGenerateMode}
                 className="w-full bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-                disabled={generating || !aiPrompt.trim() || aiPrompt.trim().length < 10}
+                disabled={generating || !aiPrompt.trim()}
               >
                 {generating ? 'AI 生成中...' : 'AI 生成提示词'}
               </button>
@@ -354,7 +404,7 @@ export default function TopicConfigTabs({
               onChange={(e) => setCustomPrompt(e.target.value)}
               placeholder="使用上方 AI 生成，或手动输入主持人提示词..."
             />
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 items-center">
               <button
                 onClick={async () => {
                   await handleSaveMode()
@@ -364,8 +414,83 @@ export default function TopicConfigTabs({
               >
                 完成
               </button>
+              {customPrompt.trim() && (
+                <button
+                  onClick={() => {
+                    setShareModeId('')
+                    setShareName('')
+                    setShareDescription('')
+                    setShowShareDialog(true)
+                  }}
+                  className="bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                >
+                  共享到讨论方式库
+                </button>
+              )}
               <button
                 onClick={() => setShowCustomDialog(false)}
+                className="bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Share moderator mode dialog */}
+      {showShareDialog && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
+          onClick={() => setShowShareDialog(false)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl p-6 max-w-md w-[90%] border border-gray-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-semibold text-gray-900 mb-3">共享到讨论方式库</h3>
+            <p className="text-sm text-gray-500 mb-4">将当前自定义模式共享到平台，所有用户均可添加使用。</p>
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">模式 ID（必填，小写字母、数字、下划线）</label>
+                <input
+                  type="text"
+                  className={`${inputClass} w-full`}
+                  placeholder="例如 risk_assessment"
+                  value={shareModeId}
+                  onChange={(e) => setShareModeId(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">显示名称（选填）</label>
+                <input
+                  type="text"
+                  className={`${inputClass} w-full`}
+                  placeholder="例如 风险评估模式"
+                  value={shareName}
+                  onChange={(e) => setShareName(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">描述（选填）</label>
+                <input
+                  type="text"
+                  className={`${inputClass} w-full`}
+                  placeholder="简要描述该模式的用途"
+                  value={shareDescription}
+                  onChange={(e) => setShareDescription(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handleShareMode}
+                disabled={sharing || !shareModeId.trim()}
+                className="bg-black text-white px-4 py-2 rounded-lg text-sm font-serif font-medium hover:bg-gray-900 transition-colors disabled:opacity-50"
+              >
+                {sharing ? '共享中...' : '确认共享'}
+              </button>
+              <button
+                onClick={() => setShowShareDialog(false)}
                 className="bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
               >
                 取消

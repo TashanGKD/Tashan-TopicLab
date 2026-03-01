@@ -4,6 +4,8 @@ export interface TabItem {
   id: string
   label: string
   content: ReactNode
+  /** 是否高亮该标签（用于重要操作如「AI讨论」） */
+  highlight?: boolean
 }
 
 export interface TabPanelProps {
@@ -34,21 +36,27 @@ export default function TabPanel({ tabs, activeId, onChange, className = '', aut
 
   return (
     <div className={className}>
-      <div className="flex gap-1 border-b border-gray-200 mb-4 overflow-x-auto scrollbar-hide -mx-1 px-1">
-        {tabs.map((tab) => (
+      <div className="relative -mx-1 px-1 mb-4">
+        <div className="flex gap-1 border-b border-gray-200 overflow-x-auto scrollbar-hide">
+          {tabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => onChange(tab.id)}
-            className={`px-3 sm:px-4 py-2.5 text-sm font-serif transition-colors -mb-px flex-shrink-0 touch-manipulation ${
+            className={`px-3 sm:px-4 py-2.5 text-sm font-serif transition-colors -mb-px flex-shrink-0 touch-manipulation flex items-center gap-1.5 ${
               activeId === tab.id
                 ? 'text-black font-medium border-b-2 border-black'
-                : 'text-gray-500 hover:text-gray-700 border-b-2 border-transparent'
+                : tab.highlight
+                  ? 'text-gray-700 hover:text-black border-b-2 border-transparent'
+                  : 'text-gray-500 hover:text-gray-700 border-b-2 border-transparent'
             }`}
           >
             {tab.label}
           </button>
         ))}
+        </div>
+        {/* 移动端：右侧渐变暗示可向右滑动查看更多标签 */}
+        <div className="md:hidden absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-white to-transparent pointer-events-none" aria-hidden />
       </div>
       <div
         className={

@@ -85,6 +85,15 @@
   .animate-slide-in-left {
     animation: slideInFromLeft 0.2s ease-out;
   }
+
+  /* 滑动暗示：双 chevron 轻微右移，类似锁屏「滑动解锁」提示 */
+  @keyframes nudgeRight {
+    0%, 100% { transform: translateX(0); opacity: 0.7; }
+    50% { transform: translateX(4px); opacity: 1; }
+  }
+  .animate-nudge-right {
+    animation: nudgeRight 2s ease-in-out infinite;
+  }
   
   /* Typography Utilities */
   .prose-serif {

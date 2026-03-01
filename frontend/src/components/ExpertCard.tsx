@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import type { ExpertInfo } from '../api/client'
 
 const CARD_CLASS = 'flex sm:inline-flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors w-full min-w-0 sm:min-w-[180px] sm:max-w-[280px] sm:w-auto'
@@ -116,6 +117,71 @@ export function ExpertChip({
   onClick?: () => void
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const menuButtonRef = useRef<HTMLButtonElement>(null)
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 })
+
+  useEffect(() => {
+    if (menuOpen && menuButtonRef.current) {
+      const rect = menuButtonRef.current.getBoundingClientRect()
+      setMenuPosition({ top: rect.bottom + 4, left: rect.right - 80 })
+    }
+  }, [menuOpen])
+
+  const portalRoot = typeof document !== 'undefined' ? document.getElementById('portal-root') : null
+  const menuContent =
+    menuOpen && (onEdit || onShare) && portalRoot
+      ? createPortal(
+          <>
+            <div
+              style={{ position: 'fixed', inset: 0, zIndex: 10001, pointerEvents: 'auto' }}
+              onClick={(e) => {
+                e.stopPropagation()
+                setMenuOpen(false)
+              }}
+              aria-hidden="true"
+            />
+            <div
+              className="py-1 bg-white border border-gray-200 rounded-lg shadow-lg min-w-[80px]"
+              style={{
+                position: 'fixed',
+                top: menuPosition.top,
+                left: menuPosition.left,
+                zIndex: 10002,
+                pointerEvents: 'auto',
+              }}
+            >
+              {onEdit && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onEdit()
+                    setMenuOpen(false)
+                  }}
+                  className="block w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100"
+                >
+                  编辑
+                </button>
+              )}
+              {onShare && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onShare()
+                    setMenuOpen(false)
+                  }}
+                  className="block w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100"
+                >
+                  共享
+                </button>
+              )}
+            </div>
+          </>,
+          portalRoot
+        )
+      : null
+
   return (
     <span
       role="button"
@@ -123,7 +189,7 @@ export function ExpertChip({
       onClick={onClick}
       onKeyDown={(e) => e.key === 'Enter' && onClick?.()}
       title={expert.label}
-      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs bg-gray-100 border border-gray-200 hover:bg-gray-200 cursor-pointer relative sm:flex sm:gap-2 sm:px-3 sm:py-2 sm:rounded-lg sm:min-w-[180px] sm:max-w-[280px] sm:w-auto sm:bg-white sm:hover:border-gray-400 sm:hover:bg-gray-50"
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs bg-gray-100 border border-gray-200 hover:bg-gray-200 cursor-pointer sm:flex sm:gap-2 sm:px-3 sm:py-2 sm:rounded-lg sm:min-w-[180px] sm:max-w-[280px] sm:w-auto sm:bg-white sm:hover:border-gray-400 sm:hover:bg-gray-50"
     >
       <span className="flex-1 min-w-0 text-left truncate max-w-[100px] sm:max-w-none font-serif font-medium text-black">
         {expert.label}
@@ -132,47 +198,27 @@ export function ExpertChip({
         {(onEdit || onShare) && (
           <div className="relative">
             <button
+              ref={menuButtonRef}
               type="button"
-              onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v) }}
+              onClick={(e) => {
+                e.stopPropagation()
+                setMenuOpen((v) => !v)
+              }}
               className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-200 text-xs"
               aria-label="更多"
               title="更多"
             >
               ⋮
             </button>
-            {menuOpen && (
-              <>
-                <div
-                  className="fixed inset-0 z-10"
-                  onClick={(e) => { e.stopPropagation(); setMenuOpen(false) }}
-                />
-                <div className="absolute right-0 top-full mt-1 py-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 min-w-[80px]">
-                  {onEdit && (
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); onEdit(); setMenuOpen(false) }}
-                      className="block w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100"
-                    >
-                      编辑
-                    </button>
-                  )}
-                  {onShare && (
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); onShare(); setMenuOpen(false) }}
-                      className="block w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100"
-                    >
-                      共享
-                    </button>
-                  )}
-                </div>
-              </>
-            )}
+            {menuContent}
           </div>
         )}
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); onRemove() }}
+          onClick={(e) => {
+            e.stopPropagation()
+            onRemove()
+          }}
           className="w-5 h-5 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-xs sm:text-sm font-medium text-gray-400 hover:text-black hover:bg-gray-200 transition-colors touch-manipulation"
           aria-label="移除"
         >

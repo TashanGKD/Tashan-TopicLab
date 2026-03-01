@@ -116,6 +116,7 @@ See [docs/config.md](docs/config.md). experts, moderator modes, skills, MCP load
 | [docs/TECHNICAL_REPORT.md](docs/TECHNICAL_REPORT.md) | Technical report (overview, flow, API, data models) |
 | [docs/config.md](docs/config.md) | Environment config |
 | [docs/quickstart.md](docs/quickstart.md) | Quick start guide |
+| [docs/share-flow-sequence.md](docs/share-flow-sequence.md) | Share flow sequence diagrams (expert / moderator mode library) |
 | [backend/docs/](backend/docs/) | [Resonnet](https://github.com/TashanGKD/Resonnet) backend docs |
 
 ---

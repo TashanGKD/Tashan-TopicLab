@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: '/topic-lab/api',
+  baseURL: `${import.meta.env.BASE_URL}api`,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -182,6 +182,7 @@ export interface ExpertInfo {
   perspective?: string  // 学科视角，如 physics, biology
   category?: string  // 分类 id，用于分组（与 skills/mcps 一致）
   category_name?: string  // 分类显示名
+  source?: string  // default=内置, topiclab_shared=共享
 }
 
 export interface ExpertUpdateRequest {
@@ -320,6 +321,8 @@ export const moderatorModesApi = {
   listCategories: () => api.get<AssignableCategory[]>('/moderator-modes/assignable/categories'),
   getContent: (modeId: string) =>
     api.get<{ content: string }>(`/moderator-modes/assignable/${encodeURIComponent(modeId)}/content`),
+  share: (topicId: string, data: { mode_id: string; name?: string; description?: string }) =>
+    api.post<{ message: string; mode_id: string }>(`/topics/${topicId}/moderator-mode/share`, data),
 }
 
 // MCP assignable API (read-only, from skills/mcps/)

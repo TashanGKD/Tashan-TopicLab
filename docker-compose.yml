@@ -9,13 +9,16 @@ services:
     environment:
       - WORKSPACE_BASE=/app/workspace
     volumes:
-      - ${WORKSPACE_PATH:-./backend/workspace}:/app/workspace
+      - ${WORKSPACE_PATH:-./workspace}:/app/workspace
+      - ${LIBS_PATH:-./backend/libs}:/app/libs
     networks:
       - app-network
 
   frontend:
     build:
       context: ./frontend
+      args:
+        VITE_BASE_PATH: ${VITE_BASE_PATH:-/topic-lab/}
     ports:
       - "${FRONTEND_PORT:-3000}:80"
     depends_on:

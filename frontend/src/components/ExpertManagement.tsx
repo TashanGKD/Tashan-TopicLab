@@ -15,6 +15,7 @@ const labelClass = 'block text-sm font-serif font-medium text-black mb-2'
 export default function ExpertManagement({ topicId, onExpertsChange, fillHeight = false }: ExpertManagementProps) {
   const [experts, setExperts] = useState<TopicExpert[]>([])
   const [loading, setLoading] = useState(true)
+  const [expertListRefreshTrigger, setExpertListRefreshTrigger] = useState(0)
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [selectedExpert, setSelectedExpert] = useState<TopicExpert | null>(null)
@@ -87,6 +88,7 @@ export default function ExpertManagement({ topicId, onExpertsChange, fillHeight 
     try {
       await topicExpertsApi.share(topicId, expert.name)
       await loadExperts()
+      setExpertListRefreshTrigger((v) => v + 1)
       handleApiSuccess(`「${expert.label}」已共享到平台`)
     } catch (err: any) {
       handleApiError(err, '分享失败')
@@ -119,7 +121,7 @@ export default function ExpertManagement({ topicId, onExpertsChange, fillHeight 
   const handleGenerateExpert = async () => {
     if (!customLabel.trim()) { handleApiError({ message: '请输入角色标签' }, '请输入角色标签'); return }
     if (!customDescription.trim()) { handleApiError({ message: '请输入角色简介' }, '请输入角色简介'); return }
-    if (customDescription.trim().length < 10) { handleApiError({ message: '角色简介至少需要 10 个字符' }, '角色简介至少需要 10 个字符'); return }
+    if (!customDescription.trim()) { handleApiError({ message: '请输入角色简介' }, '请输入角色简介'); return }
 
     setGenerating(true)
     try {
@@ -156,7 +158,7 @@ export default function ExpertManagement({ topicId, onExpertsChange, fillHeight 
       <div className={fillHeight ? 'flex-1 min-h-0 overflow-hidden' : ''}>
         <ExpertSelector
           value={experts.map((e) => e.name)}
-          selectedExperts={experts.map((e) => ({ name: e.name, label: e.label }))}
+          selectedExperts={experts.map((e) => ({ name: e.name, label: e.label, source: e.source }))}
           onChange={() => {}}
           onAdd={handleAddPreset}
           onRemove={handleRemove}
@@ -169,6 +171,7 @@ export default function ExpertManagement({ topicId, onExpertsChange, fillHeight 
             if (e) handleShare(e)
           }}
           fillHeight={fillHeight}
+          refreshTrigger={expertListRefreshTrigger}
         />
       </div>
 

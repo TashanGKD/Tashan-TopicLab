@@ -8,10 +8,12 @@ import {
 
 export interface UseExpertGridOptions {
   sectionIdPrefix?: string
+  /** Increment to trigger refetch (e.g. after share to platform) */
+  refreshTrigger?: number
 }
 
 export function useExpertGrid(options: UseExpertGridOptions = {}) {
-  const { sectionIdPrefix = 'section' } = options
+  const { sectionIdPrefix = 'section', refreshTrigger = 0 } = options
   const [experts, setExperts] = useState<ExpertInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -23,7 +25,7 @@ export function useExpertGrid(options: UseExpertGridOptions = {}) {
       .then((res) => setExperts(Array.isArray(res.data) ? res.data : []))
       .catch(() => setExperts([]))
       .finally(() => setLoading(false))
-  }, [])
+  }, [refreshTrigger])
 
   const filteredExperts = useMemo(
     () => filterExpertsBySearch(experts, search),

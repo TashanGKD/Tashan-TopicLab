@@ -1,10 +1,10 @@
 import type { ExpertInfo } from '../api/client'
 
-/** 按 category 分组，与 skills/mcps 一致 */
+/** 按 source + category 分组，与 skills/mcps 一致 */
 export function groupBySourceAndCategory(experts: ExpertInfo[]) {
   const bySource: Record<string, Record<string, ExpertInfo[]>> = {}
   for (const e of experts) {
-    const src = 'default'
+    const src = e.source || 'default'
     if (!bySource[src]) bySource[src] = {}
     const cat = e.category || ''
     if (!bySource[src][cat]) bySource[src][cat] = []
@@ -26,6 +26,7 @@ export function perspectiveDisplayName(perspective: string) {
 
 export function sourceDisplayName(source: string) {
   if (source === 'default') return '内置'
+  if (source === 'topiclab_shared') return '共享'
   return source
 }
 
@@ -44,5 +45,6 @@ export function filterExpertsBySearch(experts: ExpertInfo[], search: string) {
 }
 
 export function getExpertSectionId(expert: ExpertInfo, prefix = 'section') {
-  return `${prefix}-default-${expert.category || '_'}`.replace(/\s+/g, '-')
+  const src = expert.source || 'default'
+  return `${prefix}-${src}-${expert.category || '_'}`.replace(/\s+/g, '-')
 }

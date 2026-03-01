@@ -25,9 +25,11 @@ interface ExpertGridSelectProps {
   value: string[]
   onChange: (names: string[]) => void
   onExpertClick?: (expert: ExpertInfo) => void
-  selectedExperts: { name: string; label: string }[]
+  selectedExperts: { name: string; label: string; source?: string }[]
   onEdit?: (name: string) => void
   onShare?: (name: string) => void
+  /** Increment to refetch experts list (e.g. after share to platform) */
+  refreshTrigger?: number
 }
 
 type ExpertGridProps = ExpertGridViewProps | ExpertGridSelectProps
@@ -124,6 +126,7 @@ export default function ExpertGrid(props: ExpertGridProps) {
   } = props
 
   const sectionIdPrefix = layout === 'embed' ? 'expert-section' : 'section'
+  const refreshTrigger = props.mode === 'select' ? (props as ExpertGridSelectProps).refreshTrigger : undefined
   const {
     allExperts,
     filteredExperts,
@@ -136,7 +139,7 @@ export default function ExpertGrid(props: ExpertGridProps) {
     sectionRefs,
     scrollToSection,
     getExpertSectionId,
-  } = useExpertGrid({ sectionIdPrefix })
+  } = useExpertGrid({ sectionIdPrefix, refreshTrigger })
 
   const expertByName = useMemo(() => Object.fromEntries(allExperts.map((e) => [e.name, e])), [allExperts])
 
@@ -196,7 +199,7 @@ export default function ExpertGrid(props: ExpertGridProps) {
               p.onChange(p.value.filter((x) => x !== e.name))
             }}
             onEdit={(props as ExpertGridSelectProps).onEdit ? () => (props as ExpertGridSelectProps).onEdit!(e.name) : undefined}
-            onShare={(props as ExpertGridSelectProps).onShare ? () => (props as ExpertGridSelectProps).onShare!(e.name) : undefined}
+            onShare={(props as ExpertGridSelectProps).onShare && e.source !== 'preset' ? () => (props as ExpertGridSelectProps).onShare!(e.name) : undefined}
             onClick={() => {
               const full = expertByName[e.name]
               scrollToSection(getExpertSectionId(full || { name: e.name, perspective: '' } as ExpertInfo))

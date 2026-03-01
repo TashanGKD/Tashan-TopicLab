@@ -1,0 +1,103 @@
+name: Deploy Branch
+
+on:
+  push:
+    branches-ignore:
+      - main
+
+concurrency:
+  group: deploy-branch-${{ github.repository }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy Branch to Server
+        uses: appleboy/ssh-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          DEPLOY_ENV: ${{ secrets.DEPLOY_ENV }}
+          SUBMODULE_TOKEN: ${{ secrets.SUBMODULE_TOKEN }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: GITHUB_TOKEN,REPO,BRANCH,DEPLOY_ENV,SUBMODULE_TOKEN
+          timeout: 30m
+          command_timeout: 30m
+          script: |
+            set -euo pipefail
+            BRANCH_SANITIZED=$(echo "$BRANCH" | sed 's/\//-/g' | sed 's/[^a-zA-Z0-9_-]//g' | head -c 50)
+            [ -z "$BRANCH_SANITIZED" ] && BRANCH_SANITIZED="branch"
+
+            BASE_DIR="${{ secrets.DEPLOY_PATH || '/var/www/github-actions/repos' }}"
+            REPO_NAME=$(basename "$REPO")
+            REPO_DIR="$BASE_DIR/${REPO_NAME}-${BRANCH_SANITIZED}"
+            REPO_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git"
+
+            if [ ! -d "$REPO_DIR/.git" ]; then
+              mkdir -p "$BASE_DIR"
+              for i in 1 2 3; do git clone --recurse-submodules "$REPO_URL" "$REPO_DIR" && break || sleep 5; done
+            fi
+            cd "$REPO_DIR"
+            git remote set-url origin "$REPO_URL"
+            SUBMODULE_AUTH="${SUBMODULE_TOKEN:-$GITHUB_TOKEN}"
+            BACKEND_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/TashanGKD/Resonnet.git"
+            git config submodule.backend.url "$BACKEND_URL"
+            [ -d .git/modules/backend ] && git config -f .git/modules/backend/config remote.origin.url "$BACKEND_URL"
+            for i in 1 2 3; do git fetch origin && break || { [ $i -eq 3 ] && echo "git fetch failed" && exit 1; sleep 5; }; done
+            git reset --hard "origin/$BRANCH"
+            git submodule update --init backend
+            git config -f .git/modules/backend/config submodule.libs/assignable_skills/_submodules/ai-research.url "https://x-access-token:${SUBMODULE_AUTH}@github.com/Orchestra-Research/AI-Research-SKILLs.git"
+            git config -f .git/modules/backend/config submodule.libs/assignable_skills/_submodules/anthropics.url "https://x-access-token:${SUBMODULE_AUTH}@github.com/anthropics/skills.git"
+            git submodule sync --recursive
+            git submodule update --init --recursive
+
+            if [ -z "${DEPLOY_ENV:-}" ]; then
+              echo "::error::DEPLOY_ENV secret is not set."
+              exit 1
+            fi
+            echo "$DEPLOY_ENV" > .env
+
+            export VITE_BASE_PATH="/topic-lab/${BRANCH_SANITIZED}/"
+            PORT_OFFSET=$(( $(echo -n "$BRANCH_SANITIZED" | cksum | cut -d' ' -f1) % 900 ))
+            export FRONTEND_PORT=$(( 3010 + PORT_OFFSET ))
+            export BACKEND_PORT=$(( 8010 + PORT_OFFSET ))
+            echo "FRONTEND_PORT=$FRONTEND_PORT" >> .env
+            echo "BACKEND_PORT=$BACKEND_PORT" >> .env
+
+            sed -e "s|__BASE_PATH__|/topic-lab/${BRANCH_SANITIZED}/|g" \
+                -e "s|__BASE_PATH_NO_SLASH__|/topic-lab/${BRANCH_SANITIZED}|g" \
+                frontend/nginx.conf.template > frontend/nginx.conf
+
+            export COMPOSE_PROJECT_NAME="topiclab-${BRANCH_SANITIZED}"
+            docker compose build --no-cache
+            docker compose down 2>/dev/null || true
+            docker compose up -d
+            docker image prune -f
+
+            mkdir -p /etc/nginx/snippets
+            # Branch snippet: root redirect + proxy. Include ONLY in the branch domain's server block.
+            printf '%s\n' \
+              "location = / {" \
+              "    return 302 /topic-lab/${BRANCH_SANITIZED}/;" \
+              '}' \
+              "location ^~ /topic-lab/${BRANCH_SANITIZED}/ {" \
+              "    proxy_pass http://127.0.0.1:${FRONTEND_PORT}/topic-lab/${BRANCH_SANITIZED}/;" \
+              '    proxy_set_header Host $host;' \
+              '    proxy_set_header X-Real-IP $remote_addr;' \
+              '    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' \
+              '    proxy_set_header X-Forwarded-Proto $scheme;' \
+              '}' \
+              | sudo tee "/etc/nginx/snippets/topic-lab-${BRANCH_SANITIZED}.conf" > /dev/null
+            sudo nginx -t && sudo nginx -s reload
+
+            echo "--------------------------------------------"
+            echo "Frontend: http://${{ secrets.DEPLOY_HOST }}/topic-lab/${BRANCH_SANITIZED}"
+            echo "Branch:   $BRANCH"
+            echo "Commit:   ${{ github.sha }}"
+            echo "--------------------------------------------"

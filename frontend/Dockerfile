@@ -2,6 +2,9 @@ FROM node:20-slim AS builder
 
 WORKDIR /app
 
+ARG VITE_BASE_PATH=/topic-lab/
+ENV VITE_BASE_PATH=$VITE_BASE_PATH
+
 COPY package*.json ./
 RUN npm install
 

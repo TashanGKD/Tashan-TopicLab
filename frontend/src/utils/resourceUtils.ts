@@ -45,5 +45,6 @@ export function createFilterBySearch<T>(
 /** 资源来源显示名 */
 export function sourceDisplayName(source: string) {
   if (source === 'default') return '内置'
+  if (source === 'topiclab_shared') return '共享'
   return source
 }

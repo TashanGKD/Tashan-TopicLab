@@ -9,6 +9,7 @@
 | [config.md](config.md) | Environment variables and configuration |
 | [deploy.md](deploy.md) | Deploy via GitHub Actions; DEPLOY_ENV secret setup |
 | [FUTURE_PLAN.md](FUTURE_PLAN.md) | **Unimplemented features**: Multiple AI sessions, simplified topic creation, ecosystem extensions |
+| [share-flow-sequence.md](share-flow-sequence.md) | Share flow sequence diagrams (expert / moderator mode library) |
 
 ## Quick Navigation
 

@@ -7,7 +7,7 @@ import type { ExpertInfo } from '../api/client'
 
 export interface ExpertSelectorProps {
   value: string[]
-  selectedExperts: { name: string; label: string }[]
+  selectedExperts: { name: string; label: string; source?: string }[]
   onChange: (names: string[]) => void
   onAdd: (name: string) => Promise<void>
   onRemove: (name: string) => Promise<void>
@@ -15,6 +15,8 @@ export interface ExpertSelectorProps {
   onShare?: (name: string) => void
   placeholder?: string
   fillHeight?: boolean
+  /** Increment to refetch experts list (e.g. after share to platform) */
+  refreshTrigger?: number
 }
 
 export default function ExpertSelector({
@@ -27,6 +29,7 @@ export default function ExpertSelector({
   onShare,
   placeholder = '搜索角色名称、描述、领域...',
   fillHeight = false,
+  refreshTrigger,
 }: ExpertSelectorProps) {
   const fetchContent = useCallback(async (expert: ExpertInfo) => {
     const res = await expertsApi.getContent(expert.name)
@@ -60,6 +63,7 @@ export default function ExpertSelector({
         onShare={onShare}
         placeholder={placeholder}
         fillHeight={fillHeight}
+        refreshTrigger={refreshTrigger}
       />
       {detailExpert && (
         <ExpertDetailModal

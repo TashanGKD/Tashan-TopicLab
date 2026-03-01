@@ -115,6 +115,7 @@ npm run dev   # http://localhost:3000
 | [docs/TECHNICAL_REPORT.md](docs/TECHNICAL_REPORT.md) | 技术报告（系统概览、交互逻辑、代码路径、API、数据模型） |
 | [docs/config.md](docs/config.md) | 环境变量与配置 |
 | [docs/quickstart.md](docs/quickstart.md) | 快速启动指南 |
+| [docs/share-flow-sequence.md](docs/share-flow-sequence.md) | 共享流程时序图（角色库 / 讨论方式库） |
 | [backend/docs/](backend/docs/) | [Resonnet](https://github.com/TashanGKD/Resonnet) 后端文档 |
 
 ---
