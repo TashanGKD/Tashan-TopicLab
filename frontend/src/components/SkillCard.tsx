@@ -31,15 +31,15 @@ export default function SkillCard(props: SkillCardProps) {
       <button
         type="button"
         onClick={() => props.onClick(skill)}
-        className="flex flex-col gap-1 px-4 py-3 rounded-lg border border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 transition-colors w-full min-w-0 sm:min-w-[200px] sm:max-w-[280px] sm:w-auto text-left cursor-pointer"
+        className="flex flex-col gap-1 px-4 py-3 rounded-lg border border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 transition-colors w-full min-w-0 sm:min-w-[200px] sm:max-w-[280px] sm:w-auto text-left cursor-pointer overflow-hidden"
       >
-        <span className="text-sm font-serif font-medium text-black block truncate">{skill.name}</span>
+        <span className="text-sm font-serif font-medium text-black truncate min-w-0" title={skill.name}>{skill.name}</span>
         {skill.description && (
-          <span className={`text-xs text-gray-500 ${descriptionLines === 2 ? 'line-clamp-2' : 'line-clamp-1'}`}>
+          <span className={`text-xs text-gray-500 min-w-0 ${descriptionLines === 2 ? 'line-clamp-2' : 'line-clamp-1'}`} title={skill.description}>
             {skill.description}
           </span>
         )}
-        {showId && <span className="text-[10px] text-gray-400 font-mono">{skill.id}</span>}
+        {showId && <span className="text-[10px] text-gray-400 font-mono truncate min-w-0" title={skill.id}>{skill.id}</span>}
       </button>
     )
   }
@@ -54,7 +54,7 @@ export default function SkillCard(props: SkillCardProps) {
       }`}
     >
       <div
-        className={`flex-1 min-w-0 text-left ${onDetailClick ? 'cursor-pointer' : ''}`}
+        className={`flex-1 min-w-0 overflow-hidden text-left ${onDetailClick ? 'cursor-pointer' : ''}`}
         onClick={onDetailClick ? () => onDetailClick(skill) : undefined}
         onKeyDown={
           onDetailClick
@@ -65,9 +65,9 @@ export default function SkillCard(props: SkillCardProps) {
         tabIndex={onDetailClick ? 0 : undefined}
         title={onDetailClick ? '点击查看详情' : undefined}
       >
-        <span className="text-sm font-serif font-medium text-black block truncate">{skill.name}</span>
+        <span className="text-sm font-serif font-medium text-black truncate block" title={skill.name}>{skill.name}</span>
         {skill.description && (
-          <span className="text-xs text-gray-500 line-clamp-1">{skill.description}</span>
+          <span className="text-xs text-gray-500 line-clamp-1 min-w-0 block" title={skill.description}>{skill.description}</span>
         )}
       </div>
       <button

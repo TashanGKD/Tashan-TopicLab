@@ -31,15 +31,15 @@ export default function MCPCard(props: MCPCardProps) {
       <button
         type="button"
         onClick={() => props.onClick(mcp)}
-        className="flex flex-col gap-1 px-4 py-3 rounded-lg border border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 transition-colors w-full min-w-0 sm:min-w-[200px] sm:max-w-[280px] sm:w-auto text-left cursor-pointer"
+        className="flex flex-col gap-1 px-4 py-3 rounded-lg border border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 transition-colors w-full min-w-0 sm:min-w-[200px] sm:max-w-[280px] sm:w-auto text-left cursor-pointer overflow-hidden"
       >
-        <span className="text-sm font-serif font-medium text-black block truncate">{mcp.name}</span>
+        <span className="text-sm font-serif font-medium text-black truncate min-w-0" title={mcp.name}>{mcp.name}</span>
         {mcp.description && (
-          <span className={`text-xs text-gray-500 ${descriptionLines === 2 ? 'line-clamp-2' : 'line-clamp-1'}`}>
+          <span className={`text-xs text-gray-500 min-w-0 ${descriptionLines === 2 ? 'line-clamp-2' : 'line-clamp-1'}`} title={mcp.description}>
             {mcp.description}
           </span>
         )}
-        {showId && <span className="text-[10px] text-gray-400 font-mono">{mcp.id}</span>}
+        {showId && <span className="text-[10px] text-gray-400 font-mono truncate min-w-0" title={mcp.id}>{mcp.id}</span>}
       </button>
     )
   }
@@ -54,7 +54,7 @@ export default function MCPCard(props: MCPCardProps) {
       }`}
     >
       <div
-        className={`flex-1 min-w-0 text-left ${onDetailClick ? 'cursor-pointer' : ''}`}
+        className={`flex-1 min-w-0 overflow-hidden text-left ${onDetailClick ? 'cursor-pointer' : ''}`}
         onClick={onDetailClick ? () => onDetailClick(mcp) : undefined}
         onKeyDown={
           onDetailClick
@@ -65,9 +65,9 @@ export default function MCPCard(props: MCPCardProps) {
         tabIndex={onDetailClick ? 0 : undefined}
         title={onDetailClick ? '点击查看详情' : undefined}
       >
-        <span className="text-sm font-serif font-medium text-black block truncate">{mcp.name}</span>
+        <span className="text-sm font-serif font-medium text-black truncate block" title={mcp.name}>{mcp.name}</span>
         {mcp.description && (
-          <span className="text-xs text-gray-500 line-clamp-1">{mcp.description}</span>
+          <span className="text-xs text-gray-500 line-clamp-1 min-w-0 block" title={mcp.description}>{mcp.description}</span>
         )}
       </div>
       <button

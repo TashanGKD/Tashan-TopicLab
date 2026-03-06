@@ -31,27 +31,30 @@ export default function ExpertCard(props: ExpertCardProps) {
       <button
         type="button"
         onClick={() => onClick(expert)}
-        className="flex flex-col gap-1 px-4 py-3 rounded-lg border border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 transition-colors w-full min-w-0 sm:min-w-[200px] sm:max-w-[280px] sm:w-auto text-left cursor-pointer"
+        className="flex flex-col gap-1 px-4 py-3 rounded-lg border border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 transition-colors w-full min-w-0 sm:min-w-[200px] sm:max-w-[280px] sm:w-auto text-left cursor-pointer overflow-hidden"
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           <div className="w-7 h-7 rounded-full bg-black text-white flex items-center justify-center font-serif text-xs flex-shrink-0">
             {expert.label.charAt(0)}
           </div>
-          <span className="text-sm font-serif font-medium text-black block truncate">
+          <span className="text-sm font-serif font-medium text-black truncate" title={expert.label}>
             {expert.label}
           </span>
         </div>
         {expert.description && (
           <span
-            className={`text-xs text-gray-500 ${
+            className={`text-xs text-gray-500 min-w-0 ${
               descriptionLines === 2 ? 'line-clamp-2' : 'line-clamp-1'
             }`}
+            title={expert.description}
           >
             {expert.description}
           </span>
         )}
         {showName && (
-          <span className="text-[10px] text-gray-400 font-mono">{expert.name}</span>
+          <span className="text-[10px] text-gray-400 font-mono truncate min-w-0" title={expert.name}>
+            {expert.name}
+          </span>
         )}
       </button>
     )
@@ -67,7 +70,7 @@ export default function ExpertCard(props: ExpertCardProps) {
       }`}
     >
       <div
-        className={`flex-1 min-w-0 text-left ${onDetailClick ? 'cursor-pointer' : ''}`}
+        className={`flex-1 min-w-0 overflow-hidden text-left ${onDetailClick ? 'cursor-pointer' : ''}`}
         onClick={onDetailClick ? () => onDetailClick(expert) : undefined}
         onKeyDown={
           onDetailClick ? (e) => e.key === 'Enter' && onDetailClick(expert) : undefined
@@ -76,16 +79,18 @@ export default function ExpertCard(props: ExpertCardProps) {
         tabIndex={onDetailClick ? 0 : undefined}
         title={onDetailClick ? '点击查看详情' : undefined}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           <div className="w-6 h-6 rounded-full bg-black text-white flex items-center justify-center font-serif text-[10px] flex-shrink-0">
             {expert.label.charAt(0)}
           </div>
-          <span className="text-sm font-serif font-medium text-black block truncate">
+          <span className="text-sm font-serif font-medium text-black truncate" title={expert.label}>
             {expert.label}
           </span>
         </div>
         {expert.description && (
-          <span className="text-xs text-gray-500 line-clamp-1">{expert.description}</span>
+          <span className="text-xs text-gray-500 line-clamp-1 min-w-0 block" title={expert.description}>
+            {expert.description}
+          </span>
         )}
       </div>
       <button

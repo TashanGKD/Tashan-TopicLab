@@ -48,13 +48,14 @@ export default function TopNav() {
           </Link>
           <Link
             to="/topics/new"
-            className="bg-black text-white px-4 py-1.5 rounded-lg text-sm font-serif font-medium transition-all hover:bg-gray-900 whitespace-nowrap"
+            className="bg-black text-white px-4 py-1.5 rounded-lg text-sm font-serif font-medium transition-all hover:bg-gray-900 whitespace-nowrap shrink-0"
+            onClick={() => setMobileMenuOpen(false)}
           >
             + 创建话题
           </Link>
         </div>
 
-        {/* Mobile: hamburger + create button */}
+        {/* Mobile: 科研画像 | 创建 | 汉堡 */}
         <div className="flex md:hidden items-center gap-2 shrink-0">
           <Link
             to="/profile-helper"
@@ -65,10 +66,10 @@ export default function TopNav() {
           </Link>
           <Link
             to="/topics/new"
-            className="bg-black text-white px-3 py-1.5 rounded-lg text-sm font-serif font-medium"
+            className="bg-black text-white px-3 py-1.5 rounded-lg text-sm font-serif font-medium transition-all hover:bg-gray-900 shrink-0"
             onClick={() => setMobileMenuOpen(false)}
           >
-            + 创建
+            + 创建话题
           </Link>
           <button
             type="button"

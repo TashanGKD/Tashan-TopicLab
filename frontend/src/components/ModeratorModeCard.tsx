@@ -27,18 +27,18 @@ export default function ModeratorModeCard(props: ModeratorModeCardViewProps | Mo
       <button
         type="button"
         onClick={() => props.onClick(mode)}
-        className="flex flex-col gap-1 px-4 py-3 rounded-lg border border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 transition-colors w-full min-w-0 sm:min-w-[200px] sm:max-w-[280px] sm:w-auto text-left cursor-pointer"
+        className="flex flex-col gap-1 px-4 py-3 rounded-lg border border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 transition-colors w-full min-w-0 sm:min-w-[200px] sm:max-w-[280px] sm:w-auto text-left cursor-pointer overflow-hidden"
       >
-        <span className="text-sm font-serif font-medium text-black block truncate">{mode.name}</span>
+        <span className="text-sm font-serif font-medium text-black truncate min-w-0" title={mode.name}>{mode.name}</span>
         {mode.description && (
-          <span className={`text-xs text-gray-500 ${descriptionLines === 2 ? 'line-clamp-2' : 'line-clamp-1'}`}>
+          <span className={`text-xs text-gray-500 min-w-0 ${descriptionLines === 2 ? 'line-clamp-2' : 'line-clamp-1'}`} title={mode.description}>
             {mode.description}
           </span>
         )}
         {mode.num_rounds != null && (
-          <span className="text-[10px] text-gray-400">默认 {mode.num_rounds} 轮</span>
+          <span className="text-[10px] text-gray-400 truncate min-w-0">默认 {mode.num_rounds} 轮</span>
         )}
-        {showId && <span className="text-[10px] text-gray-400 font-mono">{mode.id}</span>}
+        {showId && <span className="text-[10px] text-gray-400 font-mono truncate min-w-0" title={mode.id}>{mode.id}</span>}
       </button>
     )
   }
@@ -53,7 +53,7 @@ export default function ModeratorModeCard(props: ModeratorModeCardViewProps | Mo
       }`}
     >
       <div
-        className={`flex-1 min-w-0 text-left ${onDetailClick ? 'cursor-pointer' : ''}`}
+        className={`flex-1 min-w-0 overflow-hidden text-left ${onDetailClick ? 'cursor-pointer' : ''}`}
         onClick={onDetailClick ? () => onDetailClick(mode) : undefined}
         onKeyDown={
           onDetailClick
@@ -64,9 +64,9 @@ export default function ModeratorModeCard(props: ModeratorModeCardViewProps | Mo
         tabIndex={onDetailClick ? 0 : undefined}
         title={onDetailClick ? '点击查看详情' : undefined}
       >
-        <span className="text-sm font-serif font-medium text-black block truncate">{mode.name}</span>
+        <span className="text-sm font-serif font-medium text-black truncate block" title={mode.name}>{mode.name}</span>
         {mode.description && (
-          <span className="text-xs text-gray-500 line-clamp-1">{mode.description}</span>
+          <span className="text-xs text-gray-500 line-clamp-1 min-w-0 block" title={mode.description}>{mode.description}</span>
         )}
       </div>
       <button
