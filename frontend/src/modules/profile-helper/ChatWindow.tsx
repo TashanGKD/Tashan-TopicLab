@@ -11,14 +11,20 @@ import {
 import { PROFILE_HELPER_MODELS } from '../../api/client'
 import api from '../../api/client'
 
-const SESSION_KEY = 'tashan_profile_session_id'
+const SESSION_KEYS = ['tashan_session_id', 'tashan_profile_session_id'] as const
 
 function getStoredSessionId(): string | null {
-  return localStorage.getItem(SESSION_KEY)
+  for (const key of SESSION_KEYS) {
+    const value = localStorage.getItem(key)
+    if (value) return value
+  }
+  return null
 }
 
 function setStoredSessionId(id: string) {
-  localStorage.setItem(SESSION_KEY, id)
+  for (const key of SESSION_KEYS) {
+    localStorage.setItem(key, id)
+  }
 }
 
 export function ChatWindow() {
@@ -153,7 +159,7 @@ export function ChatWindow() {
     return (
       <div className="profile-page">
         <header className="profile-page-header">
-          <h1>画像</h1>
+          <h1>科研数字分身</h1>
           <button type="button" className="back-btn" onClick={() => setView('chat')}>
             返回对话
           </button>
@@ -174,7 +180,7 @@ export function ChatWindow() {
     <div className="chat-layout">
       <div className="chat-window">
         <header className="chat-header">
-          <h1>他山画像助手</h1>
+          <h1>他山数字分身助手</h1>
           <div className="header-actions">
             <select
               className="profile-model-select"
@@ -193,7 +199,7 @@ export function ChatWindow() {
               className="view-profile-btn"
               onClick={() => setView('profile')}
             >
-              查看画像
+              查看数字分身
             </button>
             <button
               type="button"
@@ -210,7 +216,7 @@ export function ChatWindow() {
           {messages.length === 0 && (
             <div className="welcome">
               <p>你好，我是科研数字分身采集助手。</p>
-              <p>你可以说「帮我建立画像」开始，或直接描述你的需求。</p>
+              <p>可以说「帮我建立分身」开始。</p>
             </div>
           )}
           {messages
