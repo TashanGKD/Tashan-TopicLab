@@ -28,11 +28,13 @@ export async function sendMessage(
   if (!reader) throw new Error('无法读取响应流')
   const decoder = new TextDecoder()
   let buffer = ''
+  // Use regex to split on double line endings (handles both \n\n and \r\n\r\n)
+  const SSE_REGEX = /\r?\n\r?\n/
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
     buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n\n')
+    const lines = buffer.split(SSE_REGEX)
     buffer = lines.pop() ?? ''
     for (const line of lines) {
       if (line.startsWith('data: ')) {

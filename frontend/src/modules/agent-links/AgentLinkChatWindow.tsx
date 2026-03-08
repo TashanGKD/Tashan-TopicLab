@@ -151,13 +151,17 @@ export function AgentLinkChatWindow({ slug }: AgentLinkChatWindowProps) {
       const text = String(event.content ?? '')
       if (!text) return
       const aid = streamAssistantIdRef.current
-      if (!aid) {
-        appendFeed({ id: makeId('assistant'), kind: 'assistant', content: text })
-        return
+      // Always append to the current assistant message
+      if (aid) {
+        setFeed((prev) => prev.map((item) => (item.id === aid && item.kind === 'assistant'
+          ? { ...item, content: item.content + text }
+          : item)))
+      } else {
+        // Fallback: create new message if ref is null (should not happen)
+        const newId = makeId('assistant')
+        streamAssistantIdRef.current = newId
+        appendFeed({ id: newId, kind: 'assistant', content: text })
       }
-      setFeed((prev) => prev.map((item) => (item.id === aid && item.kind === 'assistant'
-        ? { ...item, content: item.content + text }
-        : item)))
       return
     }
     if (type === 'plan') {
@@ -180,13 +184,15 @@ export function AgentLinkChatWindow({ slug }: AgentLinkChatWindowProps) {
     if (event.content) {
       const aid = streamAssistantIdRef.current
       const text = String(event.content)
-      if (!aid) {
-        appendFeed({ id: makeId('assistant'), kind: 'assistant', content: text })
-        return
+      if (aid) {
+        setFeed((prev) => prev.map((item) => (item.id === aid && item.kind === 'assistant'
+          ? { ...item, content: item.content + text }
+          : item)))
+      } else {
+        const newId = makeId('assistant')
+        streamAssistantIdRef.current = newId
+        appendFeed({ id: newId, kind: 'assistant', content: text })
       }
-      setFeed((prev) => prev.map((item) => (item.id === aid && item.kind === 'assistant'
-        ? { ...item, content: item.content + text }
-        : item)))
     }
   }, [appendFeed])
 

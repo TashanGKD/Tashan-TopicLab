@@ -94,13 +94,13 @@ export async function importAgentLink(params: ImportAgentLinkParams): Promise<Ag
     body: form,
   })
   if (!res.ok) {
-    let message = `导入失败: ${res.status}`
+    let message = `导入失败：${res.status}`
     if (res.status === 413) {
       message = '导入失败：压缩包超过 5MB 限制，请压缩后重试。'
     }
     try {
       const data = await res.json()
-      if (data?.detail) message = `导入失败: ${data.detail}`
+      if (data?.detail) message = `导入失败：${data.detail}`
     } catch {
       // ignore
     }
@@ -120,13 +120,13 @@ export async function previewAgentLinkZip(file: File): Promise<ZipPreview> {
     body: form,
   })
   if (!res.ok) {
-    let message = `预览失败: ${res.status}`
+    let message = `预览失败：${res.status}`
     if (res.status === 413) {
       message = '预览失败：压缩包超过 5MB 限制，请压缩后重试。'
     }
     try {
       const data = await res.json()
-      if (data?.detail) message = `预览失败: ${data.detail}`
+      if (data?.detail) message = `预览失败：${data.detail}`
     } catch {
       // ignore
     }
@@ -144,7 +144,7 @@ export async function startAgentLinkSession(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ session_id: sessionId || undefined }),
   })
-  if (!res.ok) throw new Error(`创建会话失败: ${res.status}`)
+  if (!res.ok) throw new Error(`创建会话失败：${res.status}`)
   return res.json()
 }
 
@@ -154,16 +154,27 @@ export async function chatWithAgentLink(
   onEvent: (event: AgentStreamEvent) => void,
   opts?: { sessionId?: string | null; model?: string | null; onSessionId?: (id: string) => void },
 ): Promise<void> {
+  const chatReq = {
+    session_id: opts?.sessionId || undefined,
+    message,
+    model: opts?.model || undefined,
+  }
+  console.log('[AgentLink Chat] Request:', { slug, ...chatReq })
+
   const res = await fetch(`${API_BASE}/agent-links/${encodeURIComponent(slug)}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      session_id: opts?.sessionId || undefined,
-      message,
-      model: opts?.model || undefined,
-    }),
+    body: JSON.stringify(chatReq),
   })
-  if (!res.ok) throw new Error(`请求失败: ${res.status}`)
+
+  console.log('[AgentLink Chat] Response status:', res.status)
+  console.log('[AgentLink Chat] Response headers:', {
+    'X-Session-Id': res.headers.get('X-Session-Id'),
+    'X-Agent-Link': res.headers.get('X-Agent-Link'),
+    'X-Agent-Workdir': res.headers.get('X-Agent-Workdir'),
+  })
+
+  if (!res.ok) throw new Error(`请求失败：${res.status}`)
 
   const sid = res.headers.get('X-Session-Id')
   if (sid && opts?.onSessionId) opts.onSessionId(sid)
@@ -173,25 +184,47 @@ export async function chatWithAgentLink(
 
   const decoder = new TextDecoder()
   let buffer = ''
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
+  let eventCount = 0
+  const SSE_REGEX = /\r?\n\r?\n/
 
-    const lines = buffer.split('\n\n')
-    buffer = lines.pop() ?? ''
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) {
+        console.log('[AgentLink Chat] Stream complete, total events:', eventCount)
+        break
+      }
 
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue
-      const payload = line.slice(6)
-      if (payload === '[DONE]') continue
-      try {
-        const obj = JSON.parse(payload) as AgentStreamEvent
-        onEvent(obj)
-      } catch {
-        // ignore parse errors
+      const chunk = decoder.decode(value, { stream: true })
+      console.log('[AgentLink Chat] Raw chunk:', JSON.stringify(chunk.substring(0, 200) + (chunk.length > 200 ? '...' : '')))
+
+      buffer += chunk
+      const lines = buffer.split(SSE_REGEX)
+      buffer = lines.pop() ?? ''
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) {
+          console.log('[AgentLink Chat] Skipping non-data line:', line)
+          continue
+        }
+        const payload = line.slice(6)
+        if (payload === '[DONE]') {
+          console.log('[AgentLink Chat] Received [DONE]')
+          continue
+        }
+        try {
+          const obj = JSON.parse(payload) as AgentStreamEvent
+          eventCount++
+          console.log(`[AgentLink Chat] Event #${eventCount}:`, obj.type, obj)
+          onEvent(obj)
+        } catch (e) {
+          console.error('[AgentLink Chat] Failed to parse event:', line, e)
+        }
       }
     }
+  } catch (e) {
+    console.error('[AgentLink Chat] Stream error:', e)
+    throw e
   }
 }
 
@@ -213,13 +246,13 @@ export async function uploadAgentLinkWorkspaceFile(
     body: form,
   })
   if (!res.ok) {
-    let message = `上传失败: ${res.status}`
+    let message = `上传失败：${res.status}`
     if (res.status === 413) {
       message = '上传失败：文件超过 30MB 限制，请压缩或分拆后重试。'
     }
     try {
       const data = await res.json()
-      if (data?.detail) message = `上传失败: ${data.detail}`
+      if (data?.detail) message = `上传失败：${data.detail}`
     } catch {
       // ignore
     }
