@@ -38,7 +38,7 @@ describe('PostThread', () => {
 
     const img = screen.getByRole('img', { name: '学术示意图' })
     expect(img.getAttribute('src')).toMatch(
-      /\/api\/topics\/topic-1\/assets\/generated_images\/round2_concept_map\.png$/
+      /\/api\/topics\/topic-1\/assets\/generated_images\/round2_concept_map\.png\?q=82&fm=webp$/
     )
   })
 
@@ -47,7 +47,7 @@ describe('PostThread', () => {
 
     const img = screen.getByRole('img', { name: '生成图' })
     expect(img.getAttribute('src')).toMatch(
-      /\/api\/topics\/topic-1\/assets\/generated_images\/existing\.png$/
+      /\/api\/topics\/topic-1\/assets\/generated_images\/existing\.png\?q=82&fm=webp$/
     )
   })
 

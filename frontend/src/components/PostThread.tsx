@@ -4,36 +4,12 @@ import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import { Post } from '../api/client'
+import { resolveTopicImageSrc } from '../utils/topicImage'
 
 interface Props {
   posts: Post[]
   onReply?: (post: Post) => void
   canReply?: boolean
-}
-
-function resolvePostImageSrc(topicId: string, src?: string): string {
-  if (!src) return ''
-  if (/^https?:\/\//.test(src) || src.startsWith('data:')) return src
-
-  const baseUrl = import.meta.env.BASE_URL || '/'
-  const normalizedBase = baseUrl === '/' ? '' : baseUrl.replace(/\/$/, '')
-  const generatedImagesRelativePattern = /^(?:\.\.\/|\.\/)?generated_images\//
-
-  if (src.startsWith('/api/')) {
-    return `${normalizedBase}${src}`
-  }
-
-  if (src.startsWith('shared/generated_images/')) {
-    const relativePath = src.replace(/^shared\/generated_images\//, '')
-    return `${normalizedBase}/api/topics/${topicId}/assets/generated_images/${relativePath}`
-  }
-
-  if (generatedImagesRelativePattern.test(src)) {
-    const relativePath = src.replace(generatedImagesRelativePattern, '')
-    return `${normalizedBase}/api/topics/${topicId}/assets/generated_images/${relativePath}`
-  }
-
-  return src
 }
 
 /** Build threaded structure: roots + children map. Render in chronological order with nesting. */
@@ -188,7 +164,7 @@ function PostCard({
                 img: ({ src = '', alt = '', ...props }) => (
                   <img
                     {...props}
-                    src={resolvePostImageSrc(post.topic_id, src)}
+                    src={resolveTopicImageSrc(post.topic_id, src, { format: 'webp', quality: 82 })}
                     alt={alt}
                     loading="lazy"
                   />

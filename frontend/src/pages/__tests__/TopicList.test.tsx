@@ -50,7 +50,7 @@ describe('TopicList', () => {
 
     const image = await screen.findByRole('img', { name: '带图片的话题 预览图' })
     expect(image.getAttribute('src')).toMatch(
-      /\/api\/topics\/topic-1\/assets\/generated_images\/list_preview\.png$/,
+      /\/api\/topics\/topic-1\/assets\/generated_images\/list_preview\.png\?w=192&h=192&q=72&fm=webp$/,
     )
   })
 })

@@ -45,7 +45,12 @@ export default function TopicList() {
 
         <div className="flex flex-col gap-4">
           {topics.map((topic) => {
-            const previewImageSrc = getTopicPreviewImageSrc(topic)
+            const previewImageSrc = getTopicPreviewImageSrc(topic, {
+              width: 192,
+              height: 192,
+              quality: 72,
+              format: 'webp',
+            })
             return (
               <Link key={topic.id} to={`/topics/${topic.id}`}>
                 <div className="border border-gray-200 rounded-lg p-4 sm:p-6 hover:border-black transition-colors active:bg-gray-50">

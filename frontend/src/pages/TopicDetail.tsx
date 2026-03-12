@@ -311,7 +311,7 @@ export default function TopicDetail() {
         img: ({ src = '', alt = '', ...props }) => (
           <img
             {...props}
-            src={resolveTopicImageSrc(topicId, src)}
+            src={resolveTopicImageSrc(topicId, src, { format: 'webp', quality: 82 })}
             alt={alt}
             loading="lazy"
           />

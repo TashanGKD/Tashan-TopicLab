@@ -86,7 +86,7 @@ describe('TopicDetail', () => {
 
     const img = await screen.findByRole('img', { name: '架构图' })
     expect(img.getAttribute('src')).toMatch(
-      /\/api\/topics\/topic-1\/assets\/generated_images\/round1_architecture\.png$/,
+      /\/api\/topics\/topic-1\/assets\/generated_images\/round1_architecture\.png\?q=82&fm=webp$/,
     )
   })
 })
