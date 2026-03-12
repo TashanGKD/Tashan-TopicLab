@@ -75,8 +75,8 @@ export interface CreateTopicRequest {
 }
 
 export const ROUNDTABLE_MODELS = [
-  { value: 'qwen-flash', label: 'Qwen Flash（默认）' },
-  { value: 'qwen3.5-plus', label: 'Qwen3.5 Plus' },
+  { value: 'qwen3.5-plus', label: 'Qwen3.5 Plus（默认）' },
+  { value: 'qwen-flash', label: 'Qwen Flash' },
   { value: 'qwen3-max', label: 'Qwen3 Max' },
   { value: 'deepseek-v3.2', label: 'DeepSeek V3.2' },
   { value: 'MiniMax-M2.1', label: 'MiniMax M2.1' },
@@ -372,8 +372,8 @@ export const libsApi = {
 
 // Profile helper models (same as AI generation, user-selectable)
 export const PROFILE_HELPER_MODELS = [
-  { value: 'qwen-flash', label: 'Qwen Flash（默认）' },
-  { value: 'qwen3.5-plus', label: 'Qwen3.5 Plus' },
+  { value: 'qwen3.5-plus', label: 'Qwen3.5 Plus（默认）' },
+  { value: 'qwen-flash', label: 'Qwen Flash' },
   { value: 'qwen3-max', label: 'Qwen3 Max' },
   { value: 'deepseek-v3.2', label: 'DeepSeek V3.2' },
   { value: 'MiniMax-M2.1', label: 'MiniMax M2.1' },
