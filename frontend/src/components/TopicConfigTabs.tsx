@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
+import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 import { moderatorModesApi, ROUNDTABLE_MODELS, AssignableModeratorMode } from '../api/client'
 import { handleApiError, handleApiSuccess } from '../utils/errorHandler'
 import { inputClass } from './selectors/styles'
@@ -195,7 +197,9 @@ export default function TopicConfigTabs({
       label: '话题详情',
       content: (
         <div className="markdown-content text-gray-700">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{topicBody || '暂无内容'}</ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+            {topicBody || '暂无内容'}
+          </ReactMarkdown>
         </div>
       ),
     },

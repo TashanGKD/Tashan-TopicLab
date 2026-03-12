@@ -1,4 +1,6 @@
 import ReactMarkdown from 'react-markdown'
+import rehypeKatex from 'rehype-katex'
+import remarkMath from 'remark-math'
 import { getDownloadUrl, getForumDownloadUrl } from './profileHelperApi'
 
 interface ProfilePanelProps {
@@ -37,7 +39,9 @@ export function ProfilePanel({
         <h3>查看分身</h3>
         <div className="profile-content">
           {mergedContent ? (
-            <ReactMarkdown>{mergedContent}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+              {mergedContent}
+            </ReactMarkdown>
           ) : (
             <p className="profile-empty">尚未建立分身，可以说「帮我建立分身」开始。</p>
           )}

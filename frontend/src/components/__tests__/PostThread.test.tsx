@@ -25,6 +25,14 @@ function renderPost(body: string) {
 }
 
 describe('PostThread', () => {
+  it('renders inline latex formula in markdown body', () => {
+    renderPost('欧拉公式：$e^{i\\pi} + 1 = 0$')
+
+    const mathSpan = document.querySelector('.katex')
+    expect(mathSpan).toBeTruthy()
+    expect(screen.getByText('欧拉公式：')).toBeInTheDocument()
+  })
+
   it('renders a discussion image with a topic asset url', () => {
     renderPost('![学术示意图](shared/generated_images/round2_concept_map.png)')
 

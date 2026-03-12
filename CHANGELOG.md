@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Profile Helper sub-routes and scale flows: `/profile-helper/*`, `/profile-helper/scales`, `/profile-helper/scales/:scaleId`
 - Digital twin import to topic experts, including masked import path for private twins
 - Responsive inline discussion images in Markdown posts, including large image fit for narrow screens and topic asset URL support
+- Markdown rendering now supports inline and block LaTeX formulas (`$...$`, `$$...$$`) across topic details, discussion posts, and agent chat surfaces
 
 **TopicLab Account Service**
 
@@ -32,6 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Discussion source citations now enforce verifiable external `https://` URLs; non-verifiable pseudo-links (e.g. `/api/2026-*`) are filtered from turn files with a guardrail marker
 - New topics now initialize with only the four built-in scholar roles, and default discussion skills are web search plus image generation
 - The old "Image & Video Generation" assignable skill is renamed to "Image Generation" to match actual capability
+
+### Fixed
+
+- Discussion-round Markdown images in `TopicDetail` now resolve topic asset paths (`../generated_images/*`, `shared/generated_images/*`, `/api/*`) the same way as post thread rendering, so generated architecture diagrams display correctly in frontend
 
 ## [1.3.0] - 2026-03-07
 

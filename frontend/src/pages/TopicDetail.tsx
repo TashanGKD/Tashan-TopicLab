@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useLocation } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
+import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 import {
   topicsApi,
   discussionApi,
@@ -36,6 +38,31 @@ interface NavigationItem {
 }
 
 const POLL_INTERVAL_MS = 2000
+
+function resolveDiscussionImageSrc(topicId: string, src?: string): string {
+  if (!src) return ''
+  if (/^https?:\/\//.test(src) || src.startsWith('data:')) return src
+
+  const baseUrl = import.meta.env.BASE_URL || '/'
+  const normalizedBase = baseUrl === '/' ? '' : baseUrl.replace(/\/$/, '')
+  const generatedImagesRelativePattern = /^(?:\.\.\/|\.\/)?generated_images\//
+
+  if (src.startsWith('/api/')) {
+    return `${normalizedBase}${src}`
+  }
+
+  if (src.startsWith('shared/generated_images/')) {
+    const relativePath = src.replace(/^shared\/generated_images\//, '')
+    return `${normalizedBase}/api/topics/${topicId}/assets/generated_images/${relativePath}`
+  }
+
+  if (generatedImagesRelativePattern.test(src)) {
+    const relativePath = src.replace(generatedImagesRelativePattern, '')
+    return `${normalizedBase}/api/topics/${topicId}/assets/generated_images/${relativePath}`
+  }
+
+  return src
+}
 
 export default function TopicDetail() {
   const { id } = useParams<{ id: string }>()
@@ -300,7 +327,24 @@ export default function TopicDetail() {
     }
   }
 
-  const renderMarkdown = (content: string) => <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+  const renderMarkdown = (content: string, topicId?: string) => (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm, remarkMath]}
+      rehypePlugins={[rehypeKatex]}
+      components={topicId ? {
+        img: ({ src = '', alt = '', ...props }) => (
+          <img
+            {...props}
+            src={resolveDiscussionImageSrc(topicId, src)}
+            alt={alt}
+            loading="lazy"
+          />
+        ),
+      } : undefined}
+    >
+      {content}
+    </ReactMarkdown>
+  )
 
   if (loading) return (
     <div className="bg-white min-h-screen flex items-center justify-center">
@@ -358,7 +402,7 @@ export default function TopicDetail() {
               />
             </div>
           ) : (
-            <div className="markdown-content text-gray-700 mb-4">{renderMarkdown(topic.body)}</div>
+            <div className="markdown-content text-gray-700 mb-4">{renderMarkdown(topic.body, topic.id)}</div>
           )}
 
           <div className="border-t border-gray-100 my-6 sm:my-8" />
@@ -402,7 +446,7 @@ export default function TopicDetail() {
                   )}
                 </div>
                 <div className="markdown-content text-sm text-gray-700 font-serif">
-                  {renderMarkdown(topic.discussion_result.discussion_summary)}
+                  {renderMarkdown(topic.discussion_result.discussion_summary, topic.id)}
                 </div>
               </div>
             </div>
@@ -475,7 +519,7 @@ export default function TopicDetail() {
                             <span className="text-[10px] border border-gray-200 rounded text-gray-400 px-1">角色</span>
                           </div>
                           <div className="markdown-content text-sm text-gray-700">
-                            {renderMarkdown(post.content)}
+                            {renderMarkdown(post.content, topic.id)}
                           </div>
                         </div>
                       </div>

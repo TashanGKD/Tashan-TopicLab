@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
+import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 import { tokenManager } from '../../api/auth'
 import {
   AGENT_LINK_MODELS,
@@ -71,7 +73,11 @@ function CodeBlockWithCopy({ children, ...props }: React.ComponentPropsWithoutRe
 function MarkdownBlock({ content }: { content: string }) {
   return (
     <div className="agent-markdown markdown-content">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ pre: CodeBlockWithCopy }}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex]}
+        components={{ pre: CodeBlockWithCopy }}
+      >
         {content}
       </ReactMarkdown>
     </div>

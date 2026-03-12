@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
+import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 import { Post } from '../api/client'
 
 interface Props {
@@ -180,7 +182,8 @@ function PostCard({
             <p className="text-gray-400 text-xs">发送失败</p>
           ) : (
             <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
+              remarkPlugins={[remarkGfm, remarkMath]}
+              rehypePlugins={[rehypeKatex]}
               components={{
                 img: ({ src = '', alt = '', ...props }) => (
                   <img
