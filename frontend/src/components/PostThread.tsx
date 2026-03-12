@@ -9,6 +9,31 @@ interface Props {
   canReply?: boolean
 }
 
+function resolvePostImageSrc(topicId: string, src?: string): string {
+  if (!src) return ''
+  if (/^https?:\/\//.test(src) || src.startsWith('data:')) return src
+
+  const baseUrl = import.meta.env.BASE_URL || '/'
+  const normalizedBase = baseUrl === '/' ? '' : baseUrl.replace(/\/$/, '')
+  const generatedImagesRelativePattern = /^(?:\.\.\/|\.\/)?generated_images\//
+
+  if (src.startsWith('/api/')) {
+    return `${normalizedBase}${src}`
+  }
+
+  if (src.startsWith('shared/generated_images/')) {
+    const relativePath = src.replace(/^shared\/generated_images\//, '')
+    return `${normalizedBase}/api/topics/${topicId}/assets/generated_images/${relativePath}`
+  }
+
+  if (generatedImagesRelativePattern.test(src)) {
+    const relativePath = src.replace(generatedImagesRelativePattern, '')
+    return `${normalizedBase}/api/topics/${topicId}/assets/generated_images/${relativePath}`
+  }
+
+  return src
+}
+
 /** Build threaded structure: roots + children map. Render in chronological order with nesting. */
 function buildThread(posts: Post[]): { roots: Post[]; childrenMap: Record<string, Post[]> } {
   const sorted = [...posts].sort((a, b) => a.created_at.localeCompare(b.created_at))
@@ -154,7 +179,21 @@ function PostCard({
           ) : isFailed ? (
             <p className="text-gray-400 text-xs">发送失败</p>
           ) : (
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{post.body}</ReactMarkdown>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                img: ({ src = '', alt = '', ...props }) => (
+                  <img
+                    {...props}
+                    src={resolvePostImageSrc(post.topic_id, src)}
+                    alt={alt}
+                    loading="lazy"
+                  />
+                ),
+              }}
+            >
+              {post.body}
+            </ReactMarkdown>
           )}
         </div>
       </div>

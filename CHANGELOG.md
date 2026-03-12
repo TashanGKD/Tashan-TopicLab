@@ -27,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Profile Helper API client now attaches auth headers for authenticated routes
 - Docs in `docs/` are aligned to English-only content, including lifecycle and deploy/config updates
 - Discussion agent guidance now explains when image generation is appropriate, the academic visual style, the `shared/generated_images/` output directory, and the `/api/topics/{topic_id}/assets/generated_images/...` Markdown embedding format
+- Discussion moderator guidance now treats images as a required deliverable when the topic explicitly asks for a diagram, figure, or architecture chart
+- For explicit "generate a figure/diagram" topics, moderator guidance now requires assigning image generation in round 1 and producing a first visual draft in round 1
+- Discussion source citations now enforce verifiable external `https://` URLs; non-verifiable pseudo-links (e.g. `/api/2026-*`) are filtered from turn files with a guardrail marker
 - New topics now initialize with only the four built-in scholar roles, and default discussion skills are web search plus image generation
 - The old "Image & Video Generation" assignable skill is renamed to "Image Generation" to match actual capability
 

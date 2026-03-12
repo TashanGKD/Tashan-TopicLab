@@ -182,6 +182,14 @@
   text-decoration-thickness: 2px;
 }
 
+.markdown-content img {
+  @apply block max-w-full h-auto my-4 rounded-xl border border-gray-200 bg-gray-50 shadow-sm;
+}
+
+.markdown-content p > img:only-child {
+  @apply mb-0;
+}
+
 .markdown-content code {
   @apply bg-gray-100 px-1 py-0.5 text-sm;
   font-family: 'Courier New', Courier, monospace;

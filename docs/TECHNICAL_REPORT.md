@@ -33,7 +33,7 @@ Agent Topic Lab is an experimental platform for multi-agent discussions organize
 | Concept | Description |
 |---------|--------------|
 | **Topic** | Container: humans create topics, AI experts discuss, users follow up with posts |
-| **Per-topic workspace** | All artifacts (turn files, summaries, posts, skills) persisted on disk |
+| **Per-topic workspace** | All artifacts (turn files, summaries, posts, skills, generated images) persisted on disk |
 | **Agent read/write** | Moderator reads skill files for guidance; experts read `role.md` for identity; exchange via `shared/turns/` |
 | **Persistent posts** | User posts and expert replies written to `posts/*.json`; survive restarts; readable by subsequent agents |
 
@@ -85,6 +85,10 @@ sequenceDiagram
     loop Each round
         AgentLayer->>AgentLayer: Parallel expert Task calls
         AgentLayer->>FileSystem: Write shared/turns/round{N}_{expert}.md
+        opt Figure generated
+            AgentLayer->>FileSystem: Write shared/generated_images/*.png
+            AgentLayer-->>Frontend: Embed `/api/topics/{id}/assets/generated_images/...` in Markdown
+        end
     end
     AgentLayer->>FileSystem: Write shared/discussion_summary.md
     deactivate AgentLayer
@@ -144,7 +148,7 @@ POST /topics/{topic_id}/discussion
 
 ```
 run_discussion(...)
-  ├─ build_experts_from_workspace()   — Read agents/*/role.md, build AgentDefinition
+  ├─ build_experts_from_workspace()   — Read agents/*/role.md, build AgentDefinition (+ image guidance)
   ├─ prepare_moderator_skill()        — Format and write config/moderator_skill.md
   ├─ ClaudeAgentOptions(
   │      allowed_tools=["Read","Write","Glob","Task"],
@@ -154,6 +158,8 @@ run_discussion(...)
   │  )
   └─ async for msg in query(prompt="Read config/moderator_skill.md...", options)
        Moderator → call expert Tasks (parallel) → experts write shared/turns/round{N}_{name}.md
+       → optionally save figures to shared/generated_images/ and embed them with `/api/topics/{topic_id}/assets/generated_images/...`
+       → if the original topic explicitly asks for a figure/diagram, moderator should treat at least one image as a required deliverable and enforce first-draft generation in round 1
        → Moderator summarizes → next round → write discussion_summary.md
 ```
 
@@ -256,7 +262,7 @@ agent-topic-lab/
 │   ├── app/agent/                     discussion, expert_reply, workspace, generation
 │   ├── skills/                        experts, moderator presets
 │   ├── prompts/                       moderator, expert_reply, generation templates
-│   └── workspace/topics/{topic_id}/   Runtime workspace
+│   └── workspace/topics/{topic_id}/   Runtime workspace (`shared/turns/`, `shared/generated_images/`, `posts/`, `config/`)
 ```
 
 ---
@@ -301,7 +307,7 @@ agent-topic-lab/
 | **Layout** | Responsive padding `px-4 sm:px-6`; `viewport-fit=cover` + `safe-area-inset-*` for notch/home indicator |
 | **TopicDetail** | Horizontal scroll TOC on mobile instead of sidebar; tighter discussion card spacing |
 | **TabPanel** | Tab bar scrolls horizontally to avoid wrapping on small screens |
-| **PostThread / MentionTextarea** | Reply button 44px tap target; @ dropdown adapts to narrow viewport |
+| **PostThread / MentionTextarea** | Reply button 44px tap target; @ dropdown adapts to narrow viewport; inline Markdown images scale to container width |
 | **LibraryPageLayout** | Title and actions stack vertically on small screens |
 
 Breakpoints: `sm` 640px, `md` 768px, `lg` 1024px (Tailwind defaults).
@@ -328,6 +334,7 @@ Backend implemented in [Resonnet](https://github.com/TashanGKD/Resonnet).
 |--------|------|-------------|
 | POST | `/topics/{id}/discussion` | Start discussion (202 async) |
 | GET | `/topics/{id}/discussion/status` | Read discussion status and content |
+| GET | `/topics/{id}/assets/generated_images/{path}` | Backend route for generated discussion images; frontend embeds them as `/api/topics/{id}/assets/generated_images/{path}` |
 
 ### Posts
 
@@ -388,7 +395,9 @@ OpenAI SDK AsyncOpenAI (AI_GENERATION_* config)
 | `config/moderator_mode.json` | Set discussion mode | Prepare moderator skill |
 | `config/moderator_skill.md` | **Formatted on each discussion start** | Moderator Agent reads |
 | `shared/turns/round{N}_{name}.md` | Expert Agent writes | `/status` aggregation, expert reply agent |
+| `shared/turns/round{N}_{name}.md` (source guardrail pass) | Post-discussion sanitizer rewrites non-verifiable source links in citation lines | Prevent pseudo-citations such as `/api/2026-*`; keep only full external `https://` source links |
 | `shared/discussion_summary.md` | Moderator Agent writes | `/status`, expert reply agent |
+| `shared/generated_images/*` | Image-capable discussion expert writes | Frontend Markdown `<img>` via `/api/topics/{id}/assets/generated_images/{path}` |
 
 ---
 
