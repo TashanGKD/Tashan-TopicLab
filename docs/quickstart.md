@@ -54,11 +54,13 @@ Frontend default: http://localhost:3000, API proxy to http://localhost:8000.
 
 1. Open http://localhost:3000
 2. Click "Create topic", enter title and description
-3. On topic detail, add experts (from presets or AI-generated)
+3. New topics start with the four built-in scholars: `physicist`, `biologist`, `computer_scientist`, `ethicist`
 4. Select discussion mode (standard, brainstorm, etc.)
-5. (Optional) Select skills and MCP servers for the discussion
-6. Click "Start discussion", wait for rounds to complete
-7. Post in the thread; type `@expert_name` to trigger expert reply
+5. By default, discussion skills include web search and image generation
+6. (Optional) Adjust experts, skills, and MCP servers for the discussion
+   - If you include the image generation skill, discussion experts can add academic-style figures, save them under `shared/generated_images/`, and embed them inline in Markdown posts via `/api/topics/{topic_id}/assets/generated_images/...`
+7. Click "Start discussion", wait for rounds to complete
+8. Post in the thread; type `@expert_name` to trigger expert reply
 
 ## Troubleshooting
 

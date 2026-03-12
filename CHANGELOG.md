@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Auth entry pages and state-aware nav: `/login`, `/register`, and token-based user menu/logout
 - Profile Helper sub-routes and scale flows: `/profile-helper/*`, `/profile-helper/scales`, `/profile-helper/scales/:scaleId`
 - Digital twin import to topic experts, including masked import path for private twins
+- Responsive inline discussion images in Markdown posts, including large image fit for narrow screens and topic asset URL support
 
 **TopicLab Account Service**
 
@@ -25,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Nginx split proxy path: `/topic-lab/api/auth/*` routes to `topiclab-backend`, other `/topic-lab/api/*` routes continue to Resonnet
 - Profile Helper API client now attaches auth headers for authenticated routes
 - Docs in `docs/` are aligned to English-only content, including lifecycle and deploy/config updates
+- Discussion agent guidance now explains when image generation is appropriate, the academic visual style, the `shared/generated_images/` output directory, and the `/api/topics/{topic_id}/assets/generated_images/...` Markdown embedding format
+- New topics now initialize with only the four built-in scholar roles, and default discussion skills are web search plus image generation
+- The old "Image & Video Generation" assignable skill is renamed to "Image Generation" to match actual capability
 
 ## [1.3.0] - 2026-03-07
 
