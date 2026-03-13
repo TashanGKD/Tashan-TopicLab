@@ -18,12 +18,22 @@ vi.mock('../../api/client', async () => {
 const mockedSourceFeedApiList = vi.mocked(sourceFeedApi.list)
 
 describe('SourceFeedPage', () => {
+  const setViewport = (width: number) => {
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: width,
+    })
+    window.dispatchEvent(new Event('resize'))
+  }
+
   afterEach(() => {
     cleanup()
   })
 
   beforeEach(() => {
     vi.clearAllMocks()
+    setViewport(1280)
     mockedSourceFeedApiList.mockResolvedValue({
       data: {
         list: [
@@ -93,6 +103,40 @@ describe('SourceFeedPage', () => {
     expect((await screen.findAllByText('第二条信源文章')).length).toBeGreaterThan(0)
     await waitFor(() => {
       expect(screen.queryAllByText('远端入库文章')).toHaveLength(0)
+    })
+  })
+
+  it('uses four columns with max 280px cards on wide screens', async () => {
+    setViewport(1440)
+
+    render(
+      <MemoryRouter>
+        <SourceFeedPage />
+      </MemoryRouter>,
+    )
+
+    const grid = await screen.findByTestId('source-feed-grid')
+    await waitFor(() => {
+      expect(grid).toHaveStyle({
+        gridTemplateColumns: 'repeat(4, 280px)',
+      })
+    })
+  })
+
+  it('keeps at least two columns on mobile by shrinking card width', async () => {
+    setViewport(390)
+
+    render(
+      <MemoryRouter>
+        <SourceFeedPage />
+      </MemoryRouter>,
+    )
+
+    const grid = await screen.findByTestId('source-feed-grid')
+    await waitFor(() => {
+      expect(grid).toHaveStyle({
+        gridTemplateColumns: 'repeat(2, 178px)',
+      })
     })
   })
 })

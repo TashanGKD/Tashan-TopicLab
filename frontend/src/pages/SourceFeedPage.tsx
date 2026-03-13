@@ -2,10 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { sourceFeedApi, SourceFeedArticle } from '../api/client'
 
 const PAGE_SIZE = 12
-const CARD_WIDTH = 280
+const CARD_MAX_WIDTH = 280
 const GRID_GAP = 12
+const MOBILE_GRID_GAP = 10
+const MIN_COLUMNS = 2
 const MAX_COLUMNS = 4
-const VIEWPORT_PADDING = 32
+const MOBILE_VIEWPORT_PADDING = 24
+const DESKTOP_VIEWPORT_PADDING = 32
+const DESKTOP_CARD_FLOOR_WIDTH = 220
 const QUICK_LINKS = [
   { label: '学术', href: 'https://daiduo2.github.io/academic-trend-monitor/' },
   { label: '全球情报', href: 'https://42vf4xnfxh.coze.site/' },
@@ -54,9 +58,21 @@ function getSourceMark(article: SourceFeedArticle) {
 }
 
 function getColumnCount(width: number) {
-  const usableWidth = Math.max(width - VIEWPORT_PADDING, CARD_WIDTH)
-  const count = Math.floor((usableWidth + GRID_GAP) / (CARD_WIDTH + GRID_GAP))
-  return Math.min(MAX_COLUMNS, Math.max(1, count))
+  if (width < 640) {
+    return MIN_COLUMNS
+  }
+  const usableWidth = Math.max(width - DESKTOP_VIEWPORT_PADDING, DESKTOP_CARD_FLOOR_WIDTH)
+  const count = Math.floor((usableWidth + GRID_GAP) / (DESKTOP_CARD_FLOOR_WIDTH + GRID_GAP))
+  return Math.min(MAX_COLUMNS, Math.max(MIN_COLUMNS, count))
+}
+
+function getColumnWidth(width: number, columnCount: number) {
+  const isMobile = width < 640
+  const viewportPadding = isMobile ? MOBILE_VIEWPORT_PADDING : DESKTOP_VIEWPORT_PADDING
+  const gap = isMobile ? MOBILE_GRID_GAP : GRID_GAP
+  const usableWidth = Math.max(width - viewportPadding, 0)
+  const widthPerColumn = (usableWidth - gap * (columnCount - 1)) / columnCount
+  return Math.min(CARD_MAX_WIDTH, Math.max(0, Math.floor(widthPerColumn)))
 }
 
 function splitIntoColumns(items: SourceFeedArticle[], columnCount: number) {
@@ -124,7 +140,7 @@ export default function SourceFeedPage() {
   const [hasMore, setHasMore] = useState(true)
   const [query, setQuery] = useState('')
   const [searchValue, setSearchValue] = useState('')
-  const [columnCount, setColumnCount] = useState(() => getColumnCount(window.innerWidth))
+  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth)
   const loadingMoreRef = useRef(false)
   const hasMoreRef = useRef(true)
   const pageRef = useRef(0)
@@ -135,7 +151,7 @@ export default function SourceFeedPage() {
 
   useEffect(() => {
     const onResize = () => {
-      setColumnCount(getColumnCount(window.innerWidth))
+      setViewportWidth(window.innerWidth)
     }
 
     window.addEventListener('resize', onResize)
@@ -213,6 +229,8 @@ export default function SourceFeedPage() {
     const haystack = `${article.title} ${article.source_feed_name} ${article.description}`.toLowerCase()
     return haystack.includes(query.trim().toLowerCase())
   })
+  const columnCount = getColumnCount(viewportWidth)
+  const columnWidth = getColumnWidth(viewportWidth, columnCount)
   const articleColumns = splitIntoColumns(filteredArticles, columnCount)
 
   return (
@@ -296,9 +314,11 @@ export default function SourceFeedPage() {
 
         {filteredArticles.length > 0 && (
           <div
+            data-testid="source-feed-grid"
             className="grid items-start gap-3"
             style={{
-              gridTemplateColumns: `repeat(${columnCount}, ${CARD_WIDTH}px)`,
+              gridTemplateColumns: `repeat(${columnCount}, ${columnWidth}px)`,
+              gap: `${viewportWidth < 640 ? MOBILE_GRID_GAP : GRID_GAP}px`,
               justifyContent: 'center',
             }}
           >
