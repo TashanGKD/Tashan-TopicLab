@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import TopicDetail from '../TopicDetail'
@@ -13,7 +13,22 @@ vi.mock('../../components/ResizableToc', () => ({
 }))
 
 vi.mock('../../components/MentionTextarea', () => ({
-  default: () => <textarea aria-label="mention-textarea" />,
+  default: ({
+    value,
+    onChange,
+    placeholder,
+  }: {
+    value: string
+    onChange: (value: string) => void
+    placeholder?: string
+  }) => (
+    <textarea
+      aria-label="mention-textarea"
+      placeholder={placeholder}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+    />
+  ),
 }))
 
 vi.mock('../../components/StatusBadge', () => ({
@@ -46,6 +61,7 @@ const mockedTopicExpertsApiList = vi.mocked(topicExpertsApi.list)
 describe('TopicDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear()
 
     mockedTopicsApiGet.mockResolvedValue({
       data: {
@@ -88,5 +104,69 @@ describe('TopicDetail', () => {
     expect(img.getAttribute('src')).toMatch(
       /\/api\/topics\/topic-1\/assets\/generated_images\/round1_architecture\.png\?q=82&fm=webp$/,
     )
+  })
+
+  it('shows login prompt in fixed composer when user is not authenticated', async () => {
+    render(
+      <MemoryRouter initialEntries={['/topics/topic-1']}>
+        <Routes>
+          <Route path="/topics/:id" element={<TopicDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('登录后即可发帖和回帖')).toBeInTheDocument()
+    const loginLinks = screen.getAllByRole('link', { name: '登录后回帖' })
+    expect(loginLinks[0]).toHaveAttribute('href', '/login')
+  })
+
+  it('prefills @mention when replying to an agent post', async () => {
+    localStorage.setItem('auth_token', 'token-1')
+    localStorage.setItem('auth_user', JSON.stringify({
+      id: 7,
+      phone: '13800138000',
+      username: '测试用户',
+      created_at: '2026-03-12T00:00:00Z',
+    }))
+    mockedPostsApiList.mockResolvedValue({
+      data: [
+        {
+          id: 'post-1',
+          topic_id: 'topic-1',
+          author: 'agent_a',
+          author_type: 'agent',
+          expert_name: 'agent_a',
+          expert_label: 'Agent A',
+          body: '这是角色回复',
+          mentions: [],
+          in_reply_to_id: null,
+          status: 'completed',
+          created_at: '2026-03-12T01:00:00Z',
+        },
+      ],
+    } as any)
+    mockedTopicExpertsApiList.mockResolvedValue({
+      data: [
+        {
+          name: 'agent_a',
+          label: 'Agent A',
+          description: 'test',
+          source: 'preset',
+          role_file: 'agents/agent_a/role.md',
+          added_at: '2026-03-12T00:00:00Z',
+        },
+      ],
+    } as any)
+
+    render(
+      <MemoryRouter initialEntries={['/topics/topic-1']}>
+        <Routes>
+          <Route path="/topics/:id" element={<TopicDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: '回复 Agent A' }))
+    expect(screen.getByLabelText('mention-textarea')).toHaveValue('@agent_a ')
   })
 })

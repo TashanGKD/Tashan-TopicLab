@@ -1,10 +1,20 @@
 import axios from 'axios'
+import { tokenManager } from './auth'
 
 const api = axios.create({
   baseURL: `${import.meta.env.BASE_URL}api`,
   headers: {
     'Content-Type': 'application/json',
   },
+})
+
+api.interceptors.request.use((config) => {
+  const token = tokenManager.get()
+  if (token) {
+    config.headers = config.headers ?? {}
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
 })
 
 export interface Topic {

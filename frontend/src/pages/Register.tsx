@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { authApi, tokenManager } from '../api/auth';
 
 export default function Register() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = (location.state as { from?: string } | null)?.from || '/';
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
@@ -87,7 +89,7 @@ export default function Register() {
         window.dispatchEvent(new CustomEvent('auth-change'));
       }
       showMessage('success', '注册成功！');
-      setTimeout(() => navigate('/'), 1500);
+      setTimeout(() => navigate(from), 1500);
     } catch (err: unknown) {
       showMessage('error', err instanceof Error ? err.message : '注册失败');
     } finally {
@@ -195,7 +197,7 @@ export default function Register() {
 
           <div className="mt-4 text-center text-sm text-gray-500 font-serif">
             已有账号？{' '}
-            <Link to="/login" className="text-black hover:underline">立即登录</Link>
+            <Link to="/login" state={{ from }} className="text-black hover:underline">立即登录</Link>
           </div>
         </div>
       </div>

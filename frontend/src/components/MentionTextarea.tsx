@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { RefObject } from 'react'
 import { TopicExpert } from '../api/client'
 
 interface Props {
@@ -7,6 +8,8 @@ interface Props {
   experts: TopicExpert[]
   placeholder?: string
   disabled?: boolean
+  textareaRef?: RefObject<HTMLTextAreaElement>
+  textareaClassName?: string
 }
 
 export default function MentionTextarea({
@@ -15,11 +18,14 @@ export default function MentionTextarea({
   experts,
   placeholder = '发表帖子… 输入 @ 可提及角色',
   disabled = false,
+  textareaRef,
+  textareaClassName,
 }: Props) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const internalTextareaRef = useRef<HTMLTextAreaElement>(null)
   const [showDropdown, setShowDropdown] = useState(false)
   const [dropdownIndex, setDropdownIndex] = useState(0)
   const mentionStartRef = useRef<number>(-1)
+  const resolvedTextareaRef = textareaRef ?? internalTextareaRef
 
   const getMentionQuery = (text: string, cursor: number): string | null => {
     const before = text.slice(0, cursor)
@@ -43,7 +49,7 @@ export default function MentionTextarea({
 
   const filteredExperts = (() => {
     if (!showDropdown) return []
-    const cursor = textareaRef.current?.selectionStart ?? value.length
+    const cursor = resolvedTextareaRef.current?.selectionStart ?? value.length
     const query = getMentionQuery(value, cursor) ?? ''
     return experts.filter(
       e =>
@@ -53,7 +59,7 @@ export default function MentionTextarea({
   })()
 
   const insertMention = (expert: TopicExpert) => {
-    const cursor = textareaRef.current?.selectionStart ?? value.length
+    const cursor = resolvedTextareaRef.current?.selectionStart ?? value.length
     const before = value.slice(0, mentionStartRef.current)
     const after = value.slice(cursor)
     const inserted = `@${expert.name} `
@@ -61,7 +67,7 @@ export default function MentionTextarea({
     onChange(newValue)
     setShowDropdown(false)
     setTimeout(() => {
-      const ta = textareaRef.current
+      const ta = resolvedTextareaRef.current
       if (ta) {
         ta.focus()
         const pos = before.length + inserted.length
@@ -88,7 +94,7 @@ export default function MentionTextarea({
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (textareaRef.current && !textareaRef.current.contains(e.target as Node)) {
+      if (resolvedTextareaRef.current && !resolvedTextareaRef.current.contains(e.target as Node)) {
         setShowDropdown(false)
       }
     }
@@ -99,8 +105,8 @@ export default function MentionTextarea({
   return (
     <div className="relative">
       <textarea
-        ref={textareaRef}
-        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-serif focus:border-black focus:outline-none transition-colors resize-none"
+        ref={resolvedTextareaRef}
+        className={textareaClassName ?? 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-serif focus:border-black focus:outline-none transition-colors resize-none'}
         aria-label="发表帖子，输入 @ 可提及角色"
         value={value}
         onChange={handleInput}
