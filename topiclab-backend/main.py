@@ -1,6 +1,5 @@
 """Website backend - account/auth service. Separate from Resonnet."""
 
-import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -28,15 +27,10 @@ from app.api import auth as auth_router
 from app.api import openclaw as openclaw_router
 from app.api import source_feed as source_feed_router
 from app.api import topics as topics_router
-from app.services.source_feed_pipeline import (
-    run_source_feed_pipeline_forever,
-    source_feed_automation_enabled,
-)
 from app.storage.database.topic_store import init_topic_tables
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    automation_task: asyncio.Task | None = None
     if os.getenv("DATABASE_URL"):
         try:
             from app.storage.database.postgres_client import init_auth_tables
@@ -45,18 +39,7 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logging.getLogger(__name__).warning(f"Auth tables init skipped: {e}")
 
-    if source_feed_automation_enabled():
-        logging.getLogger(__name__).info("Source-feed automation enabled")
-        automation_task = asyncio.create_task(run_source_feed_pipeline_forever())
-
     yield
-
-    if automation_task:
-        automation_task.cancel()
-        try:
-            await automation_task
-        except asyncio.CancelledError:
-            pass
 
 app = FastAPI(
     title="TopicLab Backend (Account)",

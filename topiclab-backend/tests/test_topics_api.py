@@ -124,10 +124,17 @@ def test_topic_create_list_and_posts(client):
 
     post_resp = client.post(f"/topics/{topic_id}/posts", json={"author": "alice", "body": "第一条"})
     assert post_resp.status_code == 201
+    assert post_resp.json()["delete_token"].startswith("ptok_")
     assert not topic_workspace.exists()
     listed_posts = client.get(f"/topics/{topic_id}/posts")
     assert listed_posts.status_code == 200
     assert listed_posts.json()[0]["body"] == "第一条"
+
+    delete_resp = client.delete(
+        f"/topics/{topic_id}/posts/{post_resp.json()['id']}?delete_token={post_resp.json()['delete_token']}"
+    )
+    assert delete_resp.status_code == 200, delete_resp.text
+    assert delete_resp.json()["ok"] is True
 
 
 def test_discussion_and_mention_complete_via_executor(client):
@@ -249,24 +256,6 @@ def test_discussion_generated_image_is_served_from_database_after_workspace_file
 
 
 def test_api_v1_topics_alias_and_home_payload(client, monkeypatch):
-    import app.api.openclaw as openclaw_module
-
-    async def fake_preview_source_feed_pipeline(limit: int = 20, select_count: int = 1):
-        return [
-            {
-                "article_id": 101,
-                "article_title": "Agent 研究进展",
-                "source_feed_name": "DeepTech",
-                "publish_time": "2026-03-14",
-                "url": "https://example.com/a",
-                "score": 11,
-                "topic_title": "AI Agent 的下一阶段协作边界",
-                "discussion_summary_markdown": "## 背景\n\n测试摘要",
-            }
-        ]
-
-    monkeypatch.setattr(openclaw_module, "preview_source_feed_pipeline", fake_preview_source_feed_pipeline)
-
     create = client.post("/api/v1/topics", json={"title": "开放 API 讨论", "body": "验证 /api/v1 路径", "category": "thought"})
     assert create.status_code == 201, create.text
     topic_id = create.json()["id"]
@@ -285,13 +274,14 @@ def test_api_v1_topics_alias_and_home_payload(client, monkeypatch):
     assert payload["latest_topics"][0]["category"] == "thought"
     assert payload["available_categories"][0]["id"] == "plaza"
     assert payload["category_profiles_overview"][0]["profile_id"] == "community_dialogue"
-    assert payload["source_feed_preview"]["list"][0]["article_id"] == 101
     assert payload["quick_links"]["topics"] == "/api/v1/topics"
     assert payload["quick_links"]["topic_categories"] == "/api/v1/topics/categories"
     assert payload["quick_links"]["topic_category_profile_template"] == "/api/v1/topics/categories/{category_id}/profile"
+    assert payload["quick_links"]["source_feed_articles"] == "/api/v1/source-feed/articles"
+    assert "source_feed_preview" not in payload
     assert payload["what_to_do_next"]
 
-    filtered_home = client.get("/api/v1/home?category=thought&include_source_preview=false")
+    filtered_home = client.get("/api/v1/home?category=thought")
     assert filtered_home.status_code == 200, filtered_home.text
     assert filtered_home.json()["selected_category"] == "thought"
     assert filtered_home.json()["latest_topics"][0]["id"] == topic_id
@@ -303,33 +293,6 @@ def test_api_v1_topics_alias_and_home_payload(client, monkeypatch):
     assert profile["category_name"] == "科研"
     assert profile["evidence_requirement"] == "high"
     assert "局限" in profile["output_structure"][2]
-
-
-def test_api_v1_source_feed_preview_alias(client, monkeypatch):
-    import app.api.source_feed as source_feed_module
-
-    async def fake_preview_source_feed_pipeline(limit: int = 20, select_count: int = 1):
-        return [
-            {
-                "article_id": 202,
-                "article_title": "芯片与模型协同",
-                "source_feed_name": "新智元",
-                "publish_time": "2026-03-14",
-                "url": "https://example.com/chip",
-                "score": 9,
-                "topic_title": "模型能力是否会反向定义芯片形态",
-                "discussion_summary_markdown": "## 背景\n\n预览",
-            }
-        ]
-
-    monkeypatch.setattr(source_feed_module, "preview_source_feed_pipeline", fake_preview_source_feed_pipeline)
-
-    response = client.get("/api/v1/source-feed/automation/preview?limit=5&select_count=1")
-    assert response.status_code == 200, response.text
-    payload = response.json()
-    assert payload["limit"] == 5
-    assert payload["select_count"] == 1
-    assert payload["list"][0]["article_id"] == 202
 
 
 def test_openclaw_key_can_bind_user_identity_and_render_personal_skill(client):
@@ -397,3 +360,13 @@ def test_openclaw_key_can_bind_user_identity_and_render_personal_skill(client):
     )
     assert post_resp.status_code == 201, post_resp.text
     assert post_resp.json()["author"] == "openclaw-user"
+
+    delete_resp = client.delete(
+        f"/api/v1/topics/{topic_id}/posts/{post_resp.json()['id']}?delete_token={post_resp.json()['delete_token']}",
+    )
+    assert delete_resp.status_code == 200, delete_resp.text
+    assert delete_resp.json()["ok"] is True
+
+    posts_after_delete = client.get(f"/api/v1/topics/{topic_id}/posts")
+    assert posts_after_delete.status_code == 200, posts_after_delete.text
+    assert posts_after_delete.json() == []

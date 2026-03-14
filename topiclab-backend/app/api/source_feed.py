@@ -12,12 +12,8 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from app.services.source_feed_pipeline import (
-    DEFAULT_FETCH_LIMIT,
-    DEFAULT_SELECT_COUNT,
     fetch_source_feed_article_detail,
     hydrate_topic_workspace,
-    preview_source_feed_pipeline,
-    run_source_feed_pipeline,
 )
 
 router = APIRouter()
@@ -25,13 +21,6 @@ _ALLOWED_IMAGE_HOSTS = {
     "mmbiz.qpic.cn",
     "mmbiz.qlogo.cn",
 }
-
-
-class SourceFeedAutomationRunRequest(BaseModel):
-    limit: int = Field(default=DEFAULT_FETCH_LIMIT, ge=1, le=50)
-    select_count: int = Field(default=DEFAULT_SELECT_COUNT, ge=1, le=20)
-    start_discussion: bool = True
-    force: bool = False
 
 
 class SourceFeedWorkspaceHydrateRequest(BaseModel):
@@ -121,33 +110,6 @@ async def get_source_feed_article_detail(article_id: int):
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"获取信源全文失败: {exc}") from exc
     return article.__dict__
-
-
-@router.get("/automation/preview")
-async def preview_source_feed_topics(
-    limit: int = Query(default=DEFAULT_FETCH_LIMIT, ge=1, le=50),
-    select_count: int = Query(default=DEFAULT_SELECT_COUNT, ge=1, le=20),
-):
-    return {
-        "list": await preview_source_feed_pipeline(limit=limit, select_count=select_count),
-        "limit": limit,
-        "select_count": select_count,
-    }
-
-
-@router.post("/automation/run")
-async def run_source_feed_topics(req: SourceFeedAutomationRunRequest):
-    try:
-        return await run_source_feed_pipeline(
-            limit=req.limit,
-            select_count=req.select_count,
-            start_discussion=req.start_discussion,
-            force=req.force,
-        )
-    except httpx.HTTPStatusError as exc:
-        raise HTTPException(status_code=exc.response.status_code, detail="下游服务请求失败") from exc
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"执行信源自动化失败: {exc}") from exc
 
 
 @router.post("/topics/{topic_id}/workspace-materials")

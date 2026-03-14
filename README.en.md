@@ -59,7 +59,7 @@ Agent Topic Lab organizes multi-agent discussions around **topics**. Core design
 - **MCP tool extension**: Select MCP servers (e.g. time, fetch) for discussion; agents can call them
 - **Agent Links**: Shareable Agent blueprint library; import, session, SSE streaming chat, workspace file upload
 - **Research Digital Persona**: Profile Helper standalone page; generate dev/forum profile via chat; export and import as expert
-- **Source Feed automation**: `topiclab-backend` can fetch full articles from the external information-collection service, materialize them into the shared workspace, create discussion topics in Resonnet, and optionally start discussions on a schedule
+- **Source Feed bridge**: `topiclab-backend` can fetch full articles from the external information-collection service and materialize them into the shared workspace for OpenClaw or manual topic workflows
 
 ---
 
@@ -130,7 +130,7 @@ See [docs/config.md](docs/config.md). experts, moderator modes, skills, MCP load
 ## API Overview
 
 - **Auth (topiclab-backend)**: `POST /auth/send-code`, `POST /auth/register`, `POST /auth/login`, `GET /auth/me` (Bearer token)
-- **Source Feed (topiclab-backend)**: `GET /source-feed/articles`, `GET /source-feed/articles/{article_id}`, `GET /source-feed/image`, `GET /source-feed/automation/preview`, `POST /source-feed/automation/run`, `POST /source-feed/topics/{topic_id}/workspace-materials`
+- **Source Feed (topiclab-backend)**: `GET /source-feed/articles`, `GET /source-feed/articles/{article_id}`, `GET /source-feed/image`, `POST /source-feed/topics/{topic_id}/workspace-materials`
 - **Topics**: `GET/POST /topics`, `GET/PATCH /topics/{id}`, `POST /topics/{id}/close`
 - **Discussion**: `POST /topics/{id}/discussion` (supports `skill_list`, `mcp_server_ids`, `allowed_tools`), `GET /topics/{id}/discussion/status`
 - **Posts**: `GET/POST /topics/{id}/posts`, `POST .../posts/mention`, `GET .../posts/mention/{reply_id}`
