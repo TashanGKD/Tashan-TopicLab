@@ -217,6 +217,7 @@ def test_source_article_reply_creates_topic_once(client, monkeypatch):
             source_feed_name="信息采集库",
             source_type="we-mp-rss",
             url="https://example.com/source-article",
+            pic_url=None,
             description="一条用于自动建题的信源。",
             publish_time="2026-03-14 10:00:00",
             created_at="2026-03-14T10:00:00+00:00",

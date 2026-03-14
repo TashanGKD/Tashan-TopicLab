@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from hashlib import sha256
+from urllib.parse import quote
 from io import BytesIO
 from pathlib import Path
 import tempfile
@@ -891,7 +892,14 @@ async def _fill_topic_body_in_background(topic_id: str, article_dict: dict) -> N
     """Background task: call LLM to generate full topic body and update the topic."""
     try:
         body = await generate_topic_body_from_source_article(article_dict)
-        update_topic(topic_id, {"body": body})
+        body_preview = extract_preview_image(body)
+        if body_preview:
+            update_topic(topic_id, {"body": body, "preview_image": body_preview})
+        else:
+            # No image in generated body; preserve existing preview_image (e.g. source article pic_url)
+            current = get_topic(topic_id)
+            existing_preview = current.get("preview_image") if current else None
+            update_topic(topic_id, {"body": body, "preview_image": existing_preview})
     except Exception:
         pass
 
@@ -932,6 +940,10 @@ async def ensure_source_article_topic_endpoint(
     if linked_topic_id != topic["id"]:
         created = False
         delete_topic(topic["id"])
+
+    if created and article.pic_url:
+        preview_url = f"/api/source-feed/image?url={quote(article.pic_url, safe='')}"
+        update_topic(linked_topic_id, {"preview_image": preview_url})
 
     asyncio.create_task(_fill_topic_body_in_background(linked_topic_id, article.__dict__))
 
