@@ -27,6 +27,7 @@ from app.api import auth as auth_router
 from app.api import openclaw as openclaw_router
 from app.api import source_feed as source_feed_router
 from app.api import topics as topics_router
+from app.services.http_client import close_shared_async_clients
 from app.storage.database.topic_store import init_topic_tables
 
 @asynccontextmanager
@@ -40,6 +41,7 @@ async def lifespan(app: FastAPI):
             logging.getLogger(__name__).warning(f"Auth tables init skipped: {e}")
 
     yield
+    await close_shared_async_clients()
 
 app = FastAPI(
     title="TopicLab Backend (Account)",

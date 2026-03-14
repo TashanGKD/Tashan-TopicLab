@@ -33,6 +33,9 @@ interface Props {
   canDelete?: (post: Post) => boolean
   canLike?: boolean
   pendingLikePostIds?: Set<string>
+  onLoadReplies?: (post: Post) => void
+  replyLoadingPostIds?: Set<string>
+  replyNextCursorByPostId?: Record<string, string | null | undefined>
 }
 
 /** Build threaded structure: roots + children map. Render in chronological order with nesting. */
@@ -66,9 +69,16 @@ function renderThread(
   canDelete?: (post: Post) => boolean,
   canLike?: boolean,
   pendingLikePostIds?: Set<string>,
+  onLoadReplies?: (post: Post) => void,
+  replyLoadingPostIds?: Set<string>,
+  replyNextCursorByPostId?: Record<string, string | null | undefined>,
 ): ReactNode[] {
   const nodes: ReactNode[] = []
   const children = childrenMap[post.id] || []
+  const replyCount = post.reply_count ?? 0
+  const loadedChildrenCount = children.length
+  const canLoadMoreReplies = replyCount > loadedChildrenCount || Boolean(replyNextCursorByPostId?.[post.id])
+  const loadingReplies = replyLoadingPostIds?.has(post.id) ?? false
 
   nodes.push(
     <PostCard
@@ -84,11 +94,31 @@ function renderThread(
       canDelete={canDelete}
       canLike={canLike}
       pendingLikePostIds={pendingLikePostIds}
+      onLoadReplies={onLoadReplies}
+      canLoadMoreReplies={canLoadMoreReplies}
+      loadingReplies={loadingReplies}
+      remainingReplies={Math.max(replyCount - loadedChildrenCount, 0)}
     />
   )
 
   for (const child of children) {
-    nodes.push(...renderThread(child, childrenMap, byId, depth + 1, onReply, onDelete, onLike, onShare, canReply, canDelete, canLike, pendingLikePostIds))
+    nodes.push(...renderThread(
+      child,
+      childrenMap,
+      byId,
+      depth + 1,
+      onReply,
+      onDelete,
+      onLike,
+      onShare,
+      canReply,
+      canDelete,
+      canLike,
+      pendingLikePostIds,
+      onLoadReplies,
+      replyLoadingPostIds,
+      replyNextCursorByPostId,
+    ))
   }
   return nodes
 }
@@ -103,6 +133,9 @@ export default function PostThread({
   canDelete,
   canLike = true,
   pendingLikePostIds,
+  onLoadReplies,
+  replyLoadingPostIds,
+  replyNextCursorByPostId,
 }: Props) {
   if (posts.length === 0) {
     return <p className="text-gray-400 text-sm font-serif">暂无帖子</p>
@@ -113,7 +146,23 @@ export default function PostThread({
 
   const nodes: ReactNode[] = []
   for (const root of roots) {
-    nodes.push(...renderThread(root, childrenMap, byId, 0, onReply, onDelete, onLike, onShare, canReply, canDelete, canLike, pendingLikePostIds))
+    nodes.push(...renderThread(
+      root,
+      childrenMap,
+      byId,
+      0,
+      onReply,
+      onDelete,
+      onLike,
+      onShare,
+      canReply,
+      canDelete,
+      canLike,
+      pendingLikePostIds,
+      onLoadReplies,
+      replyLoadingPostIds,
+      replyNextCursorByPostId,
+    ))
   }
 
   return <div className="space-y-0">{nodes}</div>
@@ -131,6 +180,10 @@ function PostCard({
   canDelete,
   canLike,
   pendingLikePostIds,
+  onLoadReplies,
+  canLoadMoreReplies,
+  loadingReplies,
+  remainingReplies,
 }: {
   post: Post
   parent?: Post
@@ -143,6 +196,10 @@ function PostCard({
   canDelete?: (post: Post) => boolean
   canLike?: boolean
   pendingLikePostIds?: Set<string>
+  onLoadReplies?: (post: Post) => void
+  canLoadMoreReplies?: boolean
+  loadingReplies?: boolean
+  remainingReplies?: number
 }) {
   const isAgent = post.author_type === 'agent'
   const isPending = post.status === 'pending'
@@ -277,6 +334,22 @@ function PostCard({
             )}
           </div>
         )}
+        {!isPending && !isFailed && onLoadReplies && canLoadMoreReplies ? (
+          <div className="mt-2 pl-6 sm:pl-8">
+            <button
+              type="button"
+              onClick={() => onLoadReplies(post)}
+              disabled={loadingReplies}
+              className="text-xs text-gray-500 hover:text-black disabled:opacity-50"
+            >
+              {loadingReplies
+                ? '加载中...'
+                : remainingReplies && remainingReplies > 0
+                  ? `查看 ${remainingReplies} 条回复`
+                  : '加载更多回复'}
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   )

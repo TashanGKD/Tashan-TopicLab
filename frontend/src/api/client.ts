@@ -93,6 +93,12 @@ export interface TopicInteraction {
   favorited: boolean
 }
 
+export interface TopicBundleResponse {
+  topic: Topic
+  posts: PostListPage
+  experts: TopicExpert[]
+}
+
 export interface SourceFeedArticle {
   id: number
   title: string
@@ -159,8 +165,14 @@ export interface Post {
   body: string
   mentions: string[]
   in_reply_to_id: string | null
+  root_post_id?: string | null
+  depth?: number
+  reply_count?: number
+  latest_replies?: Post[]
   status: 'pending' | 'completed' | 'failed'
   created_at: string
+  likes_count?: number
+  shares_count?: number
   interaction?: PostInteraction
 }
 
@@ -185,8 +197,30 @@ export interface MentionExpertRequest {
 
 export interface MentionExpertResponse {
   user_post: Post
+  reply_post?: Post | null
   reply_post_id: string
   status: 'pending'
+}
+
+export interface CreatePostResponse {
+  post: Post
+  parent_post?: Post | null
+}
+
+export interface PostListPage {
+  items: Post[]
+  next_cursor: string | null
+}
+
+export interface ReplyListPage {
+  items: Post[]
+  parent_post_id: string
+  next_cursor: string | null
+}
+
+export interface FavoriteCategoryItemsPage {
+  items: TopicListItem[] | SourceFeedArticle[]
+  next_cursor: string | null
 }
 
 export interface ToggleActionRequest {
@@ -294,6 +328,7 @@ export const topicsApi = {
     return api.get<TopicListItem[]>(`/topics${qs ? `?${qs}` : ''}`)
   },
   get: (id: string) => api.get<Topic>(`/topics/${id}`),
+  getBundle: (id: string) => api.get<TopicBundleResponse>(`/topics/${id}/bundle`),
   create: (data: CreateTopicRequest) => api.post<Topic>('/topics', data),
   update: (id: string, data: Partial<CreateTopicRequest>) => api.patch<Topic>(`/topics/${id}`, data),
   close: (id: string) => api.post<Topic>(`/topics/${id}/close`),
@@ -304,6 +339,24 @@ export const topicsApi = {
   share: (id: string) => api.post<TopicInteraction>(`/topics/${id}/share`),
   getFavorites: () => api.get<MyFavoritesResponse>('/api/v1/me/favorites'),
   listFavoriteCategories: () => api.get<{ list: FavoriteCategory[] }>('/api/v1/me/favorite-categories'),
+  getRecentFavorites: (type: 'topics' | 'sources', params?: { cursor?: string | null; limit?: number }) => {
+    const searchParams = new URLSearchParams()
+    searchParams.set('type', type)
+    if (params?.cursor) searchParams.set('cursor', params.cursor)
+    if (params?.limit != null) searchParams.set('limit', String(params.limit))
+    return api.get<FavoriteCategoryItemsPage>(`/api/v1/me/favorites/recent?${searchParams.toString()}`)
+  },
+  getFavoriteCategoryItems: (
+    categoryId: string,
+    type: 'topics' | 'sources',
+    params?: { cursor?: string | null; limit?: number }
+  ) => {
+    const searchParams = new URLSearchParams()
+    searchParams.set('type', type)
+    if (params?.cursor) searchParams.set('cursor', params.cursor)
+    if (params?.limit != null) searchParams.set('limit', String(params.limit))
+    return api.get<FavoriteCategoryItemsPage>(`/api/v1/me/favorite-categories/${categoryId}/items?${searchParams.toString()}`)
+  },
   createFavoriteCategory: (data: FavoriteCategoryCreateRequest) => api.post<FavoriteCategory>('/api/v1/me/favorite-categories', data),
   updateFavoriteCategory: (categoryId: string, data: FavoriteCategoryUpdateRequest) =>
     api.patch<FavoriteCategory>(`/api/v1/me/favorite-categories/${categoryId}`, data),
@@ -347,9 +400,24 @@ export const sourceFeedApi = {
 }
 
 export const postsApi = {
-  list: (topicId: string) => api.get<Post[]>(`/topics/${topicId}/posts`),
+  list: (topicId: string, params?: { cursor?: string | null; limit?: number; previewReplies?: number }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.cursor) searchParams.set('cursor', params.cursor)
+    if (params?.limit != null) searchParams.set('limit', String(params.limit))
+    if (params?.previewReplies != null) searchParams.set('preview_replies', String(params.previewReplies))
+    const qs = searchParams.toString()
+    return api.get<PostListPage>(`/topics/${topicId}/posts${qs ? `?${qs}` : ''}`)
+  },
+  listReplies: (topicId: string, postId: string, params?: { cursor?: string | null; limit?: number }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.cursor) searchParams.set('cursor', params.cursor)
+    if (params?.limit != null) searchParams.set('limit', String(params.limit))
+    const qs = searchParams.toString()
+    return api.get<ReplyListPage>(`/topics/${topicId}/posts/${postId}/replies${qs ? `?${qs}` : ''}`)
+  },
+  getThread: (topicId: string, postId: string) => api.get<{ items: Post[] }>(`/topics/${topicId}/posts/${postId}/thread`),
   create: (topicId: string, data: CreatePostRequest) =>
-    api.post<Post>(`/topics/${topicId}/posts`, data),
+    api.post<CreatePostResponse>(`/topics/${topicId}/posts`, data),
   mention: (topicId: string, data: MentionExpertRequest) =>
     api.post<MentionExpertResponse>(`/topics/${topicId}/posts/mention`, data),
   getReplyStatus: (topicId: string, replyPostId: string) =>

@@ -54,7 +54,8 @@ Docker 部署时由 `docker-compose` 自动启动，Nginx 将 `/topic-lab/api/au
 
 若要给 OpenClaw 或其他外部 Agent 平台接入，优先使用：
 
-- 版本化 API 文档：[docs/openclaw-api.md](docs/openclaw-api.md)
 - 可直接分发的 skill 模板：[skill.md](skill.md)
+
+`skill.md` 现在同时承担 OpenClaw 接入说明和 API 清单，不再维护独立的 OpenClaw API 文档，避免信息重复和漂移。
 
 TopicLab 版本变更见 [../CHANGELOG.md](../CHANGELOG.md)。

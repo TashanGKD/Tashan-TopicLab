@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { startTransition, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
@@ -7,8 +7,8 @@ import remarkMath from 'remark-math'
 import {
   topicsApi,
   discussionApi,
-  topicExpertsApi,
   postsApi,
+  topicExpertsApi,
   Topic,
   TopicExpert,
   Post,
@@ -73,8 +73,13 @@ export default function TopicDetail() {
   const initialSkillIds = (location.state as { skillList?: string[] } | null)?.skillList
   const [topic, setTopic] = useState<Topic | null>(null)
   const [loading, setLoading] = useState(true)
+  const [postsLoading, setPostsLoading] = useState(true)
   const [topicExperts, setTopicExperts] = useState<TopicExpert[]>([])
   const [posts, setPosts] = useState<Post[]>([])
+  const [postNextCursor, setPostNextCursor] = useState<string | null>(null)
+  const [loadingMorePosts, setLoadingMorePosts] = useState(false)
+  const [replyLoadingPostIds, setReplyLoadingPostIds] = useState<Set<string>>(new Set())
+  const [replyNextCursorByPostId, setReplyNextCursorByPostId] = useState<Record<string, string | null>>({})
   const [postText, setPostText] = useState('')
   const [submitError, setSubmitError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -96,9 +101,7 @@ export default function TopicDetail() {
 
   useEffect(() => {
     if (id) {
-      loadTopic(id)
-      loadPosts(id)
-      loadTopicExperts(id)
+      void bootstrapTopicDetail(id)
     }
   }, [id])
 
@@ -134,19 +137,17 @@ export default function TopicDetail() {
   useEffect(() => {
     const interval = setInterval(async () => {
       if (!id || pendingRepliesRef.current.size === 0) return
-      let updated = false
       for (const replyId of [...pendingRepliesRef.current]) {
         try {
           const res = await postsApi.getReplyStatus(id, replyId)
           if (res.data.status !== 'pending') {
             pendingRepliesRef.current.delete(replyId)
-            updated = true
+            setPosts(prev => mergePosts(prev, [res.data]))
           }
         } catch {
           pendingRepliesRef.current.delete(replyId)
         }
       }
-      if (updated) loadPosts(id)
     }, POLL_INTERVAL_MS)
     return () => clearInterval(interval)
   }, [id])
@@ -176,6 +177,57 @@ export default function TopicDetail() {
     }
   }, [])
 
+  const mergePosts = (existing: Post[], incoming: Post[]) => {
+    const byId = new Map(existing.map(item => [item.id, item]))
+    for (const post of incoming) {
+      byId.set(post.id, { ...byId.get(post.id), ...post })
+    }
+    return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at))
+  }
+
+  const flattenPostPage = (items: Post[]) => {
+    const flat: Post[] = []
+    for (const post of items) {
+      flat.push({ ...post, latest_replies: undefined })
+      for (const reply of post.latest_replies ?? []) {
+        flat.push(reply)
+      }
+    }
+    return flat
+  }
+
+  const bootstrapTopicDetail = async (topicId: string) => {
+    setLoading(true)
+    setPostsLoading(true)
+    setPosts([])
+    setTopicExperts([])
+    setReplyNextCursorByPostId({})
+    setPostNextCursor(null)
+    try {
+      const res = await topicsApi.get(topicId)
+      setTopic(res.data)
+    } catch (err) {
+      handleApiError(err, '加载话题失败')
+      setLoading(false)
+      setPostsLoading(false)
+      return
+    }
+    setLoading(false)
+    void loadPosts(topicId)
+    window.setTimeout(() => {
+      void loadTopicExperts(topicId)
+    }, 0)
+  }
+
+  const loadTopicExperts = async (topicId: string) => {
+    try {
+      const res = await topicExpertsApi.list(topicId)
+      setTopicExperts(res.data)
+    } catch (err) {
+      handleApiError(err, '加载专家列表失败')
+    }
+  }
+
   const loadTopic = async (topicId: string) => {
     try {
       const res = await topicsApi.get(topicId)
@@ -188,17 +240,63 @@ export default function TopicDetail() {
   }
 
   const loadPosts = async (topicId: string) => {
+    setPostsLoading(true)
     try {
-      const res = await postsApi.list(topicId)
-      setPosts(res.data)
+      const res = await postsApi.list(topicId, { previewReplies: 2 })
+      startTransition(() => {
+        setPosts(flattenPostPage(res.data.items))
+      })
+      setPostNextCursor(res.data.next_cursor)
+      setReplyNextCursorByPostId(
+        Object.fromEntries(res.data.items.map(post => [post.id, (post.reply_count ?? 0) > (post.latest_replies?.length ?? 0) ? '__more__' : null]))
+      )
     } catch { /* ignore */ }
+    finally {
+      setPostsLoading(false)
+    }
   }
 
-  const loadTopicExperts = async (topicId: string) => {
+  const loadMorePosts = async () => {
+    if (!id || !postNextCursor || loadingMorePosts) return
+    setLoadingMorePosts(true)
     try {
-      const res = await topicExpertsApi.list(topicId)
-      setTopicExperts(res.data)
-    } catch { /* ignore */ }
+      const res = await postsApi.list(id, { cursor: postNextCursor, previewReplies: 2 })
+      setPosts(prev => mergePosts(prev, flattenPostPage(res.data.items)))
+      setPostNextCursor(res.data.next_cursor)
+      setReplyNextCursorByPostId(prev => ({
+        ...prev,
+        ...Object.fromEntries(res.data.items.map(post => [post.id, (post.reply_count ?? 0) > (post.latest_replies?.length ?? 0) ? '__more__' : null])),
+      }))
+    } catch (err) {
+      handleApiError(err, '加载更多帖子失败')
+    } finally {
+      setLoadingMorePosts(false)
+    }
+  }
+
+  const handleLoadReplies = async (post: Post) => {
+    if (!id) return
+    const currentCursor = replyNextCursorByPostId[post.id]
+    if (currentCursor === null || replyLoadingPostIds.has(post.id)) return
+    setReplyLoadingPostIds(prev => new Set(prev).add(post.id))
+    try {
+      const res = await postsApi.listReplies(id, post.id, {
+        cursor: currentCursor === '__more__' ? undefined : currentCursor,
+      })
+      setPosts(prev => mergePosts(prev, res.data.items))
+      setReplyNextCursorByPostId(prev => ({
+        ...prev,
+        [post.id]: res.data.next_cursor,
+      }))
+    } catch (err) {
+      handleApiError(err, '加载回复失败')
+    } finally {
+      setReplyLoadingPostIds(prev => {
+        const next = new Set(prev)
+        next.delete(post.id)
+        return next
+      })
+    }
   }
 
   const handleReplyToPost = (post: Post) => {
@@ -218,6 +316,7 @@ export default function TopicDetail() {
     try {
       await postsApi.delete(id, post.id)
       await loadPosts(id)
+      await loadTopic(id)
       if (replyingTo?.id === post.id) {
         setReplyingTo(null)
       }
@@ -237,10 +336,22 @@ export default function TopicDetail() {
     if (!id || !topic || !requireCurrentUser()) return
     const nextEnabled = !(topic.interaction?.liked ?? false)
     setTopicLikePending(true)
+    const previousInteraction = topic.interaction
+    setTopic(prev => prev ? {
+      ...prev,
+      interaction: {
+        likes_count: Math.max(0, (prev.interaction?.likes_count ?? 0) + (nextEnabled ? 1 : -1)),
+        favorites_count: prev.interaction?.favorites_count ?? 0,
+        shares_count: prev.interaction?.shares_count ?? 0,
+        liked: nextEnabled,
+        favorited: prev.interaction?.favorited ?? false,
+      },
+    } : prev)
     try {
       const res = await topicsApi.like(id, nextEnabled)
       setTopic(prev => (prev ? { ...prev, interaction: res.data } : prev))
     } catch (err) {
+      setTopic(prev => (prev ? { ...prev, interaction: previousInteraction } : prev))
       handleApiError(err, nextEnabled ? '点赞失败' : '取消点赞失败')
     } finally {
       setTopicLikePending(false)
@@ -251,10 +362,22 @@ export default function TopicDetail() {
     if (!id || !topic || !requireCurrentUser()) return
     const nextEnabled = !(topic.interaction?.favorited ?? false)
     setTopicFavoritePending(true)
+    const previousInteraction = topic.interaction
+    setTopic(prev => prev ? {
+      ...prev,
+      interaction: {
+        likes_count: prev.interaction?.likes_count ?? 0,
+        favorites_count: Math.max(0, (prev.interaction?.favorites_count ?? 0) + (nextEnabled ? 1 : -1)),
+        shares_count: prev.interaction?.shares_count ?? 0,
+        liked: prev.interaction?.liked ?? false,
+        favorited: nextEnabled,
+      },
+    } : prev)
     try {
       const res = await topicsApi.favorite(id, nextEnabled)
       setTopic(prev => (prev ? { ...prev, interaction: res.data } : prev))
     } catch (err) {
+      setTopic(prev => (prev ? { ...prev, interaction: previousInteraction } : prev))
       handleApiError(err, nextEnabled ? '收藏失败' : '取消收藏失败')
     } finally {
       setTopicFavoritePending(false)
@@ -287,10 +410,20 @@ export default function TopicDetail() {
     if (!id || !requireCurrentUser()) return
     const nextEnabled = !(post.interaction?.liked ?? false)
     setPostLikePendingIds(prev => new Set(prev).add(post.id))
+    const previousInteraction = post.interaction
+    setPosts(prev => prev.map(item => item.id === post.id ? {
+      ...item,
+      interaction: {
+        likes_count: Math.max(0, (item.interaction?.likes_count ?? 0) + (nextEnabled ? 1 : -1)),
+        shares_count: item.interaction?.shares_count ?? 0,
+        liked: nextEnabled,
+      },
+    } : item))
     try {
       const res = await postsApi.like(id, post.id, nextEnabled)
       setPosts(prev => prev.map(item => item.id === post.id ? { ...item, interaction: res.data } : item))
     } catch (err) {
+      setPosts(prev => prev.map(item => item.id === post.id ? { ...item, interaction: previousInteraction } : item))
       handleApiError(err, nextEnabled ? '帖子点赞失败' : '取消帖子点赞失败')
     } finally {
       setPostLikePendingIds(prev => {
@@ -322,11 +455,57 @@ export default function TopicDetail() {
     const mentionedExpert = topicExperts.find(e => e.name === mentionedName)
     const inReplyToId = replyingTo?.id ?? null
     const authorName = getUserDisplayName(currentUser)
+    const now = new Date().toISOString()
+    const tempUserPostId = `temp-${crypto.randomUUID()}`
+    let tempReplyId: string | null = null
+    const tempUserPost: Post = {
+      id: tempUserPostId,
+      topic_id: id,
+      author: authorName,
+      author_type: 'human',
+      delete_token: null,
+      owner_user_id: currentUser.id,
+      owner_auth_type: null,
+      expert_name: null,
+      expert_label: null,
+      body: postText,
+      mentions: [],
+      in_reply_to_id: inReplyToId,
+      root_post_id: inReplyToId ?? tempUserPostId,
+      depth: replyingTo ? (replyingTo.depth ?? 0) + 1 : 0,
+      reply_count: 0,
+      status: 'pending',
+      created_at: now,
+      interaction: { likes_count: 0, shares_count: 0, liked: false },
+    }
 
     setSubmitting(true)
-    setSubmitError('')
-    try {
-      if (mentionedExpert) {
+      setSubmitError('')
+      try {
+        if (mentionedExpert) {
+        tempReplyId = `temp-${crypto.randomUUID()}`
+        const tempReplyPost: Post = {
+          id: tempReplyId,
+          topic_id: id,
+          author: mentionedExpert.name,
+          author_type: 'agent',
+          delete_token: null,
+          owner_user_id: null,
+          owner_auth_type: null,
+          expert_name: mentionedExpert.name,
+          expert_label: mentionedExpert.label,
+          body: '',
+          mentions: [],
+          in_reply_to_id: tempUserPostId,
+          root_post_id: tempUserPostId,
+          depth: (tempUserPost.depth ?? 0) + 1,
+          reply_count: 0,
+          status: 'pending',
+          created_at: now,
+          interaction: { likes_count: 0, shares_count: 0, liked: false },
+        }
+        setPosts(prev => mergePosts(prev, [tempUserPost, tempReplyPost]))
+        setTopic(prev => prev ? { ...prev, posts_count: (prev.posts_count ?? 0) + 2 } : prev)
         const res = await postsApi.mention(id, {
           author: authorName,
           body: postText,
@@ -334,20 +513,41 @@ export default function TopicDetail() {
           in_reply_to_id: inReplyToId,
         })
         pendingRepliesRef.current.add(res.data.reply_post_id)
+        setPosts(prev => {
+          const withoutTemps = prev.filter(item => item.id !== tempUserPostId && item.id !== tempReplyId)
+          return mergePosts(withoutTemps, [res.data.user_post, ...(res.data.reply_post ? [res.data.reply_post] : [])])
+        })
+        setReplyNextCursorByPostId(prev => ({
+          ...prev,
+          ...(inReplyToId ? { [inReplyToId]: null } : {}),
+          [res.data.user_post.id]: res.data.reply_post ? '__more__' : null,
+        }))
         handleApiSuccess(`已向 ${mentionedExpert.label} 提问，等待回复中…`)
       } else {
-        await postsApi.create(id, {
+        setPosts(prev => mergePosts(prev, [tempUserPost]))
+        setTopic(prev => prev ? { ...prev, posts_count: (prev.posts_count ?? 0) + 1 } : prev)
+        const res = await postsApi.create(id, {
           author: authorName,
           body: postText,
           in_reply_to_id: inReplyToId,
         })
+        setPosts(prev => {
+          const withoutTemp = prev.filter(item => item.id !== tempUserPostId)
+          return mergePosts(withoutTemp, [res.data.post, ...(res.data.parent_post ? [res.data.parent_post] : [])])
+        })
+        setReplyNextCursorByPostId(prev => ({
+          ...prev,
+          ...(inReplyToId ? { [inReplyToId]: null } : {}),
+          [res.data.post.id]: null,
+        }))
         handleApiSuccess('发送成功')
       }
       setPostText('')
       setSubmitError('')
       setReplyingTo(null)
-      await loadPosts(id)
     } catch (err) {
+      setPosts(prev => prev.filter(item => item.id !== tempUserPostId && item.id !== tempReplyId))
+      setTopic(prev => prev ? { ...prev, posts_count: Math.max(0, (prev.posts_count ?? 0) - (mentionedExpert ? 2 : 1)) } : prev)
       const message = handleApiError(err, '发送失败')
       setSubmitError(message)
     } finally {
@@ -455,8 +655,9 @@ export default function TopicDetail() {
     for (const round of rounds) {
       items.push({ type: 'round', round, label: `第 ${round} 轮`, id: `round-section-${round}` })
     }
-    if (posts.length > 0) {
-      items.push({ type: 'posts', label: `跟贴 (${posts.length})`, id: 'posts-section' })
+    const postCount = topic?.posts_count ?? posts.length
+    if (postCount > 0) {
+      items.push({ type: 'posts', label: `跟贴 (${postCount})`, id: 'posts-section' })
     }
     return items
   }
@@ -592,10 +793,7 @@ export default function TopicDetail() {
                 onTopicBodyUpdated={(body) => {
                   setTopic((prev) => (prev ? { ...prev, body } : prev))
                 }}
-                onExpertsChange={() => {
-                  loadTopic(id!)
-                  loadTopicExperts(id!)
-                }}
+                onExpertsChange={() => { void loadTopicExperts(id!) }}
                 onModeChange={() => loadTopic(id!)}
                 onStartDiscussion={handleStartDiscussion}
                 isStarting={startingDiscussion}
@@ -739,23 +937,48 @@ export default function TopicDetail() {
             className="scroll-mt-6"
           >
             <h2 className="text-base font-semibold text-gray-900 mb-1">
-              跟贴 ({posts.length})
+              跟贴 ({topic.posts_count ?? posts.length})
               {topicExperts.length > 0 && (
                 <span className="text-xs font-normal text-gray-400 ml-2">— 输入 @ 可追问角色</span>
               )}
             </h2>
 
-            <PostThread
-              posts={posts}
-              onReply={handleReplyToPost}
-              onDelete={handleDeletePost}
-              onLike={handleLikePost}
-              onShare={handleSharePost}
-              canReply={topic.status === 'open'}
-              canDelete={canDeletePost}
-              canLike
-              pendingLikePostIds={postLikePendingIds}
-            />
+            {postsLoading ? (
+              <div className="space-y-3 py-2">
+                <div className="h-20 animate-pulse rounded-2xl border border-gray-100 bg-gray-50" />
+                <div className="h-20 animate-pulse rounded-2xl border border-gray-100 bg-gray-50" />
+              </div>
+            ) : null}
+
+            {!postsLoading ? (
+              <PostThread
+                posts={posts}
+                onReply={handleReplyToPost}
+                onDelete={handleDeletePost}
+                onLike={handleLikePost}
+                onShare={handleSharePost}
+                onLoadReplies={handleLoadReplies}
+                canReply={topic.status === 'open'}
+                canDelete={canDeletePost}
+                canLike
+                pendingLikePostIds={postLikePendingIds}
+                replyLoadingPostIds={replyLoadingPostIds}
+                replyNextCursorByPostId={replyNextCursorByPostId}
+              />
+            ) : null}
+
+            {postNextCursor ? (
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={loadMorePosts}
+                  disabled={loadingMorePosts}
+                  className="rounded-full border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:border-gray-300 hover:text-black disabled:opacity-50"
+                >
+                  {loadingMorePosts ? '加载中...' : '加载更多帖子'}
+                </button>
+              </div>
+            ) : null}
 
             {topic.status === 'open' ? (
               <div className="mt-6 pt-4 border-t border-gray-100">

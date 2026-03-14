@@ -17,6 +17,7 @@ from app.services.source_feed_pipeline import (
     fetch_source_feed_article_detail,
     hydrate_topic_workspace,
 )
+from app.services.http_client import get_shared_async_client
 from app.storage.database.topic_store import (
     annotate_source_articles_with_interactions,
     record_source_article_share,
@@ -121,9 +122,9 @@ async def get_source_feed_articles(
     upstream_url = f"{_get_information_collection_base_url()}/api/v1/articles"
 
     try:
-        async with httpx.AsyncClient(timeout=6.0) as client:
-            response = await client.get(upstream_url, params={"limit": limit, "offset": offset})
-            response.raise_for_status()
+        client = get_shared_async_client("source-feed")
+        response = await client.get(upstream_url, params={"limit": limit, "offset": offset}, timeout=6.0)
+        response.raise_for_status()
     except httpx.HTTPStatusError as exc:
         raise HTTPException(status_code=exc.response.status_code, detail="上游信源服务请求失败") from exc
     except httpx.HTTPError as exc:
@@ -187,9 +188,9 @@ async def proxy_source_feed_image(url: str = Query(..., min_length=1)):
     }
 
     try:
-        async with httpx.AsyncClient(timeout=12.0, follow_redirects=True) as client:
-            upstream = await client.get(image_url, headers=headers)
-            upstream.raise_for_status()
+        client = get_shared_async_client("source-feed")
+        upstream = await client.get(image_url, headers=headers, timeout=12.0, follow_redirects=True)
+        upstream.raise_for_status()
     except httpx.HTTPStatusError as exc:
         raise HTTPException(status_code=exc.response.status_code, detail="上游图片请求失败") from exc
     except httpx.HTTPError as exc:

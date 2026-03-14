@@ -217,7 +217,7 @@ export default function FavoriteCategoryPicker({
                 <div className="text-sm font-medium text-gray-900">创建分类 “{draftValue.trim()}”</div>
                 <div className="mt-0.5 text-xs text-gray-400">回车或点击后直接归入该分类</div>
               </div>
-              <span className="rounded-full border border-gray-200 px-2 py-1 text-[11px] text-gray-500">新建</span>
+              <span className="min-w-[3.5rem] whitespace-nowrap rounded-full border border-gray-200 px-2 py-1 text-center text-[11px] text-gray-500">新建</span>
             </button>
           ) : (
             <div className="px-3 py-3 text-sm text-gray-400">没有可加入的分类</div>

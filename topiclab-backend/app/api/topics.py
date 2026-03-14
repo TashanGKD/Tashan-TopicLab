@@ -40,8 +40,13 @@ from app.storage.database.topic_store import (
     get_post,
     get_topic,
     get_topic_moderator_config,
+    get_post_thread,
     hash_post_delete_token,
+    list_all_posts,
     list_favorite_categories,
+    list_favorite_category_items,
+    list_recent_favorites,
+    list_post_replies,
     list_user_favorite_source_articles,
     list_user_favorite_topics,
     list_discussion_turns,
@@ -260,6 +265,7 @@ class MentionExpertRequest(BaseModel):
 
 class MentionExpertResponse(BaseModel):
     user_post: dict
+    reply_post: dict | None = None
     reply_post_id: str
     status: str
 
@@ -579,6 +585,17 @@ def _require_owner_identity(user: dict | None) -> tuple[int, str]:
     return user_id, auth_type or "jwt"
 
 
+def _apply_thread_metadata(topic_id: str, post: dict, parent_post: dict | None) -> dict:
+    if parent_post is None:
+        post["root_post_id"] = post["id"]
+        post["depth"] = 0
+        return post
+    post["in_reply_to_id"] = parent_post["id"]
+    post["root_post_id"] = parent_post.get("root_post_id") or parent_post["id"]
+    post["depth"] = int(parent_post.get("depth") or 0) + 1
+    return post
+
+
 def _is_admin_user(user: dict | None) -> bool:
     return bool(user and user.get("is_admin"))
 
@@ -845,6 +862,25 @@ def get_topic_endpoint(topic_id: str, user: dict | None = Depends(_get_optional_
     return topic
 
 
+@router.get("/topics/{topic_id}/bundle")
+async def get_topic_bundle_endpoint(
+    topic_id: str,
+    user: dict | None = Depends(_get_optional_user),
+    authorization: str | None = Header(default=None),
+):
+    user_id, auth_type = _resolve_owner_identity(user)
+    topic = get_topic(topic_id, user_id=user_id, auth_type=auth_type)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    posts = list_posts(topic_id, user_id=user_id, auth_type=auth_type, preview_replies=2)
+    experts = await _sync_topic_experts_from_resonnet(topic_id, authorization)
+    return {
+        "topic": topic,
+        "posts": posts,
+        "experts": experts,
+    }
+
+
 @router.patch("/topics/{topic_id}")
 def update_topic_endpoint(topic_id: str, data: TopicUpdateRequest):
     payload = data.model_dump(exclude_unset=True)
@@ -983,6 +1019,28 @@ def get_my_favorite_category_endpoint(category_id: str, user: dict | None = Depe
     return category
 
 
+@router.get("/me/favorite-categories/{category_id}/items")
+def list_my_favorite_category_items_endpoint(
+    category_id: str,
+    type: str = Query(default="topics", pattern="^(topics|sources)$"),
+    cursor: str | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+    user: dict | None = Depends(_get_optional_user),
+):
+    user_id, auth_type = _require_owner_identity(user)
+    category = get_favorite_category(category_id, user_id=user_id, auth_type=auth_type)
+    if not category:
+        raise HTTPException(status_code=404, detail="收藏分类不存在")
+    return list_favorite_category_items(
+        category_id,
+        item_type=type,
+        cursor=cursor,
+        limit=limit,
+        user_id=user_id,
+        auth_type=auth_type,
+    )
+
+
 @router.get("/me/favorite-categories/{category_id}/summary-payload")
 def get_my_favorite_category_summary_payload_endpoint(
     category_id: str,
@@ -993,6 +1051,23 @@ def get_my_favorite_category_summary_payload_endpoint(
     if not payload:
         raise HTTPException(status_code=404, detail="收藏分类不存在")
     return payload
+
+
+@router.get("/me/favorites/recent")
+def get_recent_favorites_endpoint(
+    type: str = Query(default="topics", pattern="^(topics|sources)$"),
+    cursor: str | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+    user: dict | None = Depends(_get_optional_user),
+):
+    user_id, auth_type = _require_owner_identity(user)
+    return list_recent_favorites(
+        item_type=type,
+        cursor=cursor,
+        limit=limit,
+        user_id=user_id,
+        auth_type=auth_type,
+    )
 
 
 @router.post("/me/favorite-categories/classify")
@@ -1079,12 +1154,62 @@ def unassign_source_article_from_my_favorite_category_endpoint(
 
 
 @router.get("/topics/{topic_id}/posts")
-def list_posts_endpoint(topic_id: str, user: dict | None = Depends(_get_optional_user)):
+def list_posts_endpoint(
+    topic_id: str,
+    cursor: str | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+    preview_replies: int = Query(default=2, ge=0, le=5),
+    user: dict | None = Depends(_get_optional_user),
+):
     user_id, auth_type = _resolve_owner_identity(user)
     topic = get_topic(topic_id, user_id=user_id, auth_type=auth_type)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
-    return list_posts(topic_id, user_id=user_id, auth_type=auth_type)
+    return list_posts(
+        topic_id,
+        cursor=cursor,
+        limit=limit,
+        preview_replies=preview_replies,
+        user_id=user_id,
+        auth_type=auth_type,
+    )
+
+
+@router.get("/topics/{topic_id}/posts/{post_id}/replies")
+def list_post_replies_endpoint(
+    topic_id: str,
+    post_id: str,
+    cursor: str | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+    user: dict | None = Depends(_get_optional_user),
+):
+    user_id, auth_type = _resolve_owner_identity(user)
+    if not get_topic(topic_id, user_id=user_id, auth_type=auth_type):
+        raise HTTPException(status_code=404, detail="Topic not found")
+    if not get_post(topic_id, post_id, user_id=user_id, auth_type=auth_type):
+        raise HTTPException(status_code=404, detail="Post not found")
+    return list_post_replies(
+        topic_id,
+        post_id,
+        cursor=cursor,
+        limit=limit,
+        user_id=user_id,
+        auth_type=auth_type,
+    )
+
+
+@router.get("/topics/{topic_id}/posts/{post_id}/thread")
+def get_post_thread_endpoint(
+    topic_id: str,
+    post_id: str,
+    user: dict | None = Depends(_get_optional_user),
+):
+    user_id, auth_type = _resolve_owner_identity(user)
+    if not get_topic(topic_id, user_id=user_id, auth_type=auth_type):
+        raise HTTPException(status_code=404, detail="Topic not found")
+    if not get_post(topic_id, post_id, user_id=user_id, auth_type=auth_type):
+        raise HTTPException(status_code=404, detail="Post not found")
+    return {"items": get_post_thread(topic_id, post_id, user_id=user_id, auth_type=auth_type)}
 
 
 @router.post("/topics/{topic_id}/posts", status_code=201)
@@ -1095,8 +1220,13 @@ async def create_post_endpoint(topic_id: str, req: CreatePostRequest, user: dict
     await _moderate_or_raise(req.body, scenario="topic_post")
     author_name = _resolve_author_name(req.author, user)
     owner_user_id, owner_auth_type = _resolve_owner_identity(user)
+    parent_post = None
+    if req.in_reply_to_id:
+        parent_post = get_post(topic_id, req.in_reply_to_id)
+        if not parent_post:
+            raise HTTPException(status_code=404, detail="Parent post not found")
     raw_delete_token = generate_post_delete_token()
-    post = make_post(
+    post = _apply_thread_metadata(topic_id, make_post(
         topic_id=topic_id,
         author=author_name,
         author_type="human",
@@ -1106,10 +1236,10 @@ async def create_post_endpoint(topic_id: str, req: CreatePostRequest, user: dict
         owner_user_id=owner_user_id,
         owner_auth_type=owner_auth_type,
         delete_token_hash=hash_post_delete_token(raw_delete_token),
-    )
+    ), parent_post)
     saved = upsert_post(post)
     saved["delete_token"] = raw_delete_token
-    return saved
+    return {"post": saved, "parent_post": get_post(topic_id, req.in_reply_to_id) if req.in_reply_to_id else None}
 
 
 @router.post("/topics/{topic_id}/posts/mention", status_code=202, response_model=MentionExpertResponse)
@@ -1132,9 +1262,14 @@ async def mention_expert_endpoint(
 
     author_name = _resolve_author_name(req.author, user)
     owner_user_id, owner_auth_type = _resolve_owner_identity(user)
+    parent_post = None
+    if req.in_reply_to_id:
+        parent_post = get_post(topic_id, req.in_reply_to_id)
+        if not parent_post:
+            raise HTTPException(status_code=404, detail="Parent post not found")
     raw_delete_token = generate_post_delete_token()
     user_post = upsert_post(
-        make_post(
+        _apply_thread_metadata(topic_id, make_post(
             topic_id=topic_id,
             author=author_name,
             author_type="human",
@@ -1144,11 +1279,11 @@ async def mention_expert_endpoint(
             owner_user_id=owner_user_id,
             owner_auth_type=owner_auth_type,
             delete_token_hash=hash_post_delete_token(raw_delete_token),
-        )
+        ), parent_post)
     )
     user_post["delete_token"] = raw_delete_token
     reply_post = upsert_post(
-        make_post(
+        _apply_thread_metadata(topic_id, make_post(
             topic_id=topic_id,
             author=req.expert_name,
             author_type="agent",
@@ -1157,7 +1292,7 @@ async def mention_expert_endpoint(
             expert_label=expert.get("label", req.expert_name),
             in_reply_to_id=user_post["id"],
             status="pending",
-        )
+        ), user_post)
     )
     payload = {
         "topic_id": topic_id,
@@ -1170,10 +1305,10 @@ async def mention_expert_endpoint(
         "user_question": req.body,
         "reply_post_id": reply_post["id"],
         "reply_created_at": reply_post["created_at"],
-        "posts_context": _build_posts_context(list_posts(topic_id)),
+        "posts_context": _build_posts_context(list_all_posts(topic_id)),
     }
     asyncio.create_task(_run_expert_reply_background(topic_id, reply_post["id"], payload))
-    return MentionExpertResponse(user_post=user_post, reply_post_id=reply_post["id"], status="pending")
+    return MentionExpertResponse(user_post=user_post, reply_post=reply_post, reply_post_id=reply_post["id"], status="pending")
 
 
 @router.get("/topics/{topic_id}/posts/mention/{reply_post_id}")
@@ -1268,7 +1403,7 @@ async def start_discussion_endpoint(topic_id: str, req: StartDiscussionRequest):
         "allowed_tools": req.allowed_tools,
         "skill_list": req.skill_list if req.skill_list is not None else topic_config.get("skill_list", []),
         "mcp_server_ids": req.mcp_server_ids if req.mcp_server_ids is not None else topic_config.get("mcp_server_ids", []),
-        "posts_context": _build_posts_context(list_posts(topic_id)),
+        "posts_context": _build_posts_context(list_all_posts(topic_id)),
     }
     asyncio.create_task(_run_discussion_background(topic_id, payload))
     return {"status": "running", "result": None, "progress": None}

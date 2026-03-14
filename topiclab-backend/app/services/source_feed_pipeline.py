@@ -12,6 +12,8 @@ from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
+from app.services.http_client import get_shared_async_client
+
 @dataclass
 class SourceArticle:
     id: int
@@ -95,9 +97,9 @@ def _validate_topic_workspace(topic_id: str) -> Path:
 
 async def fetch_source_feed_articles(limit: int = 20, offset: int = 0) -> list[SourceArticle]:
     upstream_url = f"{get_information_collection_base_url()}/api/v1/articles"
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.get(upstream_url, params={"limit": limit, "offset": offset})
-        response.raise_for_status()
+    client = get_shared_async_client("source-feed")
+    response = await client.get(upstream_url, params={"limit": limit, "offset": offset}, timeout=15.0)
+    response.raise_for_status()
     payload = response.json()
     data = payload.get("data", {})
     raw_list = data.get("list", [])
@@ -106,9 +108,9 @@ async def fetch_source_feed_articles(limit: int = 20, offset: int = 0) -> list[S
 
 async def fetch_source_feed_article_detail(article_id: int) -> SourceArticle:
     upstream_url = f"{get_information_collection_base_url()}/api/v1/articles/{article_id}"
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        response = await client.get(upstream_url)
-        response.raise_for_status()
+    client = get_shared_async_client("source-feed")
+    response = await client.get(upstream_url, timeout=20.0)
+    response.raise_for_status()
     payload = response.json()
     data = payload.get("data")
     if not isinstance(data, dict):

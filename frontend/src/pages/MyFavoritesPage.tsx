@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import {
   FavoriteCategory,
+  FavoriteCategoryItemsPage,
   sourceFeedApi,
   SourceFeedArticle,
   TopicListItem,
@@ -16,12 +17,19 @@ import { toast } from '../utils/toast'
 
 type FavoriteTab = 'topics' | 'sources'
 
+function updateCategoryList(categories: FavoriteCategory[], updated: FavoriteCategory) {
+  return categories.map((item) => (item.id === updated.id ? { ...item, ...updated } : item))
+}
+
 export default function MyFavoritesPage() {
   const [tab, setTab] = useState<FavoriteTab>('topics')
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all')
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [topics, setTopics] = useState<TopicListItem[]>([])
   const [sourceArticles, setSourceArticles] = useState<SourceFeedArticle[]>([])
+  const [topicNextCursor, setTopicNextCursor] = useState<string | null>(null)
+  const [sourceNextCursor, setSourceNextCursor] = useState<string | null>(null)
   const [categories, setCategories] = useState<FavoriteCategory[]>([])
   const [pendingTopicLikeIds, setPendingTopicLikeIds] = useState<Set<string>>(new Set())
   const [pendingTopicFavoriteIds, setPendingTopicFavoriteIds] = useState<Set<string>>(new Set())
@@ -31,17 +39,39 @@ export default function MyFavoritesPage() {
   const [pendingSourceCategoryIds, setPendingSourceCategoryIds] = useState<Set<number>>(new Set())
   const token = tokenManager.get()
 
-  const loadFavorites = async () => {
-    setLoading(true)
-    try {
-      const res = await topicsApi.getFavorites()
-      setTopics(res.data.topics)
-      setSourceArticles(res.data.source_articles)
-      setCategories(res.data.categories)
-    } catch (err) {
-      handleApiError(err, '加载收藏失败')
-    } finally {
-      setLoading(false)
+  const activeCategory = selectedCategoryId === 'all'
+    ? null
+    : categories.find((item) => item.id === selectedCategoryId) ?? null
+
+  const loadCategories = async () => {
+    const res = await topicsApi.listFavoriteCategories()
+    setCategories(res.data.list)
+    return res.data.list
+  }
+
+  const loadItems = async (options?: { append?: boolean; explicitTab?: FavoriteTab; explicitCategoryId?: string }) => {
+    const currentTab = options?.explicitTab ?? tab
+    const currentCategoryId = options?.explicitCategoryId ?? selectedCategoryId
+    const append = options?.append ?? false
+    const cursor = currentTab === 'topics' ? topicNextCursor : sourceNextCursor
+    if (append && !cursor) {
+      return
+    }
+
+    const request = currentCategoryId === 'all'
+      ? topicsApi.getRecentFavorites(currentTab, { cursor: append ? cursor : undefined, limit: 20 })
+      : topicsApi.getFavoriteCategoryItems(currentCategoryId, currentTab, { cursor: append ? cursor : undefined, limit: 20 })
+
+    const res = await request
+    const payload = res.data as FavoriteCategoryItemsPage
+    if (currentTab === 'topics') {
+      const items = payload.items as TopicListItem[]
+      setTopics((prev) => (append ? [...prev, ...items] : items))
+      setTopicNextCursor(payload.next_cursor)
+    } else {
+      const items = payload.items as SourceFeedArticle[]
+      setSourceArticles((prev) => (append ? [...prev, ...items] : items))
+      setSourceNextCursor(payload.next_cursor)
     }
   }
 
@@ -49,47 +79,111 @@ export default function MyFavoritesPage() {
     if (!token) {
       return
     }
-    void loadFavorites()
+    let cancelled = false
+    const bootstrap = async () => {
+      setLoading(true)
+      try {
+        const loadedCategories = await loadCategories()
+        if (cancelled) {
+          return
+        }
+        if (selectedCategoryId !== 'all' && !loadedCategories.some((item) => item.id === selectedCategoryId)) {
+          setSelectedCategoryId('all')
+        }
+      } catch (err) {
+        handleApiError(err, '加载收藏失败')
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      }
+    }
+    void bootstrap()
+    return () => {
+      cancelled = true
+    }
   }, [token])
+
+  useEffect(() => {
+    if (!token) {
+      return
+    }
+    let cancelled = false
+    const syncVisibleItems = async () => {
+      setLoading(true)
+      try {
+        await loadItems({ explicitCategoryId: selectedCategoryId, explicitTab: tab })
+      } catch (err) {
+        if (!cancelled) {
+          handleApiError(err, '加载收藏失败')
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      }
+    }
+    void syncVisibleItems()
+    return () => {
+      cancelled = true
+    }
+  }, [token, selectedCategoryId, tab])
 
   if (!token) {
     return <Navigate to="/login" replace state={{ from: '/favorites' }} />
   }
 
-  const filteredTopics = useMemo(() => {
-    if (selectedCategoryId === 'all') return topics
-    return topics.filter((item) => item.favorite_category_ids?.includes(selectedCategoryId))
-  }, [topics, selectedCategoryId])
-
-  const filteredSourceArticles = useMemo(() => {
-    if (selectedCategoryId === 'all') return sourceArticles
-    return sourceArticles.filter((item) => item.favorite_category_ids?.includes(selectedCategoryId))
-  }, [sourceArticles, selectedCategoryId])
+  const currentTopicsCount = activeCategory ? activeCategory.topics_count : topics.length
+  const currentSourcesCount = activeCategory ? activeCategory.source_articles_count : sourceArticles.length
 
   const sections = useMemo(() => ([
     {
       id: 'topics' as const,
       label: '话题收藏',
       description: selectedCategoryId === 'all'
-        ? `已收藏 ${filteredTopics.length} 个话题`
-        : `该分类下 ${filteredTopics.length} 个话题`,
+        ? `已加载 ${topics.length} 个话题收藏`
+        : `该分类共 ${currentTopicsCount} 个话题`,
     },
     {
       id: 'sources' as const,
       label: '信源收藏',
       description: selectedCategoryId === 'all'
-        ? `已收藏 ${filteredSourceArticles.length} 条信源`
-        : `该分类下 ${filteredSourceArticles.length} 条信源`,
+        ? `已加载 ${sourceArticles.length} 条信源收藏`
+        : `该分类共 ${currentSourcesCount} 条信源`,
     },
-  ]), [filteredSourceArticles.length, filteredTopics.length, selectedCategoryId])
+  ]), [currentSourcesCount, currentTopicsCount, selectedCategoryId, sourceArticles.length, topics.length])
 
   const activeSection = sections.find((item) => item.id === tab) ?? sections[0]
-  const activeCategory = selectedCategoryId === 'all'
-    ? null
-    : categories.find((item) => item.id === selectedCategoryId) ?? null
 
-  const refreshAfterCategoryMutation = async () => {
-    await loadFavorites()
+  const refreshCategoriesOnly = async () => {
+    try {
+      await loadCategories()
+    } catch (err) {
+      handleApiError(err, '刷新收藏分类失败')
+    }
+  }
+
+  const refreshCurrentItems = async () => {
+    try {
+      await loadItems({ explicitCategoryId: selectedCategoryId, explicitTab: tab })
+    } catch (err) {
+      handleApiError(err, '刷新收藏列表失败')
+    }
+  }
+
+  const handleLoadMore = async () => {
+    const hasNextCursor = tab === 'topics' ? topicNextCursor : sourceNextCursor
+    if (!hasNextCursor || loadingMore) {
+      return
+    }
+    setLoadingMore(true)
+    try {
+      await loadItems({ append: true })
+    } catch (err) {
+      handleApiError(err, '加载更多收藏失败')
+    } finally {
+      setLoadingMore(false)
+    }
   }
 
   const handleShareTopic = async (topicId: string) => {
@@ -111,10 +205,22 @@ export default function MyFavoritesPage() {
   const handleLikeTopic = async (topic: TopicListItem) => {
     const nextEnabled = !(topic.interaction?.liked ?? false)
     setPendingTopicLikeIds(prev => new Set(prev).add(topic.id))
+    const previousInteraction = topic.interaction
+    setTopics(prev => prev.map(item => item.id === topic.id ? {
+      ...item,
+      interaction: {
+        likes_count: Math.max(0, (item.interaction?.likes_count ?? 0) + (nextEnabled ? 1 : -1)),
+        favorites_count: item.interaction?.favorites_count ?? 0,
+        shares_count: item.interaction?.shares_count ?? 0,
+        liked: nextEnabled,
+        favorited: item.interaction?.favorited ?? false,
+      },
+    } : item))
     try {
       const res = await topicsApi.like(topic.id, nextEnabled)
       setTopics(prev => prev.map(item => item.id === topic.id ? { ...item, interaction: res.data } : item))
     } catch (err) {
+      setTopics(prev => prev.map(item => item.id === topic.id ? { ...item, interaction: previousInteraction } : item))
       handleApiError(err, nextEnabled ? '话题点赞失败' : '取消话题点赞失败')
     } finally {
       setPendingTopicLikeIds(prev => {
@@ -128,10 +234,27 @@ export default function MyFavoritesPage() {
   const handleFavoriteTopic = async (topic: TopicListItem) => {
     const nextEnabled = !(topic.interaction?.favorited ?? false)
     setPendingTopicFavoriteIds(prev => new Set(prev).add(topic.id))
+    const previousInteraction = topic.interaction
+    setTopics(prev => prev.map(item => item.id === topic.id ? {
+      ...item,
+      interaction: {
+        likes_count: item.interaction?.likes_count ?? 0,
+        favorites_count: Math.max(0, (item.interaction?.favorites_count ?? 0) + (nextEnabled ? 1 : -1)),
+        shares_count: item.interaction?.shares_count ?? 0,
+        liked: item.interaction?.liked ?? false,
+        favorited: nextEnabled,
+      },
+    } : item))
     try {
-      await topicsApi.favorite(topic.id, nextEnabled)
-      await loadFavorites()
+      const res = await topicsApi.favorite(topic.id, nextEnabled)
+      if (!nextEnabled) {
+        setTopics(prev => prev.filter(item => item.id !== topic.id))
+        await refreshCategoriesOnly()
+      } else {
+        setTopics(prev => prev.map(item => item.id === topic.id ? { ...item, interaction: res.data } : item))
+      }
     } catch (err) {
+      setTopics(prev => prev.map(item => item.id === topic.id ? { ...item, interaction: previousInteraction } : item))
       handleApiError(err, nextEnabled ? '话题收藏失败' : '取消话题收藏失败')
     } finally {
       setPendingTopicFavoriteIds(prev => {
@@ -170,10 +293,19 @@ export default function MyFavoritesPage() {
   const handleLikeSource = async (article: SourceFeedArticle) => {
     const nextEnabled = !(article.interaction?.liked ?? false)
     setPendingSourceLikeIds(prev => new Set(prev).add(article.id))
+    const previousInteraction = article.interaction
+    updateArticleInteraction(article.id, {
+      likes_count: Math.max(0, (article.interaction?.likes_count ?? 0) + (nextEnabled ? 1 : -1)),
+      shares_count: article.interaction?.shares_count ?? 0,
+      favorites_count: article.interaction?.favorites_count ?? 0,
+      liked: nextEnabled,
+      favorited: article.interaction?.favorited ?? false,
+    })
     try {
       const res = await sourceFeedApi.like(article.id, buildSourceActionPayload(article, nextEnabled))
       updateArticleInteraction(article.id, res.data)
     } catch (err) {
+      updateArticleInteraction(article.id, previousInteraction)
       handleApiError(err, nextEnabled ? '信源点赞失败' : '取消信源点赞失败')
     } finally {
       setPendingSourceLikeIds(prev => {
@@ -187,10 +319,24 @@ export default function MyFavoritesPage() {
   const handleFavoriteSource = async (article: SourceFeedArticle) => {
     const nextEnabled = !(article.interaction?.favorited ?? false)
     setPendingSourceFavoriteIds(prev => new Set(prev).add(article.id))
+    const previousInteraction = article.interaction
+    updateArticleInteraction(article.id, {
+      likes_count: article.interaction?.likes_count ?? 0,
+      shares_count: article.interaction?.shares_count ?? 0,
+      favorites_count: Math.max(0, (article.interaction?.favorites_count ?? 0) + (nextEnabled ? 1 : -1)),
+      liked: article.interaction?.liked ?? false,
+      favorited: nextEnabled,
+    })
     try {
-      await sourceFeedApi.favorite(article.id, buildSourceActionPayload(article, nextEnabled))
-      await loadFavorites()
+      const res = await sourceFeedApi.favorite(article.id, buildSourceActionPayload(article, nextEnabled))
+      if (!nextEnabled) {
+        setSourceArticles(prev => prev.filter(item => item.id !== article.id))
+        await refreshCategoriesOnly()
+      } else {
+        updateArticleInteraction(article.id, res.data)
+      }
     } catch (err) {
+      updateArticleInteraction(article.id, previousInteraction)
       handleApiError(err, nextEnabled ? '信源收藏失败' : '取消信源收藏失败')
     } finally {
       setPendingSourceFavoriteIds(prev => {
@@ -218,12 +364,27 @@ export default function MyFavoritesPage() {
   ) => {
     try {
       if (type === 'topics') {
-        await topicsApi.classifyFavorites({ category_name: name, topic_ids: [(item as TopicListItem).id] })
+        const category = (await topicsApi.classifyFavorites({ category_name: name, topic_ids: [(item as TopicListItem).id] })).data
+        setCategories(prev => prev.some((entry) => entry.id === category.id) ? updateCategoryList(prev, category) : [...prev, category])
+        setTopics(prev => prev.map(entry => entry.id === (item as TopicListItem).id ? {
+          ...entry,
+          favorite_category_ids: [...new Set([...(entry.favorite_category_ids ?? []), category.id])],
+          favorite_categories: [...(entry.favorite_categories ?? []), { id: category.id, name: category.name }],
+        } : entry))
       } else {
-        await topicsApi.classifyFavorites({ category_name: name, article_ids: [(item as SourceFeedArticle).id] })
+        const category = (await topicsApi.classifyFavorites({ category_name: name, article_ids: [(item as SourceFeedArticle).id] })).data
+        setCategories(prev => prev.some((entry) => entry.id === category.id) ? updateCategoryList(prev, category) : [...prev, category])
+        setSourceArticles(prev => prev.map(entry => entry.id === (item as SourceFeedArticle).id ? {
+          ...entry,
+          favorite_category_ids: [...new Set([...(entry.favorite_category_ids ?? []), category.id])],
+          favorite_categories: [...(entry.favorite_categories ?? []), { id: category.id, name: category.name }],
+        } : entry))
       }
       toast.success('已创建收藏分类')
-      await refreshAfterCategoryMutation()
+      await refreshCategoriesOnly()
+      if (selectedCategoryId !== 'all') {
+        await refreshCurrentItems()
+      }
     } catch (err) {
       handleApiError(err, '创建收藏分类失败')
     }
@@ -232,8 +393,16 @@ export default function MyFavoritesPage() {
   const handleAssignTopicCategory = async (topic: TopicListItem, categoryId: string) => {
     setPendingTopicCategoryIds(prev => new Set(prev).add(topic.id))
     try {
-      await topicsApi.assignTopicToFavoriteCategory(categoryId, topic.id)
-      await refreshAfterCategoryMutation()
+      const category = (await topicsApi.assignTopicToFavoriteCategory(categoryId, topic.id)).data
+      setCategories(prev => updateCategoryList(prev, category))
+      setTopics(prev => prev.map(item => item.id === topic.id ? {
+        ...item,
+        favorite_category_ids: [...new Set([...(item.favorite_category_ids ?? []), category.id])],
+        favorite_categories: [...(item.favorite_categories ?? []).filter(entry => entry.id !== category.id), { id: category.id, name: category.name }],
+      } : item))
+      if (selectedCategoryId !== 'all' && selectedCategoryId !== categoryId) {
+        await refreshCurrentItems()
+      }
     } catch (err) {
       handleApiError(err, '话题分类失败')
     } finally {
@@ -248,8 +417,17 @@ export default function MyFavoritesPage() {
   const handleUnassignTopicCategory = async (topic: TopicListItem, categoryId: string) => {
     setPendingTopicCategoryIds(prev => new Set(prev).add(topic.id))
     try {
-      await topicsApi.unassignTopicFromFavoriteCategory(categoryId, topic.id)
-      await refreshAfterCategoryMutation()
+      const category = (await topicsApi.unassignTopicFromFavoriteCategory(categoryId, topic.id)).data
+      setCategories(prev => updateCategoryList(prev, category))
+      if (selectedCategoryId === categoryId) {
+        setTopics(prev => prev.filter(item => item.id !== topic.id))
+      } else {
+        setTopics(prev => prev.map(item => item.id === topic.id ? {
+          ...item,
+          favorite_category_ids: (item.favorite_category_ids ?? []).filter(id => id !== categoryId),
+          favorite_categories: (item.favorite_categories ?? []).filter(entry => entry.id !== categoryId),
+        } : item))
+      }
     } catch (err) {
       handleApiError(err, '移出话题分类失败')
     } finally {
@@ -264,8 +442,16 @@ export default function MyFavoritesPage() {
   const handleAssignSourceCategory = async (article: SourceFeedArticle, categoryId: string) => {
     setPendingSourceCategoryIds(prev => new Set(prev).add(article.id))
     try {
-      await topicsApi.assignSourceToFavoriteCategory(categoryId, article.id)
-      await refreshAfterCategoryMutation()
+      const category = (await topicsApi.assignSourceToFavoriteCategory(categoryId, article.id)).data
+      setCategories(prev => updateCategoryList(prev, category))
+      setSourceArticles(prev => prev.map(item => item.id === article.id ? {
+        ...item,
+        favorite_category_ids: [...new Set([...(item.favorite_category_ids ?? []), category.id])],
+        favorite_categories: [...(item.favorite_categories ?? []).filter(entry => entry.id !== category.id), { id: category.id, name: category.name }],
+      } : item))
+      if (selectedCategoryId !== 'all' && selectedCategoryId !== categoryId) {
+        await refreshCurrentItems()
+      }
     } catch (err) {
       handleApiError(err, '信源分类失败')
     } finally {
@@ -280,8 +466,17 @@ export default function MyFavoritesPage() {
   const handleUnassignSourceCategory = async (article: SourceFeedArticle, categoryId: string) => {
     setPendingSourceCategoryIds(prev => new Set(prev).add(article.id))
     try {
-      await topicsApi.unassignSourceFromFavoriteCategory(categoryId, article.id)
-      await refreshAfterCategoryMutation()
+      const category = (await topicsApi.unassignSourceFromFavoriteCategory(categoryId, article.id)).data
+      setCategories(prev => updateCategoryList(prev, category))
+      if (selectedCategoryId === categoryId) {
+        setSourceArticles(prev => prev.filter(item => item.id !== article.id))
+      } else {
+        setSourceArticles(prev => prev.map(item => item.id === article.id ? {
+          ...item,
+          favorite_category_ids: (item.favorite_category_ids ?? []).filter(id => id !== categoryId),
+          favorite_categories: (item.favorite_categories ?? []).filter(entry => entry.id !== categoryId),
+        } : item))
+      }
     } catch (err) {
       handleApiError(err, '移出信源分类失败')
     } finally {
@@ -292,6 +487,10 @@ export default function MyFavoritesPage() {
       })
     }
   }
+
+  const visibleTopics = topics
+  const visibleSources = sourceArticles
+  const hasMore = tab === 'topics' ? Boolean(topicNextCursor) : Boolean(sourceNextCursor)
 
   return (
     <LibraryPageLayout title="我的收藏">
@@ -349,7 +548,7 @@ export default function MyFavoritesPage() {
           <div className="md:hidden absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-white to-transparent pointer-events-none" aria-hidden />
         </div>
 
-        <div className="flex-1 min-w-0 pt-5 md:pt-0">
+        <div className="flex-1 min-w-0 pt-5 pb-20 md:pt-0 md:pb-28">
           <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-gray-600">{activeSection.description}</p>
             <div className="flex flex-wrap gap-2 md:hidden">
@@ -390,7 +589,7 @@ export default function MyFavoritesPage() {
 
           {loading ? <p className="font-serif text-gray-500">加载中...</p> : null}
 
-          {!loading && tab === 'topics' && filteredTopics.length === 0 ? (
+          {!loading && tab === 'topics' && visibleTopics.length === 0 ? (
             <div className="rounded-[20px] border border-dashed border-gray-200 bg-gray-50 px-5 py-8">
               <p className="font-serif text-gray-700">
                 {selectedCategoryId === 'all' ? '还没有收藏话题。' : '这个分类里还没有话题。'}
@@ -406,7 +605,7 @@ export default function MyFavoritesPage() {
             </div>
           ) : null}
 
-          {!loading && tab === 'sources' && filteredSourceArticles.length === 0 ? (
+          {!loading && tab === 'sources' && visibleSources.length === 0 ? (
             <div className="rounded-[20px] border border-dashed border-gray-200 bg-gray-50 px-5 py-8">
               <p className="font-serif text-gray-700">
                 {selectedCategoryId === 'all' ? '还没有收藏信源。' : '这个分类里还没有信源。'}
@@ -422,9 +621,9 @@ export default function MyFavoritesPage() {
             </div>
           ) : null}
 
-          {!loading && tab === 'topics' && filteredTopics.length > 0 ? (
+          {!loading && tab === 'topics' && visibleTopics.length > 0 ? (
             <div className="grid gap-4">
-              {filteredTopics.map((topic) => (
+              {visibleTopics.map((topic) => (
                 <TopicCard
                   key={topic.id}
                   topic={topic}
@@ -443,9 +642,9 @@ export default function MyFavoritesPage() {
             </div>
           ) : null}
 
-          {!loading && tab === 'sources' && filteredSourceArticles.length > 0 ? (
+          {!loading && tab === 'sources' && visibleSources.length > 0 ? (
             <div className="grid gap-4 md:grid-cols-2">
-              {filteredSourceArticles.map((article) => (
+              {visibleSources.map((article) => (
                 <SourceArticleCard
                   key={article.id}
                   article={article}
@@ -461,6 +660,19 @@ export default function MyFavoritesPage() {
                   onCreateCategory={(item, name) => createCategoryAndAssign(name, item, 'sources')}
                 />
               ))}
+            </div>
+          ) : null}
+
+          {!loading && hasMore ? (
+            <div className="mt-5">
+              <button
+                type="button"
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                className="rounded-full border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 hover:border-gray-300 hover:text-black disabled:opacity-50"
+              >
+                {loadingMore ? '加载中...' : '加载更多'}
+              </button>
             </div>
           ) : null}
         </div>

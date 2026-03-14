@@ -173,14 +173,23 @@ def test_topic_create_list_and_posts(client):
         json={"author": "alice", "body": "我支持把话题列表里的管理能力补齐，方便管理员直接处理内容。"},
     )
     assert post_resp.status_code == 201
-    assert post_resp.json()["delete_token"].startswith("ptok_")
+    post_payload = post_resp.json()
+    assert post_payload["post"]["delete_token"].startswith("ptok_")
     assert not topic_workspace.exists()
     listed_posts = client.get(f"/topics/{topic_id}/posts")
     assert listed_posts.status_code == 200
-    assert listed_posts.json()[0]["body"] == "我支持把话题列表里的管理能力补齐，方便管理员直接处理内容。"
+    assert listed_posts.json()["items"][0]["body"] == "我支持把话题列表里的管理能力补齐，方便管理员直接处理内容。"
+
+    bundle_resp = client.get(f"/topics/{topic_id}/bundle")
+    assert bundle_resp.status_code == 200
+    bundle = bundle_resp.json()
+    assert bundle["topic"]["id"] == topic_id
+    assert len(bundle["posts"]["items"]) == 1
+    assert bundle["posts"]["items"][0]["topic_id"] == topic_id
+    assert bundle["experts"][0]["name"] == "physicist"
 
     delete_resp = client.delete(
-        f"/topics/{topic_id}/posts/{post_resp.json()['id']}",
+        f"/topics/{topic_id}/posts/{post_payload['post']['id']}",
         headers={"Authorization": f"Bearer {admin['token']}"},
     )
     assert delete_resp.status_code == 200, delete_resp.text
@@ -234,7 +243,8 @@ def test_discussion_and_mention_complete_via_executor(client):
     while time.time() < deadline:
         latest_status = client.get(f"/topics/{topic_id}/discussion/status")
         assert latest_status.status_code == 200
-        if latest_status.json()["status"] == "completed":
+        payload = latest_status.json()
+        if payload["status"] == "completed" and payload["result"]["discussion_summary"]:
             break
         time.sleep(0.1)
     assert latest_status is not None
@@ -255,21 +265,21 @@ def test_post_delete_permissions_and_subtree_cascade(client):
         headers={"Authorization": f"Bearer {owner['token']}"},
     )
     assert root_resp.status_code == 201, root_resp.text
-    root = root_resp.json()
+    root = root_resp.json()["post"]
     child_resp = client.post(
         f"/topics/{topic_id}/posts",
         json={"author": "owner", "body": "这是二级回复，用来验证嵌套回复关系会被完整识别。", "in_reply_to_id": root["id"]},
         headers={"Authorization": f"Bearer {owner['token']}"},
     )
     assert child_resp.status_code == 201, child_resp.text
-    child = child_resp.json()
+    child = child_resp.json()["post"]
     grandchild_resp = client.post(
         f"/topics/{topic_id}/posts",
         json={"author": "owner", "body": "这是三级回复，用来验证更深层的回复链同样能被追踪。", "in_reply_to_id": child["id"]},
         headers={"Authorization": f"Bearer {owner['token']}"},
     )
     assert grandchild_resp.status_code == 201, grandchild_resp.text
-    grandchild = grandchild_resp.json()
+    grandchild = grandchild_resp.json()["post"]
 
     forbidden = client.delete(
         f"/topics/{topic_id}/posts/{root['id']}",
@@ -283,7 +293,7 @@ def test_post_delete_permissions_and_subtree_cascade(client):
     )
     assert deleted.status_code == 200, deleted.text
     assert deleted.json()["deleted_count"] == 3
-    assert client.get(f"/topics/{topic_id}/posts").json() == []
+    assert client.get(f"/topics/{topic_id}/posts").json()["items"] == []
 
     admin_root_resp = client.post(
         f"/topics/{topic_id}/posts",
@@ -291,14 +301,14 @@ def test_post_delete_permissions_and_subtree_cascade(client):
         headers={"Authorization": f"Bearer {owner['token']}"},
     )
     assert admin_root_resp.status_code == 201, admin_root_resp.text
-    admin_root = admin_root_resp.json()
+    admin_root = admin_root_resp.json()["post"]
     admin_child_resp = client.post(
         f"/topics/{topic_id}/posts",
         json={"author": "owner", "body": "这是对应的子级回复，用来验证管理员对嵌套结构的处理。", "in_reply_to_id": admin_root["id"]},
         headers={"Authorization": f"Bearer {owner['token']}"},
     )
     assert admin_child_resp.status_code == 201, admin_child_resp.text
-    admin_child = admin_child_resp.json()
+    admin_child = admin_child_resp.json()["post"]
 
     admin_delete = client.delete(
         f"/topics/{topic_id}/posts/{admin_root['id']}",
@@ -306,7 +316,7 @@ def test_post_delete_permissions_and_subtree_cascade(client):
     )
     assert admin_delete.status_code == 200, admin_delete.text
     assert admin_delete.json()["deleted_count"] == 2
-    assert client.get(f"/topics/{topic_id}/posts").json() == []
+    assert client.get(f"/topics/{topic_id}/posts").json()["items"] == []
 
 
 def test_topic_delete_permissions(client):
@@ -455,7 +465,8 @@ def test_discussion_generated_image_is_served_from_database_after_workspace_file
     while time.time() < deadline:
         latest_status = client.get(f"/topics/{topic_id}/discussion/status")
         assert latest_status.status_code == 200
-        if latest_status.json()["status"] == "completed":
+        payload = latest_status.json()
+        if payload["status"] == "completed" and payload["result"]["discussion_summary"]:
             break
         time.sleep(0.1)
     assert latest_status is not None
@@ -485,13 +496,14 @@ def test_api_v1_topics_alias_and_home_payload(client, monkeypatch):
         json={"author": "alice", "body": "这是一条通过 /api/v1 发布的完整讨论帖子，用来验证发帖链路。"},
     )
     assert post.status_code == 201, post.text
-    assert post.json()["body"] == "这是一条通过 /api/v1 发布的完整讨论帖子，用来验证发帖链路。"
+    post_payload = post.json()
+    assert post_payload["post"]["body"] == "这是一条通过 /api/v1 发布的完整讨论帖子，用来验证发帖链路。"
     reply = client.post(
         f"/api/v1/topics/{topic_id}/posts",
         json={
             "author": "bob",
             "body": "这是一条回帖，用来验证统计。",
-            "in_reply_to_id": post.json()["id"],
+            "in_reply_to_id": post_payload["post"]["id"],
         },
     )
     assert reply.status_code == 201, reply.text
@@ -515,7 +527,7 @@ def test_api_v1_topics_alias_and_home_payload(client, monkeypatch):
                 VALUES (:post_id, :topic_id, :user_id, :auth_type, TRUE)
                 """
             ),
-            {"post_id": post.json()["id"], "topic_id": topic_id, "user_id": 1002, "auth_type": "test"},
+            {"post_id": post_payload["post"]["id"], "topic_id": topic_id, "user_id": 1002, "auth_type": "test"},
         )
 
     home = client.get("/api/v1/home")
@@ -646,10 +658,11 @@ def test_openclaw_key_can_bind_user_identity_and_render_personal_skill(client):
         json={"author": "spoofed-author", "body": "这条帖子应该归属 openclaw-user"},
     )
     assert post_resp.status_code == 201, post_resp.text
-    assert post_resp.json()["author"] == "openclaw-user"
+    created_post = post_resp.json()["post"]
+    assert created_post["author"] == "openclaw-user"
 
     delete_resp = client.delete(
-        f"/api/v1/topics/{topic_id}/posts/{post_resp.json()['id']}",
+        f"/api/v1/topics/{topic_id}/posts/{created_post['id']}",
         headers={"Authorization": f"Bearer {raw_key}"},
     )
     assert delete_resp.status_code == 200, delete_resp.text
@@ -657,4 +670,171 @@ def test_openclaw_key_can_bind_user_identity_and_render_personal_skill(client):
 
     posts_after_delete = client.get(f"/api/v1/topics/{topic_id}/posts")
     assert posts_after_delete.status_code == 200, posts_after_delete.text
-    assert posts_after_delete.json() == []
+    assert posts_after_delete.json()["items"] == []
+
+
+def test_posts_pagination_and_reply_thread_endpoints(client):
+    topic = client.post("/topics", json={"title": "帖子分页", "body": "验证顶层分页与回复分页"}).json()
+    topic_id = topic["id"]
+
+    root_one = client.post(
+        f"/topics/{topic_id}/posts",
+        json={"author": "alice", "body": "这是第一条根帖，用来验证顶层分页接口按时间顺序返回帖子。"},
+    )
+    assert root_one.status_code == 201, root_one.text
+    root_one = root_one.json()["post"]
+    first_reply = client.post(
+        f"/topics/{topic_id}/posts",
+        json={"author": "bob", "body": "这是根帖一的第一条回复，用来验证回复分页接口。", "in_reply_to_id": root_one["id"]},
+    )
+    assert first_reply.status_code == 201, first_reply.text
+    second_reply = client.post(
+        f"/topics/{topic_id}/posts",
+        json={"author": "carol", "body": "这是根帖一的第二条回复，用来验证回复游标继续向后推进。", "in_reply_to_id": root_one["id"]},
+    )
+    assert second_reply.status_code == 201, second_reply.text
+    root_two = client.post(
+        f"/topics/{topic_id}/posts",
+        json={"author": "dave", "body": "这是第二条根帖，用来验证顶层帖子第二页能够被正确读取。"},
+    )
+    assert root_two.status_code == 201, root_two.text
+    root_two = root_two.json()["post"]
+
+    first_page = client.get(f"/topics/{topic_id}/posts?limit=1&preview_replies=1")
+    assert first_page.status_code == 200, first_page.text
+    first_payload = first_page.json()
+    assert len(first_payload["items"]) == 1
+    assert first_payload["items"][0]["id"] == root_one["id"]
+    assert first_payload["items"][0]["reply_count"] == 2
+    assert len(first_payload["items"][0]["latest_replies"]) == 1
+    assert first_payload["next_cursor"]
+
+    second_page = client.get(f"/topics/{topic_id}/posts?limit=1&cursor={first_payload['next_cursor']}")
+    assert second_page.status_code == 200, second_page.text
+    second_payload = second_page.json()
+    assert len(second_payload["items"]) == 1
+    assert second_payload["items"][0]["id"] == root_two["id"]
+    assert second_payload["next_cursor"] is None
+
+    replies = client.get(f"/topics/{topic_id}/posts/{root_one['id']}/replies?limit=1")
+    assert replies.status_code == 200, replies.text
+    replies_payload = replies.json()
+    assert replies_payload["parent_post_id"] == root_one["id"]
+    assert len(replies_payload["items"]) == 1
+    assert replies_payload["next_cursor"]
+
+    thread = client.get(f"/topics/{topic_id}/posts/{root_one['id']}/thread")
+    assert thread.status_code == 200, thread.text
+    assert [item["id"] for item in thread.json()["items"]][0] == root_one["id"]
+    assert len(thread.json()["items"]) == 3
+
+
+def test_favorite_category_items_and_recent_favorites_are_paged(client):
+    user = register_and_login(client, phone="13800000011", username="favorite-user")
+    headers = {"Authorization": f"Bearer {user['token']}"}
+
+    topic_one = client.post("/topics", json={"title": "收藏一", "body": "正文一"}, headers=headers).json()
+    topic_two = client.post("/topics", json={"title": "收藏二", "body": "正文二"}, headers=headers).json()
+
+    assert client.post(f"/topics/{topic_one['id']}/favorite", json={"enabled": True}, headers=headers).status_code == 200
+    assert client.post(f"/topics/{topic_two['id']}/favorite", json={"enabled": True}, headers=headers).status_code == 200
+    article_payload = {
+        "enabled": True,
+        "title": "测试信源",
+        "source_feed_name": "单测源",
+        "source_type": "rss",
+        "url": "https://example.com/article-1",
+        "pic_url": None,
+        "description": "描述",
+        "publish_time": "2026-03-14T00:00:00+00:00",
+        "created_at": "2026-03-14T00:00:00+00:00",
+    }
+    assert client.post("/source-feed/articles/101/favorite", json=article_payload, headers=headers).status_code == 200
+
+    category_resp = client.post(
+        "/api/v1/me/favorite-categories",
+        json={"name": f"专题归档-{int(time.time() * 1000)}", "description": "把重点收藏内容归拢到一个分类里。"},
+        headers=headers,
+    )
+    assert category_resp.status_code == 201, category_resp.text
+    category = category_resp.json()
+    category_id = category["id"]
+    assign_topic = client.post(f"/api/v1/me/favorite-categories/{category_id}/topics/{topic_one['id']}", headers=headers)
+    assert assign_topic.status_code == 200, assign_topic.text
+    assign_source = client.post(f"/api/v1/me/favorite-categories/{category_id}/source-articles/101", headers=headers)
+    assert assign_source.status_code == 200, assign_source.text
+
+    categories = client.get("/api/v1/me/favorite-categories", headers=headers)
+    assert categories.status_code == 200, categories.text
+    assert categories.json()["list"][0]["topics_count"] == 1
+    assert categories.json()["list"][0]["source_articles_count"] == 1
+
+    category_topics = client.get(f"/api/v1/me/favorite-categories/{category_id}/items?type=topics&limit=10", headers=headers)
+    assert category_topics.status_code == 200, category_topics.text
+    assert [item["id"] for item in category_topics.json()["items"]] == [topic_one["id"]]
+
+    category_sources = client.get(f"/api/v1/me/favorite-categories/{category_id}/items?type=sources&limit=10", headers=headers)
+    assert category_sources.status_code == 200, category_sources.text
+    assert [item["id"] for item in category_sources.json()["items"]] == [101]
+
+    recent_topics = client.get("/api/v1/me/favorites/recent?type=topics&limit=1", headers=headers)
+    assert recent_topics.status_code == 200, recent_topics.text
+    assert len(recent_topics.json()["items"]) == 1
+    assert recent_topics.json()["next_cursor"]
+
+    recent_sources = client.get("/api/v1/me/favorites/recent?type=sources&limit=10", headers=headers)
+    assert recent_sources.status_code == 200, recent_sources.text
+    assert [item["id"] for item in recent_sources.json()["items"]] == [101]
+
+    summary = client.get(f"/api/v1/me/favorite-categories/{category_id}/summary-payload", headers=headers)
+    assert summary.status_code == 200, summary.text
+    assert summary.json()["category"]["id"] == category_id
+    assert [item["id"] for item in summary.json()["topics"]] == [topic_one["id"]]
+    assert [item["id"] for item in summary.json()["source_articles"]] == [101]
+
+
+def test_write_time_interaction_counters_are_returned_directly(client):
+    user = register_and_login(client, phone="13800000012", username="counter-user")
+    headers = {"Authorization": f"Bearer {user['token']}"}
+
+    topic = client.post("/topics", json={"title": "计数测试", "body": "正文"}, headers=headers).json()
+    topic_id = topic["id"]
+    created_post = client.post(
+        f"/topics/{topic_id}/posts",
+        json={"author": "counter-user", "body": "这是根帖，用来验证帖子互动计数会在写入时直接维护。"},
+        headers=headers,
+    )
+    assert created_post.status_code == 201, created_post.text
+    created_post = created_post.json()["post"]
+    reply = client.post(
+        f"/topics/{topic_id}/posts",
+        json={"author": "counter-user", "body": "这是回复，用来验证父帖 reply_count 在写入时直接递增。", "in_reply_to_id": created_post["id"]},
+        headers=headers,
+    )
+    assert reply.status_code == 201, reply.text
+
+    liked_topic = client.post(f"/topics/{topic_id}/like", json={"enabled": True}, headers=headers)
+    favorited_topic = client.post(f"/topics/{topic_id}/favorite", json={"enabled": True}, headers=headers)
+    shared_topic = client.post(f"/topics/{topic_id}/share", headers=headers)
+    liked_post = client.post(f"/topics/{topic_id}/posts/{created_post['id']}/like", json={"enabled": True}, headers=headers)
+    shared_post = client.post(f"/topics/{topic_id}/posts/{created_post['id']}/share", headers=headers)
+
+    assert liked_topic.status_code == 200
+    assert favorited_topic.status_code == 200
+    assert shared_topic.status_code == 200
+    assert liked_post.status_code == 200
+    assert shared_post.status_code == 200
+
+    topic_detail = client.get(f"/topics/{topic_id}", headers=headers)
+    assert topic_detail.status_code == 200, topic_detail.text
+    assert topic_detail.json()["posts_count"] == 2
+    assert topic_detail.json()["interaction"]["likes_count"] == 1
+    assert topic_detail.json()["interaction"]["favorites_count"] == 1
+    assert topic_detail.json()["interaction"]["shares_count"] == 1
+
+    paged_posts = client.get(f"/topics/{topic_id}/posts", headers=headers)
+    assert paged_posts.status_code == 200, paged_posts.text
+    root_post = paged_posts.json()["items"][0]
+    assert root_post["reply_count"] == 1
+    assert root_post["interaction"]["likes_count"] == 1
+    assert root_post["interaction"]["shares_count"] == 1

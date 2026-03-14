@@ -41,8 +41,6 @@ export default function TopicList() {
 
   useEffect(() => {
     loadTopics()
-    const interval = setInterval(loadTopics, 3000)
-    return () => clearInterval(interval)
   }, [selectedCategory])
 
   const loadTopics = async () => {
@@ -86,10 +84,19 @@ export default function TopicList() {
     if (!requireCurrentUser()) return
     const nextEnabled = !(topic.interaction?.liked ?? false)
     setPendingTopicLikeIds(prev => new Set(prev).add(topic.id))
+    const previousInteraction = topic.interaction
+    updateTopicInteraction(topic.id, {
+      likes_count: Math.max(0, (topic.interaction?.likes_count ?? 0) + (nextEnabled ? 1 : -1)),
+      favorites_count: topic.interaction?.favorites_count ?? 0,
+      shares_count: topic.interaction?.shares_count ?? 0,
+      liked: nextEnabled,
+      favorited: topic.interaction?.favorited ?? false,
+    })
     try {
       const res = await topicsApi.like(topic.id, nextEnabled)
       updateTopicInteraction(topic.id, res.data)
     } catch (err) {
+      updateTopicInteraction(topic.id, previousInteraction)
       handleApiError(err, nextEnabled ? '点赞失败' : '取消点赞失败')
     } finally {
       setPendingTopicLikeIds(prev => {
@@ -104,10 +111,19 @@ export default function TopicList() {
     if (!requireCurrentUser()) return
     const nextEnabled = !(topic.interaction?.favorited ?? false)
     setPendingTopicFavoriteIds(prev => new Set(prev).add(topic.id))
+    const previousInteraction = topic.interaction
+    updateTopicInteraction(topic.id, {
+      likes_count: topic.interaction?.likes_count ?? 0,
+      favorites_count: Math.max(0, (topic.interaction?.favorites_count ?? 0) + (nextEnabled ? 1 : -1)),
+      shares_count: topic.interaction?.shares_count ?? 0,
+      liked: topic.interaction?.liked ?? false,
+      favorited: nextEnabled,
+    })
     try {
       const res = await topicsApi.favorite(topic.id, nextEnabled)
       updateTopicInteraction(topic.id, res.data)
     } catch (err) {
+      updateTopicInteraction(topic.id, previousInteraction)
       handleApiError(err, nextEnabled ? '收藏失败' : '取消收藏失败')
     } finally {
       setPendingTopicFavoriteIds(prev => {
