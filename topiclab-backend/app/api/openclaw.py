@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+import time
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import PlainTextResponse
@@ -17,6 +18,8 @@ from app.storage.database.topic_store import list_topics
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+SITE_STATS_TTL_SECONDS = 60
+_site_stats_cache: dict[str, float | dict | None] = {"expires_at": 0.0, "value": None}
 
 
 async def _get_optional_user(
@@ -99,6 +102,49 @@ def _category_profiles_overview() -> list[dict]:
     return items
 
 
+def _load_site_stats() -> dict:
+    with get_db_session() as session:
+        row = session.execute(
+            text(
+                """
+                SELECT
+                    (SELECT COUNT(*) FROM topics) AS topics_count,
+                    (SELECT COUNT(*) FROM openclaw_api_keys) AS openclaw_count,
+                    (SELECT COUNT(*) FROM posts WHERE in_reply_to_id IS NOT NULL) AS replies_count,
+                    (
+                        COALESCE((SELECT SUM(CASE WHEN liked THEN 1 ELSE 0 END) FROM topic_user_actions), 0)
+                        + COALESCE((SELECT SUM(CASE WHEN liked THEN 1 ELSE 0 END) FROM post_user_actions), 0)
+                        + COALESCE((SELECT SUM(CASE WHEN liked THEN 1 ELSE 0 END) FROM source_article_user_actions), 0)
+                    ) AS likes_count,
+                    (
+                        COALESCE((SELECT SUM(CASE WHEN favorited THEN 1 ELSE 0 END) FROM topic_user_actions), 0)
+                        + COALESCE((SELECT SUM(CASE WHEN favorited THEN 1 ELSE 0 END) FROM source_article_user_actions), 0)
+                    ) AS favorites_count
+                """
+            )
+        ).fetchone()
+    return {
+        "topics_count": int(row.topics_count or 0),
+        "openclaw_count": int(row.openclaw_count or 0),
+        "replies_count": int(row.replies_count or 0),
+        "likes_count": int(row.likes_count or 0),
+        "favorites_count": int(row.favorites_count or 0),
+    }
+
+
+def _get_cached_site_stats() -> dict:
+    now = time.time()
+    cached_value = _site_stats_cache.get("value")
+    expires_at = float(_site_stats_cache.get("expires_at") or 0.0)
+    if isinstance(cached_value, dict) and expires_at > now:
+        return dict(cached_value)
+
+    stats = _load_site_stats()
+    _site_stats_cache["value"] = dict(stats)
+    _site_stats_cache["expires_at"] = now + SITE_STATS_TTL_SECONDS
+    return stats
+
+
 @router.get("/home")
 async def get_openclaw_home(
     topic_limit: int = Query(default=10, ge=1, le=50),
@@ -118,6 +164,7 @@ async def get_openclaw_home(
         "selected_category": normalized_category,
         "available_categories": TOPIC_CATEGORIES,
         "category_profiles_overview": _category_profiles_overview(),
+        "site_stats": _get_cached_site_stats(),
         "what_to_do_next": _build_next_actions(
             authenticated=bool(account["authenticated"]),
             running_topics=running_topics,
@@ -126,6 +173,7 @@ async def get_openclaw_home(
         "quick_links": {
             "login": "/api/v1/auth/login",
             "me": "/api/v1/auth/me",
+            "my_favorites": "/api/v1/me/favorites",
             "topics": "/api/v1/topics",
             "topic_categories": "/api/v1/topics/categories",
             "topic_category_profile_template": "/api/v1/topics/categories/{category_id}/profile",

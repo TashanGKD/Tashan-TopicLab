@@ -486,6 +486,37 @@ def test_api_v1_topics_alias_and_home_payload(client, monkeypatch):
     )
     assert post.status_code == 201, post.text
     assert post.json()["body"] == "这是一条通过 /api/v1 发布的完整讨论帖子，用来验证发帖链路。"
+    reply = client.post(
+        f"/api/v1/topics/{topic_id}/posts",
+        json={
+            "author": "bob",
+            "body": "这是一条回帖，用来验证统计。",
+            "in_reply_to_id": post.json()["id"],
+        },
+    )
+    assert reply.status_code == 201, reply.text
+
+    from app.storage.database.postgres_client import get_db_session
+
+    with get_db_session() as session:
+        session.execute(
+            text(
+                """
+                INSERT INTO topic_user_actions (topic_id, user_id, auth_type, liked, favorited)
+                VALUES (:topic_id, :user_id, :auth_type, TRUE, TRUE)
+                """
+            ),
+            {"topic_id": topic_id, "user_id": 1001, "auth_type": "test"},
+        )
+        session.execute(
+            text(
+                """
+                INSERT INTO post_user_actions (post_id, topic_id, user_id, auth_type, liked)
+                VALUES (:post_id, :topic_id, :user_id, :auth_type, TRUE)
+                """
+            ),
+            {"post_id": post.json()["id"], "topic_id": topic_id, "user_id": 1002, "auth_type": "test"},
+        )
 
     home = client.get("/api/v1/home")
     assert home.status_code == 200, home.text
@@ -498,6 +529,11 @@ def test_api_v1_topics_alias_and_home_payload(client, monkeypatch):
     assert payload["quick_links"]["topic_categories"] == "/api/v1/topics/categories"
     assert payload["quick_links"]["topic_category_profile_template"] == "/api/v1/topics/categories/{category_id}/profile"
     assert payload["quick_links"]["source_feed_articles"] == "/api/v1/source-feed/articles"
+    assert payload["site_stats"]["topics_count"] >= 1
+    assert payload["site_stats"]["openclaw_count"] >= 0
+    assert payload["site_stats"]["replies_count"] >= 1
+    assert payload["site_stats"]["likes_count"] >= 2
+    assert payload["site_stats"]["favorites_count"] >= 1
     assert "source_feed_preview" not in payload
     assert payload["what_to_do_next"]
 
@@ -513,6 +549,36 @@ def test_api_v1_topics_alias_and_home_payload(client, monkeypatch):
     assert profile["category_name"] == "科研"
     assert profile["evidence_requirement"] == "high"
     assert "局限" in profile["output_structure"][2]
+
+
+def test_openclaw_home_site_stats_are_cached(client, monkeypatch):
+    import app.api.openclaw as openclaw_module
+
+    openclaw_module._site_stats_cache["value"] = None
+    openclaw_module._site_stats_cache["expires_at"] = 0.0
+
+    load_calls = {"count": 0}
+
+    def fake_load_site_stats():
+        load_calls["count"] += 1
+        return {
+            "topics_count": 5,
+            "openclaw_count": 2,
+            "replies_count": 7,
+            "likes_count": 11,
+            "favorites_count": 13,
+        }
+
+    monkeypatch.setattr(openclaw_module, "_load_site_stats", fake_load_site_stats)
+
+    first = client.get("/api/v1/home")
+    second = client.get("/api/v1/home")
+
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    assert first.json()["site_stats"] == second.json()["site_stats"]
+    assert first.json()["site_stats"]["topics_count"] == 5
+    assert load_calls["count"] == 1
 
 
 def test_openclaw_key_can_bind_user_identity_and_render_personal_skill(client):
@@ -562,6 +628,7 @@ def test_openclaw_key_can_bind_user_identity_and_render_personal_skill(client):
     assert home_resp.status_code == 200, home_resp.text
     assert home_resp.json()["your_account"]["authenticated"] is True
     assert home_resp.json()["your_account"]["username"] == "openclaw-user"
+    assert home_resp.json()["site_stats"]["openclaw_count"] >= 1
 
     topic_resp = client.post(
         "/api/v1/topics",

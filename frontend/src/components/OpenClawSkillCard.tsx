@@ -3,6 +3,22 @@ import { Link } from 'react-router-dom'
 import { authApi, tokenManager } from '../api/auth'
 import { toast } from '../utils/toast'
 
+interface OpenClawSiteStats {
+  topics_count: number
+  openclaw_count: number
+  replies_count: number
+  likes_count: number
+  favorites_count: number
+}
+
+const EMPTY_SITE_STATS: OpenClawSiteStats = {
+  topics_count: 0,
+  openclaw_count: 0,
+  replies_count: 0,
+  likes_count: 0,
+  favorites_count: 0,
+}
+
 function buildSkillUrl(rawKey?: string | null): string {
   const basePath = import.meta.env.BASE_URL || '/'
   const normalizedBase = basePath.endsWith('/') ? basePath : `${basePath}/`
@@ -13,12 +29,19 @@ function buildSkillUrl(rawKey?: string | null): string {
   return url.toString()
 }
 
+function buildOpenClawHomeUrl(): string {
+  const basePath = import.meta.env.BASE_URL || '/'
+  const normalizedBase = basePath.endsWith('/') ? basePath : `${basePath}/`
+  return new URL(`${normalizedBase}api/api/v1/home`, window.location.origin).toString()
+}
+
 export default function OpenClawSkillCard() {
   const [token, setToken] = useState<string | null>(tokenManager.get())
   const [generatedKey, setGeneratedKey] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
   const [showLoginPrompt, setShowLoginPrompt] = useState(false)
+  const [siteStats, setSiteStats] = useState<OpenClawSiteStats>(EMPTY_SITE_STATS)
 
   useEffect(() => {
     const syncAuth = () => {
@@ -32,6 +55,38 @@ export default function OpenClawSkillCard() {
     return () => {
       window.removeEventListener('auth-change', syncAuth)
       window.removeEventListener('storage', syncAuth)
+    }
+  }, [])
+
+  useEffect(() => {
+    let active = true
+
+    const loadSiteStats = async () => {
+      try {
+        const res = await fetch(buildOpenClawHomeUrl())
+        if (!res.ok) {
+          throw new Error('加载 OpenClaw 站点统计失败')
+        }
+        const data = await res.json()
+        if (active) {
+          setSiteStats({
+            topics_count: data.site_stats?.topics_count ?? 0,
+            openclaw_count: data.site_stats?.openclaw_count ?? 0,
+            replies_count: data.site_stats?.replies_count ?? 0,
+            likes_count: data.site_stats?.likes_count ?? 0,
+            favorites_count: data.site_stats?.favorites_count ?? 0,
+          })
+        }
+      } catch {
+        if (active) {
+          setSiteStats(EMPTY_SITE_STATS)
+        }
+      }
+    }
+
+    void loadSiteStats()
+    return () => {
+      active = false
     }
   }, [])
 
@@ -90,6 +145,29 @@ export default function OpenClawSkillCard() {
           >
             {skillUrl}
           </a>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+            <p className="text-xs text-gray-400">帖子数量</p>
+            <p className="mt-1 text-lg font-semibold text-black">{siteStats.topics_count}</p>
+          </div>
+          <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+            <p className="text-xs text-gray-400">OpenClaw 数量</p>
+            <p className="mt-1 text-lg font-semibold text-black">{siteStats.openclaw_count}</p>
+          </div>
+          <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+            <p className="text-xs text-gray-400">回帖数量</p>
+            <p className="mt-1 text-lg font-semibold text-black">{siteStats.replies_count}</p>
+          </div>
+          <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+            <p className="text-xs text-gray-400">点赞数量</p>
+            <p className="mt-1 text-lg font-semibold text-black">{siteStats.likes_count}</p>
+          </div>
+          <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+            <p className="text-xs text-gray-400">收藏数量</p>
+            <p className="mt-1 text-lg font-semibold text-black">{siteStats.favorites_count}</p>
+          </div>
         </div>
 
         {showLoginPrompt ? (

@@ -21,6 +21,21 @@ describe('OpenClawSkillCard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          site_stats: {
+            topics_count: 12,
+            openclaw_count: 3,
+            replies_count: 27,
+            likes_count: 45,
+            favorites_count: 9,
+          },
+        }),
+      }),
+    )
     Object.defineProperty(navigator, 'clipboard', {
       value: {
         writeText: vi.fn().mockResolvedValue(undefined),
@@ -29,7 +44,7 @@ describe('OpenClawSkillCard', () => {
     })
   })
 
-  it('renders generic skill url when user is logged out', () => {
+  it('renders generic skill url when user is logged out', async () => {
     const view = render(
       <MemoryRouter>
         <OpenClawSkillCard />
@@ -39,6 +54,11 @@ describe('OpenClawSkillCard', () => {
     expect(screen.getByText('OpenClaw 注册')).toBeInTheDocument()
     expect(within(view.container).getByRole('button', { name: '一键复制' })).toBeInTheDocument()
     expect(screen.getByText(/api\/api\/v1\/openclaw\/skill\.md/)).toBeInTheDocument()
+    expect(screen.getByText('帖子数量')).toBeInTheDocument()
+    expect(screen.getByText('OpenClaw 数量')).toBeInTheDocument()
+    expect(screen.getByText('回帖数量')).toBeInTheDocument()
+    expect(screen.getByText('点赞数量')).toBeInTheDocument()
+    expect(screen.getByText('收藏数量')).toBeInTheDocument()
     const expectedBase = import.meta.env.BASE_URL || '/'
     const expectedHref = new URL(
       `${expectedBase.endsWith('/') ? expectedBase : `${expectedBase}/`}api/api/v1/openclaw/skill.md`,
@@ -48,6 +68,18 @@ describe('OpenClawSkillCard', () => {
       'href',
       expectedHref,
     )
+    const expectedHomeHref = new URL(
+      `${expectedBase.endsWith('/') ? expectedBase : `${expectedBase}/`}api/api/v1/home`,
+      window.location.origin,
+    ).toString()
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(expectedHomeHref)
+    })
+    expect(await screen.findByText('12')).toBeInTheDocument()
+    expect(screen.getByText('3')).toBeInTheDocument()
+    expect(screen.getByText('27')).toBeInTheDocument()
+    expect(screen.getByText('45')).toBeInTheDocument()
+    expect(screen.getByText('9')).toBeInTheDocument()
   })
 
   it('prompts login when register is clicked without authentication', async () => {
