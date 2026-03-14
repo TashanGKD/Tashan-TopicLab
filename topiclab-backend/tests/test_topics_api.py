@@ -3,6 +3,7 @@ import importlib
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import bcrypt
 import pytest
@@ -204,6 +205,177 @@ def test_topic_create_list_and_posts(client):
 
     topic_missing = client.get(f"/topics/{topic_id}")
     assert topic_missing.status_code == 404
+
+
+def test_source_article_reply_creates_topic_once(client, monkeypatch):
+    import app.api.source_feed as source_feed_module
+
+    async def fake_fetch_source_feed_article_detail(article_id: int):
+        return SimpleNamespace(
+            id=article_id,
+            title="测试信源标题",
+            source_feed_name="信息采集库",
+            source_type="we-mp-rss",
+            url="https://example.com/source-article",
+            description="一条用于自动建题的信源。",
+            publish_time="2026-03-14 10:00:00",
+            created_at="2026-03-14T10:00:00+00:00",
+        )
+
+    async def fake_hydrate_topic_workspace(topic_id: str, article_ids: list[int]):
+        return {"topic_id": topic_id, "article_ids": article_ids, "written_files": []}
+
+    async def fake_request_json(method, path, *, json_body=None, headers=None, params=None, timeout=600.0):
+        if path == "/executor/topics/bootstrap":
+            return {"ok": True, "topic_id": json_body["topic_id"]}
+        return {}
+
+    async def fake_generate_topic_body(article: dict):
+        return (
+            "## 背景\n"
+            "这是一条由模型生成的摘要。\n\n"
+            "## 核心议题\n"
+            "适合作为跨学科讨论入口。\n\n"
+            "## 为什么值得讨论\n"
+            "能帮助团队识别趋势变化。\n\n"
+            "## 建议讨论问题\n"
+            "1. 关键变化是什么？\n"
+            "2. 哪些判断可验证？\n"
+            "3. 下一步行动是什么？\n\n"
+            "## 原文信息\n"
+            f"- article_id: {article['id']}\n"
+            f"- 来源：{article['source_feed_name']}\n"
+            f"- 标题：{article['title']}\n"
+            f"- 发布时间：{article['publish_time']}\n"
+            f"- 原文链接：{article['url']}\n"
+            f"- 原文摘要：{article['description']}\n"
+        )
+
+    monkeypatch.setattr(source_feed_module, "fetch_source_feed_article_detail", fake_fetch_source_feed_article_detail)
+    monkeypatch.setattr(source_feed_module, "hydrate_topic_workspace", fake_hydrate_topic_workspace)
+    monkeypatch.setattr(source_feed_module, "request_json", fake_request_json)
+    monkeypatch.setattr(source_feed_module, "generate_topic_body_from_source_article", fake_generate_topic_body)
+
+    first = client.post("/source-feed/articles/9001/topic")
+    assert first.status_code == 200, first.text
+    first_payload = first.json()
+    assert first_payload["topic"]["title"] == "测试信源标题"
+    assert first_payload["topic"]["category"] == "news"
+    assert "这是一条由模型生成的摘要" in first_payload["topic"]["body"]
+    assert "- article_id: 9001" in first_payload["topic"]["body"]
+    assert "- 原文链接：https://example.com/source-article" in first_payload["topic"]["body"]
+
+    second = client.post("/source-feed/articles/9001/topic")
+    assert second.status_code == 200, second.text
+    second_payload = second.json()
+    assert second_payload["topic"]["id"] == first_payload["topic"]["id"]
+
+
+def test_source_article_topic_endpoint_uses_generated_body(client, monkeypatch):
+    import app.api.topics as topics_module
+
+    async def fake_fetch_source_feed_article_detail(article_id: int):
+        return SimpleNamespace(
+            id=article_id,
+            title="测试信源标题（topics）",
+            source_feed_name="信息采集库",
+            source_type="we-mp-rss",
+            url="https://example.com/source-article-topics",
+            description="一条用于 /source-articles 路径的信源。",
+            publish_time="2026-03-14 11:00:00",
+            created_at="2026-03-14T11:00:00+00:00",
+        )
+
+    async def fake_hydrate_topic_workspace(topic_id: str, article_ids: list[int]):
+        return {"topic_id": topic_id, "article_ids": article_ids, "written_files": []}
+
+    async def fake_generate_topic_body(article: dict):
+        return (
+            "## 背景\n模型输出（topics endpoint）\n\n"
+            "## 核心议题\n验证旧路由也接入新生成逻辑。\n\n"
+            "## 为什么值得讨论\n减少模板化信息噪声。\n\n"
+            "## 建议讨论问题\n"
+            "1. 是否可复用到其他入口？\n"
+            "2. 原文信息是否完整？\n"
+            "3. 如何保证稳定性？\n\n"
+            "## 原文信息\n"
+            f"- article_id: {article['id']}\n"
+            f"- 原文链接：{article['url']}\n"
+        )
+
+    monkeypatch.setattr(topics_module, "fetch_source_feed_article_detail", fake_fetch_source_feed_article_detail)
+    monkeypatch.setattr(topics_module, "hydrate_topic_workspace", fake_hydrate_topic_workspace)
+    monkeypatch.setattr(topics_module, "generate_topic_body_from_source_article", fake_generate_topic_body)
+
+    resp = client.post("/source-articles/9101/topic")
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    assert payload["created"] is True
+    assert payload["topic"]["title"] == "测试信源标题（topics）"
+    assert "模型输出（topics endpoint）" in payload["topic"]["body"]
+    assert "- article_id: 9101" in payload["topic"]["body"]
+
+
+def test_source_feed_articles_list_uses_short_ttl_cache(client, monkeypatch):
+    import app.api.source_feed as source_feed_module
+
+    calls = {"count": 0}
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._payload
+
+    class FakeHttpClient:
+        async def get(self, url, params=None, timeout=6.0):
+            calls["count"] += 1
+            article_id = 1000 + calls["count"]
+            return FakeResponse(
+                {
+                    "data": {
+                        "list": [
+                            {
+                                "id": article_id,
+                                "title": f"缓存文章-{article_id}",
+                                "source_feed_name": "测试源",
+                                "source_type": "rss",
+                                "url": f"https://example.com/{article_id}",
+                                "pic_url": None,
+                                "description": "用于测试 source-feed 列表缓存",
+                                "publish_time": "2026-03-14 10:00:00",
+                                "created_at": "2026-03-14T10:00:00+00:00",
+                            }
+                        ],
+                        "limit": int((params or {}).get("limit", 0)),
+                        "offset": int((params or {}).get("offset", 0)),
+                    }
+                }
+            )
+
+    monkeypatch.setenv("SOURCE_FEED_LIST_CACHE_TTL_SECONDS", "30")
+    source_feed_module._source_feed_list_cache.clear()
+    monkeypatch.setattr(source_feed_module, "get_shared_async_client", lambda _: FakeHttpClient())
+
+    first = client.get("/source-feed/articles?limit=5&offset=0")
+    assert first.status_code == 200, first.text
+    first_payload = first.json()
+    assert calls["count"] == 1
+
+    second = client.get("/source-feed/articles?limit=5&offset=0")
+    assert second.status_code == 200, second.text
+    second_payload = second.json()
+    assert calls["count"] == 1
+    assert second_payload["list"][0]["id"] == first_payload["list"][0]["id"]
+
+    third = client.get("/source-feed/articles?limit=5&offset=5")
+    assert third.status_code == 200, third.text
+    assert calls["count"] == 2
+    source_feed_module._source_feed_list_cache.clear()
 
 
 def test_discussion_and_mention_complete_via_executor(client):

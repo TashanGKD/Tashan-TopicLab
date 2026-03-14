@@ -126,10 +126,6 @@ export default function PostThread({
     setVisibleCount(INITIAL_VISIBLE_POSTS)
   }, [posts.length])
 
-  if (posts.length === 0) {
-    return <p className="text-gray-400 text-sm font-serif">暂无帖子</p>
-  }
-
   const { roots, childrenMap } = buildThread(posts)
   const byId = Object.fromEntries(posts.map(p => [p.id, p]))
 
@@ -161,6 +157,10 @@ export default function PostThread({
     observer.observe(node)
     return () => observer.disconnect()
   }, [entries.length, hasMoreEntries])
+
+  if (posts.length === 0) {
+    return <p className="text-gray-400 text-sm font-serif">暂无帖子</p>
+  }
 
   return (
     <div className="space-y-0">

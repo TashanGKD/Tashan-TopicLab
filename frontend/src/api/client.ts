@@ -109,9 +109,18 @@ export interface SourceFeedArticle {
   description: string
   publish_time: string
   created_at: string
+  linked_topic_id?: string | null
+  linked_topic_posts_count?: number
   interaction?: SourceArticleInteraction
   favorite_category_ids?: string[]
   favorite_categories?: FavoriteCategoryRef[]
+}
+
+export interface SourceFeedArticleDetail extends SourceFeedArticle {
+  content_md?: string
+  content_source?: string
+  md_path?: string
+  run_dir?: string
 }
 
 export interface FavoriteCategoryRef {
@@ -142,6 +151,11 @@ export interface SourceFeedListResponse {
   list: SourceFeedArticle[]
   limit: number
   offset: number
+}
+
+export interface EnsureSourceArticleTopicResponse {
+  topic: Topic
+  created: boolean
 }
 
 export interface DiscussionResult {
@@ -398,12 +412,16 @@ export const sourceFeedApi = {
     searchParams.set('url', rawUrl)
     return `${import.meta.env.BASE_URL}api/source-feed/image?${searchParams.toString()}`
   },
+  detail: (articleId: number) =>
+    api.get<SourceFeedArticleDetail>(`/source-feed/articles/${articleId}`),
   like: (articleId: number, data: SourceArticleActionRequest) =>
     api.post<SourceArticleInteraction>(`/source-feed/articles/${articleId}/like`, data),
   favorite: (articleId: number, data: SourceArticleActionRequest) =>
     api.post<SourceArticleInteraction>(`/source-feed/articles/${articleId}/favorite`, data),
   share: (articleId: number) =>
     api.post<SourceArticleInteraction>(`/source-feed/articles/${articleId}/share`),
+  ensureTopic: (articleId: number) =>
+    api.post<EnsureSourceArticleTopicResponse>(`/source-feed/articles/${articleId}/topic`),
 }
 
 export const postsApi = {

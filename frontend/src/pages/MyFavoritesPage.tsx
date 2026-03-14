@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, Navigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import {
   FavoriteCategory,
   FavoriteCategoryItemsPage,
@@ -22,6 +22,7 @@ function updateCategoryList(categories: FavoriteCategory[], updated: FavoriteCat
 }
 
 export default function MyFavoritesPage() {
+  const navigate = useNavigate()
   const [tab, setTab] = useState<FavoriteTab>('topics')
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all')
   const [loading, setLoading] = useState(true)
@@ -35,6 +36,7 @@ export default function MyFavoritesPage() {
   const [pendingTopicFavoriteIds, setPendingTopicFavoriteIds] = useState<Set<string>>(new Set())
   const [pendingSourceLikeIds, setPendingSourceLikeIds] = useState<Set<number>>(new Set())
   const [pendingSourceFavoriteIds, setPendingSourceFavoriteIds] = useState<Set<number>>(new Set())
+  const [pendingSourceReplyIds, setPendingSourceReplyIds] = useState<Set<number>>(new Set())
   const [pendingTopicCategoryIds, setPendingTopicCategoryIds] = useState<Set<string>>(new Set())
   const [pendingSourceCategoryIds, setPendingSourceCategoryIds] = useState<Set<number>>(new Set())
   const token = tokenManager.get()
@@ -390,6 +392,23 @@ export default function MyFavoritesPage() {
     }
   }
 
+  const handleReplySourceArticle = async (article: SourceFeedArticle) => {
+    setPendingSourceReplyIds(prev => new Set(prev).add(article.id))
+    try {
+      const res = await sourceFeedApi.ensureTopic(article.id)
+      navigate(`/topics/${res.data.topic.id}`)
+      toast.success('已打开对应话题')
+    } catch (err) {
+      handleApiError(err, '打开信源对应话题失败')
+    } finally {
+      setPendingSourceReplyIds(prev => {
+        const next = new Set(prev)
+        next.delete(article.id)
+        return next
+      })
+    }
+  }
+
   const handleAssignTopicCategory = async (topic: TopicListItem, categoryId: string) => {
     setPendingTopicCategoryIds(prev => new Set(prev).add(topic.id))
     try {
@@ -651,8 +670,10 @@ export default function MyFavoritesPage() {
                   onLike={handleLikeSource}
                   onFavorite={handleFavoriteSource}
                   onShare={handleShareSourceArticle}
+                  onReply={handleReplySourceArticle}
                   likePending={pendingSourceLikeIds.has(article.id)}
                   favoritePending={pendingSourceFavoriteIds.has(article.id)}
+                  replyPending={pendingSourceReplyIds.has(article.id)}
                   favoriteCategories={categories}
                   categoryPending={pendingSourceCategoryIds.has(article.id)}
                   onAssignCategory={handleAssignSourceCategory}

@@ -82,6 +82,7 @@ describe('SourceFeedPage', () => {
     expect(await screen.findByRole('button', { name: '搜索' })).toBeInTheDocument()
     expect(await screen.findByText('远端入库文章')).toBeInTheDocument()
     expect(await screen.findByText('第二条信源文章')).toBeInTheDocument()
+    expect(await screen.findAllByRole('button', { name: '回复到话题' })).not.toHaveLength(0)
     const image = await screen.findByRole('img', { name: '远端入库文章' })
     expect(image.getAttribute('src')).toContain('/api/source-feed/image?url=')
   })

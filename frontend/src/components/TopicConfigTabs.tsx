@@ -3,7 +3,8 @@ import ReactMarkdown from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
-import { moderatorModesApi, ROUNDTABLE_MODELS, AssignableModeratorMode, topicsApi } from '../api/client'
+import { moderatorModesApi, ROUNDTABLE_MODELS, AssignableModeratorMode, topicsApi, SourceFeedArticle } from '../api/client'
+import SourceArticlePreviewCard from './SourceArticlePreviewCard'
 import { handleApiError, handleApiSuccess } from '../utils/errorHandler'
 import { inputClass } from './selectors/styles'
 import TabPanel from './TabPanel'
@@ -25,6 +26,8 @@ interface TopicConfigTabsProps {
   isRunning?: boolean
   isCompleted?: boolean
   initialSkillIds?: string[]
+  linkedSourceArticle?: SourceFeedArticle | null
+  viewportWidth?: number
 }
 
 export default function TopicConfigTabs({
@@ -38,6 +41,8 @@ export default function TopicConfigTabs({
   isRunning = false,
   isCompleted = false,
   initialSkillIds,
+  linkedSourceArticle,
+  viewportWidth,
 }: TopicConfigTabsProps) {
   const [activeTabId, setActiveTabId] = useState<ConfigTabId>('detail')
   const [detailBody, setDetailBody] = useState(topicBody)
@@ -222,57 +227,79 @@ export default function TopicConfigTabs({
     {
       id: 'detail' as ConfigTabId,
       label: '话题详情',
-      content: (
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            {!editingDetail ? (
-              <button
-                type="button"
-                onClick={() => setEditingDetail(true)}
-                className="text-xs border border-gray-200 rounded px-2.5 py-1 text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                编辑描述
-              </button>
-            ) : (
-              <div className="flex items-center gap-2">
+      content: (() => {
+        const showSideBySide = !editingDetail && !!linkedSourceArticle && (viewportWidth ?? 0) >= 1200
+        const showHorizontal = !editingDetail && !!linkedSourceArticle && (viewportWidth ?? 0) < 1200
+        return (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              {!editingDetail ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    setDetailBody(topicBody || '')
-                    setEditingDetail(false)
-                  }}
-                  className="text-xs border border-gray-200 rounded px-2.5 py-1 text-gray-600 hover:bg-gray-50 transition-colors"
-                  disabled={savingDetail}
+                  onClick={() => setEditingDetail(true)}
+                  className="text-xs border border-gray-200 rounded px-2.5 py-1 text-gray-700 hover:bg-gray-50 transition-colors"
                 >
-                  取消
+                  编辑描述
                 </button>
-                <button
-                  type="button"
-                  onClick={handleSaveTopicBody}
-                  className="text-xs bg-black text-white rounded px-2.5 py-1 hover:bg-gray-900 transition-colors disabled:opacity-50"
-                  disabled={savingDetail}
-                >
-                  {savingDetail ? '保存中...' : '保存'}
-                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDetailBody(topicBody || '')
+                      setEditingDetail(false)
+                    }}
+                    className="text-xs border border-gray-200 rounded px-2.5 py-1 text-gray-600 hover:bg-gray-50 transition-colors"
+                    disabled={savingDetail}
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveTopicBody}
+                    className="text-xs bg-black text-white rounded px-2.5 py-1 hover:bg-gray-900 transition-colors disabled:opacity-50"
+                    disabled={savingDetail}
+                  >
+                    {savingDetail ? '保存中...' : '保存'}
+                  </button>
+                </div>
+              )}
+            </div>
+            {editingDetail ? (
+              <textarea
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-serif focus:border-black focus:outline-none transition-colors min-h-[160px] resize-y"
+                value={detailBody}
+                onChange={(e) => setDetailBody(e.target.value)}
+                placeholder="输入话题描述（支持 Markdown）"
+              />
+            ) : showSideBySide ? (
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+                <div className="min-w-0 markdown-content text-gray-700">
+                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                    {detailBody || '暂无内容'}
+                  </ReactMarkdown>
+                </div>
+                <div data-testid="source-article-vertical-card" className="self-start">
+                  <SourceArticlePreviewCard article={linkedSourceArticle!} layout="vertical" />
+                </div>
               </div>
+            ) : (
+              <>
+                <div className="markdown-content text-gray-700">
+                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                    {detailBody || '暂无内容'}
+                  </ReactMarkdown>
+                </div>
+                {showHorizontal && (
+                  <div data-testid="source-article-horizontal-card" className="mt-4">
+                    <SourceArticlePreviewCard article={linkedSourceArticle!} layout="horizontal" />
+                  </div>
+                )}
+              </>
             )}
           </div>
-          {editingDetail ? (
-            <textarea
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-serif focus:border-black focus:outline-none transition-colors min-h-[160px] resize-y"
-              value={detailBody}
-              onChange={(e) => setDetailBody(e.target.value)}
-              placeholder="输入话题描述（支持 Markdown）"
-            />
-          ) : (
-            <div className="markdown-content text-gray-700">
-              <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-                {detailBody || '暂无内容'}
-              </ReactMarkdown>
-            </div>
-          )}
-        </div>
-      ),
+        )
+      })(),
     },
     {
       id: 'experts' as ConfigTabId,

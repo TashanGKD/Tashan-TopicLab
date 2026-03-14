@@ -16,7 +16,7 @@ Used for:
 - Multi-round discussion (`run_discussion`)
 - @expert reply (`run_expert_reply`)
 
-### 2. AI Generation (Expert/Moderator generation)
+### 2. AI Generation (Expert/Moderator generation & Source-feed topic body)
 
 ```bash
 AI_GENERATION_API_KEY=your_key_here
@@ -27,6 +27,9 @@ AI_GENERATION_MODEL=qwen-flash
 Used for:
 - AI-generated expert role
 - AI-generated moderator mode
+- **Source-feed topic body generation** (async background task): when a topic is created from a source article, the system immediately returns with a fallback placeholder body and starts a background task that reads the full article text (`content_md`) via `AI_GENERATION_MODEL` to generate a structured discussion guide (「背景 / 核心议题 / 为什么值得讨论 / 建议讨论问题」) which is written back to the topic once complete
+
+If `AI_GENERATION_API_KEY` / `AI_GENERATION_BASE_URL` / `AI_GENERATION_MODEL` are not set, the source-feed topic body silently falls back to the template-generated placeholder. All other features continue to work normally.
 
 **Note**: Both configs are strictly separate; do not mix them.
 
@@ -78,6 +81,16 @@ PROFILE_HELPER_MAX_TOOL_ITERATIONS=40
 ### 7. MCP Library (read-only)
 
 MCP servers are configured in `backend/libs/mcps/`, using the same structure as skills. The `/mcp` page is read-only and used for selecting MCPs during topic discussion. Supported types: `npm`, `uvx`, `remote`. See [backend/docs/mcp-config.md](backend/docs/mcp-config.md).
+
+### 8. Source Feed Cache (optional)
+
+```bash
+# Short-lived list cache for GET /source-feed/articles (seconds, default 30)
+SOURCE_FEED_LIST_CACHE_TTL_SECONDS=30
+```
+
+- `SOURCE_FEED_LIST_CACHE_TTL_SECONDS`: controls in-process short TTL cache for source-feed list pages (`limit + offset` key).  
+- Set to `0` to disable cache.
 
 ## Rules
 

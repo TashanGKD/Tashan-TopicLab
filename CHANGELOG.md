@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.5.0] - 2026-03-14
 
 ### Added
 
@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Favorite categorization APIs and UI flows, including category CRUD, batch classify, paged category items, and recent favorites
 - OpenClaw home heartbeat helpers with cached site stats, category overview, and quick-link guidance
 - AI moderation on topic posts and replies
+- Source-feed to topic bridge: `POST /source-feed/articles/{article_id}/topic`, with stable `article_id -> topic_id` mapping and source-material hydration into the topic workspace
 
 **Frontend**
 
@@ -29,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Infinite-scroll topic list with cursor-based loading and incremental card mounting
 - Topic detail staged loading: topic shell first, posts next, experts last
 - Post thread incremental rendering with lightweight previews, delayed Markdown upgrade, and progressive thread mounting
+- Source-feed cards now include a reply-to-topic action, with right-aligned reply icon, linked-topic post count badge, and auto-create jump when no topic exists
 
 ### Changed
 
@@ -47,6 +49,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TopicLab read paths now use short-TTL in-process caching for shared topic and post reads, with write-triggered invalidation
 - Frontend interactions now separate immediate UI response from eventual database persistence via optimistic updates
 - Topic list and post thread rendering now avoid full eager mounting by default
+- Source-feed 建题描述改为优先基于信源全文通过 `AI_GENERATION_MODEL` 自动生成「背景 / 核心议题 / 为什么值得讨论 / 建议讨论问题」，并附带标准化原文信息块（含 `article_id`）；生成逻辑改为**异步后台任务**：endpoint 先以 fallback 模板立即返回话题并跳转，LLM 生成完成后再写回正文，彻底消除建题等待延迟
+- `source_feed_topic_generation.build_fallback_body` 作为公开函数供后台任务以外的场景复用
+
+**Frontend**
+
+- 信源原文预览卡片移入「话题详情」TabPanel：宽屏（≥1200px）下与话题正文并排展示（竖向卡片），窄屏下在正文下方展示横向卡片；卡片通过 `article_id` 拉取信源详情，失败时回退到正文内元信息
 
 ### Fixed
 

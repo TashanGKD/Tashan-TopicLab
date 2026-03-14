@@ -20,6 +20,11 @@ from sqlalchemy import text
 from app.api.auth import security, verify_access_token
 from app.services.content_moderation import moderate_post_content
 from app.services.resonnet_client import request_json
+from app.services.source_feed_pipeline import fetch_source_feed_article_detail, hydrate_topic_workspace
+from app.services.source_feed_topic_generation import (
+    build_fallback_body,
+    generate_topic_body_from_source_article,
+)
 from app.storage.database.postgres_client import get_db_session
 from app.storage.database.topic_store import (
     DEFAULT_MODERATOR_MODE,
@@ -39,9 +44,11 @@ from app.storage.database.topic_store import (
     get_favorite_category_summary_payload,
     get_post,
     get_topic,
+    get_topic_id_by_source_article,
     get_topic_moderator_config,
     get_post_thread,
     hash_post_delete_token,
+    link_source_article_to_topic,
     list_all_posts,
     list_favorite_categories,
     list_favorite_category_items,
@@ -310,6 +317,11 @@ class FavoriteCategoryBatchClassifyRequest(BaseModel):
     description: str = ""
     topic_ids: list[str] = Field(default_factory=list, max_length=100)
     article_ids: list[int] = Field(default_factory=list, max_length=100)
+
+
+class EnsureSourceArticleTopicResponse(BaseModel):
+    topic: dict[str, Any]
+    created: bool
 
 
 def get_workspace_base() -> Path:
@@ -712,6 +724,17 @@ async def _sync_topic_mode_from_resonnet(topic_id: str, authorization: str | Non
     return config
 
 
+def _guess_topic_category_from_source_article(article: dict[str, Any]) -> str:
+    marker = " ".join([
+        str(article.get("source_feed_name") or ""),
+        str(article.get("source_type") or ""),
+        str(article.get("url") or ""),
+    ]).lower()
+    if "arxiv" in marker or "paper" in marker or "preprint" in marker:
+        return "research"
+    return "news"
+
+
 def _collect_generated_images(topic_id: str, asset_paths: list[str]) -> list[dict]:
     generated_images: list[dict] = []
     for asset_path in asset_paths:
@@ -862,6 +885,62 @@ async def create_topic_endpoint(data: TopicCreateRequest, user: dict | None = De
         creator_name=creator_name,
         creator_auth_type=creator_auth_type,
     )
+
+
+async def _fill_topic_body_in_background(topic_id: str, article_dict: dict) -> None:
+    """Background task: call LLM to generate full topic body and update the topic."""
+    try:
+        body = await generate_topic_body_from_source_article(article_dict)
+        update_topic(topic_id, {"body": body})
+    except Exception:
+        pass
+
+
+@router.post("/source-articles/{article_id}/topic", response_model=EnsureSourceArticleTopicResponse)
+async def ensure_source_article_topic_endpoint(
+    article_id: int,
+    user: dict | None = Depends(_get_optional_user),
+):
+    user_id, auth_type = _resolve_owner_identity(user)
+    existing_topic_id = get_topic_id_by_source_article(article_id)
+    if existing_topic_id:
+        await _ensure_executor_workspace(existing_topic_id)
+        await hydrate_topic_workspace(existing_topic_id, [article_id])
+        topic = get_topic(existing_topic_id, user_id=user_id, auth_type=auth_type)
+        if topic is None:
+            raise HTTPException(status_code=404, detail="Topic not found")
+        return {"topic": topic, "created": False}
+
+    article = await fetch_source_feed_article_detail(article_id)
+
+    # Create topic immediately with fallback body; LLM generation runs in background.
+    initial_body = build_fallback_body(article.__dict__)
+    topic = create_topic(
+        article.title or f"信源 {article_id}",
+        initial_body,
+        _guess_topic_category_from_source_article(article.__dict__),
+    )
+    linked_topic_id = link_source_article_to_topic(
+        article.id,
+        topic["id"],
+        title=article.title,
+        source_feed_name=article.source_feed_name,
+        source_type=article.source_type,
+        url=article.url,
+    )
+    created = True
+    if linked_topic_id != topic["id"]:
+        created = False
+        delete_topic(topic["id"])
+
+    asyncio.create_task(_fill_topic_body_in_background(linked_topic_id, article.__dict__))
+
+    await _ensure_executor_workspace(linked_topic_id)
+    await hydrate_topic_workspace(linked_topic_id, [article.id])
+    resolved_topic = get_topic(linked_topic_id, user_id=user_id, auth_type=auth_type)
+    if resolved_topic is None:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    return {"topic": resolved_topic, "created": created}
 
 
 @router.get("/topics/{topic_id}")

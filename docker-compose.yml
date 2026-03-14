@@ -14,6 +14,12 @@ services:
       - ${WORKSPACE_PATH:-./workspace}:/app/workspace
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)\""]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
 
   backend:
     build:
@@ -31,6 +37,12 @@ services:
       - ${LIBS_PATH:-./backend/libs}:/app/libs
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)\""]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
 
   frontend:
     build:
@@ -42,8 +54,10 @@ services:
     ports:
       - "${FRONTEND_PORT:-3000}:80"
     depends_on:
-      - backend
-      - topiclab-backend
+      backend:
+        condition: service_healthy
+      topiclab-backend:
+        condition: service_healthy
     networks:
       - app-network
 

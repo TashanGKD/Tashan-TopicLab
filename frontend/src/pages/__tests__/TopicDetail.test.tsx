@@ -1,12 +1,21 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { AxiosError } from 'axios'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import TopicDetail from '../TopicDetail'
-import { postsApi, topicExpertsApi, topicsApi } from '../../api/client'
+import { postsApi, sourceFeedApi, topicExpertsApi, topicsApi } from '../../api/client'
 
 vi.mock('../../components/TopicConfigTabs', () => ({
-  default: () => <div data-testid="topic-config-tabs" />,
+  default: ({ linkedSourceArticle, viewportWidth }: any) => {
+    const showSideBySide = !!linkedSourceArticle && (viewportWidth ?? 0) >= 1200
+    const showHorizontal = !!linkedSourceArticle && (viewportWidth ?? 0) < 1200
+    return (
+      <div data-testid="topic-config-tabs">
+        {showSideBySide && <div data-testid="source-article-vertical-card" />}
+        {showHorizontal && <div data-testid="source-article-horizontal-card" />}
+      </div>
+    )
+  },
 }))
 
 vi.mock('../../components/ResizableToc', () => ({
@@ -49,6 +58,10 @@ vi.mock('../../api/client', async () => {
       ...actual.topicExpertsApi,
       list: vi.fn(),
     },
+    sourceFeedApi: {
+      ...actual.sourceFeedApi,
+      detail: vi.fn(),
+    },
   }
 })
 
@@ -56,11 +69,23 @@ const mockedTopicsApiGet = vi.mocked(topicsApi.get)
 const mockedPostsApiList = vi.mocked(postsApi.list)
 const mockedPostsApiCreate = vi.mocked(postsApi.create)
 const mockedTopicExpertsApiList = vi.mocked(topicExpertsApi.list)
+const mockedSourceFeedApiDetail = vi.mocked(sourceFeedApi.detail)
 
 describe('TopicDetail', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
+    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1280 })
+    class MockIntersectionObserver {
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    }
+    vi.stubGlobal('IntersectionObserver', MockIntersectionObserver as any)
 
     mockedTopicsApiGet.mockResolvedValue({
       data: {
@@ -91,9 +116,49 @@ describe('TopicDetail', () => {
     mockedPostsApiList.mockResolvedValue({ data: { items: [], next_cursor: null } } as any)
     mockedPostsApiCreate.mockResolvedValue({ data: {} } as any)
     mockedTopicExpertsApiList.mockResolvedValue({ data: [] } as any)
+    mockedSourceFeedApiDetail.mockResolvedValue({
+      data: {
+        id: 258,
+        title: '远端入库文章',
+        source_feed_name: '信息采集库',
+        source_type: 'we-mp-rss',
+        url: 'https://example.com/article',
+        pic_url: 'https://mmbiz.qpic.cn/example.jpg',
+        description: '用于验证话题详情中的信源预览卡片。',
+        publish_time: '2026-03-12 16:25:00',
+        created_at: '2026-03-12T10:09:13.216155',
+        content_md: 'full content',
+      },
+    } as any)
   })
 
   it('renders discussion image with topic asset url', async () => {
+    mockedTopicsApiGet.mockResolvedValueOnce({
+      data: {
+        id: 'topic-1',
+        session_id: 'topic-1',
+        title: 'AI 芯片架构图设计',
+        body: '## 背景\n测试\n\n## 原文信息\n- article_id: 258\n- 原文链接：https://example.com/article',
+        category: 'research',
+        status: 'open',
+        mode: 'discussion',
+        num_rounds: 5,
+        expert_names: ['computer_scientist'],
+        discussion_status: 'completed',
+        creator_name: 'openclaw-user',
+        creator_auth_type: 'openclaw_key',
+        discussion_result: {
+          discussion_history:
+            '## Round 1 - Computer Science Researcher\n\n![架构图](../generated_images/round1_architecture.png)\n',
+          discussion_summary: '',
+          turns_count: 1,
+          cost_usd: null,
+          completed_at: '2026-03-12T00:00:00Z',
+        },
+        created_at: '2026-03-12T00:00:00Z',
+        updated_at: '2026-03-12T00:00:00Z',
+      },
+    } as any)
     render(
       <MemoryRouter initialEntries={['/topics/topic-1']}>
         <Routes>
@@ -110,6 +175,70 @@ describe('TopicDetail', () => {
     expect(img.getAttribute('src')).toMatch(
       /\/api\/topics\/topic-1\/assets\/generated_images\/round1_architecture\.png\?q=82&fm=webp$/,
     )
+  })
+
+  it('shows side-by-side source preview card on wide screens', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1440 })
+    window.dispatchEvent(new Event('resize'))
+    mockedTopicsApiGet.mockResolvedValueOnce({
+      data: {
+        id: 'topic-1',
+        session_id: 'topic-1',
+        title: 'AI 芯片架构图设计',
+        body: '## 背景\n测试\n\n## 原文信息\n- article_id: 258\n- 原文链接：https://example.com/article',
+        category: 'research',
+        status: 'open',
+        mode: 'discussion',
+        num_rounds: 5,
+        expert_names: ['computer_scientist'],
+        discussion_status: 'completed',
+        creator_name: 'openclaw-user',
+        creator_auth_type: 'openclaw_key',
+        discussion_result: { discussion_history: '', discussion_summary: '', turns_count: 0, cost_usd: null, completed_at: '2026-03-12T00:00:00Z' },
+        created_at: '2026-03-12T00:00:00Z',
+        updated_at: '2026-03-12T00:00:00Z',
+      },
+    } as any)
+    render(
+      <MemoryRouter initialEntries={['/topics/topic-1']}>
+        <Routes>
+          <Route path="/topics/:id" element={<TopicDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(await screen.findByTestId('source-article-vertical-card')).toBeInTheDocument()
+  })
+
+  it('shows horizontal source preview card on narrow screens', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 960 })
+    window.dispatchEvent(new Event('resize'))
+    mockedTopicsApiGet.mockResolvedValueOnce({
+      data: {
+        id: 'topic-1',
+        session_id: 'topic-1',
+        title: 'AI 芯片架构图设计',
+        body: '## 背景\n测试\n\n## 原文信息\n- article_id: 258\n- 原文链接：https://example.com/article',
+        category: 'research',
+        status: 'open',
+        mode: 'discussion',
+        num_rounds: 5,
+        expert_names: ['computer_scientist'],
+        discussion_status: 'completed',
+        creator_name: 'openclaw-user',
+        creator_auth_type: 'openclaw_key',
+        discussion_result: { discussion_history: '', discussion_summary: '', turns_count: 0, cost_usd: null, completed_at: '2026-03-12T00:00:00Z' },
+        created_at: '2026-03-12T00:00:00Z',
+        updated_at: '2026-03-12T00:00:00Z',
+      },
+    } as any)
+    render(
+      <MemoryRouter initialEntries={['/topics/topic-1']}>
+        <Routes>
+          <Route path="/topics/:id" element={<TopicDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(await screen.findByTestId('source-article-horizontal-card')).toBeInTheDocument()
   })
 
   it('shows login prompt in fixed composer when user is not authenticated', async () => {
@@ -221,6 +350,8 @@ describe('TopicDetail', () => {
     fireEvent.change(await screen.findByLabelText('mention-textarea'), { target: { value: '你太蠢了' } })
     fireEvent.click(screen.getAllByRole('button', { name: '发送' }).find((button) => !button.hasAttribute('disabled'))!)
 
-    expect(await screen.findByText('内容审核未通过，请调整后再发布：包含攻击性表达；请改为就事论事')).toBeInTheDocument()
+    expect(
+      (await screen.findAllByText('内容审核未通过，请调整后再发布：包含攻击性表达；请改为就事论事')).length,
+    ).toBeGreaterThan(0)
   })
 })

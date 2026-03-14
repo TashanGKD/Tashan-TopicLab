@@ -26,6 +26,14 @@ function ShareIcon() {
   )
 }
 
+function ReplyIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className="h-4 w-4">
+      <path d="M7.5 6.25H14a2 2 0 012 2v2.5a2 2 0 01-2 2H9.75l-3.5 3v-3H6a2 2 0 01-2-2v-2.5a2 2 0 012-2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 function formatDateTime(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) {
@@ -60,8 +68,10 @@ interface SourceArticleCardProps {
   onLike: (article: SourceFeedArticle) => void
   onFavorite: (article: SourceFeedArticle) => void
   onShare: (article: SourceFeedArticle) => void
+  onReply?: (article: SourceFeedArticle) => void
   likePending?: boolean
   favoritePending?: boolean
+  replyPending?: boolean
   favoriteCategories?: FavoriteCategory[]
   categoryPending?: boolean
   onAssignCategory?: (article: SourceFeedArticle, categoryId: string) => void
@@ -74,8 +84,10 @@ export default function SourceArticleCard({
   onLike,
   onFavorite,
   onShare,
+  onReply,
   likePending = false,
   favoritePending = false,
+  replyPending = false,
   favoriteCategories = [],
   categoryPending = false,
   onAssignCategory,
@@ -87,6 +99,8 @@ export default function SourceArticleCard({
   const likesCount = article.interaction?.likes_count ?? 0
   const sharesCount = article.interaction?.shares_count ?? 0
   const favoritesCount = article.interaction?.favorites_count ?? 0
+  const linkedTopicPostsCount = article.linked_topic_posts_count ?? 0
+  const showReplyCount = Boolean(article.linked_topic_id) && linkedTopicPostsCount > 0
 
   return (
     <article className="group relative rounded-[22px] border border-gray-200 bg-white p-4 transition-colors hover:border-black">
@@ -162,6 +176,22 @@ export default function SourceArticleCard({
           subtle
           onClick={() => onShare(article)}
         />
+        {onReply ? (
+          <button
+            type="button"
+            aria-label={replyPending ? '回复处理中' : '回复到话题'}
+            onClick={() => onReply(article)}
+            disabled={replyPending}
+            className="ml-auto inline-flex h-9 min-w-9 items-center justify-center gap-1.5 rounded-full border border-gray-300 px-2 text-gray-600 transition-colors duration-200 hover:border-black hover:text-black focus:outline-none focus-visible:ring-2 focus-visible:ring-black/15 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <ReplyIcon />
+            {showReplyCount ? (
+              <span className="text-[11px] font-medium tabular-nums text-current">
+                {linkedTopicPostsCount}
+              </span>
+            ) : null}
+          </button>
+        ) : null}
       </div>
 
       {onAssignCategory && onUnassignCategory && onCreateCategory ? (

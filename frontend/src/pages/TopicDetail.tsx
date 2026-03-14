@@ -9,9 +9,11 @@ import {
   discussionApi,
   postsApi,
   topicExpertsApi,
+  sourceFeedApi,
   Topic,
   TopicExpert,
   Post,
+  SourceFeedArticle,
   StartDiscussionRequest,
   DiscussionProgress,
   getTopicCategoryMeta,
@@ -94,6 +96,8 @@ export default function TopicDetail() {
   const [topicLikePending, setTopicLikePending] = useState(false)
   const [topicFavoritePending, setTopicFavoritePending] = useState(false)
   const [postLikePendingIds, setPostLikePendingIds] = useState<Set<string>>(new Set())
+  const [linkedSourceArticle, setLinkedSourceArticle] = useState<SourceFeedArticle | null>(null)
+  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth)
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const pendingRepliesRef = useRef<Set<string>>(new Set())
   const composerTextareaRef = useRef<HTMLTextAreaElement>(null)
@@ -153,6 +157,12 @@ export default function TopicDetail() {
   }, [id])
 
   useEffect(() => {
+    const onResize = () => setViewportWidth(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  useEffect(() => {
     const syncUser = async () => {
       const token = tokenManager.get()
       if (token) {
@@ -176,6 +186,29 @@ export default function TopicDetail() {
       window.removeEventListener('auth-change', handleAuthChange)
     }
   }, [])
+
+  useEffect(() => {
+    const articleId = extractSourceArticleId(topic?.body || '')
+    if (!articleId) {
+      setLinkedSourceArticle(null)
+      return
+    }
+    let cancelled = false
+    sourceFeedApi.detail(articleId)
+      .then((res) => {
+        if (!cancelled) {
+          setLinkedSourceArticle(res.data)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLinkedSourceArticle(buildSourcePreviewFromTopicBody(topic?.body || '', articleId))
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [topic?.body])
 
   const mergePosts = (existing: Post[], incoming: Post[]) => {
     const byId = new Map(existing.map(item => [item.id, item]))
@@ -741,7 +774,6 @@ export default function TopicDetail() {
   const topicFavorites = topic.interaction?.favorites_count ?? 0
   const topicLiked = topic.interaction?.liked ?? false
   const topicFavorited = topic.interaction?.favorited ?? false
-
   return (
     <div className="bg-white min-h-screen">
       <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-4 sm:py-5 flex flex-col lg:flex-row gap-5 lg:gap-7">
@@ -800,6 +832,8 @@ export default function TopicDetail() {
                 isRunning={polling}
                 isCompleted={topic.discussion_status === 'completed'}
                 initialSkillIds={initialSkillIds}
+                linkedSourceArticle={linkedSourceArticle}
+                viewportWidth={viewportWidth}
               />
             </div>
           ) : null}
@@ -1207,6 +1241,34 @@ export default function TopicDetail() {
 
 function getUserDisplayName(user: User): string {
   return user.username?.trim() || user.phone || `用户-${user.id}`
+}
+
+function extractSourceArticleId(topicBody: string): number | null {
+  const match = topicBody.match(/^- article_id:\s*(\d+)\s*$/m)
+  if (!match) return null
+  const articleId = Number.parseInt(match[1], 10)
+  return Number.isFinite(articleId) && articleId > 0 ? articleId : null
+}
+
+function extractBulletValue(topicBody: string, key: string): string {
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const regex = new RegExp(`^- ${escaped}：\\s*(.+)$`, 'm')
+  const match = topicBody.match(regex)
+  return match?.[1]?.trim() ?? ''
+}
+
+function buildSourcePreviewFromTopicBody(topicBody: string, articleId: number): SourceFeedArticle {
+  return {
+    id: articleId,
+    title: extractBulletValue(topicBody, '标题') || `信源 ${articleId}`,
+    source_feed_name: extractBulletValue(topicBody, '来源') || '未知来源',
+    source_type: 'source-feed',
+    url: extractBulletValue(topicBody, '原文链接'),
+    pic_url: null,
+    description: extractBulletValue(topicBody, '原文摘要'),
+    publish_time: extractBulletValue(topicBody, '发布时间'),
+    created_at: '',
+  }
 }
 
 function ensureExpertMention(text: string, expertName: string): string {

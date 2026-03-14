@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { sourceFeedApi, SourceFeedArticle } from '../api/client'
 import { tokenManager, User } from '../api/auth'
 import SourceArticleCard from '../components/SourceArticleCard'
@@ -59,6 +60,7 @@ function splitIntoColumns(items: SourceFeedArticle[], columnCount: number) {
 }
 
 export default function SourceFeedPage() {
+  const navigate = useNavigate()
   const [articles, setArticles] = useState<SourceFeedArticle[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -69,6 +71,7 @@ export default function SourceFeedPage() {
   const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [pendingLikeIds, setPendingLikeIds] = useState<Set<number>>(new Set())
   const [pendingFavoriteIds, setPendingFavoriteIds] = useState<Set<number>>(new Set())
+  const [pendingReplyIds, setPendingReplyIds] = useState<Set<number>>(new Set())
   const loadingMoreRef = useRef(false)
   const hasMoreRef = useRef(true)
   const pageRef = useRef(0)
@@ -250,6 +253,23 @@ export default function SourceFeedPage() {
     }
   }
 
+  const handleReply = async (article: SourceFeedArticle) => {
+    setPendingReplyIds(prev => new Set(prev).add(article.id))
+    try {
+      const res = await sourceFeedApi.ensureTopic(article.id)
+      navigate(`/topics/${res.data.topic.id}`)
+      toast.success('已打开对应话题')
+    } catch (err) {
+      handleApiError(err, '打开信源对应话题失败')
+    } finally {
+      setPendingReplyIds(prev => {
+        const next = new Set(prev)
+        next.delete(article.id)
+        return next
+      })
+    }
+  }
+
   return (
     <div className="min-h-screen bg-white">
       <div className="mx-auto max-w-[1400px] px-4 py-5 sm:px-6 sm:py-6">
@@ -348,8 +368,10 @@ export default function SourceFeedPage() {
                     onLike={handleLike}
                     onFavorite={handleFavorite}
                     onShare={handleShare}
+                    onReply={handleReply}
                     likePending={pendingLikeIds.has(article.id)}
                     favoritePending={pendingFavoriteIds.has(article.id)}
+                    replyPending={pendingReplyIds.has(article.id)}
                   />
                 ))}
               </div>

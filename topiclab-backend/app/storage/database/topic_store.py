@@ -161,6 +161,22 @@ def init_topic_tables() -> None:
             )
         """))
         session.execute(text("""
+            CREATE TABLE IF NOT EXISTS topic_source_article_links (
+                article_id BIGINT PRIMARY KEY,
+                topic_id VARCHAR(36) NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+                snapshot_title TEXT NOT NULL DEFAULT '',
+                snapshot_source_feed_name TEXT NOT NULL DEFAULT '',
+                snapshot_source_type TEXT NOT NULL DEFAULT '',
+                snapshot_url TEXT NOT NULL DEFAULT '',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """))
+        session.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_topic_source_article_links_topic_id
+            ON topic_source_article_links(topic_id)
+        """))
+        session.execute(text("""
             CREATE TABLE IF NOT EXISTS posts (
                 id VARCHAR(36) PRIMARY KEY,
                 topic_id VARCHAR(36) NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
@@ -759,21 +775,39 @@ def annotate_source_articles_with_interactions(
     article_map = {int(item["id"]): item for item in articles}
     for item in articles:
         item["interaction"] = item.get("interaction") or _source_interaction_template()
+        item["linked_topic_id"] = item.get("linked_topic_id")
+        item["linked_topic_posts_count"] = int(item.get("linked_topic_posts_count") or 0)
 
     with get_db_session() as session:
-        stat_rows = session.execute(
+        aggregate_rows = session.execute(
             text("""
-                SELECT article_id, likes_count, favorites_count, shares_count
-                FROM source_article_stats
-                WHERE article_id IN :article_ids
+                SELECT
+                    COALESCE(s.article_id, l.article_id) AS article_id,
+                    COALESCE(s.likes_count, 0) AS likes_count,
+                    COALESCE(s.favorites_count, 0) AS favorites_count,
+                    COALESCE(s.shares_count, 0) AS shares_count,
+                    l.topic_id,
+                    COALESCE(t.posts_count, 0) AS posts_count
+                FROM source_article_stats AS s
+                FULL OUTER JOIN topic_source_article_links AS l
+                    ON l.article_id = s.article_id
+                LEFT JOIN topics AS t
+                    ON t.id = l.topic_id
+                WHERE COALESCE(s.article_id, l.article_id) IN :article_ids
             """).bindparams(bindparam("article_ids", expanding=True)),
             {"article_ids": article_ids},
         ).fetchall()
-    for row in stat_rows:
-        interaction = article_map[int(row.article_id)]["interaction"]
+    for row in aggregate_rows:
+        article = article_map.get(int(row.article_id))
+        if article is None:
+            continue
+        interaction = article["interaction"]
         interaction["likes_count"] = int(row.likes_count or 0)
         interaction["favorites_count"] = int(row.favorites_count or 0)
         interaction["shares_count"] = int(row.shares_count or 0)
+        if row.topic_id:
+            article["linked_topic_id"] = str(row.topic_id)
+            article["linked_topic_posts_count"] = int(row.posts_count or 0)
 
     if user_id is not None and auth_type:
         with get_db_session() as session:
@@ -902,6 +936,72 @@ def get_topic(
         _cache_set(cache_key, topic)
     annotate_topics_with_interactions([topic], user_id=user_id, auth_type=auth_type)
     return topic
+
+
+def get_topic_id_by_source_article(article_id: int) -> str | None:
+    with get_db_session() as session:
+        row = session.execute(
+            text("""
+                SELECT l.topic_id
+                FROM topic_source_article_links AS l
+                JOIN topics AS t ON t.id = l.topic_id
+                WHERE l.article_id = :article_id
+            """),
+            {"article_id": article_id},
+        ).first()
+    if not row:
+        return None
+    return str(row.topic_id)
+
+
+def link_source_article_to_topic(
+    article_id: int,
+    topic_id: str,
+    *,
+    title: str = "",
+    source_feed_name: str = "",
+    source_type: str = "",
+    url: str = "",
+) -> str:
+    now = utc_now()
+    with get_db_session() as session:
+        row = session.execute(
+            text("""
+                INSERT INTO topic_source_article_links (
+                    article_id,
+                    topic_id,
+                    snapshot_title,
+                    snapshot_source_feed_name,
+                    snapshot_source_type,
+                    snapshot_url,
+                    created_at,
+                    updated_at
+                ) VALUES (
+                    :article_id,
+                    :topic_id,
+                    :snapshot_title,
+                    :snapshot_source_feed_name,
+                    :snapshot_source_type,
+                    :snapshot_url,
+                    :created_at,
+                    :updated_at
+                )
+                ON CONFLICT (article_id) DO UPDATE SET
+                    updated_at = EXCLUDED.updated_at
+                RETURNING topic_id
+            """),
+            {
+                "article_id": article_id,
+                "topic_id": topic_id,
+                "snapshot_title": title,
+                "snapshot_source_feed_name": source_feed_name,
+                "snapshot_source_type": source_type,
+                "snapshot_url": url,
+                "created_at": now,
+                "updated_at": now,
+            },
+        ).one()
+    return str(row.topic_id)
 
 
 def update_topic(topic_id: str, data: dict) -> dict | None:
