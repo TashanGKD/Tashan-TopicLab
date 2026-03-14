@@ -7,13 +7,20 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
+from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 
+from app.api.auth import security, verify_access_token
 from app.services.source_feed_pipeline import (
     fetch_source_feed_article_detail,
     hydrate_topic_workspace,
+)
+from app.storage.database.topic_store import (
+    annotate_source_articles_with_interactions,
+    record_source_article_share,
+    set_source_article_user_action,
 )
 
 router = APIRouter()
@@ -25,6 +32,42 @@ _ALLOWED_IMAGE_HOSTS = {
 
 class SourceFeedWorkspaceHydrateRequest(BaseModel):
     article_ids: list[int] = Field(..., min_length=1, max_length=20)
+
+
+class SourceArticleActionRequest(BaseModel):
+    enabled: bool = True
+    title: str = ""
+    source_feed_name: str = ""
+    source_type: str = ""
+    url: str = ""
+    pic_url: str | None = None
+    description: str = ""
+    publish_time: str = ""
+    created_at: str = ""
+
+
+async def _get_optional_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> dict | None:
+    if not credentials:
+        return None
+    return verify_access_token(credentials.credentials)
+
+
+def _resolve_owner_identity(user: dict | None) -> tuple[int | None, str | None]:
+    if not user:
+        return None, None
+    raw_user_id = user.get("sub")
+    if raw_user_id is None:
+        return None, user.get("auth_type")
+    return int(raw_user_id), user.get("auth_type", "jwt")
+
+
+def _require_owner_identity(user: dict | None) -> tuple[int, str]:
+    user_id, auth_type = _resolve_owner_identity(user)
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="未登录")
+    return user_id, auth_type or "jwt"
 
 
 def _get_information_collection_base_url() -> str:
@@ -73,6 +116,7 @@ def _validate_image_url(url: str) -> str:
 async def get_source_feed_articles(
     limit: int = Query(default=8, ge=1, le=20),
     offset: int = Query(default=0, ge=0),
+    user: dict | None = Depends(_get_optional_user),
 ):
     upstream_url = f"{_get_information_collection_base_url()}/api/v1/articles"
 
@@ -94,8 +138,12 @@ async def get_source_feed_articles(
     if not isinstance(raw_list, list):
         raise HTTPException(status_code=502, detail="信源文章列表缺失")
 
+    user_id, auth_type = _resolve_owner_identity(user)
+    articles = [_normalize_article(item) for item in raw_list if isinstance(item, dict)]
+    annotate_source_articles_with_interactions(articles, user_id=user_id, auth_type=auth_type)
+
     return {
-        "list": [_normalize_article(item) for item in raw_list if isinstance(item, dict)],
+        "list": articles,
         "limit": int(data.get("limit", limit)),
         "offset": int(data.get("offset", offset)),
     }
@@ -109,7 +157,9 @@ async def get_source_feed_article_detail(article_id: int):
         raise HTTPException(status_code=exc.response.status_code, detail="上游信源服务请求失败") from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"获取信源全文失败: {exc}") from exc
-    return article.__dict__
+    payload = article.__dict__
+    annotate_source_articles_with_interactions([payload])
+    return payload
 
 
 @router.post("/topics/{topic_id}/workspace-materials")
@@ -154,3 +204,44 @@ async def proxy_source_feed_image(url: str = Query(..., min_length=1)):
         media_type=upstream.headers.get("Content-Type", "image/jpeg"),
         headers=response_headers,
     )
+
+
+@router.post("/articles/{article_id}/like")
+async def like_source_feed_article(
+    article_id: int,
+    req: SourceArticleActionRequest,
+    user: dict | None = Depends(_get_optional_user),
+):
+    user_id, auth_type = _require_owner_identity(user)
+    return set_source_article_user_action(
+        article_id,
+        user_id=user_id,
+        auth_type=auth_type,
+        liked=req.enabled,
+        snapshot=req.model_dump(exclude={"enabled"}),
+    )
+
+
+@router.post("/articles/{article_id}/favorite")
+async def favorite_source_feed_article(
+    article_id: int,
+    req: SourceArticleActionRequest,
+    user: dict | None = Depends(_get_optional_user),
+):
+    user_id, auth_type = _require_owner_identity(user)
+    return set_source_article_user_action(
+        article_id,
+        user_id=user_id,
+        auth_type=auth_type,
+        favorited=req.enabled,
+        snapshot=req.model_dump(exclude={"enabled"}),
+    )
+
+
+@router.post("/articles/{article_id}/share")
+async def share_source_feed_article(
+    article_id: int,
+    user: dict | None = Depends(_get_optional_user),
+):
+    user_id, auth_type = _resolve_owner_identity(user)
+    return record_source_article_share(article_id, user_id=user_id, auth_type=auth_type)

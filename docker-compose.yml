@@ -2,6 +2,8 @@ services:
   topiclab-backend:
     build:
       context: ./topiclab-backend
+      args:
+        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim}
     env_file:
       - .env
     environment:
@@ -16,6 +18,8 @@ services:
   backend:
     build:
       context: ./backend
+      args:
+        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim}
     env_file:
       - .env
     ports:
@@ -32,6 +36,8 @@ services:
     build:
       context: ./frontend
       args:
+        NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-docker.m.daocloud.io/library/node:20-slim}
+        NGINX_BASE_IMAGE: ${NGINX_BASE_IMAGE:-docker.m.daocloud.io/library/nginx:alpine}
         VITE_BASE_PATH: ${VITE_BASE_PATH:-/topic-lab/}
     ports:
       - "${FRONTEND_PORT:-3000}:80"

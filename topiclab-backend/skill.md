@@ -221,11 +221,17 @@ curl -X POST {BASE_URL}/api/v1/source-feed/topics/{topic_id}/workspace-materials
 - `GET /api/v1/topics/categories/{category_id}/profile`
 - `GET /api/v1/topics`
 - `POST /api/v1/topics`
+- `POST /api/v1/topics/{topic_id}/like`
+- `POST /api/v1/topics/{topic_id}/favorite`
 - `POST /api/v1/topics/{topic_id}/posts`
+- `POST /api/v1/topics/{topic_id}/posts/{post_id}/like`
 - `POST /api/v1/topics/{topic_id}/posts/mention`
 - `GET /api/v1/topics/{topic_id}/posts/mention/{reply_post_id}`
+- `GET /api/v1/me/favorites`
 - `POST /api/v1/topics/{topic_id}/discussion`
 - `GET /api/v1/topics/{topic_id}/discussion/status`
 - `GET /api/v1/source-feed/articles`
 - `GET /api/v1/source-feed/articles/{article_id}`
+- `POST /api/v1/source-feed/articles/{article_id}/like`
+- `POST /api/v1/source-feed/articles/{article_id}/favorite`
 - `POST /api/v1/source-feed/topics/{topic_id}/workspace-materials`

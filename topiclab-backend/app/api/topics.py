@@ -23,26 +23,34 @@ from app.services.resonnet_client import request_json
 from app.storage.database.postgres_client import get_db_session
 from app.storage.database.topic_store import (
     DEFAULT_MODERATOR_MODE,
+    assign_source_article_to_favorite_category,
+    assign_topic_to_favorite_category,
     close_topic,
+    classify_favorites_by_category_name,
     create_topic,
+    create_favorite_category,
     delete_post,
+    delete_favorite_category,
     delete_topic,
     extract_preview_image,
     generate_post_delete_token,
-    get_post,
     get_generated_image,
+    get_favorite_category,
+    get_favorite_category_summary_payload,
+    get_post,
     get_topic,
     get_topic_moderator_config,
     hash_post_delete_token,
+    list_favorite_categories,
     list_user_favorite_source_articles,
     list_user_favorite_topics,
-    record_post_share,
-    record_topic_share,
     list_discussion_turns,
     list_posts,
     list_topic_experts,
     list_topics,
     make_post,
+    record_post_share,
+    record_topic_share,
     replace_discussion_turns,
     replace_generated_images,
     replace_topic_experts,
@@ -52,7 +60,10 @@ from app.storage.database.topic_store import (
     set_source_article_user_action,
     set_topic_user_action,
     set_topic_moderator_config,
+    unassign_source_article_from_favorite_category,
+    unassign_topic_from_favorite_category,
     update_topic,
+    update_favorite_category,
     upsert_post,
 )
 
@@ -276,6 +287,23 @@ class SourceArticleActionRequest(ToggleActionRequest):
     description: str = ""
     publish_time: str = ""
     created_at: str = ""
+
+
+class FavoriteCategoryCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+    description: str = ""
+
+
+class FavoriteCategoryUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = None
+
+
+class FavoriteCategoryBatchClassifyRequest(BaseModel):
+    category_name: str = Field(..., min_length=1, max_length=120)
+    description: str = ""
+    topic_ids: list[str] = Field(default_factory=list, max_length=100)
+    article_ids: list[int] = Field(default_factory=list, max_length=100)
 
 
 def get_workspace_base() -> Path:
@@ -892,7 +920,162 @@ def get_my_favorites_endpoint(user: dict | None = Depends(_get_optional_user)):
     return {
         "topics": list_user_favorite_topics(user_id=user_id, auth_type=auth_type),
         "source_articles": list_user_favorite_source_articles(user_id=user_id, auth_type=auth_type),
+        "categories": list_favorite_categories(user_id=user_id, auth_type=auth_type),
     }
+
+
+@router.get("/me/favorite-categories")
+def list_my_favorite_categories_endpoint(user: dict | None = Depends(_get_optional_user)):
+    user_id, auth_type = _require_owner_identity(user)
+    return {"list": list_favorite_categories(user_id=user_id, auth_type=auth_type)}
+
+
+@router.post("/me/favorite-categories", status_code=201)
+def create_my_favorite_category_endpoint(
+    req: FavoriteCategoryCreateRequest,
+    user: dict | None = Depends(_get_optional_user),
+):
+    user_id, auth_type = _require_owner_identity(user)
+    try:
+        return create_favorite_category(
+            user_id=user_id,
+            auth_type=auth_type,
+            name=req.name,
+            description=req.description,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=409, detail=f"创建收藏分类失败: {exc}") from exc
+
+
+@router.patch("/me/favorite-categories/{category_id}")
+def update_my_favorite_category_endpoint(
+    category_id: str,
+    req: FavoriteCategoryUpdateRequest,
+    user: dict | None = Depends(_get_optional_user),
+):
+    user_id, auth_type = _require_owner_identity(user)
+    updated = update_favorite_category(
+        category_id,
+        user_id=user_id,
+        auth_type=auth_type,
+        name=req.name,
+        description=req.description,
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="收藏分类不存在")
+    return updated
+
+
+@router.delete("/me/favorite-categories/{category_id}")
+def delete_my_favorite_category_endpoint(category_id: str, user: dict | None = Depends(_get_optional_user)):
+    user_id, auth_type = _require_owner_identity(user)
+    if not delete_favorite_category(category_id, user_id=user_id, auth_type=auth_type):
+        raise HTTPException(status_code=404, detail="收藏分类不存在")
+    return {"ok": True, "category_id": category_id}
+
+
+@router.get("/me/favorite-categories/{category_id}")
+def get_my_favorite_category_endpoint(category_id: str, user: dict | None = Depends(_get_optional_user)):
+    user_id, auth_type = _require_owner_identity(user)
+    category = get_favorite_category(category_id, user_id=user_id, auth_type=auth_type)
+    if not category:
+        raise HTTPException(status_code=404, detail="收藏分类不存在")
+    return category
+
+
+@router.get("/me/favorite-categories/{category_id}/summary-payload")
+def get_my_favorite_category_summary_payload_endpoint(
+    category_id: str,
+    user: dict | None = Depends(_get_optional_user),
+):
+    user_id, auth_type = _require_owner_identity(user)
+    payload = get_favorite_category_summary_payload(category_id, user_id=user_id, auth_type=auth_type)
+    if not payload:
+        raise HTTPException(status_code=404, detail="收藏分类不存在")
+    return payload
+
+
+@router.post("/me/favorite-categories/classify")
+def classify_my_favorites_endpoint(
+    req: FavoriteCategoryBatchClassifyRequest,
+    user: dict | None = Depends(_get_optional_user),
+):
+    user_id, auth_type = _require_owner_identity(user)
+    try:
+        return classify_favorites_by_category_name(
+            user_id=user_id,
+            auth_type=auth_type,
+            category_name=req.category_name,
+            description=req.description,
+            topic_ids=req.topic_ids,
+            article_ids=req.article_ids,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except KeyError as exc:
+        if str(exc) == "'favorite_topic_required'":
+            raise HTTPException(status_code=400, detail="只能对已收藏的话题做分类") from exc
+        if str(exc) == "'favorite_source_required'":
+            raise HTTPException(status_code=400, detail="只能对已收藏的信源做分类") from exc
+        raise HTTPException(status_code=404, detail="收藏分类不存在") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=409, detail=f"收藏分类失败: {exc}") from exc
+
+
+@router.post("/me/favorite-categories/{category_id}/topics/{topic_id}")
+def assign_topic_to_my_favorite_category_endpoint(
+    category_id: str,
+    topic_id: str,
+    user: dict | None = Depends(_get_optional_user),
+):
+    user_id, auth_type = _require_owner_identity(user)
+    try:
+        return assign_topic_to_favorite_category(category_id, topic_id, user_id=user_id, auth_type=auth_type)
+    except KeyError as exc:
+        if str(exc) == "'favorite_topic_required'":
+            raise HTTPException(status_code=400, detail="只能对已收藏的话题做分类") from exc
+        raise HTTPException(status_code=404, detail="收藏分类不存在") from exc
+
+
+@router.delete("/me/favorite-categories/{category_id}/topics/{topic_id}")
+def unassign_topic_from_my_favorite_category_endpoint(
+    category_id: str,
+    topic_id: str,
+    user: dict | None = Depends(_get_optional_user),
+):
+    user_id, auth_type = _require_owner_identity(user)
+    try:
+        return unassign_topic_from_favorite_category(category_id, topic_id, user_id=user_id, auth_type=auth_type)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="收藏分类不存在") from exc
+
+
+@router.post("/me/favorite-categories/{category_id}/source-articles/{article_id}")
+def assign_source_article_to_my_favorite_category_endpoint(
+    category_id: str,
+    article_id: int,
+    user: dict | None = Depends(_get_optional_user),
+):
+    user_id, auth_type = _require_owner_identity(user)
+    try:
+        return assign_source_article_to_favorite_category(category_id, article_id, user_id=user_id, auth_type=auth_type)
+    except KeyError as exc:
+        if str(exc) == "'favorite_source_required'":
+            raise HTTPException(status_code=400, detail="只能对已收藏的信源做分类") from exc
+        raise HTTPException(status_code=404, detail="收藏分类不存在") from exc
+
+
+@router.delete("/me/favorite-categories/{category_id}/source-articles/{article_id}")
+def unassign_source_article_from_my_favorite_category_endpoint(
+    category_id: str,
+    article_id: int,
+    user: dict | None = Depends(_get_optional_user),
+):
+    user_id, auth_type = _require_owner_identity(user)
+    try:
+        return unassign_source_article_from_favorite_category(category_id, article_id, user_id=user_id, auth_type=auth_type)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="收藏分类不存在") from exc
 
 
 @router.get("/topics/{topic_id}/posts")

@@ -40,6 +40,7 @@ export interface Topic {
   creator_user_id?: number | null
   creator_name?: string | null
   creator_auth_type?: string | null
+  posts_count?: number
   interaction?: TopicInteraction
 }
 
@@ -78,7 +79,10 @@ export interface TopicListItem {
   creator_user_id?: number | null
   creator_name?: string | null
   creator_auth_type?: string | null
+  posts_count?: number
   interaction?: TopicInteraction
+  favorite_category_ids?: string[]
+  favorite_categories?: FavoriteCategoryRef[]
 }
 
 export interface TopicInteraction {
@@ -100,6 +104,24 @@ export interface SourceFeedArticle {
   publish_time: string
   created_at: string
   interaction?: SourceArticleInteraction
+  favorite_category_ids?: string[]
+  favorite_categories?: FavoriteCategoryRef[]
+}
+
+export interface FavoriteCategoryRef {
+  id: string
+  name: string
+}
+
+export interface FavoriteCategory extends FavoriteCategoryRef {
+  description: string
+  created_at: string
+  updated_at: string
+  topics_count: number
+  source_articles_count: number
+  items_count?: number
+  topics?: TopicListItem[]
+  source_articles?: SourceFeedArticle[]
 }
 
 export interface SourceArticleInteraction {
@@ -185,6 +207,17 @@ export interface SourceArticleActionRequest extends ToggleActionRequest {
 export interface MyFavoritesResponse {
   topics: TopicListItem[]
   source_articles: SourceFeedArticle[]
+  categories: FavoriteCategory[]
+}
+
+export interface FavoriteCategoryCreateRequest {
+  name: string
+  description?: string
+}
+
+export interface FavoriteCategoryUpdateRequest {
+  name?: string
+  description?: string
 }
 
 export interface CreateTopicRequest {
@@ -269,7 +302,27 @@ export const topicsApi = {
   like: (id: string, enabled: boolean) => api.post<TopicInteraction>(`/topics/${id}/like`, { enabled }),
   favorite: (id: string, enabled: boolean) => api.post<TopicInteraction>(`/topics/${id}/favorite`, { enabled }),
   share: (id: string) => api.post<TopicInteraction>(`/topics/${id}/share`),
-  getFavorites: () => api.get<MyFavoritesResponse>('/me/favorites'),
+  getFavorites: () => api.get<MyFavoritesResponse>('/api/v1/me/favorites'),
+  listFavoriteCategories: () => api.get<{ list: FavoriteCategory[] }>('/api/v1/me/favorite-categories'),
+  createFavoriteCategory: (data: FavoriteCategoryCreateRequest) => api.post<FavoriteCategory>('/api/v1/me/favorite-categories', data),
+  updateFavoriteCategory: (categoryId: string, data: FavoriteCategoryUpdateRequest) =>
+    api.patch<FavoriteCategory>(`/api/v1/me/favorite-categories/${categoryId}`, data),
+  deleteFavoriteCategory: (categoryId: string) =>
+    api.delete<{ ok: boolean; category_id: string }>(`/api/v1/me/favorite-categories/${categoryId}`),
+  assignTopicToFavoriteCategory: (categoryId: string, topicId: string) =>
+    api.post<FavoriteCategory>(`/api/v1/me/favorite-categories/${categoryId}/topics/${topicId}`),
+  unassignTopicFromFavoriteCategory: (categoryId: string, topicId: string) =>
+    api.delete<FavoriteCategory>(`/api/v1/me/favorite-categories/${categoryId}/topics/${topicId}`),
+  assignSourceToFavoriteCategory: (categoryId: string, articleId: number) =>
+    api.post<FavoriteCategory>(`/api/v1/me/favorite-categories/${categoryId}/source-articles/${articleId}`),
+  unassignSourceFromFavoriteCategory: (categoryId: string, articleId: number) =>
+    api.delete<FavoriteCategory>(`/api/v1/me/favorite-categories/${categoryId}/source-articles/${articleId}`),
+  classifyFavorites: (data: { category_name: string; description?: string; topic_ids?: string[]; article_ids?: number[] }) =>
+    api.post<FavoriteCategory>('/api/v1/me/favorite-categories/classify', data),
+  getFavoriteCategorySummaryPayload: (categoryId: string) =>
+    api.get<{ category: FavoriteCategoryRef; topics: TopicListItem[]; source_articles: SourceFeedArticle[]; combined_markdown: string }>(
+      `/api/v1/me/favorite-categories/${categoryId}/summary-payload`,
+    ),
 }
 
 export const sourceFeedApi = {

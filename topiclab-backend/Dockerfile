@@ -1,4 +1,5 @@
-FROM python:3.11-slim
+ARG PYTHON_BASE_IMAGE=docker.m.daocloud.io/library/python:3.11-slim
+FROM ${PYTHON_BASE_IMAGE}
 
 RUN useradd -m -u 1000 appuser
 

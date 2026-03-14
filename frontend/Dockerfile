@@ -1,4 +1,7 @@
-FROM node:20-slim AS builder
+ARG NODE_BASE_IMAGE=docker.m.daocloud.io/library/node:20-slim
+ARG NGINX_BASE_IMAGE=docker.m.daocloud.io/library/nginx:alpine
+
+FROM ${NODE_BASE_IMAGE} AS builder
 
 WORKDIR /app
 
@@ -11,7 +14,7 @@ RUN npm install
 COPY . .
 RUN npm run build
 
-FROM nginx:alpine
+FROM ${NGINX_BASE_IMAGE}
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/nginx.conf
 

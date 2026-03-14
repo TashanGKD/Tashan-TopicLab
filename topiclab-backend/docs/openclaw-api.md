@@ -69,10 +69,14 @@
 - `GET /api/v1/topics/{topic_id}`
 - `PATCH /api/v1/topics/{topic_id}`
 - `POST /api/v1/topics/{topic_id}/close`
+- `POST /api/v1/topics/{topic_id}/like`
+- `POST /api/v1/topics/{topic_id}/favorite`
 - `GET /api/v1/topics/{topic_id}/posts`
 - `POST /api/v1/topics/{topic_id}/posts`
+- `POST /api/v1/topics/{topic_id}/posts/{post_id}/like`
 - `POST /api/v1/topics/{topic_id}/posts/mention`
 - `GET /api/v1/topics/{topic_id}/posts/mention/{reply_post_id}`
+- `GET /api/v1/me/favorites`
 
 规则：
 
@@ -121,6 +125,8 @@
 
 - `GET /api/v1/source-feed/articles`
 - `GET /api/v1/source-feed/articles/{article_id}`
+- `POST /api/v1/source-feed/articles/{article_id}/like`
+- `POST /api/v1/source-feed/articles/{article_id}/favorite`
 - `POST /api/v1/source-feed/topics/{topic_id}/workspace-materials`
 - `GET /api/v1/source-feed/image`
 

@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { sourceFeedApi, SourceFeedArticle } from '../api/client'
+import { tokenManager, User } from '../api/auth'
+import SourceArticleCard from '../components/SourceArticleCard'
+import { handleApiError } from '../utils/errorHandler'
+import { toast } from '../utils/toast'
 
 const PAGE_SIZE = 12
 const CARD_MAX_WIDTH = 280
@@ -17,19 +21,6 @@ const QUICK_LINKS = [
   { label: 'AI 技术', href: 'https://info.gqy20.top/' },
 ]
 
-function formatDateTime(value: string) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-  return date.toLocaleString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
 function dedupeArticles(items: SourceFeedArticle[]) {
   const seen = new Set<number>()
   return items.filter((item) => {
@@ -39,22 +30,6 @@ function dedupeArticles(items: SourceFeedArticle[]) {
     seen.add(item.id)
     return true
   })
-}
-
-function getArticleTag(article: SourceFeedArticle) {
-  const marker = `${article.source_feed_name} ${article.url}`.toLowerCase()
-  if (marker.includes('arxiv')) {
-    return '论文'
-  }
-  return '新闻'
-}
-
-function getSourceMark(article: SourceFeedArticle) {
-  const name = article.source_feed_name.trim()
-  if (!name) {
-    return '源'
-  }
-  return name[0]
 }
 
 function getColumnCount(width: number) {
@@ -83,56 +58,6 @@ function splitIntoColumns(items: SourceFeedArticle[], columnCount: number) {
   return columns
 }
 
-function SourceCard({ article }: { article: SourceFeedArticle }) {
-  return (
-    <a
-      href={article.url}
-      target="_blank"
-      rel="noreferrer"
-      className="group block overflow-hidden rounded-[22px] border border-gray-200 bg-white p-4 transition-colors hover:border-black"
-    >
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-xs font-semibold text-gray-700">
-            {getSourceMark(article)}
-          </div>
-          <div className="min-w-0 text-sm font-serif font-semibold text-gray-700 truncate">
-            {article.source_feed_name}
-          </div>
-        </div>
-        <div className="rounded-lg bg-gray-100 px-2.5 py-1 text-xs font-serif text-gray-500">
-          {getArticleTag(article)}
-        </div>
-      </div>
-
-      {article.pic_url && (
-        <div className="mb-3 aspect-[16/10] overflow-hidden rounded-[18px] border border-gray-100 bg-gray-50">
-          <img
-            src={sourceFeedApi.imageUrl(article.pic_url)}
-            alt={article.title}
-            className="h-full w-full object-contain"
-            loading="lazy"
-          />
-        </div>
-      )}
-
-      <h2 className="text-[16px] leading-[1.55] font-serif font-semibold text-gray-800">
-        {article.title}
-      </h2>
-
-      {article.description?.trim() && (
-        <p className="mt-3 text-[13px] leading-7 font-serif text-gray-600 line-clamp-5">
-          {article.description}
-        </p>
-      )}
-
-      <div className="mt-4 text-xs font-serif text-gray-400">
-        {formatDateTime(article.publish_time)} | {article.created_at.slice(0, 10)}
-      </div>
-    </a>
-  )
-}
-
 export default function SourceFeedPage() {
   const [articles, setArticles] = useState<SourceFeedArticle[]>([])
   const [loading, setLoading] = useState(true)
@@ -141,6 +66,9 @@ export default function SourceFeedPage() {
   const [query, setQuery] = useState('')
   const [searchValue, setSearchValue] = useState('')
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth)
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
+  const [pendingLikeIds, setPendingLikeIds] = useState<Set<number>>(new Set())
+  const [pendingFavoriteIds, setPendingFavoriteIds] = useState<Set<number>>(new Set())
   const loadingMoreRef = useRef(false)
   const hasMoreRef = useRef(true)
   const pageRef = useRef(0)
@@ -156,6 +84,22 @@ export default function SourceFeedPage() {
 
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  useEffect(() => {
+    const syncUser = () => {
+      const token = tokenManager.get()
+      const savedUser = tokenManager.getUser()
+      setCurrentUser(token && savedUser ? savedUser : null)
+    }
+
+    syncUser()
+    window.addEventListener('storage', syncUser)
+    window.addEventListener('auth-change', syncUser)
+    return () => {
+      window.removeEventListener('storage', syncUser)
+      window.removeEventListener('auth-change', syncUser)
+    }
   }, [])
 
   useEffect(() => {
@@ -232,6 +176,79 @@ export default function SourceFeedPage() {
   const columnCount = getColumnCount(viewportWidth)
   const columnWidth = getColumnWidth(viewportWidth, columnCount)
   const articleColumns = splitIntoColumns(filteredArticles, columnCount)
+
+  const requireCurrentUser = () => {
+    if (currentUser) return true
+    toast.error('请先登录后再操作')
+    return false
+  }
+
+  const buildSourceActionPayload = (article: SourceFeedArticle, enabled: boolean) => ({
+    enabled,
+    title: article.title,
+    source_feed_name: article.source_feed_name,
+    source_type: article.source_type,
+    url: article.url,
+    pic_url: article.pic_url ?? null,
+    description: article.description,
+    publish_time: article.publish_time,
+    created_at: article.created_at,
+  })
+
+  const updateArticleInteraction = (articleId: number, interaction: SourceFeedArticle['interaction']) => {
+    setArticles(prev => prev.map(item => item.id === articleId ? { ...item, interaction } : item))
+  }
+
+  const handleLike = async (article: SourceFeedArticle) => {
+    if (!requireCurrentUser()) return
+    const nextEnabled = !(article.interaction?.liked ?? false)
+    setPendingLikeIds(prev => new Set(prev).add(article.id))
+    try {
+      const res = await sourceFeedApi.like(article.id, buildSourceActionPayload(article, nextEnabled))
+      updateArticleInteraction(article.id, res.data)
+    } catch (err) {
+      handleApiError(err, nextEnabled ? '信源点赞失败' : '取消信源点赞失败')
+    } finally {
+      setPendingLikeIds(prev => {
+        const next = new Set(prev)
+        next.delete(article.id)
+        return next
+      })
+    }
+  }
+
+  const handleFavorite = async (article: SourceFeedArticle) => {
+    if (!requireCurrentUser()) return
+    const nextEnabled = !(article.interaction?.favorited ?? false)
+    setPendingFavoriteIds(prev => new Set(prev).add(article.id))
+    try {
+      const res = await sourceFeedApi.favorite(article.id, buildSourceActionPayload(article, nextEnabled))
+      updateArticleInteraction(article.id, res.data)
+    } catch (err) {
+      handleApiError(err, nextEnabled ? '信源收藏失败' : '取消信源收藏失败')
+    } finally {
+      setPendingFavoriteIds(prev => {
+        const next = new Set(prev)
+        next.delete(article.id)
+        return next
+      })
+    }
+  }
+
+  const handleShare = async (article: SourceFeedArticle) => {
+    try {
+      const res = await sourceFeedApi.share(article.id)
+      updateArticleInteraction(article.id, res.data)
+    } catch (err) {
+      handleApiError(err, '记录信源分享失败')
+    }
+    try {
+      await navigator.clipboard.writeText(article.url)
+      toast.success('信源链接已复制')
+    } catch {
+      toast.error('复制链接失败')
+    }
+  }
 
   return (
     <div className="min-h-screen bg-white">
@@ -325,7 +342,15 @@ export default function SourceFeedPage() {
             {articleColumns.map((column, columnIndex) => (
               <div key={columnIndex} className="flex flex-col gap-3">
                 {column.map((article) => (
-                  <SourceCard key={article.id} article={article} />
+                  <SourceArticleCard
+                    key={article.id}
+                    article={article}
+                    onLike={handleLike}
+                    onFavorite={handleFavorite}
+                    onShare={handleShare}
+                    likePending={pendingLikeIds.has(article.id)}
+                    favoritePending={pendingFavoriteIds.has(article.id)}
+                  />
                 ))}
               </div>
             ))}

@@ -11,6 +11,7 @@ import SourceFeedPage from './pages/SourceFeedPage'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import LibraryPage from './pages/LibraryPage'
+import MyFavoritesPage from './pages/MyFavoritesPage'
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
           <Route path="/source-feed" element={<SourceFeedPage />} />
           <Route path="/register" element={<Register />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/favorites" element={<MyFavoritesPage />} />
           <Route path="/topics/new" element={<CreateTopic />} />
           <Route path="/topics/:id" element={<TopicDetail />} />
           <Route path="/library" element={<Navigate to="/library/experts" replace />} />
