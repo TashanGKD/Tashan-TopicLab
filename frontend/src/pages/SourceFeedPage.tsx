@@ -341,7 +341,8 @@ export default function SourceFeedPage() {
       handleApiError(err, '记录信源分享失败')
     }
     try {
-      await navigator.clipboard.writeText(article.url)
+      const text = article.title ? `${article.title}\n${article.url}` : article.url
+      await navigator.clipboard.writeText(text)
       toast.success('信源链接已复制')
     } catch {
       toast.error('复制链接失败')
@@ -367,7 +368,8 @@ export default function SourceFeedPage() {
 
   const handleLiteratureShare = (item: LiteratureRecentItem) => {
     const url = getArxivUrl(item.paper_id)
-    navigator.clipboard.writeText(url).then(
+    const text = item.title ? `${item.title}\n${url}` : url
+    navigator.clipboard.writeText(text).then(
       () => toast.success('论文链接已复制'),
       () => toast.error('复制链接失败'),
     )

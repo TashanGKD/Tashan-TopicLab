@@ -188,16 +188,17 @@ export default function MyFavoritesPage() {
     }
   }
 
-  const handleShareTopic = async (topicId: string) => {
+  const handleShareTopic = async (topic: TopicListItem) => {
     try {
-      const res = await topicsApi.share(topicId)
-      setTopics(prev => prev.map(item => item.id === topicId ? { ...item, interaction: res.data } : item))
+      const res = await topicsApi.share(topic.id)
+      setTopics(prev => prev.map(item => item.id === topic.id ? { ...item, interaction: res.data } : item))
     } catch (err) {
       handleApiError(err, '记录话题分享失败')
     }
     try {
-      const url = new URL(`${import.meta.env.BASE_URL}topics/${topicId}`, window.location.origin).toString()
-      await navigator.clipboard.writeText(url)
+      const url = new URL(`${import.meta.env.BASE_URL}topics/${topic.id}`, window.location.origin).toString()
+      const text = topic.title ? `${topic.title}\n${url}` : url
+      await navigator.clipboard.writeText(text)
       toast.success('话题链接已复制')
     } catch {
       toast.error('复制链接失败')
@@ -267,9 +268,10 @@ export default function MyFavoritesPage() {
     }
   }
 
-  const handleShareSource = async (url: string) => {
+  const handleShareSource = async (title: string, url: string) => {
     try {
-      await navigator.clipboard.writeText(url)
+      const text = title ? `${title}\n${url}` : url
+      await navigator.clipboard.writeText(text)
       toast.success('信源链接已复制')
     } catch {
       toast.error('复制链接失败')
@@ -356,7 +358,7 @@ export default function MyFavoritesPage() {
     } catch (err) {
       handleApiError(err, '记录信源分享失败')
     }
-    await handleShareSource(article.url)
+    await handleShareSource(article.title, article.url)
   }
 
   const createCategoryAndAssign = async (
@@ -648,7 +650,7 @@ export default function MyFavoritesPage() {
                   topic={topic}
                   onLike={handleLikeTopic}
                   onFavorite={handleFavoriteTopic}
-                  onShare={(item) => handleShareTopic(item.id)}
+                  onShare={handleShareTopic}
                   likePending={pendingTopicLikeIds.has(topic.id)}
                   favoritePending={pendingTopicFavoriteIds.has(topic.id)}
                   favoriteCategories={categories}

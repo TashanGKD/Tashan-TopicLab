@@ -209,7 +209,8 @@ export default function TopicList() {
     }
     try {
       const url = new URL(`${import.meta.env.BASE_URL}topics/${topic.id}`, window.location.origin).toString()
-      await navigator.clipboard.writeText(url)
+      const text = topic.title ? `${topic.title}\n${url}` : url
+      await navigator.clipboard.writeText(text)
       toast.success('话题链接已复制')
     } catch {
       toast.error('复制链接失败')

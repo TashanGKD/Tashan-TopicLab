@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Frontend**
 
+- Share actions (topics, posts, sources, literature) now copy both title and link to clipboard (format: `标题\n链接`) instead of link only
 - Source feed page adds Academic tab: same left tab layout as Library (Source Feed | Academic), Trends and waterfall layout shared, data from `GET /api/v1/literature/recent`, LiteratureCard style aligned with source feed
 - Literature API client: `literatureApi.papers`, `literatureApi.recent`, `literatureApi.paperById`, header `x-ingest-token`, env vars `VITE_LITERATURE_API_BASE`, `VITE_LITERATURE_SHARED_TOKEN`
 

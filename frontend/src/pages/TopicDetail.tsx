@@ -417,9 +417,9 @@ export default function TopicDetail() {
     }
   }
 
-  const copyLink = async (url: string, successMessage: string) => {
+  const copyToClipboard = async (text: string, successMessage: string) => {
     try {
-      await navigator.clipboard.writeText(url)
+      await navigator.clipboard.writeText(text)
       handleApiSuccess(successMessage)
       toast.success(successMessage)
     } catch {
@@ -428,7 +428,7 @@ export default function TopicDetail() {
   }
 
   const handleShareTopic = async () => {
-    if (!id) return
+    if (!id || !topic) return
     const url = new URL(`${import.meta.env.BASE_URL}topics/${id}`, window.location.origin).toString()
     try {
       const res = await topicsApi.share(id)
@@ -436,7 +436,8 @@ export default function TopicDetail() {
     } catch (err) {
       handleApiError(err, '记录分享失败')
     }
-    await copyLink(url, '话题链接已复制')
+    const text = topic.title ? `${topic.title}\n${url}` : url
+    await copyToClipboard(text, '话题链接已复制')
   }
 
   const handleLikePost = async (post: Post) => {
@@ -468,7 +469,7 @@ export default function TopicDetail() {
   }
 
   const handleSharePost = async (post: Post) => {
-    if (!id) return
+    if (!id || !topic) return
     const url = new URL(`${import.meta.env.BASE_URL}topics/${id}#post-${post.id}`, window.location.origin).toString()
     try {
       const res = await postsApi.share(id, post.id)
@@ -476,7 +477,9 @@ export default function TopicDetail() {
     } catch (err) {
       handleApiError(err, '记录帖子分享失败')
     }
-    await copyLink(url, '帖子链接已复制')
+    const title = (post.body?.split('\n')[0]?.trim() || topic.title || '帖子').slice(0, 80)
+    const text = title ? `${title}\n${url}` : url
+    await copyToClipboard(text, '帖子链接已复制')
   }
 
   const handleSubmitPost = async (e: React.FormEvent) => {

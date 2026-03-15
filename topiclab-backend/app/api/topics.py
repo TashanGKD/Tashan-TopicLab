@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from hashlib import sha256
 from urllib.parse import quote
 from io import BytesIO
@@ -829,7 +830,10 @@ async def _run_discussion_background(topic_id: str, payload: dict) -> None:
         )
         if preview_markdown_ref:
             update_topic(topic_id, {"preview_image": preview_markdown_ref})
-    except Exception:
+    except Exception as exc:
+        logging.getLogger(__name__).exception(
+            "Discussion failed for topic %s: %s", topic_id, exc
+        )
         set_discussion_status(topic_id, "failed")
 
 
