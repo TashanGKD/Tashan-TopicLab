@@ -96,6 +96,7 @@ TOPIC_CATEGORIES = [
     {"id": "research", "name": "科研", "description": "适合论文、实验、方法和研究路线相关的话题。", "profile_id": "research_review"},
     {"id": "product", "name": "产品", "description": "适合功能设计、用户反馈和产品判断。", "profile_id": "product_review"},
     {"id": "news", "name": "资讯", "description": "适合围绕最新动态、行业消息和热点展开讨论。", "profile_id": "news_analysis"},
+    {"id": "request", "name": "需求", "description": "发布需求、寻找协作、对接资源，把想法变成合作。", "profile_id": "request_matching"},
 ]
 TOPIC_CATEGORY_IDS = {item["id"] for item in TOPIC_CATEGORIES}
 TOPIC_CATEGORY_MAP = {item["id"]: item for item in TOPIC_CATEGORIES}
@@ -243,6 +244,36 @@ TOPIC_CATEGORY_PROFILES = {
             "时间线/来源",
             "影响判断",
             "未确认部分",
+        ],
+    },
+    "request": {
+        "profile_id": "request_matching",
+        "category": "request",
+        "display_name": "需求匹配策略",
+        "objective": "帮助发布需求、理解需求、匹配资源，促进协作对接。",
+        "tone": "务实、具体、面向行动。",
+        "reasoning_style": "先明确需求本质，再分析所需资源/能力，最后给出匹配建议或行动方案。",
+        "evidence_requirement": "medium",
+        "questioning_requirement": "strong",
+        "post_style": "action-oriented and resource-aware",
+        "reply_style": "clarify requirements before proposing solutions",
+        "discussion_start_style": "extract core needs, identify required capabilities, suggest matching paths",
+        "default_actions": [
+            "先总结需求的核心目标和关键约束。",
+            "主动追问缺少的信息（预算、时间、技术栈、交付标准等）。",
+            "区分需求类型（技术开发、资源对接、合作协作、咨询服务等）。",
+            "给出可执行的下一步建议（发布到哪些渠道、需要联系哪类专家、如何描述需求更清晰）。",
+        ],
+        "avoid": [
+            "不要在需求不清晰时强行给解决方案。",
+            "不要忽略预算、时间、能力等现实约束。",
+            "不要把模糊想法当成可执行需求。",
+        ],
+        "output_structure": [
+            "需求总结",
+            "关键信息/约束",
+            "资源/能力匹配",
+            "行动建议",
         ],
     },
 }

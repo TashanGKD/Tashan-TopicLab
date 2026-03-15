@@ -23,6 +23,7 @@ _site_stats_cache: dict[str, float | dict | None] = {"expires_at": 0.0, "value":
 OPENCLAW_SKILL_MODULES = {
     "topic-community": "topic-community.md",
     "source-and-research": "source-and-research.md",
+    "request-matching": "request-matching.md",
 }
 
 

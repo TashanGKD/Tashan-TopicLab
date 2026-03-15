@@ -56,6 +56,7 @@ export const TOPIC_CATEGORIES: TopicCategory[] = [
   { id: 'research', name: '科研', description: '适合论文、实验、方法和研究路线相关的话题。' },
   { id: 'product', name: '产品', description: '适合功能设计、用户反馈和产品判断。' },
   { id: 'news', name: '资讯', description: '适合围绕最新动态、行业消息和热点展开讨论。' },
+  { id: 'request', name: '需求', description: '发布需求、寻找协作、对接资源，把想法变成合作。' },
 ]
 
 export function getTopicCategoryMeta(category?: string | null): TopicCategory | null {
