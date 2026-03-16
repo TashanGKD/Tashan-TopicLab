@@ -29,6 +29,7 @@ from app.services.source_feed_topic_generation import (
 )
 from app.storage.database.postgres_client import get_db_session
 from app.storage.database.topic_store import (
+    check_and_reset_stale_running_discussion,
     DEFAULT_MODERATOR_MODE,
     assign_source_article_to_favorite_category,
     assign_topic_to_favorite_category,
@@ -321,6 +322,15 @@ class StartDiscussionRequest(BaseModel):
     mcp_server_ids: list[str] | None = None
 
 
+class DiscussionSnapshotPushRequest(BaseModel):
+    """Snapshot pushed by Resonnet executor during discussion (per-round sync)."""
+    turns: list[dict] = Field(default_factory=list)
+    turns_count: int = 0
+    discussion_history: str = ""
+    discussion_summary: str = ""
+    generated_images: list[str] = Field(default_factory=list)
+
+
 class ToggleActionRequest(BaseModel):
     enabled: bool = True
 
@@ -356,6 +366,16 @@ class FavoriteCategoryBatchClassifyRequest(BaseModel):
 class EnsureSourceArticleTopicResponse(BaseModel):
     topic: dict[str, Any]
     created: bool
+
+
+def _get_topiclab_sync_url() -> str | None:
+    """URL for Resonnet to push discussion snapshot. Resonnet calls POST {url}/internal/discussion-snapshot/{topic_id}."""
+    import os
+
+    raw = os.getenv("TOPICLAB_SYNC_URL", "").strip()
+    if raw:
+        return raw.rstrip("/")
+    return None
 
 
 def get_workspace_base() -> Path:
@@ -780,19 +800,13 @@ def _collect_generated_images(topic_id: str, asset_paths: list[str]) -> list[dic
     return generated_images
 
 
-async def _sync_discussion_snapshot(topic_id: str) -> dict | None:
-    try:
-        snapshot = await request_json("GET", f"/executor/discussions/{topic_id}/snapshot", timeout=120.0)
-    except Exception:
-        return None
-
+def _apply_snapshot_to_db(topic_id: str, snapshot: dict) -> None:
+    """Apply discussion snapshot to database. Used by both polling and push-from-executor."""
     turns = snapshot.get("turns") or []
     discussion_history = snapshot.get("discussion_history") or _build_discussion_history(turns)
     discussion_summary = snapshot.get("discussion_summary") or ""
     generated_images = _collect_generated_images(topic_id, snapshot.get("generated_images") or [])
 
-    # 若本次 snapshot 为空（无 turns、无内容），且 DB 中已存有效数据，则跳过覆盖，
-    # 避免 executor 暂时返回空结果时将已有讨论内容清空。
     snapshot_has_content = bool(turns or discussion_history or discussion_summary)
     if not snapshot_has_content:
         existing = get_topic(topic_id)
@@ -800,7 +814,7 @@ async def _sync_discussion_snapshot(topic_id: str) -> dict | None:
         if existing_result and (
             existing_result.get("discussion_history") or existing_result.get("discussion_summary")
         ):
-            return snapshot
+            return
 
     replace_discussion_turns(topic_id, turns)
     replace_generated_images(topic_id, generated_images)
@@ -819,6 +833,15 @@ async def _sync_discussion_snapshot(topic_id: str) -> dict | None:
     )
     if preview_markdown_ref:
         update_topic(topic_id, {"preview_image": preview_markdown_ref})
+
+
+async def _sync_discussion_snapshot(topic_id: str) -> dict | None:
+    try:
+        snapshot = await request_json("GET", f"/executor/discussions/{topic_id}/snapshot", timeout=120.0)
+    except Exception:
+        return None
+
+    _apply_snapshot_to_db(topic_id, snapshot)
     return snapshot
 
 
@@ -1412,6 +1435,10 @@ async def mention_expert_endpoint(
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
     await _moderate_or_raise(req.body, scenario="topic_post_mention")
+    check_and_reset_stale_running_discussion(topic_id)
+    topic = get_topic(topic_id)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
     if topic["discussion_status"] == "running":
         raise HTTPException(status_code=409, detail="Discussion is running; wait for it to finish before @mentioning experts")
 
@@ -1537,8 +1564,29 @@ def delete_post_endpoint(
     return {"ok": True, "topic_id": topic_id, "post_id": post_id, "deleted_count": deleted_count}
 
 
+@router.post("/internal/discussion-snapshot/{topic_id}", status_code=204)
+def push_discussion_snapshot_endpoint(topic_id: str, req: DiscussionSnapshotPushRequest):
+    """Receive snapshot from Resonnet executor during discussion. Updates DB per-round."""
+    topic = get_topic(topic_id)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    snapshot = {
+        "turns": req.turns,
+        "turns_count": req.turns_count or len(req.turns),
+        "discussion_history": req.discussion_history,
+        "discussion_summary": req.discussion_summary,
+        "generated_images": req.generated_images,
+    }
+    _apply_snapshot_to_db(topic_id, snapshot)
+    return Response(status_code=204)
+
+
 @router.post("/topics/{topic_id}/discussion", status_code=202)
 async def start_discussion_endpoint(topic_id: str, req: StartDiscussionRequest):
+    topic = get_topic(topic_id)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    check_and_reset_stale_running_discussion(topic_id)
     topic = get_topic(topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
@@ -1565,12 +1613,34 @@ async def start_discussion_endpoint(topic_id: str, req: StartDiscussionRequest):
         "mcp_server_ids": req.mcp_server_ids if req.mcp_server_ids is not None else topic_config.get("mcp_server_ids", []),
         "posts_context": _build_posts_context(list_all_posts(topic_id)),
     }
+    sync_url = _get_topiclab_sync_url()
+    if sync_url:
+        payload["topiclab_sync_url"] = sync_url
     asyncio.create_task(_run_discussion_background(topic_id, payload))
     return {"status": "running", "result": None, "progress": None}
 
 
+@router.post("/topics/{topic_id}/discussion/cancel", status_code=200)
+def cancel_discussion_endpoint(topic_id: str):
+    """Fail-safe: cancel a stuck running discussion so @mention can be used again."""
+    topic = get_topic(topic_id)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    if topic["discussion_status"] != "running":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Discussion is not running (current: {topic['discussion_status']}); nothing to cancel",
+        )
+    set_discussion_status(topic_id, "failed")
+    return {"status": "failed", "result": topic.get("discussion_result"), "progress": None}
+
+
 @router.get("/topics/{topic_id}/discussion/status")
 async def get_discussion_status_endpoint(topic_id: str):
+    topic = get_topic(topic_id)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    check_and_reset_stale_running_discussion(topic_id)
     topic = get_topic(topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")

@@ -11,6 +11,7 @@ services:
       - .env
     environment:
       - WORKSPACE_BASE=/app/workspace
+      - TOPICLAB_SYNC_URL=${TOPICLAB_SYNC_URL:-http://topiclab-backend:8000}
     ports:
       - "${TOPICLAB_BACKEND_PORT:-8001}:8000"
     volumes:

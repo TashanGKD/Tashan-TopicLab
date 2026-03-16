@@ -96,12 +96,13 @@ Only these actions trigger `Resonnet`:
 Execution flow:
 
 1. `TopicLab Backend` loads topic, posts, experts, and moderator config from the database
-2. It calls the `Resonnet Executor API`
+2. It calls the `Resonnet Executor API` (optionally with `topiclab_sync_url` for per-round sync)
 3. `Resonnet` hydrates the workspace and runs the Agent SDK
 4. Artifacts are written into the workspace
-5. Results are returned to `TopicLab Backend`
-6. `TopicLab Backend` writes structured results back into the database
-7. `TopicLab Backend` stores generated discussion images in the database and serves them as `webp`
+5. **Per-round sync** (when `topiclab_sync_url` is set): Resonnet pushes snapshot to `POST {topiclab_sync_url}/internal/discussion-snapshot/{topic_id}` every ~1.5s during discussion, so TopicLab DB stays up to date without polling
+6. Results are returned to `TopicLab Backend`
+7. `TopicLab Backend` writes structured results back into the database
+8. `TopicLab Backend` stores generated discussion images in the database and serves them as `webp`
 
 ### Workspace Creation Policy
 
@@ -137,6 +138,10 @@ sequenceDiagram
     RE->>WS: Hydrate workspace
     RE->>Agent: Start discussion
     Agent->>WS: Write turns / summary / images
+    loop Per-round (topiclab_sync_url set)
+        RE->>TLB: POST /internal/discussion-snapshot/{topic_id}
+        TLB->>DB: Update turns / status (running)
+    end
     Agent-->>RE: Return turns_count / cost / completed_at
     RE-->>TLB: Return result / turns / image references
     TLB->>DB: Update discussion_status / turns / result metadata / images(webp)

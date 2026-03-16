@@ -559,6 +559,40 @@ def test_mention_rejects_when_content_moderation_fails(client, monkeypatch):
     assert response.json()["detail"]["review_message"] == "疑似恶意骚扰"
 
 
+def test_internal_discussion_snapshot_push_updates_db(client):
+    """POST /internal/discussion-snapshot/{topic_id} updates DB (used by Resonnet per-round sync)."""
+    topic = client.post("/topics", json={"title": "快照推送", "body": "测试"}).json()
+    topic_id = topic["id"]
+
+    push = client.post(
+        f"/internal/discussion-snapshot/{topic_id}",
+        json={
+            "turns": [
+                {"turn_key": "round1_physicist", "round_num": 1, "expert_name": "physicist", "expert_label": "Physicist", "body": "第一轮观点"}
+            ],
+            "turns_count": 1,
+            "discussion_history": "## Round 1 - Physicist\n\n第一轮观点",
+            "discussion_summary": "",
+            "generated_images": [],
+        },
+    )
+    assert push.status_code == 204
+
+    status = client.get(f"/topics/{topic_id}/discussion/status")
+    assert status.status_code == 200
+    payload = status.json()
+    assert payload["status"] == "running"
+    assert payload["result"]["turns_count"] == 1
+    assert "第一轮观点" in (payload["result"].get("discussion_history") or "")
+
+    # 404 for non-existent topic
+    bad_push = client.post(
+        "/internal/discussion-snapshot/nonexistent-id",
+        json={"turns": [], "turns_count": 0, "discussion_history": "", "discussion_summary": "", "generated_images": []},
+    )
+    assert bad_push.status_code == 404
+
+
 def test_discussion_status_syncs_running_turns_into_database(client):
     topic = client.post("/topics", json={"title": "实时状态", "body": "观察进行中 turn"}).json()
     topic_id = topic["id"]
@@ -587,6 +621,45 @@ def test_discussion_status_syncs_running_turns_into_database(client):
         assert payload["progress"]["completed_turns"] >= 1
         assert payload["progress"]["current_round"] == 1
         assert payload["progress"]["latest_speaker"] == "Physicist"
+
+
+def test_discussion_timeout_failsafe_allows_mention(client):
+    """After 45min timeout, stale running discussion is reset to failed; @mention is allowed."""
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import text
+
+    from app.storage.database.postgres_client import get_db_session
+
+    topic = client.post("/topics", json={"title": "超时测试", "body": "测试"}).json()
+    topic_id = topic["id"]
+    # Set topic and run to "running" with old updated_at (simulate stuck discussion)
+    old_time = (datetime.now(timezone.utc) - timedelta(minutes=46)).isoformat()
+    with get_db_session() as session:
+        session.execute(
+            text("""
+                INSERT INTO discussion_runs (topic_id, status, turns_count, updated_at, discussion_summary, discussion_history)
+                VALUES (:id, 'running', 0, :t, '', '')
+                ON CONFLICT (topic_id) DO UPDATE SET status = 'running', updated_at = :t
+            """),
+            {"t": old_time, "id": topic_id},
+        )
+        session.execute(
+            text("UPDATE topics SET discussion_status = 'running', updated_at = :t WHERE id = :id"),
+            {"t": old_time, "id": topic_id},
+        )
+
+    # get_discussion_status should reset and return failed
+    status = client.get(f"/topics/{topic_id}/discussion/status")
+    assert status.status_code == 200
+    assert status.json()["status"] == "failed"
+
+    # @mention should succeed (no longer blocked)
+    mention = client.post(
+        f"/topics/{topic_id}/posts/mention",
+        json={"author": "测试", "body": "请问专家", "expert_name": "physicist"},
+    )
+    assert mention.status_code == 202
 
 
 def test_topic_detail_related_proxy_bootstraps_workspace_on_demand(client):

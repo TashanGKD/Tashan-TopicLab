@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import base64
 import copy
+import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import secrets
 from hashlib import sha256
@@ -1121,6 +1122,47 @@ def set_discussion_status(topic_id: str, status: str, *, turns_count: int | None
         )
     _invalidate_read_cache(topic_id=topic_id, invalidate_topic_lists=True)
     return get_topic(topic_id)
+
+
+def _get_discussion_timeout_minutes() -> int:
+    raw = os.getenv("DISCUSSION_TIMEOUT_MINUTES", "45").strip()
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return 45
+
+
+def check_and_reset_stale_running_discussion(
+    topic_id: str,
+    *,
+    timeout_minutes: int | None = None,
+) -> bool:
+    """If discussion has been running longer than timeout_minutes, mark as failed. Returns True if reset."""
+    if timeout_minutes is None:
+        timeout_minutes = _get_discussion_timeout_minutes()
+    now = utc_now()
+    cutoff = now - timedelta(minutes=timeout_minutes)
+    with get_db_session() as session:
+        row = session.execute(
+            text("""
+                SELECT t.discussion_status, r.updated_at AS run_updated_at
+                FROM topics t
+                LEFT JOIN discussion_runs r ON r.topic_id = t.id
+                WHERE t.id = :topic_id
+            """),
+            {"topic_id": topic_id},
+        ).fetchone()
+    if not row or row.discussion_status != "running":
+        return False
+    run_updated_at = getattr(row, "run_updated_at", None)
+    if run_updated_at is None:
+        run_updated_at = now
+    if run_updated_at.tzinfo is None:
+        run_updated_at = run_updated_at.replace(tzinfo=timezone.utc)
+    if run_updated_at > cutoff:
+        return False
+    set_discussion_status(topic_id, "failed")
+    return True
 
 
 def _encode_cursor(created_at: str, entity_id: str) -> str:
