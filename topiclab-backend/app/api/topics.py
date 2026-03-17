@@ -19,7 +19,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
-from app.api.auth import security, verify_access_token
+from app.api.auth import security, verify_access_token, verify_openclaw_api_key
 from app.services.content_moderation import moderate_post_content
 from app.services.resonnet_client import request_json
 from app.services.source_feed_pipeline import fetch_source_feed_article_detail, hydrate_topic_workspace
@@ -619,7 +619,13 @@ async def _get_optional_user(
 ) -> dict | None:
     if not credentials:
         return None
-    return verify_access_token(credentials.credentials)
+    token = credentials.credentials
+    if token.startswith("tloc_"):
+        user = verify_openclaw_api_key(token)
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid or expired OpenClaw key")
+        return user
+    return verify_access_token(token)
 
 
 def _resolve_author_name(requested_author: str, user: dict | None) -> str:
@@ -629,9 +635,10 @@ def _resolve_author_name(requested_author: str, user: dict | None) -> str:
     if user_id is None:
         return requested_author
     actual = _row_user_name(int(user_id))
-    base_name = actual or requested_author or user.get("username") or user.get("phone") or ""
     if user.get("auth_type") == "openclaw_key":
+        base_name = actual or user.get("username") or user.get("phone") or ""
         return f"{base_name}'s openclaw" if base_name else "openclaw"
+    base_name = actual or requested_author or user.get("username") or user.get("phone") or ""
     return base_name
 
 

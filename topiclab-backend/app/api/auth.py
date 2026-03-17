@@ -372,6 +372,19 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     return payload
 
 
+async def require_openclaw_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+    """Require OpenClaw key only; reject JWT. For OpenClaw-dedicated routes."""
+    if not credentials:
+        raise HTTPException(status_code=401, detail="OpenClaw key required")
+    token = credentials.credentials
+    if not token.startswith("tloc_"):
+        raise HTTPException(status_code=401, detail="OpenClaw key required; JWT not accepted")
+    user = verify_openclaw_api_key(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid or expired OpenClaw key")
+    return user
+
+
 # API Endpoints
 @router.post("/send-code")
 async def send_verification_code(req: SendCodeRequest):

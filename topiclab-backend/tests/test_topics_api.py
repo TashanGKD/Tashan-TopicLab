@@ -914,6 +914,90 @@ def test_openclaw_key_can_bind_user_identity_and_render_personal_skill(client):
     assert posts_after_delete.json()["items"] == []
 
 
+def test_openclaw_dedicated_routes_require_openclaw_key_reject_jwt(client):
+    """OpenClaw dedicated routes reject JWT; only accept tloc_ key."""
+    user = register_and_login(client, phone="13800009991", username="jwt-user")
+    topic_resp = client.post(
+        "/api/v1/openclaw/topics",
+        headers={"Authorization": f"Bearer {user['token']}"},
+        json={"title": "JWT 开题", "body": "应被拒绝"},
+    )
+    assert topic_resp.status_code == 401, topic_resp.text
+    assert "OpenClaw key" in topic_resp.json().get("detail", "")
+
+
+def test_openclaw_invalid_key_rejected_on_general_routes(client):
+    """General routes reject invalid OpenClaw key (tloc_xxx) with 401 instead of anonymous."""
+    topic_resp = client.post(
+        "/api/v1/topics",
+        headers={"Authorization": "Bearer tloc_invalid_key_12345"},
+        json={"title": "无效 key 开题", "body": "应被拒绝"},
+    )
+    assert topic_resp.status_code == 401, topic_resp.text
+    assert "OpenClaw" in topic_resp.json().get("detail", "")
+
+
+def test_openclaw_dedicated_routes_require_auth(client):
+    """OpenClaw dedicated routes reject requests without Authorization."""
+    topic_resp = client.post(
+        "/api/v1/openclaw/topics",
+        json={"title": "匿名开题", "body": "应被拒绝"},
+    )
+    assert topic_resp.status_code == 401, topic_resp.text
+
+
+def test_openclaw_dedicated_routes_create_topic_and_post(client):
+    """OpenClaw dedicated routes create topic/post with OpenClaw key; author derived from user."""
+    from app.storage.database.postgres_client import get_db_session
+
+    phone = f"138{int(time.time() * 1000) % 100000000:08d}"
+    hashed_password = bcrypt.hashpw("password123".encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    with get_db_session() as session:
+        session.execute(
+            text(
+                """
+                INSERT INTO users (phone, password, username)
+                VALUES (:phone, :password, :username)
+                """
+            ),
+            {
+                "phone": phone,
+                "password": hashed_password,
+                "username": "dedicated-user",
+            },
+        )
+
+    login = client.post("/api/v1/auth/login", json={"phone": phone, "password": "password123"})
+    assert login.status_code == 200, login.text
+    key_resp = client.post(
+        "/api/v1/auth/openclaw-key",
+        headers={"Authorization": f"Bearer {login.json()['token']}"},
+    )
+    assert key_resp.status_code == 200, key_resp.text
+    raw_key = key_resp.json()["key"]
+
+    topic_resp = client.post(
+        "/api/v1/openclaw/topics",
+        headers={"Authorization": f"Bearer {raw_key}"},
+        json={"title": "专用路由开题", "body": "正文", "category": "plaza"},
+    )
+    assert topic_resp.status_code == 201, topic_resp.text
+    topic = topic_resp.json()
+    assert topic["creator_name"] == "dedicated-user's openclaw"
+    assert topic["creator_auth_type"] == "openclaw_key"
+    topic_id = topic["id"]
+
+    post_resp = client.post(
+        f"/api/v1/openclaw/topics/{topic_id}/posts",
+        headers={"Authorization": f"Bearer {raw_key}"},
+        json={"body": "专用路由发帖，无 author 字段"},
+    )
+    assert post_resp.status_code == 201, post_resp.text
+    created_post = post_resp.json()["post"]
+    assert created_post["author"] == "dedicated-user's openclaw"
+    assert created_post["owner_auth_type"] == "openclaw_key"
+
+
 def test_openclaw_module_skill_markdown_is_served(client):
     resp = client.get("/api/v1/openclaw/skills/source-and-research.md")
     topic_resp = client.get("/api/v1/openclaw/skills/topic-community.md")

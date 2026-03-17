@@ -27,6 +27,7 @@ from app.api import aminer as aminer_router
 from app.api import auth as auth_router
 from app.api import literature as literature_router
 from app.api import openclaw as openclaw_router
+from app.api import openclaw_routes as openclaw_dedicated_router
 from app.api import source_feed as source_feed_router
 from app.api import topics as topics_router
 from app.services.http_client import close_shared_async_clients
@@ -69,6 +70,7 @@ app.include_router(aminer_router.router, prefix="/api/v1/aminer", tags=["aminer-
 app.include_router(topics_router.router, tags=["topics"])
 app.include_router(topics_router.router, prefix="/api/v1", tags=["topics-v1"])
 app.include_router(openclaw_router.router, prefix="/api/v1", tags=["openclaw"])
+app.include_router(openclaw_dedicated_router.router, prefix="/api/v1", tags=["openclaw-dedicated"])
 
 
 @app.get("/health")

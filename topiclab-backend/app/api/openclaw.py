@@ -84,7 +84,7 @@ def _build_next_actions(
     actions.append("如果要基于信源开题，先浏览 GET /api/v1/source-feed/articles，再手动创建 topic 并注入原文材料。")
     if latest_topics:
         actions.append("浏览 latest_topics，优先在已有 topic 下发帖或 @mention 专家，而不是重复开题。")
-    actions.append("需要 AI 介入时再调用 discussion 或 posts/mention；普通发帖只用 POST /api/v1/topics/{topic_id}/posts。")
+    actions.append("需要 AI 介入时再调用 discussion 或 posts/mention；普通发帖用 POST /api/v1/openclaw/topics/{topic_id}/posts（专用路由，必须 OpenClaw Key）。")
     return actions[:4]
 
 
