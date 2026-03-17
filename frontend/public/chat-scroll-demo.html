@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>聊天滚动修复演示</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    .demo-container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .demo-header {
+      background: white;
+      padding: 2rem;
+      border-radius: 16px;
+      margin-bottom: 2rem;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+
+    .demo-header h1 {
+      color: #1a202c;
+      margin-bottom: 1rem;
+    }
+
+    .demo-header p {
+      color: #4a5568;
+      line-height: 1.6;
+    }
+
+    .demo-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+    }
+
+    @media (max-width: 768px) {
+      .demo-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .demo-panel {
+      background: white;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+
+    .demo-panel-header {
+      background: #f7fafc;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .demo-panel-header h2 {
+      font-size: 1.125rem;
+      color: #2d3748;
+      margin-bottom: 0.5rem;
+    }
+
+    .demo-panel-header p {
+      font-size: 0.875rem;
+      color: #718096;
+    }
+
+    /* 修复后的布局 - 正确版本 */
+    .chat-layout-fixed {
+      display: flex;
+      flex-direction: column;
+      height: 500px;
+    }
+
+    .chat-window-fixed {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .chat-header {
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid #e2e8f0;
+      background: #f7fafc;
+      flex-shrink: 0;
+    }
+
+    .messages-fixed {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .message-bubble {
+      max-width: 85%;
+      padding: 0.75rem 1rem;
+      border-radius: 16px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+      line-height: 1.5;
+    }
+
+    .message-bubble.user {
+      background: #667eea;
+      color: white;
+      align-self: flex-end;
+      border-bottom-right-radius: 4px;
+    }
+
+    .message-bubble.assistant {
+      background: #edf2f7;
+      color: #2d3748;
+      align-self: flex-start;
+      border-bottom-left-radius: 4px;
+    }
+
+    .chat-input-container {
+      padding: 1rem;
+      border-top: 1px solid #e2e8f0;
+      background: white;
+      flex-shrink: 0;
+    }
+
+    .chat-input {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 0.95rem;
+    }
+
+    /* 问题版本 - 用于对比 */
+    .chat-layout-broken {
+      display: flex;
+      flex-direction: column;
+      /* 没有固定高度 */
+    }
+
+    .chat-window-broken {
+      display: flex;
+      flex-direction: column;
+      /* 没有 min-height: 0 */
+    }
+
+    .messages-broken {
+      overflow-y: auto;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      /* 没有 min-height: 0 */
+      max-height: 400px; /* 使用 max-height 而不是 flex */
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-top: 0.5rem;
+    }
+
+    .status-badge.success {
+      background: #c6f6d5;
+      color: #22543d;
+    }
+
+    .status-badge.warning {
+      background: #feebc8;
+      color: #7c2d12;
+    }
+
+    .annotation {
+      position: relative;
+      background: #fffbeb;
+      border-left: 4px solid #f59e0b;
+      padding: 1rem;
+      margin: 1rem;
+      border-radius: 4px;
+    }
+
+    .annotation h4 {
+      color: #92400e;
+      margin-bottom: 0.5rem;
+      font-size: 0.875rem;
+    }
+
+    .annotation ul {
+      margin-left: 1rem;
+      color: #78350f;
+      font-size: 0.875rem;
+      line-height: 1.6;
+    }
+
+    .key-points {
+      background: #f0fff4;
+      border-left: 4px solid #48bb78;
+      padding: 1rem;
+      margin: 1rem;
+      border-radius: 4px;
+    }
+
+    .key-points h4 {
+      color: #22543d;
+      margin-bottom: 0.5rem;
+      font-size: 0.875rem;
+    }
+
+    .key-points ul {
+      margin-left: 1rem;
+      color: #276749;
+      font-size: 0.875rem;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="demo-container">
+    <div class="demo-header">
+      <h1>🔧 聊天滚动修复演示</h1>
+      <p>这个演示展示了如何修复聊天区域的滚动问题。左侧是修复后的正确版本，右侧是之前的问题版本对比。</p>
+    </div>
+
+    <div class="demo-grid">
+      <!-- 修复后的版本 -->
+      <div class="demo-panel">
+        <div class="demo-panel-header">
+          <h2>✅ 修复后的版本</h2>
+          <p>只有聊天区域滚动，页面固定</p>
+          <span class="status-badge success">正确行为</span>
+        </div>
+        
+        <div class="chat-layout-fixed">
+          <div class="chat-window-fixed">
+            <div class="chat-header">
+              <strong>科研数字分身助手</strong>
+            </div>
+            
+            <div class="messages-fixed">
+              <div class="message-bubble assistant">
+                你好，我是科研数字分身采集助手。
+              </div>
+              <div class="message-bubble user">
+                帮我建立分身
+              </div>
+              <div class="message-bubble assistant">
+                好的，我来帮您建立科研数字分身。首先，让我了解一下您的研究背景和兴趣方向。
+              </div>
+              <div class="message-bubble user">
+                我主要研究机器学习和人工智能在医疗影像分析中的应用
+              </div>
+              <div class="message-bubble assistant">
+                非常棒的研究方向！医疗影像分析是 AI 落地的重要场景之一。能具体说说您关注的影像类型吗？比如：
+                <br><br>
+                • CT 扫描影像
+                <br>• MRI 核磁共振影像
+                <br>• X 光影像
+                <br>• 病理切片图像
+                <br>• 超声影像
+              </div>
+              <div class="message-bubble user">
+                我主要关注 CT 和 MRI 影像，特别是肺部结节的检测和分割
+              </div>
+              <div class="message-bubble assistant">
+                肺部结节检测确实是一个非常重要且具有挑战性的问题。早期肺癌筛查中，CT 影像的结节检测准确率直接影响诊断效果。
+                <br><br>
+                您在使用哪些深度学习架构？是传统的 CNN 还是更先进的 Transformer 模型？
+              </div>
+              <div class="message-bubble user">
+                我尝试过 U-Net、ResNet，最近在看 Vision Transformer 在这个任务上的应用
+              </div>
+              <div class="message-bubble assistant">
+                很好的技术栈！U-Net 在医学图像分割中是经典架构，ResNet 的特征提取能力也很强。Vision Transformer 是近年来的热点，它在捕捉全局依赖关系方面有优势。
+                <br><br>
+                您的研究数据来自哪里？是公开数据集如 LIDC-IDRI 还是医院合作数据？
+              </div>
+              <div class="message-bubble user">
+                我们使用 LIDC-IDRI 数据集，也有部分来自合作医院的临床数据
+              </div>
+              <div class="message-bubble assistant">
+                非常好！LIDC-IDRI 是肺部 CT 分析的标准基准数据集，有放射科医生的标注，适合做算法对比实验。
+                <br><br>
+                基于我们刚才的对话，我已经开始建立您的数字分身档案了。接下来我会继续收集更多信息...
+              </div>
+              <div class="message-bubble user">
+                继续
+              </div>
+              <div class="message-bubble assistant">
+                好的，让我继续了解您的研究偏好和学术行为模式...
+              </div>
+            </div>
+            
+            <div class="chat-input-container">
+              <input type="text" class="chat-input" placeholder="输入消息..." value="继续对话">
+            </div>
+          </div>
+        </div>
+
+        <div class="key-points">
+          <h4>✅ 关键修复点</h4>
+          <ul>
+            <li><code>flex: 1</code> - 聊天区域占据剩余空间</li>
+            <li><code>min-height: 0</code> - 允许 flex 子项缩小</li>
+            <li><code>overflow-y: auto</code> - 只有消息区域滚动</li>
+            <li><code>overscroll-behavior: contain</code> - 防止滚动穿透</li>
+            <li><code>flex-shrink: 0</code> - 输入框不收缩</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 问题版本 -->
+      <div class="demo-panel">
+        <div class="demo-panel-header">
+          <h2>❌ 问题版本（对比）</h2>
+          <p>整个页面滚动，聊天区域不滚动</p>
+          <span class="status-badge warning">错误行为</span>
+        </div>
+        
+        <div class="chat-layout-broken">
+          <div class="chat-window-broken">
+            <div class="chat-header">
+              <strong>科研数字分身助手</strong>
+            </div>
+            
+            <div class="messages-broken">
+              <div class="message-bubble assistant">
+                你好，我是科研数字分身采集助手。
+              </div>
+              <div class="message-bubble user">
+                帮我建立分身
+              </div>
+              <div class="message-bubble assistant">
+                好的，我来帮您建立科研数字分身。首先，让我了解一下您的研究背景和兴趣方向。
+              </div>
+              <div class="message-bubble user">
+                我主要研究机器学习和人工智能在医疗影像分析中的应用
+              </div>
+              <div class="message-bubble assistant">
+                非常棒的研究方向！医疗影像分析是 AI 落地的重要场景之一。能具体说说您关注的影像类型吗？
+              </div>
+              <div class="message-bubble user">
+                我主要关注 CT 和 MRI 影像，特别是肺部结节的检测和分割
+              </div>
+              <div class="message-bubble assistant">
+                肺部结节检测确实是一个非常重要且具有挑战性的问题。
+              </div>
+              <div class="message-bubble user">
+                继续
+              </div>
+              <div class="message-bubble assistant">
+                好的，让我继续了解您的研究偏好...
+              </div>
+            </div>
+            
+            <div class="chat-input-container">
+              <input type="text" class="chat-input" placeholder="输入消息..." value="继续对话">
+            </div>
+          </div>
+        </div>
+
+        <div class="annotation">
+          <h4>❌ 问题分析</h4>
+          <ul>
+            <li>没有固定容器高度，内容撑开页面</li>
+            <li>缺少 <code>min-height: 0</code>，flex 子项无法缩小</li>
+            <li>使用 <code>max-height</code> 而非 flex 布局</li>
+            <li>导致整个页面滚动而非聊天区域滚动</li>
+            <li>footer 会随着滚动暴露出来</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 自动滚动演示
+    document.addEventListener('DOMContentLoaded', () => {
+      const messagesFixed = document.querySelector('.messages-fixed');
+      const messagesBroken = document.querySelector('.messages-broken');
+      
+      // 缓慢滚动展示效果
+      let scrollPos = 0;
+      let direction = 1;
+      
+      function animateScroll() {
+        if (messagesFixed && messagesBroken) {
+          const maxScroll = messagesFixed.scrollHeight - messagesFixed.clientHeight;
+          
+          scrollPos += direction * 2;
+          
+          if (scrollPos >= maxScroll || scrollPos <= 0) {
+            direction *= -1;
+          }
+          
+          messagesFixed.scrollTop = scrollPos;
+          // messagesBroken.scrollTop = scrollPos; // 注释掉以展示问题
+        }
+        
+        requestAnimationFrame(animateScroll);
+      }
+      
+      // 启动动画（延迟 2 秒）
+      setTimeout(() => {
+        animateScroll();
+      }, 2000);
+    });
+  </script>
+</body>
+</html>
