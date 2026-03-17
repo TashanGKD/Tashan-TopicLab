@@ -1578,9 +1578,11 @@ def make_post(
 
 
 def replace_discussion_turns(topic_id: str, turns: list[dict]) -> None:
+    """Replace discussion turns for a topic. Uses INSERT ... ON CONFLICT DO UPDATE to avoid
+    IntegrityError in concurrent scenarios (DELETE+INSERT can race with other requests)."""
     now = utc_now()
     with get_db_session() as session:
-        session.execute(text("DELETE FROM discussion_turns WHERE topic_id = :topic_id"), {"topic_id": topic_id})
+        # 1. Upsert all turns (avoids unique constraint race vs DELETE+INSERT)
         for turn in turns:
             session.execute(
                 text("""
@@ -1589,6 +1591,12 @@ def replace_discussion_turns(topic_id: str, turns: list[dict]) -> None:
                     ) VALUES (
                         :id, :topic_id, :turn_key, :round_num, :expert_name, :expert_label, :body, :created_at, :updated_at
                     )
+                    ON CONFLICT (topic_id, turn_key) DO UPDATE SET
+                        round_num = EXCLUDED.round_num,
+                        expert_name = EXCLUDED.expert_name,
+                        expert_label = EXCLUDED.expert_label,
+                        body = EXCLUDED.body,
+                        updated_at = EXCLUDED.updated_at
                 """),
                 {
                     "id": str(uuid.uuid4()),
@@ -1601,6 +1609,21 @@ def replace_discussion_turns(topic_id: str, turns: list[dict]) -> None:
                     "created_at": turn.get("updated_at") or now,
                     "updated_at": turn.get("updated_at") or now,
                 },
+            )
+        # 2. Delete turns no longer in the new list
+        turn_keys = [t["turn_key"] for t in turns]
+        if turn_keys:
+            session.execute(
+                text("""
+                    DELETE FROM discussion_turns
+                    WHERE topic_id = :topic_id AND turn_key NOT IN :turn_keys
+                """).bindparams(bindparam("turn_keys", expanding=True)),
+                {"topic_id": topic_id, "turn_keys": turn_keys},
+            )
+        else:
+            session.execute(
+                text("DELETE FROM discussion_turns WHERE topic_id = :topic_id"),
+                {"topic_id": topic_id},
             )
     _invalidate_read_cache(topic_id=topic_id)
 
