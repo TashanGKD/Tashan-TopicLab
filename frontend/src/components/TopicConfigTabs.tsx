@@ -206,15 +206,57 @@ export default function TopicConfigTabs({
 
   const hasAiGeneratedExperts = topicExpertNames.some((n) => !BUILTIN_EXPERT_NAMES.includes(n as typeof BUILTIN_EXPERT_NAMES[number]))
 
+  const generateFromTopicPollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const generateFromTopicCancelledRef = useRef(false)
+
+  useEffect(() => {
+    return () => {
+      generateFromTopicCancelledRef.current = true
+      if (generateFromTopicPollRef.current) {
+        clearTimeout(generateFromTopicPollRef.current)
+        generateFromTopicPollRef.current = null
+      }
+    }
+  }, [])
+
   const handleGenerateFromTopic = async () => {
     setGeneratingFromTopic(true)
+    generateFromTopicCancelledRef.current = false
     try {
       await topicExpertsApi.generateFromTopic(topicId)
-      handleApiSuccess('角色已生成')
-      onExpertsChange?.()
+      // 202 异步：轮询直到 expert_names 有 4 个
+      const pollIntervalMs = 1500
+      const maxWaitMs = 120_000
+      const start = Date.now()
+      const poll = async (): Promise<void> => {
+        if (generateFromTopicCancelledRef.current) return
+        if (Date.now() - start > maxWaitMs) {
+          if (!generateFromTopicCancelledRef.current) {
+            handleApiError({ message: '角色生成超时，请刷新重试' }, '角色生成超时')
+            setGeneratingFromTopic(false)
+          }
+          return
+        }
+        try {
+          const res = await topicsApi.get(topicId)
+          if (generateFromTopicCancelledRef.current) return
+          const names = res.data.expert_names ?? []
+          if (names.length >= 4) {
+            handleApiSuccess('角色已生成')
+            onExpertsChange?.()
+            setGeneratingFromTopic(false)
+            return
+          }
+        } catch {
+          /* ignore */
+        }
+        if (!generateFromTopicCancelledRef.current) {
+          generateFromTopicPollRef.current = setTimeout(poll, pollIntervalMs)
+        }
+      }
+      generateFromTopicPollRef.current = setTimeout(poll, pollIntervalMs)
     } catch (err) {
       handleApiError(err, '角色生成失败')
-    } finally {
       setGeneratingFromTopic(false)
     }
   }

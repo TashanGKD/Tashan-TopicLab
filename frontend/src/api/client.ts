@@ -634,9 +634,9 @@ export const topicExpertsApi = {
   delete: (topicId: string, expertName: string) => api.delete(`/topics/${topicId}/experts/${expertName}`),
   generate: (topicId: string, data: GenerateExpertRequest) =>
     api.post<GenerateExpertResponse>(`/topics/${topicId}/experts/generate`, data),
-  /** 根据话题标题和正文生成 4 个讨论角色，替换当前角色集 */
+  /** 根据话题标题和正文生成 4 个讨论角色（异步，返回 202），前端需轮询 GET /topics/{id} 获取结果 */
   generateFromTopic: (topicId: string) =>
-    api.post<{ ok: boolean; expert_names: string[] }>(`/topics/${topicId}/experts/generate-from-topic`),
+    api.post<{ status: string; message: string }>(`/topics/${topicId}/experts/generate-from-topic`),
   getContent: (topicId: string, expertName: string) =>
     api.get<{ role_content: string }>(`/topics/${topicId}/experts/${expertName}/content`),
   share: (topicId: string, expertName: string) =>

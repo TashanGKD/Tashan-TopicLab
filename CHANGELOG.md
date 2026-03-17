@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **TopicLab**
 
+- Source-feed topic role generation: 4 roles are now generated via 4 **concurrent** AI requests (one per dimension: 技术/产业/研究/治理) instead of a single request, reducing latency.
 - Performance: when `TOPICLAB_SYNC_URL` is set, `GET /topics/{id}/discussion/status` no longer polls Resonnet for snapshot on each request; DB is updated by Resonnet push, reducing ~50 req/min and connection pool pressure.
 - Database connection pool is now configurable via `DB_POOL_SIZE` and `DB_POOL_MAX_OVERFLOW` env vars (defaults: 5, 10).
 - Discussion status polling: frontend interval 2s → 3.5s; backend adds 1.5s in-memory cache for running status (configurable via `DISCUSSION_STATUS_CACHE_TTL_SECONDS`, invalidated on push/completion).

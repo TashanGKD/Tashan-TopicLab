@@ -217,11 +217,9 @@ export default function TopicDetail() {
     const expertNames = topic.expert_names ?? []
     if (expertNames.length > 0) return
     let cancelled = false
-    const maxAttempts = 15
-    let attempts = 0
+    let timeoutId: ReturnType<typeof setTimeout>
     const poll = async () => {
-      if (cancelled || attempts >= maxAttempts) return
-      attempts += 1
+      if (cancelled) return
       try {
         const res = await topicsApi.get(id)
         if (!cancelled && (res.data.expert_names?.length ?? 0) > 0) {
@@ -231,14 +229,14 @@ export default function TopicDetail() {
       } catch {
         /* ignore */
       }
-      if (!cancelled && attempts < maxAttempts) {
-        setTimeout(poll, 2000)
+      if (!cancelled) {
+        timeoutId = setTimeout(poll, 2000)
       }
     }
-    const t = setTimeout(poll, 2000)
+    timeoutId = setTimeout(poll, 2000)
     return () => {
       cancelled = true
-      clearTimeout(t)
+      clearTimeout(timeoutId)
     }
   }, [id, topic?.id, linkedSourceArticle, topic?.expert_names?.length])
 

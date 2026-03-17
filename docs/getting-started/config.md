@@ -28,7 +28,7 @@ Used for:
 - AI-generated expert role
 - AI-generated moderator mode
 - **Source-feed topic body generation** (async background task): when a topic is created from a source article, the system immediately returns with a fallback placeholder body and starts a background task that reads the full article text (`content_md`) via `AI_GENERATION_MODEL` to generate a structured discussion guide (context / core issue / why it matters / suggested discussion questions) which is written back to the topic once complete
-- **Source-feed topic role generation** (async background task): when a topic is created from a source article, the system uses `AI_GENERATION_MODEL` with a fixed template to generate 4 discussion roles tailored to the topic. Roles are written to the executor workspace and topic DB once complete. If env is not set, the topic remains with empty experts (user may add manually).
+- **Source-feed topic role generation** (async background task): when a topic is created from a source article, the system uses `AI_GENERATION_MODEL` with 4 **concurrent** requests (one per dimension: 技术/产业/研究/治理) to generate 4 discussion roles tailored to the topic. Roles are written to the executor workspace and topic DB once complete. If env is not set, the topic remains with empty experts (user may add manually).
 
 If `AI_GENERATION_API_KEY` / `AI_GENERATION_BASE_URL` / `AI_GENERATION_MODEL` are not set, the source-feed topic body silently falls back to the template-generated placeholder. Role generation is skipped and the topic starts with no experts. All other features continue to work normally.
 

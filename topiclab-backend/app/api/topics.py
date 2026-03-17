@@ -1805,27 +1805,26 @@ async def get_topic_expert_content_endpoint(topic_id: str, expert_name: str, aut
     )
 
 
-@router.post("/topics/{topic_id}/experts/generate-from-topic")
-async def generate_experts_from_topic_endpoint(topic_id: str, authorization: str | None = Header(default=None)):
-    """Generate 4 discussion roles from topic title+body via AI_GENERATION_MODEL, replace topic experts."""
+async def _generate_and_replace_experts_background(topic_id: str) -> None:
+    """Background task: generate 4 roles via AI, replace in executor and DB."""
     topic = get_topic(topic_id)
     if not topic:
-        raise HTTPException(status_code=404, detail="Topic not found")
+        return
     roles = await generate_roles_from_topic(
         topic.get("title", ""),
         topic.get("body", ""),
     )
     if not roles:
-        raise HTTPException(
-            status_code=503,
-            detail="AI 角色生成失败，请检查 AI_GENERATION_* 环境变量配置",
+        return
+    try:
+        await request_json(
+            "POST",
+            f"/executor/topics/{topic_id}/experts/replace",
+            json_body={"experts": roles},
+            timeout=60.0,
         )
-    await request_json(
-        "POST",
-        f"/executor/topics/{topic_id}/experts/replace",
-        json_body={"experts": roles},
-        timeout=60.0,
-    )
+    except Exception:
+        return
     replace_topic_experts(
         topic_id,
         [
@@ -1839,7 +1838,16 @@ async def generate_experts_from_topic_endpoint(topic_id: str, authorization: str
             for r in roles
         ],
     )
-    return {"ok": True, "expert_names": [r["name"] for r in roles]}
+
+
+@router.post("/topics/{topic_id}/experts/generate-from-topic", status_code=202)
+async def generate_experts_from_topic_endpoint(topic_id: str, authorization: str | None = Header(default=None)):
+    """Start async generation of 4 discussion roles. Returns 202 immediately; poll GET /topics/{id} for expert_names."""
+    topic = get_topic(topic_id)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    asyncio.create_task(_generate_and_replace_experts_background(topic_id))
+    return {"status": "accepted", "message": "角色生成已启动，请稍候"}
 
 
 @router.post("/topics/{topic_id}/experts/generate")
