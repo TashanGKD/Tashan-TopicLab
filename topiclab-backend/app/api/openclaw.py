@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from pathlib import Path
 import time
 
-from fastapi import APIRouter, Depends, Query
-from fastapi.responses import PlainTextResponse
+from fastapi import APIRouter, Depends, Header, Query
+from fastapi.responses import PlainTextResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy import text
 
@@ -176,6 +177,7 @@ async def get_openclaw_home(
             latest_topics=latest_topics,
         ),
         "quick_links": {
+            "skill_version": "/api/v1/openclaw/skill-version",
             "login": "/api/v1/auth/login",
             "me": "/api/v1/auth/me",
             "my_favorites": "/api/v1/me/favorites",
@@ -239,9 +241,47 @@ def _build_openclaw_skill_path(raw_key: str) -> str:
     return f"/api/v1/openclaw/skill.md?key={raw_key}"
 
 
-@router.get("/openclaw/skill.md", response_class=PlainTextResponse)
+def _compute_skill_version() -> str:
+    """Compute content hash of base skill + all module skills for versioning."""
+    h = hashlib.sha256()
+    base_path = _skill_template_path()
+    if base_path.exists():
+        h.update(base_path.read_bytes())
+    for module_name, filename in OPENCLAW_SKILL_MODULES.items():
+        path = _module_skill_path(module_name)
+        if path and path.exists():
+            h.update(path.read_bytes())
+    return h.hexdigest()[:16]
+
+
+def _get_skill_updated_at() -> str:
+    """Return ISO timestamp of most recent skill file modification."""
+    base_path = _skill_template_path()
+    latest = 0.0
+    if base_path.exists():
+        latest = max(latest, base_path.stat().st_mtime)
+    for module_name in OPENCLAW_SKILL_MODULES:
+        path = _module_skill_path(module_name)
+        if path and path.exists():
+            latest = max(latest, path.stat().st_mtime)
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(latest)) if latest else ""
+
+
+@router.get("/openclaw/skill-version")
+async def get_openclaw_skill_version():
+    """返回 skill 版本信息，供 OpenClaw 检查是否需要更新。无需认证。"""
+    return {
+        "version": _compute_skill_version(),
+        "updated_at": _get_skill_updated_at(),
+        "skill_url": "/api/v1/openclaw/skill.md",
+        "check_url": "/api/v1/openclaw/skill-version",
+    }
+
+
+@router.get("/openclaw/skill.md")
 async def get_openclaw_skill_markdown(
     key: str | None = Query(default=None),
+    if_none_match: str | None = Header(default=None, alias="If-None-Match"),
     user: dict | None = Depends(_get_optional_user),
 ):
     resolved_user = user
@@ -251,7 +291,15 @@ async def get_openclaw_skill_markdown(
         if not resolved_user:
             return PlainTextResponse("Invalid OpenClaw key\n", status_code=401, media_type="text/plain; charset=utf-8")
         raw_key = key
-    return PlainTextResponse(_render_personalized_skill(resolved_user, raw_key), media_type="text/markdown; charset=utf-8")
+    content = _render_personalized_skill(resolved_user, raw_key)
+    etag = hashlib.sha256(content.encode("utf-8")).hexdigest()[:24]
+    if if_none_match and if_none_match.strip('"') == etag:
+        return Response(status_code=304)
+    return Response(
+        content=content,
+        media_type="text/markdown; charset=utf-8",
+        headers={"ETag": f'"{etag}"', "Cache-Control": "no-cache"},
+    )
 
 
 @router.get("/openclaw/skills/{module_name}.md", response_class=PlainTextResponse)

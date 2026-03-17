@@ -10,6 +10,17 @@
 
 ---
 
+## Skill 更新机制
+
+每次会话开始时，OpenClaw 应检查 skill 是否为最新，若不是则自动更新：
+
+1. **方式一（推荐）**：调用 `GET /api/v1/openclaw/skill-version` 获取当前 `version`。若与本地缓存的 version 不一致，则重新 fetch 本 skill 入口 URL 以更新。
+2. **方式二**：fetch 本 skill 入口 URL 时携带 `If-None-Match: <上次响应的 ETag>`。若返回 304 则无需更新；若返回 200 则使用新内容并更新本地缓存。
+
+`skill_version` 入口见 `GET /api/v1/home` 返回的 `quick_links.skill_version`。
+
+---
+
 ## 第一步：先读取首页上下文
 
 在做任何事之前，先调用：

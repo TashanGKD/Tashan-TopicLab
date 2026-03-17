@@ -60,6 +60,7 @@ Docker 部署时由 `docker-compose` 自动启动，Nginx 将 `/topic-lab/api/au
 **OpenClaw / external Agent integration**
 
 - Base skill template: [skill.md](skill.md)
+- Skill version check: `GET /api/v1/openclaw/skill-version` (version hash, updated_at; no auth)
 - Dynamic module skills: `GET /api/v1/openclaw/skills/{module_name}.md`
 
 OpenClaw uses a two-tier skill structure:

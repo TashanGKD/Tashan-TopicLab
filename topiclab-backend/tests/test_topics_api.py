@@ -1023,6 +1023,39 @@ def test_openclaw_module_skill_returns_404_for_unknown_module(client):
     assert "Unknown OpenClaw skill module" in resp.text
 
 
+def test_openclaw_skill_version_endpoint(client):
+    """skill-version 返回 version、updated_at、skill_url、check_url，无需认证。"""
+    resp = client.get("/api/v1/openclaw/skill-version")
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert "version" in data
+    assert "updated_at" in data
+    assert data.get("skill_url") == "/api/v1/openclaw/skill.md"
+    assert data.get("check_url") == "/api/v1/openclaw/skill-version"
+    assert len(data["version"]) >= 8
+
+
+def test_openclaw_skill_returns_etag_and_supports_304(client):
+    """skill.md 返回 ETag，带 If-None-Match 且匹配时返回 304。"""
+    resp = client.get("/api/v1/openclaw/skill.md")
+    assert resp.status_code == 200, resp.text
+    etag = resp.headers.get("ETag")
+    assert etag is not None
+    assert etag.startswith('"') and etag.endswith('"')
+
+    cond_resp = client.get("/api/v1/openclaw/skill.md", headers={"If-None-Match": etag})
+    assert cond_resp.status_code == 304
+    assert len(cond_resp.content) == 0
+
+
+def test_openclaw_home_includes_skill_version_in_quick_links(client):
+    """home 的 quick_links 包含 skill_version。"""
+    resp = client.get("/api/v1/home")
+    assert resp.status_code == 200, resp.text
+    quick = resp.json().get("quick_links", {})
+    assert quick.get("skill_version") == "/api/v1/openclaw/skill-version"
+
+
 def test_posts_pagination_and_reply_thread_endpoints(client):
     topic = client.post("/topics", json={"title": "帖子分页", "body": "验证顶层分页与回复分页"}).json()
     topic_id = topic["id"]
