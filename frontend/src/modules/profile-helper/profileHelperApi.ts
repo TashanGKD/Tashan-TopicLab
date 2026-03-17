@@ -1,5 +1,6 @@
-/** Profile helper API: session, profile, chat stream, download URLs */
+/** Profile helper API: session, profile, chat stream, blocks, download, scales, scientist match */
 import { profileHelperApi } from '../../api/client'
+import type { Block, FamousMatchResult, FieldRecommendation, StructuredProfile } from './types'
 
 const API_BASE = `${import.meta.env.BASE_URL}api`
 
@@ -20,6 +21,7 @@ export async function getOrCreateSession(existingId?: string): Promise<string> {
   return data.session_id
 }
 
+/** 旧式流式文本接口（保留兼容） */
 export async function sendMessage(
   sessionId: string,
   message: string,
@@ -36,7 +38,6 @@ export async function sendMessage(
   if (!reader) throw new Error('无法读取响应流')
   const decoder = new TextDecoder()
   let buffer = ''
-  // Use regex to split on double line endings (handles both \n\n and \r\n\r\n)
   const SSE_REGEX = /\r?\n\r?\n/
   while (true) {
     const { done, value } = await reader.read()
@@ -60,6 +61,47 @@ export async function sendMessage(
   }
 }
 
+/**
+ * Block 协议接口：每个 SSE 事件是一个 Block JSON。
+ * onBlock 回调在收到每个 Block 时触发。
+ */
+export async function sendMessageBlocks(
+  sessionId: string,
+  message: string,
+  onBlock: (block: Block) => void,
+  model?: string | null
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/profile-helper/chat/blocks`, {
+    method: 'POST',
+    headers: getAuthFetchHeaders(true),
+    body: JSON.stringify({ session_id: sessionId, message, model: model || undefined }),
+  })
+  if (!res.ok) throw new Error(`请求失败: ${res.status}`)
+  const reader = res.body?.getReader()
+  if (!reader) throw new Error('无法读取响应流')
+  const decoder = new TextDecoder()
+  let buffer = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n\n')
+    buffer = lines.pop() ?? ''
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        const payload = line.slice(6)
+        if (payload === '[DONE]') continue
+        try {
+          const block = JSON.parse(payload) as Block
+          onBlock(block)
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
+}
+
 export function getDownloadUrl(sessionId: string): string {
   return profileHelperApi.getDownloadUrl(sessionId)
 }
@@ -76,6 +118,14 @@ export async function getProfile(sessionId: string): Promise<{
     headers: getAuthFetchHeaders(),
   })
   if (!res.ok) throw new Error(`获取画像失败: ${res.status}`)
+  return res.json()
+}
+
+export async function getStructuredProfile(sessionId: string): Promise<StructuredProfile> {
+  const res = await fetch(`${API_BASE}/profile-helper/profile/${sessionId}/structured`, {
+    headers: getAuthFetchHeaders(),
+  })
+  if (!res.ok) throw new Error(`获取结构化画像失败: ${res.status}`)
   return res.json()
 }
 
@@ -107,6 +157,29 @@ export async function submitScale(
   })
   if (!res.ok) throw new Error(`提交失败: ${res.status}`)
 }
+
+// ── 科学家匹配 API ──────────────────────────────────────────────
+
+export async function getFamousMatches(sessionId: string): Promise<FamousMatchResult> {
+  const res = await fetch(
+    `${API_BASE}/profile-helper/profile/${sessionId}/scientists/famous`,
+    { headers: getAuthFetchHeaders() }
+  )
+  if (!res.ok) throw new Error(`获取匹配失败: ${res.status}`)
+  return res.json()
+}
+
+export async function getFieldRecommendations(sessionId: string): Promise<FieldRecommendation[]> {
+  const res = await fetch(
+    `${API_BASE}/profile-helper/profile/${sessionId}/scientists/field`,
+    { headers: getAuthFetchHeaders() }
+  )
+  if (!res.ok) throw new Error(`获取推荐失败: ${res.status}`)
+  const data = await res.json()
+  return data.recommendations
+}
+
+// ── 发布分身 ────────────────────────────────────────────────────
 
 export interface PublishTwinPayload {
   session_id: string

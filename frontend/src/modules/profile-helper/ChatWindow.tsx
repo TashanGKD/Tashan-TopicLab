@@ -2,12 +2,14 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { MessageBubble } from './MessageBubble'
 import { LoadingDots, RobotAvatar } from './LoadingDots'
+import { BlockRenderer } from './blocks/BlockRenderer'
 import {
   getOrCreateSession,
-  sendMessage,
+  sendMessageBlocks,
   resetSession,
   getProfile,
 } from './profileHelperApi'
+import type { Block, ChatMessage } from './types'
 import { PROFILE_HELPER_MODELS } from '../../api/client'
 import { refreshCurrentUserProfile, tokenManager, User } from '../../api/auth'
 import { toast } from '../../utils/toast'
@@ -28,27 +30,67 @@ function setStoredSessionId(id: string) {
   }
 }
 
+/** 判断消息是否含有交互型 Block（choice/text_input/rating） */
+function hasInteractiveBlock(blocks: Block[]): boolean {
+  return blocks.some((b) => b.type === 'choice' || b.type === 'text_input' || b.type === 'rating')
+}
+
+/**
+ * 输入框锁定状态：
+ * - 'initial'：空会话，显示固定文本"建立我的分身"，只读，只能发送
+ * - 'locked'：最后一条助手消息含 choice/rating，输入框变浅禁用
+ * - 'active'：正常可输入（纯文本回复、text_input 块、copyable 等）
+ */
+type InputLockState = 'initial' | 'locked' | 'active'
+
+function getInputLockState(messages: ChatMessage[]): InputLockState {
+  if (messages.length === 0) return 'initial'
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]
+    if (m.role === 'assistant') {
+      const blocks = m.blocks ?? []
+      if (blocks.length === 0) return 'active'
+      const hasChoice = blocks.some((b) => b.type === 'choice')
+      const hasRating = blocks.some((b) => b.type === 'rating')
+      // choice/rating 存在 → 锁定（即使同时有 text_input 也锁定）
+      if (hasChoice || hasRating) return 'locked'
+      // 只有 text_input / text / copyable / actions → 可输入
+      return 'active'
+    }
+  }
+  return 'active'
+}
+
+const INIT_MESSAGE = '建立我的分身'
+
 export function ChatWindow() {
   const [sessionId, setSessionId] = useState<string | null>(null)
-  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([])
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [, setProfile] = useState('')
   const [, setForumProfile] = useState('')
-  const [input, setInput] = useState('帮我建立分身')
+  const [input, setInput] = useState(INIT_MESSAGE)
   const [loading, setLoading] = useState(false)
   const [initialized, setInitialized] = useState(false)
   const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [selectedModel, setSelectedModel] = useState<string>(PROFILE_HELPER_MODELS[0]?.value ?? '')
-  const [, setImportResult] = useState<string | null>(null)
   const [isComposing, setIsComposing] = useState(false)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const navigate = useNavigate()
 
+  /**
+   * requireCurrentUser：
+   * - 有登录用户 → 始终通过
+   * - 无登录用户但 sessionId 存在 → 匿名模式通过（AUTH_MODE=none 场景）
+   * - 无登录 + 无 session → 提示登录
+   */
   const requireCurrentUser = useCallback(() => {
     if (currentUser) return true
+    if (sessionId) return true      // 匿名 session 已建立，允许交互
     toast.error('请先登录后再与数字分身助手对话')
     return false
-  }, [currentUser])
+  }, [currentUser, sessionId])
 
   const fetchProfile = useCallback(async (sid: string) => {
     try {
@@ -62,26 +104,28 @@ export function ChatWindow() {
 
   useEffect(() => {
     async function init() {
+      // ── 1. 尝试认证（可选，失败降级为匿名）──────────────────────
+      let user: import('../../api/auth').User | null = null
       const token = tokenManager.get()
-      if (!token) {
-        setCurrentUser(null)
-        setInitialized(true)
-        return
-      }
-      try {
-        const user = await refreshCurrentUserProfile()
-        setCurrentUser(user ?? null)
-        if (!user) {
-          setInitialized(true)
-          return
+      if (token) {
+        try {
+          user = await refreshCurrentUserProfile()
+        } catch {
+          // auth 服务不可用（如 topiclab-backend 未启动），降级为匿名模式
         }
+      }
+      setCurrentUser(user)
+
+      // ── 2. 始终创建 session（无论是否已登录）──────────────────────
+      // AUTH_MODE=none 时后端接受匿名请求，前端无需登录即可使用 profile helper
+      try {
         const stored = getStoredSessionId()
         const id = await getOrCreateSession(stored ?? undefined)
         setSessionId(id)
         setStoredSessionId(id)
         await fetchProfile(id)
       } catch {
-        setCurrentUser(null)
+        // 后端不可达，session 创建失败（保持 sessionId = null）
       } finally {
         setInitialized(true)
       }
@@ -89,14 +133,16 @@ export function ChatWindow() {
     init()
   }, [fetchProfile])
 
+  /** 从 localStorage 恢复历史消息，有历史则清空初始输入文字 */
   useEffect(() => {
     if (!sessionId) return
     try {
       const raw = localStorage.getItem(`profile_helper_chat_${sessionId}`)
       if (raw) {
         const parsed = JSON.parse(raw)
-        if (Array.isArray(parsed)) {
+        if (Array.isArray(parsed) && parsed.length > 0) {
           setMessages(parsed)
+          setInput('')   // 有历史消息时清空初始固定文字
         }
       }
     } catch {
@@ -104,6 +150,7 @@ export function ChatWindow() {
     }
   }, [sessionId])
 
+  /** 同步消息到 localStorage */
   useEffect(() => {
     if (!sessionId) return
     try {
@@ -113,9 +160,36 @@ export function ChatWindow() {
     }
   }, [sessionId, messages])
 
+  /**
+   * 滚动策略：
+   * - 有用户消息 → 让最后一条用户消息贴近容器顶部（AI 回复在下方可见）
+   * - 无用户消息 → 滚到底部
+   *
+   * MessageBubble 已有 data-role="user"，直接查询，无需额外包裹 div。
+   * 用 requestAnimationFrame 确保 DOM 完成渲染后再计算位置。
+   */
   useEffect(() => {
-    const el = messagesContainerRef.current
-    if (el) el.scrollTop = el.scrollHeight
+    const container = messagesContainerRef.current
+    if (!container) return
+
+    requestAnimationFrame(() => {
+      // MessageBubble 自带 data-role 属性（see MessageBubble.tsx）
+      const userMsgs = container.querySelectorAll('[data-role="user"]')
+      const lastUserEl = userMsgs[userMsgs.length - 1] as HTMLElement | undefined
+
+      if (lastUserEl) {
+        // 遍历 offsetParent 链计算相对容器的绝对偏移，比 getBoundingClientRect 更稳
+        let offsetTop = 0
+        let cur: HTMLElement | null = lastUserEl
+        while (cur && cur !== container) {
+          offsetTop += cur.offsetTop
+          cur = cur.offsetParent as HTMLElement | null
+        }
+        container.scrollTop = Math.max(0, offsetTop - 16)
+      } else {
+        container.scrollTop = container.scrollHeight
+      }
+    })
   }, [messages])
 
   const handleSubmit = async () => {
@@ -124,36 +198,38 @@ export function ChatWindow() {
     if (!text || !sessionId || loading) return
 
     setInput('')
-    setMessages((prev) => [...prev, { role: 'user', content: text }])
+    const userMsg: ChatMessage = { role: 'user', content: text }
+    setMessages((prev) => [...prev, userMsg])
     setLoading(true)
 
-    const assistantContent: string[] = []
-    setMessages((prev) => [...prev, { role: 'assistant', content: '' }])
+    // 先加一个空的 assistant 占位
+    const placeholderMsg: ChatMessage = { role: 'assistant', blocks: [] }
+    setMessages((prev) => [...prev, placeholderMsg])
+
+    const collectedBlocks: Block[] = []
 
     try {
-      await sendMessage(sessionId, text, (chunk) => {
-        assistantContent.push(chunk)
+      await sendMessageBlocks(sessionId, text, (block) => {
+        collectedBlocks.push(block)
         setMessages((prev) => {
           const next = [...prev]
           const last = next[next.length - 1]
           if (last?.role === 'assistant') {
-            next[next.length - 1] = {
-              ...last,
-              content: assistantContent.join(''),
-            }
+            next[next.length - 1] = { ...last, blocks: [...collectedBlocks] }
           }
           return next
         })
       }, selectedModel || undefined)
       await fetchProfile(sessionId)
     } catch (e) {
+      const errText = `请求失败: ${e instanceof Error ? e.message : String(e)}`
       setMessages((prev) => {
         const next = [...prev]
         const last = next[next.length - 1]
-        if (last?.role === 'assistant' && last.content === '') {
+        if (last?.role === 'assistant') {
           next[next.length - 1] = {
-            ...last,
-            content: `请求失败: ${e instanceof Error ? e.message : String(e)}`,
+            role: 'assistant',
+            blocks: [{ type: 'text', content: errText }],
           }
         }
         return next
@@ -163,12 +239,69 @@ export function ChatWindow() {
     }
   }
 
+  /** 当用户点击 Block 中的交互组件时，自动作为新消息发送 */
+  const handleBlockRespond = useCallback(
+    async (msgIndex: number, responseText: string) => {
+      // 标记该消息 Block 已响应（防止重复点击）
+      setMessages((prev) => {
+        const next = [...prev]
+        const msg = next[msgIndex]
+        if (msg?.role === 'assistant') {
+          next[msgIndex] = { ...msg, _responded: true } as ChatMessage & { _responded: boolean }
+        }
+        return next
+      })
+      setInput(responseText)
+      // 自动发送
+      if (!requireCurrentUser() || !sessionId || loading) return
+      setLoading(true)
+
+      const userMsg: ChatMessage = { role: 'user', content: responseText }
+      setMessages((prev) => [...prev, userMsg])
+      const placeholderMsg: ChatMessage = { role: 'assistant', blocks: [] }
+      setMessages((prev) => [...prev, placeholderMsg])
+      setInput('')
+
+      const collectedBlocks: Block[] = []
+      try {
+        await sendMessageBlocks(sessionId, responseText, (block) => {
+          collectedBlocks.push(block)
+          setMessages((prev) => {
+            const next = [...prev]
+            const last = next[next.length - 1]
+            if (last?.role === 'assistant') {
+              next[next.length - 1] = { ...last, blocks: [...collectedBlocks] }
+            }
+            return next
+          })
+        }, selectedModel || undefined)
+        await fetchProfile(sessionId)
+      } catch (e) {
+        const errText = `请求失败: ${e instanceof Error ? e.message : String(e)}`
+        setMessages((prev) => {
+          const next = [...prev]
+          const last = next[next.length - 1]
+          if (last?.role === 'assistant') {
+            next[next.length - 1] = {
+              role: 'assistant',
+              blocks: [{ type: 'text', content: errText }],
+            }
+          }
+          return next
+        })
+      } finally {
+        setLoading(false)
+      }
+    },
+    [sessionId, loading, selectedModel, requireCurrentUser, fetchProfile]
+  )
+
   const handleReset = async () => {
     if (!requireCurrentUser() || !sessionId) return
     try {
       await resetSession(sessionId)
       setMessages([])
-      setImportResult(null)
+      setInput(INIT_MESSAGE)   // 重置后恢复固定初始文本
       await fetchProfile(sessionId)
       inputRef.current?.focus()
     } catch (e) {
@@ -180,7 +313,14 @@ export function ChatWindow() {
     loading &&
     messages.length > 0 &&
     messages[messages.length - 1]?.role === 'assistant' &&
-    messages[messages.length - 1]?.content === ''
+    (messages[messages.length - 1]?.blocks?.length ?? 0) === 0
+
+  const lockState: InputLockState = loading ? 'locked' : getInputLockState(messages)
+  const isInitial = lockState === 'initial'
+  const isLocked = lockState === 'locked'
+  // initial 状态的显示值固定为 INIT_MESSAGE；locked/active 使用 input state
+  const textareaValue = isInitial ? INIT_MESSAGE : input
+  const textareaPlaceholder = isLocked ? '请从上方选项中作答' : '输入消息...'
 
   if (!initialized) {
     return <div className="chat-loading">加载中...</div>
@@ -197,18 +337,46 @@ export function ChatWindow() {
             </div>
           )}
           {messages
-            .filter(
-              (m, i) =>
-                !(
-                  showLoadingDots &&
-                  i === messages.length - 1 &&
-                  m.role === 'assistant' &&
-                  m.content === ''
+            .filter((m, i) => {
+              // 过滤掉最后一条空占位 assistant 消息（正在加载时）
+              if (
+                showLoadingDots &&
+                i === messages.length - 1 &&
+                m.role === 'assistant' &&
+                (m.blocks?.length ?? 0) === 0
+              ) return false
+              return true
+            })
+            .map((m, i) => {
+              if (m.role === 'user') {
+                // MessageBubble 自带 data-role="user"，供滚动逻辑查询
+                return <MessageBubble key={i} role="user" content={m.content ?? ''} />
+              }
+              // assistant: blocks 模式
+              if (m.blocks && m.blocks.length > 0) {
+                const isResponded = !!(m as ChatMessage & { _responded?: boolean })._responded
+                const isLatest = i === messages.length - 1
+                const isInteractive = hasInteractiveBlock(m.blocks)
+                return (
+                  <div key={i} className="message-row assistant-row">
+                    <RobotAvatar />
+                    <div className="assistant-blocks">
+                      {m.blocks.map((block, bi) => (
+                        <BlockRenderer
+                          key={bi}
+                          block={block}
+                          onRespond={(text) => handleBlockRespond(i, text)}
+                          disabled={loading || (isInteractive && (!isLatest || isResponded))}
+                          responded={isResponded}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 )
-            )
-            .map((m, i) => (
-              <MessageBubble key={i} role={m.role} content={m.content} />
-            ))}
+              }
+              // 旧式纯文本（backward compat）
+              return <MessageBubble key={i} role="assistant" content={m.content ?? ''} />
+            })}
           {showLoadingDots && (
             <div className="loading-message-row">
               <RobotAvatar />
@@ -227,7 +395,8 @@ export function ChatWindow() {
           }}
         >
           <div className="chat-input-inner">
-            {!currentUser ? (
+            {!currentUser && !sessionId ? (
+              // 既未登录、又无匿名 session（后端不可达）→ 才提示登录
               <div className="chat-login-prompt">
                 <p>请先登录后再与数字分身助手对话</p>
                 <Link to="/login" state={{ from: '/profile-helper' }} className="chat-login-link">
@@ -236,83 +405,88 @@ export function ChatWindow() {
               </div>
             ) : (
               <>
-            {/* 输入区域 */}
-            <div className="chat-input-row">
-              <div className="chat-input-wrapper">
-                <textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
-                      e.preventDefault()
-                      handleSubmit()
-                    }
-                  }}
-                  onCompositionStart={() => setIsComposing(true)}
-                  onCompositionEnd={() => setIsComposing(false)}
-                  placeholder="输入消息..."
-                  rows={3}
-                  className="chat-textarea"
-                />
-              </div>
-              <button
-                type="submit"
-                className="chat-send-btn"
-                disabled={loading || !input.trim()}
-              >
-                {loading ? (
-                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                ) : (
-                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                  </svg>
-                )}
-              </button>
-            </div>
+                <div className="chat-input-row">
+                  <div className="chat-input-wrapper">
+                    <textarea
+                      ref={inputRef}
+                      value={textareaValue}
+                      readOnly={isInitial || isLocked}
+                      onChange={(e) => {
+                        if (isInitial || isLocked) return
+                        setInput(e.target.value)
+                      }}
+                      onKeyDown={(e) => {
+                        if (isInitial || isLocked) { e.preventDefault(); return }
+                        if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
+                          e.preventDefault()
+                          handleSubmit()
+                        }
+                      }}
+                      onCompositionStart={() => setIsComposing(true)}
+                      onCompositionEnd={() => setIsComposing(false)}
+                      placeholder={textareaPlaceholder}
+                      rows={3}
+                      className={`chat-textarea${isLocked ? ' chat-textarea--locked' : ''}${isInitial ? ' chat-textarea--initial' : ''}`}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="chat-send-btn"
+                    disabled={isLocked || (!isInitial && !input.trim())}
+                  >
+                    {loading ? (
+                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                    ) : (
+                      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
 
-            {/* 底部：提示 + 模型选择 + 操作按钮 */}
-            <div className="chat-hint-row">
-              <span className="input-hint">Enter 发送 · Shift+Enter 换行</span>
-              <div className="chat-hint-actions">
-                <select
-                  className="model-select-single"
-                  value={selectedModel}
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                  title="选择模型"
-                >
-                  {PROFILE_HELPER_MODELS.map((m) => (
-                    <option key={m.value} value={m.value}>
-                      {m.label}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  className="chat-action-btn"
-                  onClick={() => navigate('/profile-helper/profile')}
-                >
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                  我的分身
-                </button>
-                <button
-                  type="button"
-                  className="chat-action-btn"
-                  onClick={handleReset}
-                  disabled={loading}
-                >
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  重置会话
-                </button>
-              </div>
-            </div>
+                <div className="chat-hint-row">
+                  <span className="input-hint">
+                    {isLocked ? '请点击上方选项作答' : isInitial ? '点击发送开始建立分身' : 'Enter 发送 · Shift+Enter 换行'}
+                  </span>
+                  <div className="chat-hint-actions">
+                    <select
+                      className="model-select-single"
+                      value={selectedModel}
+                      onChange={(e) => setSelectedModel(e.target.value)}
+                      title="选择模型"
+                    >
+                      {PROFILE_HELPER_MODELS.map((m) => (
+                        <option key={m.value} value={m.value}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="chat-action-btn"
+                      onClick={() => navigate('/profile-helper/profile')}
+                    >
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      我的分身
+                    </button>
+                    <button
+                      type="button"
+                      className="chat-action-btn"
+                      onClick={handleReset}
+                      disabled={loading}
+                    >
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      重置会话
+                    </button>
+                  </div>
+                </div>
               </>
             )}
           </div>

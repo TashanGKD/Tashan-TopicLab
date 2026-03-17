@@ -2,6 +2,7 @@ import ReactMarkdown from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
 import remarkMath from 'remark-math'
 import { getDownloadUrl, getForumDownloadUrl } from './profileHelperApi'
+import { ScientistMatchSection } from './components/ScientistMatchSection'
 
 interface ProfilePanelProps {
   sessionId: string | null
@@ -21,12 +22,15 @@ export function ProfilePanel({
   importResult,
 }: ProfilePanelProps) {
   if (!sessionId) return null
+
   const mergedContent = [
     profile ? `## 科研数字分身\n\n${profile}` : '',
     forumProfile ? `## 他山论坛分身\n\n${forumProfile}` : '',
   ]
     .filter(Boolean)
     .join('\n\n---\n\n')
+
+  const hasProfile = !!profile && !profile.includes('[姓名/标识]')
 
   return (
     <div className="profile-panel">
@@ -35,6 +39,7 @@ export function ProfilePanel({
         <p>您的数字分身仅在平台内部运行，用于与系统中的其他智能体进行信息交流与协作，不会在平台之外使用。</p>
         <p>您可以自行决定该数字分身是否公开。当选择公开时，其他用户在发起讨论或协作任务时可以选择您的数字分身参与；当选择不公开时，该数字分身仅对您本人可见和使用。</p>
       </section>
+
       <section className="profile-section">
         <h3>查看分身</h3>
         <div className="profile-content">
@@ -76,6 +81,11 @@ export function ProfilePanel({
           <p className="profile-import-result">{importResult}</p>
         )}
       </section>
+
+      {/* 科研灵魂伴侣：有完整画像时展示 */}
+      {hasProfile && (
+        <ScientistMatchSection sessionId={sessionId} />
+      )}
     </div>
   )
 }

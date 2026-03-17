@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getScaleById } from '../data/scales'
-import { calculateAMSRAI, calculateRCSS, calculateScores } from '../utils/scoring'
+import { calculateAMS_RAI, calculateRCSS, calculateScores } from '../utils/scoring'
 import { submitScale } from '../profileHelperApi'
 
 const SESSION_KEYS = ['tashan_session_id', 'tashan_profile_session_id'] as const
@@ -12,6 +12,73 @@ function getStoredSessionId(): string | null {
     if (value) return value
   }
   return null
+}
+
+/** 渲染 Mini-IPIP 测试结果 */
+function IPIPResult({ scores }: { scores: Record<string, number> }) {
+  const dims = [
+    { id: 'E', label: '外向性' },
+    { id: 'A', label: '宜人性' },
+    { id: 'C', label: '尽责性' },
+    { id: 'N', label: '神经质' },
+    { id: 'I', label: '开放性/智力' },
+  ]
+  const levelLabel = (v: number) => {
+    if (v >= 4.2) return '高'
+    if (v >= 2.8) return '中'
+    return '低'
+  }
+  return (
+    <div className="score-table">
+      {dims.map((d) => (
+        <div key={d.id} className="score-row">
+          <span className="score-dim">{d.label}</span>
+          <span className="score-val">
+            {(scores[d.id] || 0).toFixed(2)}
+            <span style={{ color: '#9ca3af', marginLeft: 4, fontSize: '0.8em' }}>
+              （{levelLabel(scores[d.id] || 0)}）
+            </span>
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** 渲染 AMS 完整 7 维结果 */
+function AMSResult({ scores }: { scores: Record<string, number> }) {
+  const { intrinsicTotal, extrinsicTotal, RAI } = calculateAMS_RAI(scores)
+  const dims = [
+    { id: 'know',           label: '求知内在动机',     group: 'intrinsic' },
+    { id: 'accomplishment', label: '成就内在动机',     group: 'intrinsic' },
+    { id: 'stimulation',    label: '体验刺激内在动机', group: 'intrinsic' },
+    { id: 'identified',     label: '认同调节',         group: 'autonomous' },
+    { id: 'introjected',    label: '内摄调节',         group: 'controlled' },
+    { id: 'external',       label: '外部调节',         group: 'controlled' },
+    { id: 'amotivation',    label: '无动机',           group: 'amotivation' },
+  ]
+  return (
+    <>
+      <div className="score-table">
+        {dims.map((d) => (
+          <div key={d.id} className="score-row">
+            <span className="score-dim">{d.label}</span>
+            <span className="score-val">{(scores[d.id] || 0).toFixed(2)}</span>
+          </div>
+        ))}
+      </div>
+      <div className="score-summary">
+        <p>内在动机总分：{intrinsicTotal}</p>
+        <p>外在动机总分：{extrinsicTotal}</p>
+        <p>
+          自主动机指数 (RAI)：<strong>{RAI}</strong>
+        </p>
+        <p style={{ fontSize: '0.8em', color: '#9ca3af' }}>
+          RAI = 3×求知 + 3×成就 + 3×体验刺激 + 2×认同 − 内摄 − 2×外部 − 3×无动机
+        </p>
+      </div>
+    </>
+  )
 }
 
 export function ScaleTestPage() {
@@ -27,7 +94,7 @@ export function ScaleTestPage() {
   const question = scale?.questions[currentIdx]
   const values = useMemo(() => {
     if (!scale) return []
-    return Array.from({ length: scale.maxVal - scale.minVal + 1 }, (_, i) => scale.minVal + i)
+    return Array.from({ length: scale.max_val - scale.min_val + 1 }, (_, i) => scale.min_val + i)
   }, [scale])
 
   if (!scale) {
@@ -93,43 +160,41 @@ export function ScaleTestPage() {
   if (completed) {
     const scores = calculateScores(scale, answers)
     const rcss = scale.id === 'rcss' ? calculateRCSS(scores) : null
-    const ams = scale.id === 'ams' ? calculateAMSRAI(scores) : null
+    const amsRai = scale.id === 'ams' ? calculateAMS_RAI(scores) : null
 
     return (
       <div className="scale-test-page">
         <div className="scale-result">
-          <h2>{scale.name} - 测试完成</h2>
-          <div className="score-table">
-            {scale.dimensions.map((dim) => (
-              <div key={dim.id} className="score-row">
-                <span className="score-dim">{dim.name}</span>
-                <span className="score-val">{(scores[dim.id] || 0).toFixed(2)}</span>
+          <h2>{scale.name} — 测试完成</h2>
+
+          {scale.id === 'rcss' && (
+            <>
+              <div className="score-table">
+                {scale.dimensions.map((dim) => (
+                  <div key={dim.id} className="score-row">
+                    <span className="score-dim">{dim.name}</span>
+                    <span className="score-val">{(scores[dim.id] || 0).toFixed(0)}</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-
-          {rcss && (
-            <div className="score-summary">
-              <p>横向整合分 (I): {rcss.I}</p>
-              <p>垂直深度分 (D): {rcss.D}</p>
-              <p>
-                认知风格指数 (CSI): <strong>{rcss.CSI}</strong>
-              </p>
-              <p>
-                类型: <strong>{rcss.type}</strong>
-              </p>
-            </div>
+              {rcss && (
+                <div className="score-summary">
+                  <p>横向整合分 (I)：{rcss.I}</p>
+                  <p>垂直深度分 (D)：{rcss.D}</p>
+                  <p>
+                    认知风格指数 (CSI)：<strong>{rcss.CSI}</strong>
+                  </p>
+                  <p>
+                    类型：<strong>{rcss.type}</strong>
+                  </p>
+                </div>
+              )}
+            </>
           )}
 
-          {ams && (
-            <div className="score-summary">
-              <p>内在动机: {ams.intrinsicTotal}</p>
-              <p>外在动机: {ams.extrinsicTotal}</p>
-              <p>
-                自主动机指数 (RAI): <strong>{ams.RAI}</strong>
-              </p>
-            </div>
-          )}
+          {scale.id === 'mini-ipip' && <IPIPResult scores={scores} />}
+
+          {scale.id === 'ams' && amsRai && <AMSResult scores={scores} />}
 
           <div className="scale-result-actions">
             <button type="button" className="btn-primary" onClick={handleSave} disabled={saving}>
@@ -183,7 +248,7 @@ export function ScaleTestPage() {
         <div className="scale-question-card">
           <p className="scale-question-text">{question.text}</p>
           <div className="scale-rating-row">
-            <span className="rating-end-label">{scale.minLabel}</span>
+            <span className="rating-end-label">{scale.min_label}</span>
             <div className="scale-rating-buttons">
               {values.map((v) => (
                 <button
@@ -196,7 +261,7 @@ export function ScaleTestPage() {
                 </button>
               ))}
             </div>
-            <span className="rating-end-label">{scale.maxLabel}</span>
+            <span className="rating-end-label">{scale.max_label}</span>
           </div>
         </div>
 
