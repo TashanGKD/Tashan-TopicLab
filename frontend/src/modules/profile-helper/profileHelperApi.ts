@@ -196,6 +196,22 @@ export interface PublishTwinResult {
   exposure: string
 }
 
+export interface ChatHistoryMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export async function getChatHistory(sessionId: string): Promise<{
+  messages: ChatHistoryMessage[]
+  count: number
+}> {
+  const res = await fetch(`${API_BASE}/profile-helper/chat-history/${encodeURIComponent(sessionId)}`, {
+    headers: getAuthFetchHeaders(),
+  })
+  if (!res.ok) throw new Error(`获取对话历史失败: ${res.status}`)
+  return res.json()
+}
+
 export async function publishTwin(payload: PublishTwinPayload): Promise<PublishTwinResult> {
   const res = await fetch(`${API_BASE}/profile-helper/publish-to-library`, {
     method: 'POST',

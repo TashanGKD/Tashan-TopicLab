@@ -30,6 +30,10 @@ export interface ChatMessage {
   content?: string
   /** Block 协议消息 */
   blocks?: Block[]
+  /** Block 级已响应集合（存储已回答的 block id），替代消息级 _responded */
+  _responded_blocks?: string[]
+  /** @deprecated 消息级已响应标记，仅向后兼容用，新逻辑以 _responded_blocks 为准 */
+  _responded?: boolean
 }
 
 // ── 科学家匹配类型 ────────────────────────────────────────────────

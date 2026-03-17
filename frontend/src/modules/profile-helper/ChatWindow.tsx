@@ -241,13 +241,23 @@ export function ChatWindow() {
 
   /** 当用户点击 Block 中的交互组件时，自动作为新消息发送 */
   const handleBlockRespond = useCallback(
-    async (msgIndex: number, responseText: string) => {
-      // 标记该消息 Block 已响应（防止重复点击）
+    async (msgIndex: number, responseText: string, blockId?: string) => {
+      // Block 级标记：只禁用本次点击的 block，其余 block 保持可用
       setMessages((prev) => {
         const next = [...prev]
         const msg = next[msgIndex]
         if (msg?.role === 'assistant') {
-          next[msgIndex] = { ...msg, _responded: true } as ChatMessage & { _responded: boolean }
+          const respondedBlocks = [...(msg._responded_blocks ?? [])]
+          if (blockId && !respondedBlocks.includes(blockId)) {
+            respondedBlocks.push(blockId)
+          }
+          // 检查该消息内所有交互型 block 是否都已响应（向后兼容 _responded）
+          const interactiveIds = (msg.blocks ?? [])
+            .filter((b) => b.type === 'choice' || b.type === 'rating' || b.type === 'text_input')
+            .map((b) => ('id' in b ? (b as { id: string }).id : ''))
+            .filter(Boolean)
+          const allResponded = interactiveIds.length > 0 && interactiveIds.every((id) => respondedBlocks.includes(id))
+          next[msgIndex] = { ...msg, _responded_blocks: respondedBlocks, _responded: allResponded }
         }
         return next
       })
@@ -354,22 +364,29 @@ export function ChatWindow() {
               }
               // assistant: blocks 模式
               if (m.blocks && m.blocks.length > 0) {
-                const isResponded = !!(m as ChatMessage & { _responded?: boolean })._responded
                 const isLatest = i === messages.length - 1
                 const isInteractive = hasInteractiveBlock(m.blocks)
+                const respondedBlocks = m._responded_blocks ?? []
                 return (
                   <div key={i} className="message-row assistant-row">
                     <RobotAvatar />
                     <div className="assistant-blocks">
-                      {m.blocks.map((block, bi) => (
-                        <BlockRenderer
-                          key={bi}
-                          block={block}
-                          onRespond={(text) => handleBlockRespond(i, text)}
-                          disabled={loading || (isInteractive && (!isLatest || isResponded))}
-                          responded={isResponded}
-                        />
-                      ))}
+                      {m.blocks.map((block, bi) => {
+                        // Block 级响应状态：每个 block 独立判断是否已被回答
+                        const blockId = 'id' in block ? (block as { id: string }).id : undefined
+                        const isBlockResponded = blockId
+                          ? respondedBlocks.includes(blockId)
+                          : !!m._responded
+                        return (
+                          <BlockRenderer
+                            key={bi}
+                            block={block}
+                            onRespond={(text) => handleBlockRespond(i, text, blockId)}
+                            disabled={loading || (isInteractive && (!isLatest || isBlockResponded))}
+                            responded={isBlockResponded}
+                          />
+                        )
+                      })}
                     </div>
                   </div>
                 )
