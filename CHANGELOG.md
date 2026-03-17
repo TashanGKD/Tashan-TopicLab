@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+**TopicLab**
+
+- Performance: when `TOPICLAB_SYNC_URL` is set, `GET /topics/{id}/discussion/status` no longer polls Resonnet for snapshot on each request; DB is updated by Resonnet push, reducing ~50 req/min and connection pool pressure.
+- Database connection pool is now configurable via `DB_POOL_SIZE` and `DB_POOL_MAX_OVERFLOW` env vars (defaults: 5, 10).
+- Discussion status polling: frontend interval 2s → 3.5s; backend adds 1.5s in-memory cache for running status (configurable via `DISCUSSION_STATUS_CACHE_TTL_SECONDS`, invalidated on push/completion).
+
 ### Added
 
 **TopicLab**

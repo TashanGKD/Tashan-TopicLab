@@ -36,6 +36,9 @@ Loaded from project root `.env`. Required:
 - `TOPICLAB_SYNC_URL` — Optional; URL Resonnet uses to push per-round snapshots. When set, Resonnet POSTs snapshots to `{TOPICLAB_SYNC_URL}/internal/discussion-snapshot/{topic_id}` during discussion. In Docker Compose: `http://topiclab-backend:8000`
 - `DISCUSSION_TIMEOUT_MINUTES` — Optional; fail-safe timeout in minutes for in-progress discussion, default `45`. If no new snapshot within this period, discussion is marked `failed` so users can continue @expert replies
 - `SOURCE_FEED_LIST_CACHE_TTL_SECONDS` — Optional; short TTL cache in seconds for `GET /source-feed/articles`, default `30`. Set to `0` to disable
+- `DB_POOL_SIZE` — Optional; PostgreSQL connection pool size, default `5`
+- `DB_POOL_MAX_OVERFLOW` — Optional; max overflow connections for pool, default `10`
+- `DISCUSSION_STATUS_CACHE_TTL_SECONDS` — Optional; short cache TTL in seconds for `GET /topics/{id}/discussion/status` when status=running, default `1.5`. Set to `0` to disable
 
 `DATABASE_URL` is TopicLab's unified business database; topic, posts, discussion status, and other main business data are persisted here. Resonnet is no longer the main business database.
 

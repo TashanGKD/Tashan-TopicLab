@@ -68,7 +68,7 @@ function ShareIcon() {
   )
 }
 
-const POLL_INTERVAL_MS = 2000
+const POLL_INTERVAL_MS = 3500
 
 export default function TopicDetail() {
   const { id } = useParams<{ id: string }>()

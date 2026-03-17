@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import time
 from hashlib import sha256
 from urllib.parse import quote
 from io import BytesIO
@@ -93,6 +95,12 @@ _PREVIEW_DEFAULT_QUALITY = 72
 _PREVIEW_DEFAULT_FORMAT = "webp"
 _PREVIEW_MAX_DIMENSION = 2048
 _DISCUSSION_SYNC_INTERVAL_SECONDS = 2.0
+_STATUS_CACHE_TTL_SECONDS = float(os.getenv("DISCUSSION_STATUS_CACHE_TTL_SECONDS", "1.5"))
+_status_cache: dict[str, tuple[float, dict]] = {}
+
+
+def _invalidate_status_cache(topic_id: str) -> None:
+    _status_cache.pop(topic_id, None)
 
 TOPIC_CATEGORIES = [
     {"id": "plaza", "name": "广场", "description": "适合公开发起、泛讨论和社区互动的话题。", "profile_id": "community_dialogue"},
@@ -857,6 +865,7 @@ def _apply_snapshot_to_db(topic_id: str, snapshot: dict) -> None:
     )
     if preview_markdown_ref:
         update_topic(topic_id, {"preview_image": preview_markdown_ref})
+    _invalidate_status_cache(topic_id)
 
 
 async def _sync_discussion_snapshot(topic_id: str) -> dict | None:
@@ -908,11 +917,13 @@ async def _run_discussion_background(topic_id: str, payload: dict) -> None:
         )
         if preview_markdown_ref:
             update_topic(topic_id, {"preview_image": preview_markdown_ref})
+        _invalidate_status_cache(topic_id)
     except Exception as exc:
         logging.getLogger(__name__).exception(
             "Discussion failed for topic %s: %s", topic_id, exc
         )
         set_discussion_status(topic_id, "failed")
+        _invalidate_status_cache(topic_id)
 
 
 async def _run_expert_reply_background(topic_id: str, reply_post_id: str, payload: dict) -> None:
@@ -1591,6 +1602,7 @@ def delete_post_endpoint(
 @router.post("/internal/discussion-snapshot/{topic_id}", status_code=204)
 def push_discussion_snapshot_endpoint(topic_id: str, req: DiscussionSnapshotPushRequest):
     """Receive snapshot from Resonnet executor during discussion. Updates DB per-round."""
+    _invalidate_status_cache(topic_id)
     topic = get_topic(topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
@@ -1657,11 +1669,19 @@ def cancel_discussion_endpoint(topic_id: str):
             detail=f"Discussion is not running (current: {topic['discussion_status']}); nothing to cancel",
         )
     set_discussion_status(topic_id, "failed")
+    _invalidate_status_cache(topic_id)
     return {"status": "failed", "result": topic.get("discussion_result"), "progress": None}
 
 
 @router.get("/topics/{topic_id}/discussion/status")
 async def get_discussion_status_endpoint(topic_id: str):
+    now = time.time()
+    cached = _status_cache.get(topic_id)
+    if cached is not None:
+        expires_at, payload = cached
+        if expires_at > now:
+            return payload
+
     topic = get_topic(topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
@@ -1670,7 +1690,10 @@ async def get_discussion_status_endpoint(topic_id: str):
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
     if topic["discussion_status"] == "running":
-        await _sync_discussion_snapshot(topic_id)
+        # When TOPICLAB_SYNC_URL is set, Resonnet pushes snapshot per-round; skip polling
+        # to avoid redundant HTTP calls and DB writes (reduces load by ~50 req/min).
+        if not _get_topiclab_sync_url():
+            await _sync_discussion_snapshot(topic_id)
         topic = get_topic(topic_id)
         if not topic:
             raise HTTPException(status_code=404, detail="Topic not found")
@@ -1678,7 +1701,10 @@ async def get_discussion_status_endpoint(topic_id: str):
     progress = None
     if topic["discussion_status"] == "running":
         progress = _discussion_progress_from_turns(topic, list_discussion_turns(topic_id))
-    return {"status": topic["discussion_status"], "result": topic.get("discussion_result"), "progress": progress}
+    payload = {"status": topic["discussion_status"], "result": topic.get("discussion_result"), "progress": progress}
+    if topic["discussion_status"] == "running" and _STATUS_CACHE_TTL_SECONDS > 0:
+        _status_cache[topic_id] = (now + _STATUS_CACHE_TTL_SECONDS, payload)
+    return payload
 
 
 @router.get("/topics/{topic_id}/assets/generated_images/{asset_path:path}")

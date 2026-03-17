@@ -45,8 +45,8 @@ def get_engine():
         kwargs["connect_args"] = {"check_same_thread": False}
     else:
         kwargs["poolclass"] = QueuePool
-        kwargs["pool_size"] = 5
-        kwargs["max_overflow"] = 10
+        kwargs["pool_size"] = int(os.getenv("DB_POOL_SIZE", "5"))
+        kwargs["max_overflow"] = int(os.getenv("DB_POOL_MAX_OVERFLOW", "10"))
     _engine = create_engine(url, **kwargs)
     return _engine
 
