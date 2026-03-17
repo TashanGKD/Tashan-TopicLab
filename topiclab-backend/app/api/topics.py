@@ -796,9 +796,14 @@ async def _ensure_executor_workspace(topic_id: str) -> dict:
 
 
 async def _sync_topic_experts_from_resonnet(topic_id: str, authorization: str | None) -> list[dict]:
+    """Sync experts from Resonnet to topiclab-backend DB.
+
+    Preserves user-added experts by only replacing is_from_topic_creation=True experts.
+    """
     await _ensure_executor_workspace(topic_id)
     experts = await _proxy_to_resonnet("GET", f"/topics/{topic_id}/experts", authorization=authorization)
-    replace_topic_experts(topic_id, experts)
+    # Only replace experts that were created during topic creation, preserve user-added experts
+    replace_topic_experts(topic_id, experts, only_replace_creation_roles=True)
     return experts
 
 
@@ -1629,6 +1634,12 @@ async def start_discussion_endpoint(topic_id: str, req: StartDiscussionRequest):
     if topic["discussion_status"] == "running":
         raise HTTPException(status_code=400, detail="Discussion already running")
 
+    # Sync experts from Resonnet before starting discussion to include user-added experts
+    await _sync_topic_experts_from_resonnet(topic_id, None)
+    topic = get_topic(topic_id)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
     topic_config = get_topic_moderator_config(topic_id) or DEFAULT_MODERATOR_MODE
     num_rounds = int(topic_config.get("num_rounds") or topic["num_rounds"] or req.num_rounds)
     updated = update_topic(topic_id, {"num_rounds": num_rounds})
@@ -1806,7 +1817,7 @@ async def get_topic_expert_content_endpoint(topic_id: str, expert_name: str, aut
 
 
 async def _generate_and_replace_experts_background(topic_id: str) -> None:
-    """Background task: generate 4 roles via AI, replace in executor and DB."""
+    """Background task: generate 4 roles via AI, replace topic creation roles, preserve user-added experts."""
     topic = get_topic(topic_id)
     if not topic:
         return
@@ -1825,6 +1836,7 @@ async def _generate_and_replace_experts_background(topic_id: str) -> None:
         )
     except Exception:
         return
+    # Only replace roles that were created during topic creation, preserve user-added experts
     replace_topic_experts(
         topic_id,
         [
@@ -1837,6 +1849,7 @@ async def _generate_and_replace_experts_background(topic_id: str) -> None:
             }
             for r in roles
         ],
+        only_replace_creation_roles=True,
     )
 
 

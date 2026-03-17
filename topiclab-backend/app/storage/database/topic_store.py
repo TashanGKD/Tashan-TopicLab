@@ -1706,13 +1706,49 @@ def get_generated_image(topic_id: str, asset_path: str) -> dict | None:
     }
 
 
-def replace_topic_experts(topic_id: str, experts: list[dict], *, session=None) -> None:
+def replace_topic_experts(
+    topic_id: str,
+    experts: list[dict],
+    *,
+    session=None,
+    only_replace_creation_roles: bool = False,
+) -> None:
+    """Replace topic experts.
+
+    Args:
+        topic_id: The topic ID
+        experts: List of expert dicts with keys: name, label, description, source, is_from_topic_creation
+        session: Optional DB session
+        only_replace_creation_roles: If True, only replace experts with is_from_topic_creation=True,
+                                    preserving user-added experts. If False, replace all experts.
+    """
     owns_session = session is None
     if owns_session:
         ctx = get_db_session()
         session = ctx.__enter__()
     try:
-        session.execute(text("DELETE FROM topic_experts WHERE topic_id = :topic_id"), {"topic_id": topic_id})
+        if only_replace_creation_roles:
+            # Only delete experts that were created during topic creation
+            session.execute(
+                text("DELETE FROM topic_experts WHERE topic_id = :topic_id AND is_from_topic_creation = TRUE"),
+                {"topic_id": topic_id},
+            )
+            # Get existing expert names that are NOT from topic creation
+            existing_rows = session.execute(
+                text("""
+                    SELECT expert_name FROM topic_experts
+                    WHERE topic_id = :topic_id AND is_from_topic_creation = FALSE
+                """),
+                {"topic_id": topic_id},
+            ).fetchall()
+            existing_expert_names = [row[0] for row in existing_rows]
+        else:
+            # Delete all experts (legacy behavior)
+            session.execute(text("DELETE FROM topic_experts WHERE topic_id = :topic_id"), {"topic_id": topic_id})
+            existing_expert_names = []
+
+        # Insert new experts using ON CONFLICT to handle duplicate keys
+        all_expert_names = list(existing_expert_names)
         for expert in experts:
             session.execute(
                 text("""
@@ -1723,6 +1759,12 @@ def replace_topic_experts(topic_id: str, experts: list[dict], *, session=None) -
                         :topic_id, :expert_name, :expert_label, :description, :source,
                         :is_from_topic_creation, :updated_at
                     )
+                    ON CONFLICT (topic_id, expert_name) DO UPDATE SET
+                        expert_label = EXCLUDED.expert_label,
+                        description = EXCLUDED.description,
+                        source = EXCLUDED.source,
+                        is_from_topic_creation = EXCLUDED.is_from_topic_creation,
+                        updated_at = EXCLUDED.updated_at
                 """),
                 {
                     "topic_id": topic_id,
@@ -1734,6 +1776,9 @@ def replace_topic_experts(topic_id: str, experts: list[dict], *, session=None) -
                     "updated_at": utc_now(),
                 },
             )
+            all_expert_names.append(expert["name"])
+
+        # Update topic's expert_names field
         session.execute(
             text("""
                 UPDATE topics
@@ -1742,7 +1787,7 @@ def replace_topic_experts(topic_id: str, experts: list[dict], *, session=None) -
             """),
             {
                 "topic_id": topic_id,
-                "expert_names": json.dumps([expert["name"] for expert in experts], ensure_ascii=False),
+                "expert_names": json.dumps(all_expert_names, ensure_ascii=False),
                 "updated_at": utc_now(),
             },
         )

@@ -286,7 +286,7 @@ async def _fill_topic_body_in_background(topic_id: str, article_dict: dict) -> N
 
 
 async def _fill_topic_roles_in_background(topic_id: str) -> None:
-    """Background task: generate 4 roles via AI, set in executor workspace, update topic."""
+    """Background task: generate 4 roles via AI, replace topic creation roles, preserve user-added experts."""
     try:
         topic = get_topic(topic_id)
         if not topic:
@@ -303,6 +303,7 @@ async def _fill_topic_roles_in_background(topic_id: str) -> None:
             json_body={"experts": roles},
             timeout=60.0,
         )
+        # Only replace roles that were created during topic creation, preserve user-added experts
         replace_topic_experts(
             topic_id,
             [
@@ -315,6 +316,7 @@ async def _fill_topic_roles_in_background(topic_id: str) -> None:
                 }
                 for r in roles
             ],
+            only_replace_creation_roles=True,
         )
     except Exception:
         pass
