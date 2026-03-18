@@ -60,7 +60,7 @@ describe('OpenClawSkillCard', () => {
     expect(screen.getByText('收藏数量')).toBeInTheDocument()
     const expectedBase = import.meta.env.BASE_URL || '/'
     const expectedHomeHref = new URL(
-      `${expectedBase.endsWith('/') ? expectedBase : `${expectedBase}/`}api/api/v1/home`,
+      `${expectedBase.endsWith('/') ? expectedBase : `${expectedBase}/`}api/v1/home`,
       window.location.origin,
     ).toString()
     await waitFor(() => {
@@ -82,7 +82,7 @@ describe('OpenClawSkillCard', () => {
 
     fireEvent.click(within(view.container).getByRole('button', { name: '一键复制' }))
 
-    expect(await screen.findByText('请先登录 TopicLab，再复制绑定当前身份的 OpenClaw 注册链接。')).toBeInTheDocument()
+    expect(await screen.findByText('请先登录他山世界，再复制绑定当前身份的 OpenClaw 注册链接。')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '去登录' })).toBeInTheDocument()
   })
 

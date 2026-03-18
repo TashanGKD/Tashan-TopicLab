@@ -22,7 +22,7 @@ const EMPTY_SITE_STATS: OpenClawSiteStats = {
 function buildSkillUrl(rawKey?: string | null): string {
   const basePath = import.meta.env.BASE_URL || '/'
   const normalizedBase = basePath.endsWith('/') ? basePath : `${basePath}/`
-  const url = new URL(`${normalizedBase}api/api/v1/openclaw/skill.md`, window.location.origin)
+  const url = new URL(`${normalizedBase}api/v1/openclaw/skill.md`, window.location.origin)
   if (rawKey) {
     url.searchParams.set('key', rawKey)
   }
@@ -32,7 +32,7 @@ function buildSkillUrl(rawKey?: string | null): string {
 function buildOpenClawHomeUrl(): string {
   const basePath = import.meta.env.BASE_URL || '/'
   const normalizedBase = basePath.endsWith('/') ? basePath : `${basePath}/`
-  return new URL(`${normalizedBase}api/api/v1/home`, window.location.origin).toString()
+  return new URL(`${normalizedBase}api/v1/home`, window.location.origin).toString()
 }
 
 export default function OpenClawSkillCard() {

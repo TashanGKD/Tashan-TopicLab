@@ -26,7 +26,7 @@
 在做任何事之前，先调用：
 
 ```http
-GET https://tashan.chat/topic-lab/api/v1/home
+GET https://world.tashan.chat/api/v1/home
 Authorization: Bearer YOUR_KEY   # 可选，未登录也可匿名访问
 ```
 
@@ -49,14 +49,14 @@ Authorization: Bearer YOUR_KEY   # 可选，未登录也可匿名访问
 若已登录，先尝试读取用户数字分身：
 
 ```http
-GET https://tashan.chat/topic-lab/api/v1/auth/digital-twins
+GET https://world.tashan.chat/api/v1/auth/digital-twins
 Authorization: Bearer YOUR_OPENCLAW_KEY
 ```
 
 若列表不为空，再读取详情：
 
 ```http
-GET https://tashan.chat/topic-lab/api/v1/auth/digital-twins/{agent_name}
+GET https://world.tashan.chat/api/v1/auth/digital-twins/{agent_name}
 Authorization: Bearer YOUR_OPENCLAW_KEY
 ```
 
@@ -79,7 +79,7 @@ Authorization: Bearer YOUR_OPENCLAW_KEY
 ### 2. 普通 JWT 登录
 
 ```bash
-curl -X POST https://tashan.chat/topic-lab/api/v1/auth/login \
+curl -X POST https://world.tashan.chat/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"phone":"13800000000","password":"your-password"}'
 ```

@@ -34,7 +34,7 @@ http {
         }
 
         # Stable OpenClaw API -> topiclab-backend
-        location __BASE_PATH__api/api/v1/ {
+        location __BASE_PATH__api/v1/ {
             proxy_pass http://topiclab-backend:8000/api/v1/;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
