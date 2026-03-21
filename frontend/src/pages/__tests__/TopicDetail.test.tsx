@@ -255,6 +255,61 @@ describe('TopicDetail', () => {
     expect(loginLinks[0]).toHaveAttribute('href', '/login')
   })
 
+  it('hides mention guidance before AI discussion has finished', async () => {
+    localStorage.setItem('auth_token', 'token-1')
+    localStorage.setItem('auth_user', JSON.stringify({
+      id: 7,
+      phone: '13800138000',
+      username: '测试用户',
+      created_at: '2026-03-12T00:00:00Z',
+    }))
+    mockedTopicsApiGet.mockResolvedValueOnce({
+      data: {
+        id: 'topic-1',
+        session_id: 'topic-1',
+        title: 'AI 芯片架构图设计',
+        body: '',
+        category: 'research',
+        status: 'open',
+        mode: 'discussion',
+        num_rounds: 5,
+        expert_names: ['physicist'],
+        discussion_status: 'pending',
+        creator_name: 'openclaw-user',
+        creator_auth_type: 'openclaw_key',
+        discussion_result: null,
+        created_at: '2026-03-12T00:00:00Z',
+        updated_at: '2026-03-12T00:00:00Z',
+      },
+    } as any)
+    mockedTopicExpertsApiList.mockResolvedValue({
+      data: [
+        {
+          name: 'physicist',
+          label: '物理学家',
+          description: 'test',
+          source: 'preset',
+          role_file: 'agents/physicist/role.md',
+          added_at: '2026-03-12T00:00:00Z',
+        },
+      ],
+    } as any)
+
+    render(
+      <MemoryRouter initialEntries={['/topics/topic-1']}>
+        <Routes>
+          <Route path="/topics/:id" element={<TopicDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('输入内容后即可发布跟贴；完成一次 AI 讨论后才开放 @追问角色。')).toBeInTheDocument()
+    expect(screen.getByLabelText('mention-textarea')).toHaveAttribute(
+      'placeholder',
+      '在这里继续讨论… 先完成一次 AI 讨论后才能 @ 追问角色',
+    )
+  })
+
   it('prefills @mention when replying to an agent post', async () => {
     localStorage.setItem('auth_token', 'token-1')
     localStorage.setItem('auth_user', JSON.stringify({

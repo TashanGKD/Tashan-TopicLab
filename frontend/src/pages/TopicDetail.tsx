@@ -365,7 +365,7 @@ export default function TopicDetail() {
   const handleReplyToPost = (post: Post) => {
     setSubmitError('')
     setReplyingTo(post)
-    if (post.author_type === 'agent') {
+    if (post.author_type === 'agent' && topic?.discussion_status !== 'pending' && topic?.discussion_status !== 'running') {
       const mentionName = post.expert_name ?? post.author
       setPostText(prev => ensureExpertMention(prev, mentionName))
     }
@@ -811,6 +811,7 @@ export default function TopicDetail() {
   }
 
   const isDiscussionMode = topic.mode === 'discussion' || topic.mode === 'both'
+  const canMentionExperts = topic.discussion_status !== 'pending' && topic.discussion_status !== 'running' && topicExperts.length > 0
   const shouldShowReplyDock = topic.status === 'open' && replyingTo !== null
   const closeReplyDock = () => setReplyingTo(null)
   const categoryMeta = getTopicCategoryMeta(topic.category)
@@ -1036,7 +1037,7 @@ export default function TopicDetail() {
           >
             <h2 className="text-base font-semibold text-gray-900 mb-1">
               跟贴 ({topic.posts_count ?? posts.length})
-              {topicExperts.length > 0 && (
+              {canMentionExperts && (
                 <span className="text-xs font-normal text-gray-400 ml-2">— 输入 @ 可追问角色</span>
               )}
             </h2>
@@ -1108,10 +1109,16 @@ export default function TopicDetail() {
                               setPostText(value)
                               if (submitError) setSubmitError('')
                             }}
-                            experts={topicExperts}
+                            experts={canMentionExperts ? topicExperts : []}
                             disabled={submitting}
                             textareaRef={composerTextareaRef}
-                            placeholder={topic.discussion_status === 'running' ? "在这里继续讨论… 普通跟贴可直接发送，@专家回复需等待讨论完成" : "在这里继续讨论… 输入 @ 可追问角色"}
+                            placeholder={
+                              topic.discussion_status === 'running'
+                                ? '在这里继续讨论… 普通跟贴可直接发送，@专家回复需等待讨论完成'
+                                : canMentionExperts
+                                  ? '在这里继续讨论… 输入 @ 可追问角色'
+                                  : '在这里继续讨论… 先完成一次 AI 讨论后才能 @ 追问角色'
+                            }
                             textareaClassName="w-full bg-transparent px-1 py-1 text-sm font-serif text-gray-800 focus:outline-none resize-none"
                           />
                         </div>
@@ -1126,7 +1133,7 @@ export default function TopicDetail() {
                       <p className="mt-2 text-xs text-gray-400">
                         {topic.discussion_status === 'running'
                           ? 'AI 讨论进行中，普通跟贴可直接发送，@专家回复需等待讨论完成。'
-                          : (topicExperts.length > 0 ? '输入 @ 可直接追问角色。' : '输入内容后即可发布跟贴。')}
+                          : (canMentionExperts ? '输入 @ 可直接追问角色。' : '输入内容后即可发布跟贴；完成一次 AI 讨论后才开放 @追问角色。')}
                       </p>
                       {submitError ? (
                         <p className="mt-2 text-xs text-red-600">{submitError}</p>
@@ -1244,10 +1251,16 @@ export default function TopicDetail() {
                           setPostText(value)
                           if (submitError) setSubmitError('')
                         }}
-                        experts={topicExperts}
+                        experts={canMentionExperts ? topicExperts : []}
                         disabled={submitting}
                         textareaRef={composerTextareaRef}
-                        placeholder={topic.discussion_status === 'running' ? "在这里继续讨论… 普通跟贴可直接发送，@专家回复需等待讨论完成" : "在这里继续讨论… 回复角色时会自动补上 @"}
+                        placeholder={
+                          topic.discussion_status === 'running'
+                            ? '在这里继续讨论… 普通跟贴可直接发送，@专家回复需等待讨论完成'
+                            : canMentionExperts
+                              ? '在这里继续讨论… 回复角色时会自动补上 @'
+                              : '在这里继续讨论… 先完成一次 AI 讨论后才能 @ 追问角色'
+                        }
                         textareaClassName="w-full bg-transparent px-1 py-1 text-sm font-serif text-gray-800 focus:outline-none resize-none"
                       />
                     </div>
@@ -1262,7 +1275,7 @@ export default function TopicDetail() {
                   <p className="mt-2 text-xs text-gray-400">
                     {topic.discussion_status === 'running'
                       ? 'AI 讨论进行中，普通跟贴可直接发送，@专家回复需等待讨论完成。'
-                      : (topicExperts.length > 0 ? '输入 @ 可直接追问角色，回复角色时会自动带上 @。' : '输入内容后即可发布跟贴。')}
+                      : (canMentionExperts ? '输入 @ 可直接追问角色，回复角色时会自动带上 @。' : '输入内容后即可发布跟贴；完成一次 AI 讨论后才开放 @追问角色。')}
                   </p>
                   {submitError ? (
                     <p className="mt-2 text-xs text-red-600">{submitError}</p>
