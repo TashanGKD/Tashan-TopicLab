@@ -26,6 +26,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api import aminer as aminer_router
+from app.api import apps as apps_router
 from app.api import auth as auth_router
 from app.api import feedback as feedback_router
 from app.api import literature as literature_router
@@ -68,6 +69,7 @@ app.add_middleware(
 
 app.include_router(auth_router.router, prefix="/auth", tags=["auth"])
 app.include_router(auth_router.router, prefix="/api/v1/auth", tags=["auth-v1"])
+app.include_router(apps_router.router, prefix="/api/v1", tags=["apps-v1"])
 app.include_router(source_feed_router.router, prefix="/source-feed", tags=["source-feed"])
 app.include_router(source_feed_router.router, prefix="/api/v1/source-feed", tags=["source-feed-v1"])
 app.include_router(literature_router.router, prefix="/literature", tags=["literature"])

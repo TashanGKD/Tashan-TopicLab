@@ -1432,6 +1432,20 @@ def test_feedback_requires_auth(client):
     assert resp.status_code == 401, resp.text
 
 
+def test_app_topic_is_singleton(client):
+    first = client.post("/api/v1/apps/scispark/topic")
+    assert first.status_code == 200, first.text
+    first_payload = first.json()
+    assert first_payload["created"] is True
+    topic_id = first_payload["topic"]["id"]
+
+    second = client.post("/api/v1/apps/scispark/topic")
+    assert second.status_code == 200, second.text
+    second_payload = second.json()
+    assert second_payload["created"] is False
+    assert second_payload["topic"]["id"] == topic_id
+
+
 def test_feedback_submit_migrates_legacy_site_feedback_schema(client):
     from app.storage.database.postgres_client import get_db_session
 

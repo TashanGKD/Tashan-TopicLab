@@ -40,6 +40,7 @@ export interface Topic {
   creator_user_id?: number | null
   creator_name?: string | null
   creator_auth_type?: string | null
+  topic_origin?: 'app' | 'source' | null
   posts_count?: number
   interaction?: TopicInteraction
 }
@@ -55,6 +56,7 @@ export const TOPIC_CATEGORIES: TopicCategory[] = [
   { id: 'thought', name: '思考', description: '适合观点整理、开放问题和长线思辨。' },
   { id: 'research', name: '科研', description: '适合论文、实验、方法和研究路线相关的话题。' },
   { id: 'product', name: '产品', description: '适合功能设计、用户反馈和产品判断。' },
+  { id: 'app', name: '应用', description: '适合围绕应用、插件、工具能力与使用体验展开讨论。' },
   { id: 'news', name: '资讯', description: '适合围绕最新动态、行业消息和热点展开讨论。' },
   { id: 'request', name: '需求', description: '发布需求、寻找协作、对接资源，把想法变成合作。' },
 ]
@@ -82,6 +84,7 @@ export interface TopicListItem {
   creator_user_id?: number | null
   creator_name?: string | null
   creator_auth_type?: string | null
+  topic_origin?: 'app' | 'source' | null
   posts_count?: number
   interaction?: TopicInteraction
   favorite_category_ids?: string[]
@@ -324,6 +327,53 @@ export interface CreateTopicRequest {
   category?: string
 }
 
+export interface AppCatalogLinks {
+  docs?: string
+  repo?: string
+  catalog_source?: string
+}
+
+export interface AppCatalogTopicSeed {
+  category?: string
+  title?: string
+  body?: string
+}
+
+export interface AppCatalogReviewFeedback {
+  scenario?: string
+  body_template?: string
+}
+
+export interface AppCatalogOpenClawMeta {
+  topic_seed?: AppCatalogTopicSeed
+  review_feedback?: AppCatalogReviewFeedback
+}
+
+export interface AppCatalogItem {
+  id: string
+  name: string
+  command?: string
+  summary?: string
+  description?: string
+  icon?: string
+  tags?: string[]
+  links?: AppCatalogLinks
+  openclaw?: AppCatalogOpenClawMeta
+}
+
+export interface AppCatalogListResponse {
+  version: string
+  count: number
+  import_sources: string[]
+  list: AppCatalogItem[]
+}
+
+export interface EnsureAppTopicResponse {
+  topic: Topic
+  created: boolean
+  catalog_version: string
+}
+
 export const ROUNDTABLE_MODELS = [
   { value: 'qwen3.5-plus', label: 'Qwen3.5 Plus（默认）' },
   { value: 'qwen-flash', label: 'Qwen Flash' },
@@ -484,6 +534,12 @@ export const sourceFeedApi = {
     api.post<SourceArticleInteraction>(`/source-feed/articles/${articleId}/share`),
   ensureTopic: (articleId: number) =>
     api.post<EnsureSourceArticleTopicResponse>(`/source-feed/articles/${articleId}/topic`),
+}
+
+export const appsApi = {
+  list: () => api.get<AppCatalogListResponse>('v1/apps'),
+  get: (appId: string) => api.get<{ version: string; app: AppCatalogItem }>(`v1/apps/${encodeURIComponent(appId)}`),
+  ensureTopic: (appId: string) => api.post<EnsureAppTopicResponse>(`v1/apps/${encodeURIComponent(appId)}/topic`),
 }
 
 /** 学术板块：经 topiclab-backend 代理到 IC（与信源同源 INFORMATION_COLLECTION_BASE_URL） */

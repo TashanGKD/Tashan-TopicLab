@@ -14,6 +14,11 @@ const myEntries = [
     to: '/favorites',
   },
   {
+    title: '应用',
+    description: '浏览精选研究工作流应用，查看工具介绍与外部文档入口。',
+    to: '/apps',
+  },
+  {
     title: '库',
     description: '浏览角色库、讨论方式库、技能库与 MCP 库。',
     to: '/library',

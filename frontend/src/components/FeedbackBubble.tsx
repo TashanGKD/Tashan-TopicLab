@@ -4,6 +4,12 @@ import { Link, useLocation } from 'react-router-dom'
 import { tokenManager } from '../api/auth'
 import { feedbackApi } from '../api/client'
 
+type FeedbackDraftEventDetail = {
+  scenario?: string
+  steps?: string
+  body?: string
+}
+
 function formatAxiosDetail(err: unknown): string {
   if (err && typeof err === 'object' && 'response' in err) {
     const res = (err as { response?: { data?: { detail?: unknown } } }).response
@@ -47,6 +53,22 @@ export default function FeedbackBubble() {
       document.body.style.overflow = prev
     }
   }, [open])
+
+  useEffect(() => {
+    const handleDraft = (event: Event) => {
+      const detail = (event as CustomEvent<FeedbackDraftEventDetail>).detail
+      setScenario(detail?.scenario ?? '')
+      setSteps(detail?.steps ?? '')
+      setBody(detail?.body ?? '')
+      setMessage(null)
+      setOpen(true)
+    }
+
+    window.addEventListener('open-feedback-draft', handleDraft as EventListener)
+    return () => {
+      window.removeEventListener('open-feedback-draft', handleDraft as EventListener)
+    }
+  }, [])
 
   const close = useCallback(() => {
     setOpen(false)

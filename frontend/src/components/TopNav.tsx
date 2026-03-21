@@ -6,6 +6,7 @@ import { refreshCurrentUserProfile, tokenManager, User } from '../api/auth'
 const navLinks = [
   { to: '/', label: '话题列表', match: (path: string) => path === '/' && !path.startsWith('/topics') && !path.startsWith('/source-feed') && !path.startsWith('/library') && !path.startsWith('/profile-helper') && !path.startsWith('/agent-links') },
   { to: '/source-feed', label: '信源', match: (path: string) => path.startsWith('/source-feed') },
+  { to: '/apps', label: '应用', match: (path: string) => path.startsWith('/apps') },
   { to: '/library', label: '库', match: (path: string) => path.startsWith('/library') || path.startsWith('/experts') || path.startsWith('/skills') || path.startsWith('/mcp') || path.startsWith('/moderator-modes') },
 ] as const
 
@@ -38,6 +39,7 @@ const mobileTabs = [
     label: '我的',
     match: (path: string) =>
       path.startsWith('/me') ||
+      path.startsWith('/apps') ||
       path.startsWith('/profile-helper') ||
       path.startsWith('/favorites') ||
       path.startsWith('/library') ||

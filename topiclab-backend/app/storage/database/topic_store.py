@@ -62,6 +62,7 @@ class TopicRecord:
     likes_count: int
     favorites_count: int
     shares_count: int
+    topic_origin: str | None
     discussion_result: dict | None
 
 
@@ -178,6 +179,24 @@ def init_topic_tables() -> None:
             ON topic_source_article_links(topic_id)
         """))
         session.execute(text("ALTER TABLE topic_source_article_links ADD COLUMN IF NOT EXISTS snapshot_pic_url TEXT"))
+        session.execute(text("""
+            CREATE TABLE IF NOT EXISTS topic_app_links (
+                app_id VARCHAR(255) PRIMARY KEY,
+                topic_id VARCHAR(36) NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+                snapshot_name TEXT NOT NULL DEFAULT '',
+                snapshot_command TEXT NOT NULL DEFAULT '',
+                snapshot_summary TEXT NOT NULL DEFAULT '',
+                snapshot_docs_url TEXT NOT NULL DEFAULT '',
+                snapshot_repo_url TEXT NOT NULL DEFAULT '',
+                snapshot_icon TEXT NOT NULL DEFAULT '',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """))
+        session.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_topic_app_links_topic_id
+            ON topic_app_links(topic_id)
+        """))
         session.execute(text("""
             CREATE TABLE IF NOT EXISTS posts (
                 id VARCHAR(36) PRIMARY KEY,
@@ -587,6 +606,7 @@ def _build_topic(row) -> TopicRecord:
         likes_count=int(getattr(row, "likes_count", 0) or 0),
         favorites_count=int(getattr(row, "favorites_count", 0) or 0),
         shares_count=int(getattr(row, "shares_count", 0) or 0),
+        topic_origin=None,
         discussion_result=discussion_result,
     )
 
@@ -933,6 +953,10 @@ def get_topic(
         if not row:
             return None
         topic = topic_record_to_dict(_build_topic(row))
+        if is_topic_from_app(topic_id):
+            topic["topic_origin"] = "app"
+        elif is_topic_from_source(topic_id):
+            topic["topic_origin"] = "source"
         _cache_set(cache_key, topic)
     annotate_topics_with_interactions([topic], user_id=user_id, auth_type=auth_type)
     return topic
@@ -1017,6 +1041,124 @@ def is_topic_from_source(topic_id: str) -> bool:
             {"topic_id": topic_id},
         ).first()
     return row is not None
+
+
+def get_topic_id_by_app(app_id: str) -> str | None:
+    with get_db_session() as session:
+        row = session.execute(
+            text("""
+                SELECT l.topic_id
+                FROM topic_app_links AS l
+                JOIN topics AS t ON t.id = l.topic_id
+                WHERE l.app_id = :app_id
+            """),
+            {"app_id": app_id},
+        ).first()
+    if not row:
+        return None
+    return str(row.topic_id)
+
+
+def is_topic_from_app(topic_id: str) -> bool:
+    with get_db_session() as session:
+        row = session.execute(
+            text("SELECT 1 FROM topic_app_links WHERE topic_id = :topic_id LIMIT 1"),
+            {"topic_id": topic_id},
+        ).first()
+    return row is not None
+
+
+def get_topic_origin_by_ids(topic_ids: list[str]) -> dict[str, str]:
+    if not topic_ids:
+        return {}
+    result: dict[str, str] = {}
+    with get_db_session() as session:
+        source_rows = session.execute(
+            text("""
+                SELECT topic_id
+                FROM topic_source_article_links
+                WHERE topic_id IN :topic_ids
+            """).bindparams(bindparam("topic_ids", expanding=True)),
+            {"topic_ids": topic_ids},
+        ).fetchall()
+        for row in source_rows:
+            result[str(row.topic_id)] = "source"
+
+        app_rows = session.execute(
+            text("""
+                SELECT topic_id
+                FROM topic_app_links
+                WHERE topic_id IN :topic_ids
+            """).bindparams(bindparam("topic_ids", expanding=True)),
+            {"topic_ids": topic_ids},
+        ).fetchall()
+        for row in app_rows:
+            result[str(row.topic_id)] = "app"
+    return result
+
+
+def link_app_to_topic(
+    app_id: str,
+    topic_id: str,
+    *,
+    name: str = "",
+    command: str = "",
+    summary: str = "",
+    docs_url: str = "",
+    repo_url: str = "",
+    icon: str = "",
+) -> str:
+    now = utc_now()
+    with get_db_session() as session:
+        row = session.execute(
+            text("""
+                INSERT INTO topic_app_links (
+                    app_id,
+                    topic_id,
+                    snapshot_name,
+                    snapshot_command,
+                    snapshot_summary,
+                    snapshot_docs_url,
+                    snapshot_repo_url,
+                    snapshot_icon,
+                    created_at,
+                    updated_at
+                ) VALUES (
+                    :app_id,
+                    :topic_id,
+                    :snapshot_name,
+                    :snapshot_command,
+                    :snapshot_summary,
+                    :snapshot_docs_url,
+                    :snapshot_repo_url,
+                    :snapshot_icon,
+                    :created_at,
+                    :updated_at
+                )
+                ON CONFLICT (app_id) DO UPDATE SET
+                    snapshot_name = COALESCE(NULLIF(EXCLUDED.snapshot_name, ''), topic_app_links.snapshot_name),
+                    snapshot_command = COALESCE(NULLIF(EXCLUDED.snapshot_command, ''), topic_app_links.snapshot_command),
+                    snapshot_summary = COALESCE(NULLIF(EXCLUDED.snapshot_summary, ''), topic_app_links.snapshot_summary),
+                    snapshot_docs_url = COALESCE(NULLIF(EXCLUDED.snapshot_docs_url, ''), topic_app_links.snapshot_docs_url),
+                    snapshot_repo_url = COALESCE(NULLIF(EXCLUDED.snapshot_repo_url, ''), topic_app_links.snapshot_repo_url),
+                    snapshot_icon = COALESCE(NULLIF(EXCLUDED.snapshot_icon, ''), topic_app_links.snapshot_icon),
+                    updated_at = EXCLUDED.updated_at
+                RETURNING topic_id
+            """),
+            {
+                "app_id": app_id,
+                "topic_id": topic_id,
+                "snapshot_name": name,
+                "snapshot_command": command,
+                "snapshot_summary": summary,
+                "snapshot_docs_url": docs_url,
+                "snapshot_repo_url": repo_url,
+                "snapshot_icon": icon,
+                "created_at": now,
+                "updated_at": now,
+            },
+        ).one()
+    return str(row.topic_id)
 
 
 def get_source_pic_url_by_topic_ids(topic_ids: list[str]) -> dict[str, str]:
@@ -1932,6 +2074,7 @@ def topic_record_to_dict(record: TopicRecord, *, lightweight: bool = False) -> d
         "likes_count": record.likes_count,
         "favorites_count": record.favorites_count,
         "shares_count": record.shares_count,
+        "topic_origin": record.topic_origin,
         "interaction": {
             "likes_count": record.likes_count,
             "favorites_count": record.favorites_count,

@@ -1,0 +1,54 @@
+{
+  "apps": [
+    {
+      "id": "scispark",
+      "name": "Scispark",
+      "command": "/scispark",
+      "summary": "基于 Scispark 方法的 7 阶段结构化研究想法生成工作流。",
+      "description": "适合文献综述、研究设计与论文选题探索，支持事实提取、假设生成、Review 评审循环、专家系统整合与可选幻灯片生成。",
+      "icon": "spark",
+      "tags": ["research", "workflow", "idea-generation"],
+      "links": {
+        "docs": "https://tashangkd.github.io/cc_plugins/plugins/scispark/",
+        "repo": "https://github.com/TashanGKD/cc_plugins/tree/main/plugins/scispark",
+        "catalog_source": "https://github.com/TashanGKD/cc_plugins"
+      },
+      "openclaw": {
+        "topic_seed": {
+          "category": "research",
+          "title": "评估 Scispark 在研究想法生成中的价值与局限",
+          "body": "我想评估应用 Scispark 的实际效果。\n\n应用信息：\n- 名称：Scispark\n- 命令：/scispark\n- 文档：https://tashangkd.github.io/cc_plugins/plugins/scispark/\n\n请围绕以下方面展开：\n1. 适合解决哪些研究问题\n2. 使用门槛与依赖条件\n3. 优势、局限与失败场景\n4. 是否值得纳入我的研究工作流\n"
+        },
+        "review_feedback": {
+          "scenario": "apps:scispark",
+          "body_template": "我要评价应用 Scispark。\n\n评价维度：\n- 使用场景：\n- 期望能力：\n- 实际体验：\n- 优点：\n- 问题/不足：\n- 改进建议：\n"
+        }
+      }
+    },
+    {
+      "id": "manim-creator",
+      "name": "Manim Creator",
+      "command": "/manim",
+      "summary": "面向数学动画与学术展示的可视化工具。",
+      "description": "可从自然语言描述生成 Manim 代码并完成编译渲染，内含代码生成、工具函数库与构建能力，适合函数可视化、几何演示和教学视频制作。",
+      "icon": "manim",
+      "tags": ["visualization", "animation", "math"],
+      "links": {
+        "docs": "https://tashangkd.github.io/cc_plugins/plugins/manim-creator/",
+        "repo": "https://github.com/TashanGKD/cc_plugins/tree/main/plugins/manim-creator",
+        "catalog_source": "https://github.com/TashanGKD/cc_plugins"
+      },
+      "openclaw": {
+        "topic_seed": {
+          "category": "app",
+          "title": "讨论 Manim Creator 在教学与学术展示中的适用性",
+          "body": "我想评估应用 Manim Creator 的实际效果。\n\n应用信息：\n- 名称：Manim Creator\n- 命令：/manim\n- 文档：https://tashangkd.github.io/cc_plugins/plugins/manim-creator/\n\n请围绕以下方面展开：\n1. 适合哪些数学可视化场景\n2. 依赖环境与上手门槛\n3. 输出质量与可编辑性\n4. 是否值得纳入内容制作流程\n"
+        },
+        "review_feedback": {
+          "scenario": "apps:manim-creator",
+          "body_template": "我要评价应用 Manim Creator。\n\n评价维度：\n- 使用场景：\n- 期望能力：\n- 实际体验：\n- 优点：\n- 问题/不足：\n- 改进建议：\n"
+        }
+      }
+    }
+  ]
+}

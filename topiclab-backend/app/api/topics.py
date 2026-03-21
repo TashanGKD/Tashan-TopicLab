@@ -51,6 +51,7 @@ from app.storage.database.topic_store import (
     get_favorite_category_summary_payload,
     get_post,
     get_source_pic_url_by_topic_ids,
+    get_topic_origin_by_ids,
     get_topic,
     get_topic_id_by_source_article,
     is_topic_from_source,
@@ -107,6 +108,7 @@ TOPIC_CATEGORIES = [
     {"id": "thought", "name": "思考", "description": "适合观点整理、开放问题和长线思辨。", "profile_id": "critical_thinking"},
     {"id": "research", "name": "科研", "description": "适合论文、实验、方法和研究路线相关的话题。", "profile_id": "research_review"},
     {"id": "product", "name": "产品", "description": "适合功能设计、用户反馈和产品判断。", "profile_id": "product_review"},
+    {"id": "app", "name": "应用", "description": "适合围绕应用、插件、工具能力与使用体验展开讨论。", "profile_id": "app_review"},
     {"id": "news", "name": "资讯", "description": "适合围绕最新动态、行业消息和热点展开讨论。", "profile_id": "news_analysis"},
     {"id": "request", "name": "需求", "description": "发布需求、寻找协作、对接资源，把想法变成合作。", "profile_id": "request_matching"},
 ]
@@ -227,6 +229,35 @@ TOPIC_CATEGORY_PROFILES = {
             "方案与取舍",
             "风险/成本",
             "建议优先级",
+        ],
+    },
+    "app": {
+        "profile_id": "app_review",
+        "category": "app",
+        "display_name": "应用参与策略",
+        "objective": "围绕应用或工具的用途、体验、能力边界与接入价值展开讨论。",
+        "tone": "务实、清晰、面向真实使用。",
+        "reasoning_style": "先说明应用解决什么问题，再讨论上手成本、实际表现、局限与适用场景。",
+        "evidence_requirement": "medium",
+        "questioning_requirement": "medium",
+        "post_style": "experience-aware and evaluation-oriented",
+        "reply_style": "use-case first with trade-offs",
+        "discussion_start_style": "pin down use cases, setup cost, actual value, and limitations",
+        "default_actions": [
+            "先明确这是给谁、解决什么问题的应用。",
+            "区分功能介绍、实际体验和长期使用价值。",
+            "尽量给出适用场景、不适用场景和接入建议。",
+        ],
+        "avoid": [
+            "不要只复述功能列表，不讨论实际使用。",
+            "不要忽略安装、配置和维护成本。",
+            "不要把单次体验直接等同于长期价值。",
+        ],
+        "output_structure": [
+            "应用定位/场景",
+            "能力与体验",
+            "局限与门槛",
+            "是否值得接入",
         ],
     },
     "news": {
@@ -969,11 +1000,13 @@ def get_topics(
     items = payload.get("items") or []
     if items:
         pic_map = get_source_pic_url_by_topic_ids([t["id"] for t in items])
+        origin_map = get_topic_origin_by_ids([t["id"] for t in items])
         out = []
         for t in items:
             row = dict(t)
             pic = pic_map.get(t["id"])
             row["source_preview_image"] = f"/api/source-feed/image?url={quote(pic, safe='')}" if pic else None
+            row["topic_origin"] = origin_map.get(t["id"])
             out.append(row)
         payload = {"items": out, "next_cursor": payload.get("next_cursor")}
     return payload

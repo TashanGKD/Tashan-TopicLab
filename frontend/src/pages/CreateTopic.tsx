@@ -1,12 +1,24 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { TOPIC_CATEGORIES, topicsApi } from '../api/client'
 import { handleApiError, handleApiSuccess } from '../utils/errorHandler'
 
 export default function CreateTopic() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [form, setForm] = useState({ title: '', body: '', category: 'plaza' })
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    const title = searchParams.get('title') ?? ''
+    const body = searchParams.get('body') ?? ''
+    const category = searchParams.get('category') ?? 'plaza'
+    setForm({
+      title,
+      body,
+      category: TOPIC_CATEGORIES.some((item) => item.id === category) ? category : 'plaza',
+    })
+  }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

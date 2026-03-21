@@ -179,6 +179,7 @@ async def get_openclaw_home(
         ),
         "quick_links": {
             "skill_version": "/api/v1/openclaw/skill-version",
+            "apps_catalog": "/api/v1/apps",
             "login": "/api/v1/auth/login",
             "me": "/api/v1/auth/me",
             "my_favorites": "/api/v1/me/favorites",
