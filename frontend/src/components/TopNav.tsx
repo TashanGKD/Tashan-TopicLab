@@ -166,6 +166,7 @@ export default function TopNav() {
   }
 
   const hideNav = location.pathname === '/login' || location.pathname === '/register'
+  const activeMobileTabIndex = Math.max(0, mobileTabs.findIndex((tab) => tab.match(location.pathname)))
 
   if (hideNav) {
     return null
@@ -299,15 +300,7 @@ export default function TopNav() {
             )}
           </div>
 
-          <div className="flex md:hidden items-center shrink-0">
-            <Link
-              to="/topics/new"
-              className="text-white px-3 py-2 rounded-[var(--radius-md)] text-sm font-serif font-medium transition-all shrink-0 min-h-[36px] flex items-center touch-manipulation"
-              style={{ background: 'var(--color-dark)' }}
-            >
-              + 创建话题
-            </Link>
-          </div>
+          <div className="md:hidden w-10 shrink-0" aria-hidden />
         </div>
       </nav>
       {userMenuOpen &&
@@ -351,33 +344,93 @@ export default function TopNav() {
           document.body,
         )}
       <div
-        className="fixed bottom-0 left-0 right-0 z-50 border-t bg-white/95 backdrop-blur-xl md:hidden"
+        className="fixed inset-x-0 z-50 px-3 md:hidden"
         style={{
-          borderColor: 'var(--border-default)',
-          paddingBottom: 'env(safe-area-inset-bottom)',
-          boxShadow: '0 -8px 24px rgba(15, 23, 42, 0.08)',
+          bottom: 'calc(0.85rem + env(safe-area-inset-bottom))',
         }}
-        >
-          <div className="mx-auto flex h-16 max-w-md items-stretch px-2">
+      >
+        <div className="mx-auto max-w-md">
+          <div
+            className="relative grid h-[4.25rem] grid-cols-3 items-stretch rounded-[1.7rem] border p-1"
+            style={{
+              background: 'linear-gradient(180deg, rgba(255,255,255,0.62) 0%, rgba(248,250,252,0.84) 100%)',
+              borderColor: 'rgba(255, 255, 255, 0.34)',
+              boxShadow: '0 18px 40px rgba(15, 23, 42, 0.12), 0 6px 18px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255,255,255,0.8)',
+              backdropFilter: 'blur(24px) saturate(1.25)',
+            }}
+          >
+            <div
+              className="absolute inset-y-1 rounded-[1.35rem] transition-all duration-300 ease-out"
+              style={{
+                left: `calc(0.25rem + ${activeMobileTabIndex} * ((100% - 0.5rem) / 3))`,
+                width: 'calc((100% - 0.5rem) / 3)',
+                background: 'linear-gradient(180deg, rgba(241,245,249,0.98) 0%, rgba(226,232,240,0.92) 100%)',
+                boxShadow: '0 10px 18px rgba(148, 163, 184, 0.14), inset 0 1px 0 rgba(255,255,255,0.76)',
+              }}
+              aria-hidden
+            />
           {mobileTabs.map((tab) => {
             const active = tab.match(location.pathname)
             return (
               <Link
                 key={tab.to}
                 to={tab.to}
-                className="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-[var(--radius-md)] text-xs font-medium transition-colors"
+                className="relative z-10 grid min-w-0 place-items-center rounded-[1.25rem] px-2 text-xs font-medium transition-all duration-300 ease-out"
                 style={{
                   color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  backgroundColor: active ? 'var(--bg-secondary)' : 'transparent',
+                  transform: active ? 'translateY(-1px)' : 'translateY(0)',
                 }}
+                aria-current={active ? 'page' : undefined}
               >
-                {tab.icon}
-                <span>{tab.label}</span>
+                <span className="grid min-h-[2.5rem] place-items-center">
+                  <span
+                    className="flex h-6 items-center justify-center transition-all duration-300 ease-out"
+                    style={{
+                      transform: active ? 'scale(1.06)' : 'scale(1)',
+                      opacity: active ? 1 : 0.76,
+                    }}
+                  >
+                    {tab.icon}
+                  </span>
+                  <span
+                    className="mt-1 block leading-none transition-all duration-300 ease-out"
+                    style={{
+                      transform: active ? 'translateY(0)' : 'translateY(1px)',
+                      fontWeight: active ? 600 : 500,
+                      letterSpacing: active ? '0.01em' : '0',
+                    }}
+                  >
+                    {tab.label}
+                  </span>
+                </span>
               </Link>
             )
           })}
+          </div>
         </div>
       </div>
+      <Link
+        to="/topics/new"
+        className="fixed z-[34] flex h-12 w-12 items-center justify-center rounded-full border text-white shadow-md transition-all duration-200 hover:-translate-y-0.5 active:scale-95 md:hidden"
+        style={{
+          right: 'max(1rem, env(safe-area-inset-right))',
+          bottom: 'calc(5.9rem + env(safe-area-inset-bottom))',
+          background: 'linear-gradient(180deg, rgba(51,65,85,0.68) 0%, rgba(30,41,59,0.54) 100%)',
+          borderColor: 'rgba(255, 255, 255, 0.1)',
+          boxShadow: '0 10px 24px rgba(15, 23, 42, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.08)',
+          backdropFilter: 'blur(16px) saturate(1.15)',
+        }}
+        aria-label="创建话题"
+      >
+        <span
+          className="pointer-events-none absolute inset-[3px] rounded-full"
+          aria-hidden
+          style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.01) 100%)' }}
+        />
+        <svg className="relative h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v14M5 12h14" />
+        </svg>
+      </Link>
     </>
   )
 }

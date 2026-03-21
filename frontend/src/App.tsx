@@ -22,7 +22,7 @@ function App() {
     <AppErrorBoundary>
       <div className="flex flex-col min-h-screen">
         <TopNav />
-        <main className="flex-1 pt-14 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-[env(safe-area-inset-bottom)]">
+        <main className="flex-1 pt-14 pb-[calc(7.5rem+env(safe-area-inset-bottom))] md:pb-[env(safe-area-inset-bottom)]">
           <Routes>
             <Route path="/" element={<TopicList />} />
             <Route path="/source-feed" element={<Navigate to="/source-feed/source" replace />} />

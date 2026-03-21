@@ -86,10 +86,14 @@ export default function FeedbackBubble() {
   const fab = (
     <button
       type="button"
-      className="feedback-bubble-fab fixed z-[35] flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-md transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+      className="feedback-bubble-fab fixed z-[35] flex h-12 w-12 items-center justify-center rounded-full border text-slate-700 shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
       style={{
         right: 'max(1rem, env(safe-area-inset-right))',
         bottom: 'calc(10rem + env(safe-area-inset-bottom))',
+        background: 'linear-gradient(180deg, rgba(255,255,255,0.66) 0%, rgba(255,255,255,0.42) 100%)',
+        borderColor: 'rgba(255,255,255,0.26)',
+        boxShadow: '0 10px 24px rgba(15, 23, 42, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.32)',
+        backdropFilter: 'blur(16px) saturate(1.2)',
       }}
       aria-label="打开反馈"
       onClick={() => {
@@ -97,7 +101,12 @@ export default function FeedbackBubble() {
         setMessage(null)
       }}
     >
-      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden>
+      <span
+        className="pointer-events-none absolute inset-[3px] rounded-full"
+        aria-hidden
+        style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.04) 100%)' }}
+      />
+      <svg className="relative h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden>
         <path
           strokeWidth={1.75}
           strokeLinecap="round"
