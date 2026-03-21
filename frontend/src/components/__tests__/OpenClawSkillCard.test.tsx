@@ -42,6 +42,10 @@ describe('OpenClawSkillCard', () => {
       },
       configurable: true,
     })
+    Object.defineProperty(document, 'execCommand', {
+      value: vi.fn().mockReturnValue(true),
+      configurable: true,
+    })
   })
 
   it('renders generic skill url when user is logged out', async () => {
@@ -116,5 +120,80 @@ describe('OpenClawSkillCard', () => {
     })
 
     expect(await screen.findByText('已复制')).toBeInTheDocument()
+  })
+
+  it('falls back to execCommand when clipboard API is unavailable', async () => {
+    tokenManager.set('jwt-token')
+    mockedCreateOpenClawKey.mockResolvedValue({
+      has_key: true,
+      key: 'tloc_test_personal_key',
+      masked_key: 'tloc_tes..._key',
+      created_at: '2026-03-14T00:00:00Z',
+      last_used_at: null,
+    })
+    Object.defineProperty(navigator, 'clipboard', {
+      value: undefined,
+      configurable: true,
+    })
+
+    const view = render(
+      <MemoryRouter>
+        <OpenClawSkillCard />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(within(view.container).getByRole('button', { name: '一键复制' }))
+
+    const expectedBase = import.meta.env.BASE_URL || '/'
+    const expectedSkillHref = new URL(
+      `${expectedBase.endsWith('/') ? expectedBase : `${expectedBase}/`}api/v1/openclaw/skill.md?key=tloc_test_personal_key`,
+      window.location.origin,
+    ).toString()
+
+    expect(await within(view.container).findByText('OPENCLAW 专属链接')).toBeInTheDocument()
+    expect(within(view.container).getByText(expectedSkillHref)).toBeInTheDocument()
+    expect(await within(view.container).findByText('已复制')).toBeInTheDocument()
+    expect(document.execCommand).toHaveBeenCalledWith('copy')
+  })
+
+  it('renders the generated link when both clipboard strategies fail', async () => {
+    tokenManager.set('jwt-token')
+    mockedCreateOpenClawKey.mockResolvedValue({
+      has_key: true,
+      key: 'tloc_test_personal_key',
+      masked_key: 'tloc_tes..._key',
+      created_at: '2026-03-14T00:00:00Z',
+      last_used_at: null,
+    })
+    Object.defineProperty(navigator, 'clipboard', {
+      value: {
+        writeText: vi.fn().mockRejectedValue(new Error('denied')),
+      },
+      configurable: true,
+    })
+    Object.defineProperty(document, 'execCommand', {
+      value: vi.fn(() => {
+        throw new Error('copy failed')
+      }),
+      configurable: true,
+    })
+
+    const view = render(
+      <MemoryRouter>
+        <OpenClawSkillCard />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(within(view.container).getByRole('button', { name: '一键复制' }))
+
+    const expectedBase = import.meta.env.BASE_URL || '/'
+    const expectedSkillHref = new URL(
+      `${expectedBase.endsWith('/') ? expectedBase : `${expectedBase}/`}api/v1/openclaw/skill.md?key=tloc_test_personal_key`,
+      window.location.origin,
+    ).toString()
+
+    expect(await within(view.container).findByText('OPENCLAW 专属链接')).toBeInTheDocument()
+    expect(within(view.container).getByText(expectedSkillHref)).toBeInTheDocument()
+    expect(within(view.container).getByText('如果浏览器未授予剪贴板权限，请手动复制下方链接。')).toBeInTheDocument()
   })
 })

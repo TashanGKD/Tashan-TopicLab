@@ -35,11 +35,43 @@ function buildOpenClawHomeUrl(): string {
   return new URL(`${normalizedBase}api/v1/home`, window.location.origin).toString()
 }
 
+async function copyTextWithFallback(text: string): Promise<boolean> {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      // Fall through to the legacy execCommand path when clipboard permissions are denied.
+    }
+  }
+
+  if (typeof document.execCommand !== 'function') {
+    return false
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', 'true')
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  textarea.style.pointerEvents = 'none'
+  document.body.appendChild(textarea)
+  textarea.focus()
+  textarea.select()
+
+  try {
+    return document.execCommand('copy')
+  } finally {
+    document.body.removeChild(textarea)
+  }
+}
+
 export default function OpenClawSkillCard() {
   const [token, setToken] = useState<string | null>(tokenManager.get())
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
   const [showLoginPrompt, setShowLoginPrompt] = useState(false)
+  const [generatedSkillUrl, setGeneratedSkillUrl] = useState<string | null>(null)
   const [siteStats, setSiteStats] = useState<OpenClawSiteStats>(EMPTY_SITE_STATS)
 
   useEffect(() => {
@@ -47,6 +79,7 @@ export default function OpenClawSkillCard() {
       setToken(tokenManager.get())
       setShowLoginPrompt(false)
       setCopied(false)
+      setGeneratedSkillUrl(null)
     }
     window.addEventListener('auth-change', syncAuth)
     window.addEventListener('storage', syncAuth)
@@ -103,10 +136,19 @@ export default function OpenClawSkillCard() {
       const nextKey = data.key ?? null
       const nextUrl = buildSkillUrl(nextKey)
       const copyText = `${OPENCLAW_SKILL_PROMPT}\n${nextUrl}`
-      await navigator.clipboard.writeText(copyText)
-      setCopied(true)
+      setGeneratedSkillUrl(nextUrl)
       setShowLoginPrompt(false)
-      window.setTimeout(() => setCopied(false), 1600)
+      try {
+        const copySucceeded = await copyTextWithFallback(copyText)
+        if (!copySucceeded) {
+          toast.info('当前浏览器不支持自动复制，请手动复制下方链接')
+          return
+        }
+        setCopied(true)
+        window.setTimeout(() => setCopied(false), 1600)
+      } catch {
+        toast.info('自动复制失败，请手动复制下方链接')
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '复制 OpenClaw 注册链接失败')
     } finally {
@@ -240,6 +282,39 @@ export default function OpenClawSkillCard() {
             >
               去登录
             </Link>
+          </div>
+        ) : null}
+
+        {generatedSkillUrl ? (
+          <div
+            className="rounded-xl border px-4 py-3"
+            style={{
+              borderColor: copied ? 'var(--border-default)' : 'var(--accent-warning)',
+              backgroundColor: copied ? 'var(--bg-secondary)' : '#FFFBEB',
+            }}
+          >
+            <p
+              className="text-xs font-medium tracking-[0.16em]"
+              style={{ color: 'var(--text-tertiary)' }}
+            >
+              OPENCLAW 专属链接
+            </p>
+            <p
+              className="mt-2 text-xs"
+              style={{ color: copied ? 'var(--text-secondary)' : '#92400E' }}
+            >
+              {copied ? '已自动复制，你也可以直接使用下方链接。' : '如果浏览器未授予剪贴板权限，请手动复制下方链接。'}
+            </p>
+            <div
+              className="mt-3 overflow-x-auto rounded-lg border px-3 py-2 text-sm"
+              style={{
+                borderColor: 'var(--border-default)',
+                backgroundColor: 'var(--bg-container)',
+                color: 'var(--text-primary)',
+              }}
+            >
+              <code className="break-all whitespace-pre-wrap">{generatedSkillUrl}</code>
+            </div>
           </div>
         ) : null}
       </div>
