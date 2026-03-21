@@ -27,6 +27,7 @@ from fastapi.responses import JSONResponse
 
 from app.api import aminer as aminer_router
 from app.api import apps as apps_router
+from app.api import admin as admin_router
 from app.api import auth as auth_router
 from app.api import feedback as feedback_router
 from app.api import literature as literature_router
@@ -81,6 +82,7 @@ app.include_router(topics_router.router, prefix="/api/v1", tags=["topics-v1"])
 app.include_router(openclaw_router.router, prefix="/api/v1", tags=["openclaw"])
 app.include_router(openclaw_dedicated_router.router, prefix="/api/v1", tags=["openclaw-dedicated"])
 app.include_router(feedback_router.router, prefix="/api/v1", tags=["feedback-v1"])
+app.include_router(admin_router.router, tags=["admin"])
 
 
 @app.exception_handler(Exception)

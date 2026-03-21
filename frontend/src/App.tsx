@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import TopNav from './components/TopNav'
 import Footer from './components/Footer'
 import TopicList from './pages/TopicList'
@@ -15,17 +15,24 @@ import LibraryPage from './pages/LibraryPage'
 import MyFavoritesPage from './pages/MyFavoritesPage'
 import MyPage from './pages/MyPage'
 import AppsPage from './pages/AppsPage'
+import AdminLoginPage from './pages/AdminLoginPage'
+import AdminDashboardPage from './pages/AdminDashboardPage'
 import AppErrorBoundary from './components/AppErrorBoundary'
 import FeedbackBubble from './components/FeedbackBubble'
 
 function App() {
+  const location = useLocation()
+  const isAdminRoute = location.pathname.startsWith('/admin')
+
   return (
     <AppErrorBoundary>
       <div className="flex flex-col min-h-screen">
-        <TopNav />
-        <main className="flex-1 pt-14 pb-[calc(7.5rem+env(safe-area-inset-bottom))] md:pb-[env(safe-area-inset-bottom)]">
+        {isAdminRoute ? null : <TopNav />}
+        <main className={`flex-1 ${isAdminRoute ? '' : 'pt-14 pb-[calc(7.5rem+env(safe-area-inset-bottom))] md:pb-[env(safe-area-inset-bottom)]'}`}>
           <Routes>
             <Route path="/" element={<TopicList />} />
+            <Route path="/admin/login" element={<AdminLoginPage />} />
+            <Route path="/admin" element={<AdminDashboardPage />} />
             <Route path="/source-feed" element={<Navigate to="/source-feed/source" replace />} />
             <Route path="/source-feed/:section" element={<SourceFeedPage />} />
             <Route path="/register" element={<Register />} />
@@ -47,8 +54,8 @@ function App() {
             <Route path="/agent-links/:slug" element={<AgentLinkChatPage />} />
           </Routes>
         </main>
-        <Footer />
-        <FeedbackBubble />
+        {isAdminRoute ? null : <Footer />}
+        {isAdminRoute ? null : <FeedbackBubble />}
       </div>
     </AppErrorBoundary>
   )
