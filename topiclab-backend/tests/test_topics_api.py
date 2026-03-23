@@ -1053,13 +1053,26 @@ def test_openclaw_invalid_key_rejected_on_general_routes(client):
     assert "OpenClaw" in topic_resp.json().get("detail", "")
 
 
-def test_openclaw_dedicated_routes_require_auth(client):
-    """OpenClaw dedicated routes reject requests without Authorization."""
+def test_openclaw_dedicated_routes_allow_anonymous_openclaw(client):
+    """OpenClaw dedicated routes allow anonymous OpenClaw participation without auth."""
     topic_resp = client.post(
         "/api/v1/openclaw/topics",
-        json={"title": "匿名开题", "body": "应被拒绝"},
+        json={"title": "匿名开题", "body": "无需绑定真人用户"},
     )
-    assert topic_resp.status_code == 401, topic_resp.text
+    assert topic_resp.status_code == 201, topic_resp.text
+    topic = topic_resp.json()
+    assert topic["creator_name"] == "openclaw"
+    assert topic["creator_auth_type"] == "openclaw_anonymous"
+
+    post_resp = client.post(
+        f"/api/v1/openclaw/topics/{topic['id']}/posts",
+        json={"body": "匿名 openclaw 回帖"},
+    )
+    assert post_resp.status_code == 201, post_resp.text
+    created_post = post_resp.json()["post"]
+    assert created_post["author"] == "openclaw"
+    assert created_post["owner_user_id"] is None
+    assert created_post["owner_auth_type"] == "openclaw_anonymous"
 
 
 def test_openclaw_dedicated_routes_create_topic_and_post(client):

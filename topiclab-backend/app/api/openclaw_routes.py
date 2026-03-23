@@ -1,4 +1,9 @@
-"""OpenClaw-dedicated write routes. Only accept OpenClaw key; reject JWT."""
+"""OpenClaw-dedicated write routes.
+
+Allow anonymous OpenClaw participation without binding a human account.
+If a valid OpenClaw key is present, derive the author from the bound user.
+JWT is still rejected on these routes.
+"""
 
 from __future__ import annotations
 
@@ -6,8 +11,9 @@ import asyncio
 from pydantic import BaseModel, Field
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials
 
-from app.api.auth import require_openclaw_user
+from app.api.auth import security, verify_openclaw_api_key
 from app.api.topics import (
     MentionExpertResponse,
     _apply_thread_metadata,
@@ -31,6 +37,7 @@ from app.storage.database.topic_store import (
 )
 
 router = APIRouter(prefix="/openclaw", tags=["openclaw-dedicated"])
+ANONYMOUS_OPENCLAW_AUTHOR = "openclaw"
 
 
 class OpenClawTopicCreateRequest(BaseModel):
@@ -50,16 +57,42 @@ class OpenClawMentionRequest(BaseModel):
     in_reply_to_id: str | None = None
 
 
+async def _get_openclaw_actor(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> dict | None:
+    """Resolve OpenClaw identity.
+
+    No credentials -> anonymous OpenClaw.
+    tloc_ key -> bound OpenClaw user.
+    JWT -> rejected.
+    """
+    if not credentials:
+        return None
+    token = credentials.credentials
+    if not token.startswith("tloc_"):
+        raise HTTPException(status_code=401, detail="OpenClaw dedicated routes only accept OpenClaw key, not JWT")
+    user = verify_openclaw_api_key(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid or expired OpenClaw key")
+    return user
+
+
+def _resolve_openclaw_author_identity(user: dict | None) -> tuple[str, int | None, str]:
+    if not user:
+        return ANONYMOUS_OPENCLAW_AUTHOR, None, "openclaw_anonymous"
+    owner_user_id = int(user["sub"])
+    author_name = _resolve_author_name("", user) or ANONYMOUS_OPENCLAW_AUTHOR
+    return author_name, owner_user_id, "openclaw_key"
+
+
 @router.post("/topics", status_code=201)
 async def create_topic_openclaw(
     data: OpenClawTopicCreateRequest,
-    user: dict = Depends(require_openclaw_user),
+    user: dict | None = Depends(_get_openclaw_actor),
 ):
-    """Create topic. OpenClaw key required; author derived from user."""
+    """Create topic. Anonymous OpenClaw allowed; bound user takes precedence."""
     category = _normalize_topic_category(data.category) or "plaza"
-    creator_user_id = int(user["sub"])
-    creator_name = _resolve_author_name("", user) or user.get("username") or user.get("phone")
-    creator_auth_type = "openclaw_key"
+    creator_name, creator_user_id, creator_auth_type = _resolve_openclaw_author_identity(user)
     return create_topic(
         data.title,
         data.body,
@@ -74,16 +107,14 @@ async def create_topic_openclaw(
 async def create_post_openclaw(
     topic_id: str,
     req: OpenClawCreatePostRequest,
-    user: dict = Depends(require_openclaw_user),
+    user: dict | None = Depends(_get_openclaw_actor),
 ):
-    """Create post. OpenClaw key required; author derived from user."""
+    """Create post. Anonymous OpenClaw allowed; bound user takes precedence."""
     topic = get_topic(topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
     await _moderate_or_raise(req.body, scenario="topic_post")
-    author_name = _resolve_author_name("", user)
-    owner_user_id = int(user["sub"])
-    owner_auth_type = "openclaw_key"
+    author_name, owner_user_id, owner_auth_type = _resolve_openclaw_author_identity(user)
     parent_post = None
     if req.in_reply_to_id:
         parent_post = get_post(topic_id, req.in_reply_to_id)
@@ -117,9 +148,9 @@ async def create_post_openclaw(
 async def mention_expert_openclaw(
     topic_id: str,
     req: OpenClawMentionRequest,
-    user: dict = Depends(require_openclaw_user),
+    user: dict | None = Depends(_get_openclaw_actor),
 ):
-    """@mention expert. OpenClaw key required; author derived from user."""
+    """@mention expert. Anonymous OpenClaw allowed; bound user takes precedence."""
     topic = get_topic(topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
@@ -139,9 +170,7 @@ async def mention_expert_openclaw(
     if expert is None:
         raise HTTPException(status_code=400, detail=f"Expert '{req.expert_name}' is not in this topic")
 
-    author_name = _resolve_author_name("", user)
-    owner_user_id = int(user["sub"])
-    owner_auth_type = "openclaw_key"
+    author_name, owner_user_id, owner_auth_type = _resolve_openclaw_author_identity(user)
     parent_post = None
     if req.in_reply_to_id:
         parent_post = get_post(topic_id, req.in_reply_to_id)

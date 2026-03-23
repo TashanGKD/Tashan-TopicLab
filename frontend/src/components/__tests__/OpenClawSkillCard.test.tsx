@@ -77,7 +77,7 @@ describe('OpenClawSkillCard', () => {
     expect(screen.getByText('9')).toBeInTheDocument()
   })
 
-  it('prompts login when register is clicked without authentication', async () => {
+  it('copies anonymous skill when register is clicked without authentication', async () => {
     const view = render(
       <MemoryRouter>
         <OpenClawSkillCard />
@@ -86,8 +86,17 @@ describe('OpenClawSkillCard', () => {
 
     fireEvent.click(within(view.container).getByRole('button', { name: '一键复制' }))
 
-    expect(await screen.findByText('请先登录他山世界，再复制绑定当前身份的 OpenClaw 注册链接。')).toBeInTheDocument()
+    const expectedBase = import.meta.env.BASE_URL || '/'
+    const expectedSkillHref = new URL(
+      `${expectedBase.endsWith('/') ? expectedBase : `${expectedBase}/`}api/v1/openclaw/skill.md`,
+      window.location.origin,
+    ).toString()
+
+    expect(mockedCreateOpenClawKey).not.toHaveBeenCalled()
+    expect(await screen.findByText('当前已复制匿名 OpenClaw skill。若要绑定到您的他山世界账号，请先登录后再复制专属链接。')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '去登录' })).toBeInTheDocument()
+    expect(screen.getByText('OPENCLAW 匿名链接')).toBeInTheDocument()
+    expect(screen.getByText(expectedSkillHref)).toBeInTheDocument()
   })
 
   it('shows personalized skill url after generating a bound key', async () => {
@@ -119,7 +128,7 @@ describe('OpenClawSkillCard', () => {
       expect(mockedCreateOpenClawKey).toHaveBeenCalledWith('jwt-token')
     })
 
-    expect(await screen.findByText('已复制')).toBeInTheDocument()
+    expect(await within(view.container).findByText('已复制')).toBeInTheDocument()
   })
 
   it('falls back to execCommand when clipboard API is unavailable', async () => {

@@ -72,6 +72,7 @@ export default function OpenClawSkillCard() {
   const [copied, setCopied] = useState(false)
   const [showLoginPrompt, setShowLoginPrompt] = useState(false)
   const [generatedSkillUrl, setGeneratedSkillUrl] = useState<string | null>(null)
+  const [generatedSkillIsBound, setGeneratedSkillIsBound] = useState(false)
   const [siteStats, setSiteStats] = useState<OpenClawSiteStats>(EMPTY_SITE_STATS)
 
   useEffect(() => {
@@ -80,6 +81,7 @@ export default function OpenClawSkillCard() {
       setShowLoginPrompt(false)
       setCopied(false)
       setGeneratedSkillUrl(null)
+      setGeneratedSkillIsBound(false)
     }
     window.addEventListener('auth-change', syncAuth)
     window.addEventListener('storage', syncAuth)
@@ -124,27 +126,26 @@ export default function OpenClawSkillCard() {
   const OPENCLAW_SKILL_PROMPT = '将这个写入你的 skill：'
 
   const handleCopy = async () => {
-    if (!token) {
-      setShowLoginPrompt(true)
-      toast.info('请先登录后再复制 OpenClaw 注册链接')
-      return
-    }
-
     setLoading(true)
     try {
-      const data = await authApi.createOpenClawKey(token)
-      const nextKey = data.key ?? null
+      let nextKey: string | null = null
+      if (token) {
+        const data = await authApi.createOpenClawKey(token)
+        nextKey = data.key ?? null
+      }
       const nextUrl = buildSkillUrl(nextKey)
       const copyText = `${OPENCLAW_SKILL_PROMPT}\n${nextUrl}`
       setGeneratedSkillUrl(nextUrl)
-      setShowLoginPrompt(false)
+      setGeneratedSkillIsBound(Boolean(nextKey))
+      setShowLoginPrompt(!token)
       try {
         const copySucceeded = await copyTextWithFallback(copyText)
         if (!copySucceeded) {
-          toast.info('当前浏览器不支持自动复制，请手动复制下方链接')
+          toast.info(token ? '当前浏览器不支持自动复制，请手动复制下方专属链接' : '当前浏览器不支持自动复制，请手动复制下方匿名链接')
           return
         }
         setCopied(true)
+        toast.success(token ? '已复制绑定当前身份的 OpenClaw skill 链接' : '已复制匿名 OpenClaw skill 链接')
         window.setTimeout(() => setCopied(false), 1600)
       } catch {
         toast.info('自动复制失败，请手动复制下方链接')
@@ -183,10 +184,12 @@ export default function OpenClawSkillCard() {
               className="mt-1 text-sm"
               style={{ color: 'var(--text-secondary)' }}
             >
-              一键复制专属 skill 链接与提示语，发给 OpenClaw 即可创建 skill。
+              未登录时复制匿名 skill，登录后复制绑定当前身份的专属 skill；发给 OpenClaw 即可创建。
             </p>
             <p className="mt-1 text-xs" style={{ color: 'var(--accent-warning)' }}>
-              请勿分享此链接：他人使用后其 OpenClaw 会绑定到您的账号，可能带来不便。您可将论坛或帖子链接分享给他人。
+              {token
+                ? '请勿分享此链接：他人使用后其 OpenClaw 会绑定到您的账号，可能带来不便。您可将论坛或帖子链接分享给他人。'
+                : '匿名 skill 可直接分享；如果希望 OpenClaw 绑定到您的账号，请先登录后再复制专属链接。'}
             </p>
           </div>
           <button
@@ -274,7 +277,7 @@ export default function OpenClawSkillCard() {
               color: '#92400E',
             }}
           >
-            <p>请先登录他山世界，再复制绑定当前身份的 OpenClaw 注册链接。</p>
+            <p>当前已复制匿名 OpenClaw skill。若要绑定到您的他山世界账号，请先登录后再复制专属链接。</p>
             <Link
               to="/login"
               className="inline-flex shrink-0 items-center justify-center rounded-lg px-4 py-2 text-sm font-medium text-white transition-all hover:opacity-90"
@@ -297,13 +300,17 @@ export default function OpenClawSkillCard() {
               className="text-xs font-medium tracking-[0.16em]"
               style={{ color: 'var(--text-tertiary)' }}
             >
-              OPENCLAW 专属链接
+              {generatedSkillIsBound ? 'OPENCLAW 专属链接' : 'OPENCLAW 匿名链接'}
             </p>
             <p
               className="mt-2 text-xs"
               style={{ color: copied ? 'var(--text-secondary)' : '#92400E' }}
             >
-              {copied ? '已自动复制，你也可以直接使用下方链接。' : '如果浏览器未授予剪贴板权限，请手动复制下方链接。'}
+              {copied
+                ? generatedSkillIsBound
+                  ? '已自动复制绑定当前身份的专属链接，你也可以直接使用下方链接。'
+                  : '已自动复制匿名链接，你也可以直接使用下方链接。'
+                : '如果浏览器未授予剪贴板权限，请手动复制下方链接。'}
             </p>
             <div
               className="mt-3 overflow-x-auto rounded-lg border px-3 py-2 text-sm"

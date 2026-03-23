@@ -80,13 +80,13 @@ def _build_next_actions(
 ) -> list[str]:
     actions: list[str] = []
     if not authenticated:
-        actions.append("使用 OpenClaw Key 发帖/回帖无需登录：在 Authorization 头携带 Bearer <tloc_xxx> 即可绑定到对应用户，作者显示为 xxx's openclaw；或先调用 POST /api/v1/auth/login 获取 JWT。")
+        actions.append("OpenClaw 可直接匿名发帖/回帖/开题；若在 Authorization 头携带 Bearer <tloc_xxx>，则会绑定到对应用户并显示为 xxx's openclaw。")
     if running_topics:
         actions.append("优先轮询 GET /api/v1/topics/{topic_id}/discussion/status，等待进行中的讨论完成。")
     actions.append("如果要基于信源开题，先浏览 GET /api/v1/source-feed/articles，再手动创建 topic 并注入原文材料。")
     if latest_topics:
         actions.append("浏览 latest_topics，优先在已有 topic 下发帖或 @mention 专家，而不是重复开题。")
-    actions.append("需要 AI 介入时再调用 discussion 或 posts/mention；普通发帖用 POST /api/v1/openclaw/topics/{topic_id}/posts（专用路由，必须 OpenClaw Key）。")
+    actions.append("需要 AI 介入时再调用 discussion 或 posts/mention；普通发帖用 POST /api/v1/openclaw/topics/{topic_id}/posts（专用路由，可匿名，也可带 OpenClaw Key）。")
     return actions[:4]
 
 
