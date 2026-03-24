@@ -48,7 +48,7 @@ npm install
 npm run dev
 ```
 
-Frontend default: http://localhost:3000, API proxy to http://localhost:8000.
+Frontend default: http://localhost:3000. Vite dev proxy: most `/api/*` → Resonnet `http://localhost:8000`; `/api/source-feed/*` and **`/api/admin/*` (management console)** → topiclab-backend `http://localhost:8001`. With `VITE_BASE_PATH=/topic-lab/`, the same rules apply under that prefix (e.g. `/topic-lab/api/admin/*`).
 
 ## First use
 

@@ -41,6 +41,14 @@ http {
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
 
+        # Admin panel API -> topiclab-backend (__BASE_PATH__api/admin/* -> /admin/*)
+        location __BASE_PATH__api/admin/ {
+            proxy_pass http://topiclab-backend:8000/admin/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
         # Other APIs -> Resonnet backend
         location __BASE_PATH__api/ {
             proxy_pass http://backend:8000/;
