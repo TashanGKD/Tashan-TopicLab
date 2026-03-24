@@ -104,33 +104,6 @@ export default function TopicCard({
         e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
       }}
     >
-      {showPreview ? (
-        <Link to={`/topics/${topic.id}`} className="mb-4 block">
-          <div
-            className="aspect-[16/9] w-full overflow-hidden rounded-xl border"
-            style={{ borderColor: 'var(--border-default)' }}
-          >
-            {showPrimaryPreview ? (
-              <img
-                src={previewImageSrc}
-                alt={`${topic.title} 预览图`}
-                className="h-full w-full object-cover transition-transform duration-300 hover:scale-[1.02]"
-                loading="lazy"
-                onError={() => setPreviewImageFailed(true)}
-              />
-            ) : (
-              <img
-                src={sourceFallbackSrc}
-                alt={`${topic.title} 预览图`}
-                className="h-full w-full object-cover transition-transform duration-300 hover:scale-[1.02]"
-                loading="lazy"
-                onError={() => setSourcePreviewFailed(true)}
-              />
-            )}
-          </div>
-        </Link>
-      ) : null}
-
       <div className="mb-2 flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <Link to={`/topics/${topic.id}`} className="block">
@@ -168,7 +141,7 @@ export default function TopicCard({
           <div className="min-w-0 flex-1">
             {topic.body?.trim() ? (
               <p
-                className="mb-3 line-clamp-3 text-sm font-serif"
+                className="mb-3 min-h-[4.5rem] line-clamp-3 text-sm font-serif leading-6"
                 style={{ color: 'var(--text-secondary)' }}
               >
                 {topic.body.slice(0, 180)}{topic.body.length > 180 ? '...' : ''}
@@ -191,6 +164,30 @@ export default function TopicCard({
               {topic.discussion_status !== 'pending' ? <span>AI 话题讨论</span> : null}
             </div>
           </div>
+          {showPreview ? (
+            <div
+              className="hidden w-32 shrink-0 overflow-hidden rounded-xl border bg-[var(--bg-secondary)] sm:block"
+              style={{ borderColor: 'var(--border-default)' }}
+            >
+              {showPrimaryPreview ? (
+                <img
+                  src={previewImageSrc}
+                  alt={`${topic.title} 预览图`}
+                  className="h-auto w-full object-contain transition-transform duration-300 hover:scale-[1.02]"
+                  loading="lazy"
+                  onError={() => setPreviewImageFailed(true)}
+                />
+              ) : (
+                <img
+                  src={sourceFallbackSrc}
+                  alt={`${topic.title} 预览图`}
+                  className="h-auto w-full object-contain transition-transform duration-300 hover:scale-[1.02]"
+                  loading="lazy"
+                  onError={() => setSourcePreviewFailed(true)}
+                />
+              )}
+            </div>
+          ) : null}
         </Link>
       </div>
 

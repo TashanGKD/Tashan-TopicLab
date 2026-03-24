@@ -11,6 +11,37 @@ import { useDebouncedCallback } from '../hooks/useDebouncedCallback'
 const PAGE_SIZE = 20
 const INITIAL_VISIBLE_TOPICS = 18
 const VISIBLE_TOPICS_STEP = 18
+const STAGE_GAP_PX = 20
+const FOCUS_COLUMN_MAX_WIDTH = 56 * 16
+const FOCUS_COLUMN_MIN_WIDTH = 42 * 16
+const SIDE_COLUMN_MAX_WIDTH = 24 * 16
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max)
+}
+
+function getStageWidths(stageWidth: number) {
+  if (stageWidth <= 0) {
+    return {
+      focus: FOCUS_COLUMN_MAX_WIDTH,
+      side: 20 * 16,
+    }
+  }
+
+  if (stageWidth < 960) {
+    const focus = Math.max(0, Math.min(stageWidth, FOCUS_COLUMN_MAX_WIDTH))
+    const side = 0
+    return { focus, side }
+  }
+
+  const focus = clamp(stageWidth * 0.56, FOCUS_COLUMN_MIN_WIDTH, FOCUS_COLUMN_MAX_WIDTH)
+  const side = Math.min(
+    SIDE_COLUMN_MAX_WIDTH,
+    Math.max(0, (stageWidth - focus - STAGE_GAP_PX * 2) / 2),
+  )
+
+  return { focus, side }
+}
 
 function groupTopicsByCategory(topics: TopicListItem[]) {
   const categoryItems = TOPIC_CATEGORIES.map((category) => {
@@ -38,7 +69,10 @@ function groupTopicsByCategory(topics: TopicListItem[]) {
 export default function TopicList() {
   const [topics, setTopics] = useState<TopicListItem[]>([])
   const [activeCategory, setActiveCategory] = useState('')
-  const [tabSliderStyle, setTabSliderStyle] = useState({ left: 0, width: 96, opacity: 0 })
+  const [columnWidths, setColumnWidths] = useState(() => ({
+    focus: FOCUS_COLUMN_MAX_WIDTH,
+    side: 20 * 16,
+  }))
   const [searchInput, setSearchInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [currentUser, setCurrentUser] = useState<User | null>(null)
@@ -50,8 +84,7 @@ export default function TopicList() {
   const [pendingTopicFavoriteIds, setPendingTopicFavoriteIds] = useState<Set<string>>(new Set())
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
   const revealMoreRef = useRef<HTMLDivElement | null>(null)
-  const categoryRailRef = useRef<HTMLDivElement | null>(null)
-  const categorySectionRefs = useRef<Record<string, HTMLElement | null>>({})
+  const contentStageRef = useRef<HTMLDivElement | null>(null)
   const categoryTabRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const categoryTabsTrackRef = useRef<HTMLDivElement | null>(null)
 
@@ -87,10 +120,6 @@ export default function TopicList() {
   useEffect(() => {
     void loadTopics()
   }, [searchQuery])
-
-  useEffect(() => {
-    setVisibleCount(INITIAL_VISIBLE_TOPICS)
-  }, [searchQuery, topics.length])
 
   useEffect(() => {
     const node = loadMoreRef.current
@@ -258,59 +287,41 @@ export default function TopicList() {
   const throttledShare = useThrottledCallbackByKey(handleTopicShare, (t) => t.id)
   const visibleTopics = topics.slice(0, visibleCount)
   const topicColumns = groupTopicsByCategory(visibleTopics)
+  const activeIndex = topicColumns.findIndex(({ category }) => category.id === activeCategory)
+  const resolvedActiveIndex = activeIndex >= 0 ? activeIndex : 0
+  const activeColumn = topicColumns[resolvedActiveIndex] ?? null
+  const hasPreviewColumns = topicColumns.length > 1
+  const prevColumn = hasPreviewColumns
+    ? topicColumns[(resolvedActiveIndex - 1 + topicColumns.length) % topicColumns.length]
+    : null
+  const nextColumn = hasPreviewColumns
+    ? topicColumns[(resolvedActiveIndex + 1) % topicColumns.length]
+    : null
+  const previousActiveIndexRef = useRef(-1)
+  const transitionDirection = previousActiveIndexRef.current < 0
+    ? 'none'
+    : resolvedActiveIndex > previousActiveIndexRef.current
+      ? 'right'
+      : resolvedActiveIndex < previousActiveIndexRef.current
+        ? 'left'
+        : 'none'
+  const stageEnterAnimationClass = transitionDirection === 'right'
+    ? 'animate-stage-enter-right'
+    : transitionDirection === 'left'
+      ? 'animate-stage-enter-left'
+      : 'animate-fade-in'
 
   useEffect(() => {
-    const rail = categoryRailRef.current
-    if (!rail || topicColumns.length === 0) {
+    if (topicColumns.length === 0) {
       setActiveCategory('')
       return
     }
-
-    const syncActiveCategory = () => {
-      const maxScrollLeft = rail.scrollWidth - rail.clientWidth
-      if (maxScrollLeft <= 0) {
-        setActiveCategory(topicColumns[0]?.category.id ?? '')
-        return
-      }
-      if (rail.scrollLeft >= maxScrollLeft - 8) {
-        setActiveCategory(topicColumns[topicColumns.length - 1]?.category.id ?? '')
-        return
-      }
-
-      const viewportCenter = rail.scrollLeft + rail.clientWidth / 2
-      let nextCategory = topicColumns[0]?.category.id ?? ''
-      let smallestDistance = Number.POSITIVE_INFINITY
-      topicColumns.forEach(({ category }) => {
-        const section = categorySectionRefs.current[category.id]
-        if (!section) {
-          return
-        }
-        const sectionCenter = section.offsetLeft + section.offsetWidth / 2
-        const distance = Math.abs(sectionCenter - viewportCenter)
-        if (distance < smallestDistance) {
-          smallestDistance = distance
-          nextCategory = category.id
-        }
-      })
-      setActiveCategory(nextCategory)
+    if (!topicColumns.some(({ category }) => category.id === activeCategory)) {
+      setActiveCategory(topicColumns[0].category.id)
     }
-
-    syncActiveCategory()
-    rail.addEventListener('scroll', syncActiveCategory, { passive: true })
-    return () => rail.removeEventListener('scroll', syncActiveCategory)
-  }, [topicColumns])
+  }, [activeCategory, topicColumns])
 
   const handleCategoryJump = useCallback((categoryId: string) => {
-    const rail = categoryRailRef.current
-    if (!rail) {
-      return
-    }
-    const section = categorySectionRefs.current[categoryId]
-    if (!section) {
-      return
-    }
-    const targetLeft = Math.max(0, section.offsetLeft - (rail.clientWidth - section.offsetWidth) / 2)
-    rail.scrollTo({ left: targetLeft, behavior: 'smooth' })
     setActiveCategory(categoryId)
   }, [])
 
@@ -320,74 +331,79 @@ export default function TopicList() {
   }, [activeCategory])
 
   useEffect(() => {
-    const updateTabSlider = () => {
-      const activeTab = categoryTabRefs.current[activeCategory]
-      const tabsTrack = categoryTabsTrackRef.current
-      if (!activeTab || !tabsTrack) {
-        setTabSliderStyle((prev) => (prev.opacity === 0 ? prev : { ...prev, opacity: 0 }))
+    previousActiveIndexRef.current = resolvedActiveIndex
+  }, [resolvedActiveIndex])
+
+  useEffect(() => {
+    const updateColumnMetrics = () => {
+      const stage = contentStageRef.current
+      if (!stage) {
         return
       }
 
-      const contentRail = categoryRailRef.current
-      const sectionWidths = topicColumns
-        .map(({ category }) => categorySectionRefs.current[category.id]?.offsetWidth ?? 0)
-        .filter((width) => width > 0)
-      const averageSectionWidth = sectionWidths.length
-        ? sectionWidths.reduce((sum, width) => sum + width, 0) / sectionWidths.length
-        : 0
-      const visibleColumnEstimate = contentRail && averageSectionWidth > 0
-        ? Math.max(1, contentRail.clientWidth / averageSectionWidth)
-        : 1
-      const totalTabCount = topicColumns.length
-      const trackWidth = tabsTrack.scrollWidth || tabsTrack.offsetWidth || activeTab.offsetWidth
-      const visibleTrackShare = totalTabCount > 0
-        ? Math.min(1, visibleColumnEstimate / totalTabCount)
-        : 1
-      const proportionalWidth = trackWidth * Math.min(0.4, Math.max(0.2, visibleTrackShare * 0.72))
-      const firstCategoryId = topicColumns[0]?.category.id
-      const lastCategoryId = topicColumns[topicColumns.length - 1]?.category.id
-      const preferredWidth = Math.max(proportionalWidth, activeTab.offsetWidth * 1.28, activeTab.offsetWidth + 24)
-      const sliderWidth = Math.min(
-        preferredWidth,
-        Math.max(trackWidth * 0.4, activeTab.offsetWidth + 24),
-      )
-      const firstTab = firstCategoryId ? categoryTabRefs.current[firstCategoryId] : null
-      const symmetricEdgeInset = firstTab
-        ? Math.max(0, firstTab.offsetLeft)
-        : 14
-      const lastTabAlignedLeft = Math.max(
-        0,
-        activeTab.offsetLeft + activeTab.offsetWidth + symmetricEdgeInset - sliderWidth,
-      )
-      const sliderLeft = activeCategory === firstCategoryId
-        ? 0
-        : activeCategory === lastCategoryId
-          ? Math.min(lastTabAlignedLeft, Math.max(trackWidth - sliderWidth, 0))
-          : Math.min(
-            Math.max(0, activeTab.offsetLeft + activeTab.offsetWidth / 2 - sliderWidth / 2),
-            Math.max(trackWidth - sliderWidth, 0),
-          )
-
-      setTabSliderStyle((prev) => {
+      const nextWidths = getStageWidths(stage.clientWidth)
+      setColumnWidths((prev) => {
         if (
-          Math.abs(prev.left - sliderLeft) < 0.5
-          && Math.abs(prev.width - sliderWidth) < 0.5
-          && prev.opacity === 1
+          Math.abs(prev.focus - nextWidths.focus) < 0.5
+          && Math.abs(prev.side - nextWidths.side) < 0.5
         ) {
           return prev
         }
-        return {
-          left: sliderLeft,
-          width: sliderWidth,
-          opacity: 1,
-        }
+        return nextWidths
       })
     }
 
-    updateTabSlider()
-    window.addEventListener('resize', updateTabSlider)
-    return () => window.removeEventListener('resize', updateTabSlider)
-  }, [activeCategory, topicColumns])
+    const frame = window.requestAnimationFrame(updateColumnMetrics)
+    window.addEventListener('resize', updateColumnMetrics)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.removeEventListener('resize', updateColumnMetrics)
+    }
+  }, [activeCategory, topicColumns.length])
+
+  const renderColumn = (column: (typeof topicColumns)[number], isActive: boolean) => {
+    const { category, topics: categoryTopics, topicCount } = column
+
+    return (
+      <section
+        key={category.id}
+        data-testid={`topic-category-${category.id}`}
+        data-active={isActive ? 'true' : 'false'}
+        className={`min-w-0 rounded-2xl border border-gray-200 bg-[rgba(255,255,255,0.84)] p-4 transition-[width,opacity,transform] duration-300 ease-out motion-reduce:transition-none ${
+          isActive ? '' : 'opacity-90'
+        }`}
+      >
+        <div className="mb-4 flex items-center justify-between gap-3 border-b border-gray-100 pb-3">
+          <div>
+            <h2 className="text-lg font-serif font-semibold text-[var(--text-primary)]">{category.name}</h2>
+            <p className="mt-1 text-xs font-serif text-[var(--text-tertiary)]">{category.description}</p>
+          </div>
+          <span className="shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-600">
+            {topicCount}
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          {categoryTopics.map((topic) => {
+            const canDeleteTopic = Boolean(currentUser && (currentUser.is_admin || (topic.creator_user_id != null && topic.creator_user_id === currentUser.id)))
+            return (
+              <TopicCard
+                key={topic.id}
+                topic={topic}
+                canDelete={canDeleteTopic}
+                onDelete={handleDeleteTopic}
+                onLike={throttledLike}
+                onFavorite={throttledFavorite}
+                onShare={throttledShare}
+                likePending={pendingTopicLikeIds.has(topic.id)}
+                favoritePending={pendingTopicFavoriteIds.has(topic.id)}
+              />
+            )
+          })}
+        </div>
+      </section>
+    )
+  }
 
   return (
     <div className="min-h-screen">
@@ -420,15 +436,6 @@ export default function TopicList() {
                   ref={categoryTabsTrackRef}
                   className="relative flex h-12 w-full min-w-max items-center gap-1 px-4 py-1"
                 >
-                  <div
-                    aria-hidden="true"
-                    className="pointer-events-none absolute bottom-[6px] h-[2px] rounded-full bg-[linear-gradient(90deg,rgba(15,23,42,0.05)_0%,rgba(15,23,42,0.16)_22%,rgba(15,23,42,0.58)_50%,rgba(15,23,42,0.16)_78%,rgba(15,23,42,0.05)_100%)] transition-all duration-300 ease-out motion-reduce:transition-none"
-                    style={{
-                      left: `${tabSliderStyle.left}px`,
-                      width: `${tabSliderStyle.width}px`,
-                      opacity: tabSliderStyle.opacity,
-                    }}
-                  />
                   {topicColumns.map(({ category }) => (
                     <button
                       key={category.id}
@@ -437,13 +444,25 @@ export default function TopicList() {
                       }}
                       type="button"
                       onClick={() => handleCategoryJump(category.id)}
-                        className={`relative z-10 flex h-10 shrink-0 cursor-pointer items-center rounded-full px-4 text-sm transition-colors duration-200 motion-reduce:transition-none ${
-                          activeCategory === category.id
-                            ? 'text-[var(--color-dark)]'
-                            : 'text-gray-600 hover:text-[var(--color-dark)]'
+                      className={`relative z-10 flex h-10 shrink-0 cursor-pointer items-center rounded-full text-sm transition-[padding,color] duration-200 motion-reduce:transition-none ${
+                        activeCategory === category.id
+                          ? 'px-6 sm:px-7 font-medium text-[var(--color-dark)]'
+                          : 'px-4 text-gray-600 hover:text-[var(--color-dark)]'
                       }`}
                     >
-                      {category.name}
+                      <span className="relative inline-block">
+                        {category.name}
+                        <span
+                          data-testid={activeCategory === category.id ? 'topic-category-tab-underline' : undefined}
+                          aria-hidden="true"
+                          className={`pointer-events-none absolute left-1/2 top-[calc(100%+10px)] h-[2px] -translate-x-1/2 rounded-full bg-[linear-gradient(90deg,rgba(15,23,42,0.06)_0%,rgba(15,23,42,0.5)_50%,rgba(15,23,42,0.06)_100%)] transition-all duration-300 ease-out motion-reduce:transition-none ${
+                            activeCategory === category.id ? 'opacity-100' : 'opacity-0'
+                          }`}
+                          style={{
+                            width: activeCategory === category.id ? 'calc(100% + 1.75rem)' : '0px',
+                          }}
+                        />
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -495,48 +514,54 @@ export default function TopicList() {
           </p>
         )}
 
-        {!loading && visibleTopics.length > 0 ? (
-          <div ref={categoryRailRef} data-testid="topic-category-rail" className="overflow-x-auto pb-4 scrollbar-hide">
-            <div className="flex items-start gap-4 min-w-full">
-              {topicColumns.map(({ category, topics: categoryTopics, topicCount }) => (
-                <section
-                  key={category.id}
-                  data-testid={`topic-category-${category.id}`}
-                  ref={(node) => {
-                    categorySectionRefs.current[category.id] = node
-                  }}
-                  className="w-[min(88vw,24rem)] sm:w-[22rem] lg:w-[24rem] shrink-0 rounded-2xl border border-gray-200 bg-[rgba(255,255,255,0.84)] p-4"
-                >
-                  <div className="mb-4 flex items-center justify-between gap-3 border-b border-gray-100 pb-3">
-                    <div>
-                      <h2 className="text-lg font-serif font-semibold text-[var(--text-primary)]">{category.name}</h2>
-                      <p className="mt-1 text-xs font-serif text-[var(--text-tertiary)]">{category.description}</p>
+        {!loading && activeColumn ? (
+          <div className="mx-auto w-full max-w-[1600px] pb-4">
+            <div
+              ref={contentStageRef}
+              data-testid="topic-category-rail"
+              className="grid items-start justify-center overflow-hidden"
+              style={{
+                gap: `${STAGE_GAP_PX}px`,
+                gridTemplateColumns: columnWidths.side > 0
+                  ? `${columnWidths.side}px minmax(0, ${columnWidths.focus}px) ${columnWidths.side}px`
+                  : `minmax(0, ${columnWidths.focus}px)`,
+              }}
+            >
+              {columnWidths.side > 0 ? (
+                <div data-testid="topic-category-slot-left" className="min-w-0">
+                  {prevColumn ? (
+                    <div
+                      key={prevColumn.category.id}
+                      data-testid="topic-category-slot-left-inner"
+                      className={stageEnterAnimationClass}
+                    >
+                      {renderColumn(prevColumn, false)}
                     </div>
-                    <span className="shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-600">
-                      {topicCount}
-                    </span>
-                  </div>
-
-                  <div className="flex flex-col gap-3">
-                    {categoryTopics.map((topic) => {
-                      const canDeleteTopic = Boolean(currentUser && (currentUser.is_admin || (topic.creator_user_id != null && topic.creator_user_id === currentUser.id)))
-                      return (
-                        <TopicCard
-                          key={topic.id}
-                          topic={topic}
-                          canDelete={canDeleteTopic}
-                          onDelete={handleDeleteTopic}
-                          onLike={throttledLike}
-                          onFavorite={throttledFavorite}
-                          onShare={throttledShare}
-                          likePending={pendingTopicLikeIds.has(topic.id)}
-                          favoritePending={pendingTopicFavoriteIds.has(topic.id)}
-                        />
-                      )
-                    })}
-                  </div>
-                </section>
-              ))}
+                  ) : null}
+                </div>
+              ) : null}
+              <div data-testid="topic-category-slot-center" className="min-w-0">
+                <div
+                  key={activeColumn.category.id}
+                  data-testid="topic-category-slot-center-inner"
+                  className={stageEnterAnimationClass}
+                >
+                  {renderColumn(activeColumn, true)}
+                </div>
+              </div>
+              {columnWidths.side > 0 ? (
+                <div data-testid="topic-category-slot-right" className="min-w-0">
+                  {nextColumn ? (
+                    <div
+                      key={nextColumn.category.id}
+                      data-testid="topic-category-slot-right-inner"
+                      className={stageEnterAnimationClass}
+                    >
+                      {renderColumn(nextColumn, false)}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </div>
         ) : null}

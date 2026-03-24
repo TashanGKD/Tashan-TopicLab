@@ -133,34 +133,46 @@
     animation: fadeIn 0.15s ease-out;
   }
 
-  @keyframes slideInFromRight {
+  @keyframes stageEnterFromRight {
     from {
-      opacity: 0.6;
-      transform: translateX(12%);
+      opacity: 0.42;
+      transform: translate3d(56px, 0, 0) scale(0.985);
     }
     to {
       opacity: 1;
-      transform: translateX(0);
+      transform: translate3d(0, 0, 0) scale(1);
     }
   }
 
-  @keyframes slideInFromLeft {
+  @keyframes stageEnterFromLeft {
     from {
-      opacity: 0.6;
-      transform: translateX(-12%);
+      opacity: 0.42;
+      transform: translate3d(-56px, 0, 0) scale(0.985);
     }
     to {
       opacity: 1;
-      transform: translateX(0);
+      transform: translate3d(0, 0, 0) scale(1);
     }
+  }
+
+  .animate-stage-enter-right {
+    animation: stageEnterFromRight 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform, opacity;
   }
 
   .animate-slide-in-right {
-    animation: slideInFromRight 0.2s ease-out;
+    animation: stageEnterFromRight 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform, opacity;
+  }
+
+  .animate-stage-enter-left {
+    animation: stageEnterFromLeft 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform, opacity;
   }
 
   .animate-slide-in-left {
-    animation: slideInFromLeft 0.2s ease-out;
+    animation: stageEnterFromLeft 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform, opacity;
   }
 
   /* 滑动暗示：双 chevron 轻微右移，类似锁屏「滑动解锁」提示 */
