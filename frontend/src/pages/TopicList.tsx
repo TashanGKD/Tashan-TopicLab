@@ -9,8 +9,6 @@ import { useThrottledCallbackByKey } from '../hooks/useThrottledCallback'
 import { useDebouncedCallback } from '../hooks/useDebouncedCallback'
 
 const PAGE_SIZE = 20
-const INITIAL_VISIBLE_TOPICS = 18
-const VISIBLE_TOPICS_STEP = 18
 const STAGE_GAP_PX = 20
 const FOCUS_COLUMN_MAX_WIDTH = 56 * 16
 const FOCUS_COLUMN_MIN_WIDTH = 42 * 16
@@ -43,9 +41,21 @@ function getStageWidths(stageWidth: number) {
   return { focus, side }
 }
 
-function groupTopicsByCategory(topics: TopicListItem[]) {
+type CategoryTopicPage = {
+  items: TopicListItem[]
+  nextCursor: string | null
+}
+
+function normalizeTopicCategory(topic: TopicListItem, fallbackCategory: string): TopicListItem {
+  return {
+    ...topic,
+    category: topic.category ?? fallbackCategory,
+  }
+}
+
+function groupTopicsByCategory(categoryPages: Record<string, CategoryTopicPage>) {
   const categoryItems = TOPIC_CATEGORIES.map((category) => {
-    const categoryTopics = topics.filter((topic) => (topic.category ?? 'plaza') === category.id)
+    const categoryTopics = categoryPages[category.id]?.items ?? []
     if (categoryTopics.length === 0) {
       return null
     }
@@ -67,7 +77,7 @@ function groupTopicsByCategory(topics: TopicListItem[]) {
 }
 
 export default function TopicList() {
-  const [topics, setTopics] = useState<TopicListItem[]>([])
+  const [categoryPages, setCategoryPages] = useState<Record<string, CategoryTopicPage>>({})
   const [activeCategory, setActiveCategory] = useState('')
   const [columnWidths, setColumnWidths] = useState(() => ({
     focus: FOCUS_COLUMN_MAX_WIDTH,
@@ -77,13 +87,10 @@ export default function TopicList() {
   const [searchQuery, setSearchQuery] = useState('')
   const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
-  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_TOPICS)
+  const [loadingMoreCategory, setLoadingMoreCategory] = useState<string | null>(null)
   const [pendingTopicLikeIds, setPendingTopicLikeIds] = useState<Set<string>>(new Set())
   const [pendingTopicFavoriteIds, setPendingTopicFavoriteIds] = useState<Set<string>>(new Set())
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
-  const revealMoreRef = useRef<HTMLDivElement | null>(null)
   const contentStageRef = useRef<HTMLDivElement | null>(null)
   const categoryTabRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const categoryTabsTrackRef = useRef<HTMLDivElement | null>(null)
@@ -123,42 +130,39 @@ export default function TopicList() {
 
   useEffect(() => {
     const node = loadMoreRef.current
-    if (!node || !nextCursor || loading || loadingMore) {
+    const activeNextCursor = activeCategory ? categoryPages[activeCategory]?.nextCursor ?? null : null
+    if (!node || !activeNextCursor || loading || loadingMoreCategory) {
       return
     }
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) {
-        void loadMoreTopics()
+        void loadMoreTopics(activeCategory)
       }
     }, { rootMargin: '240px 0px' })
     observer.observe(node)
     return () => observer.disconnect()
-  }, [nextCursor, loading, loadingMore, topics.length])
-
-  useEffect(() => {
-    const node = revealMoreRef.current
-    if (!node || visibleCount >= topics.length) {
-      return
-    }
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) {
-        setVisibleCount((prev) => Math.min(prev + VISIBLE_TOPICS_STEP, topics.length))
-      }
-    }, { rootMargin: '280px 0px' })
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [topics.length, visibleCount])
+  }, [activeCategory, categoryPages, loading, loadingMoreCategory])
 
   const loadTopics = async () => {
     setLoading(true)
     try {
-      const res = await topicsApi.list({
-        q: searchQuery || undefined,
-        limit: PAGE_SIZE,
-      })
-      setTopics(res.data.items)
-      setVisibleCount(INITIAL_VISIBLE_TOPICS)
-      setNextCursor(res.data.next_cursor)
+      const responses = await Promise.all(
+        TOPIC_CATEGORIES.map(async (category) => {
+          const res = await topicsApi.list({
+            category: category.id,
+            q: searchQuery || undefined,
+            limit: PAGE_SIZE,
+          })
+          return [
+            category.id,
+            {
+              items: res.data.items.map((topic) => normalizeTopicCategory(topic, category.id)),
+              nextCursor: res.data.next_cursor,
+            },
+          ] as const
+        }),
+      )
+      setCategoryPages(Object.fromEntries(responses))
     } catch (err) {
       handleApiError(err, '加载话题列表失败')
     } finally {
@@ -166,23 +170,39 @@ export default function TopicList() {
     }
   }
 
-  const loadMoreTopics = async () => {
-    if (!nextCursor || loadingMore) {
+  const loadMoreTopics = async (categoryId: string) => {
+    const page = categoryPages[categoryId]
+    if (!page?.nextCursor || loadingMoreCategory) {
       return
     }
-    setLoadingMore(true)
+    setLoadingMoreCategory(categoryId)
     try {
       const res = await topicsApi.list({
+        category: categoryId,
         q: searchQuery || undefined,
-        cursor: nextCursor,
+        cursor: page.nextCursor,
         limit: PAGE_SIZE,
       })
-      setTopics((prev) => [...prev, ...res.data.items.filter((item) => !prev.some((existing) => existing.id === item.id))])
-      setNextCursor(res.data.next_cursor)
+      setCategoryPages((prev) => {
+        const current = prev[categoryId] ?? { items: [], nextCursor: null }
+        const nextItems = [
+          ...current.items,
+          ...res.data.items
+            .map((topic) => normalizeTopicCategory(topic, categoryId))
+            .filter((item) => !current.items.some((existing) => existing.id === item.id)),
+        ]
+        return {
+          ...prev,
+          [categoryId]: {
+            items: nextItems,
+            nextCursor: res.data.next_cursor,
+          },
+        }
+      })
     } catch (err) {
       handleApiError(err, '加载更多话题失败')
     } finally {
-      setLoadingMore(false)
+      setLoadingMoreCategory(null)
     }
   }
 
@@ -192,8 +212,17 @@ export default function TopicList() {
     if (!confirmed) return
     try {
       await topicsApi.delete(topicId)
-      setTopics((prev) => prev.filter((topic) => topic.id !== topicId))
-      if (topics.length <= 1) {
+      setCategoryPages((prev) => Object.fromEntries(
+        Object.entries(prev).map(([categoryId, page]) => [
+          categoryId,
+          {
+            ...page,
+            items: page.items.filter((topic) => topic.id !== topicId),
+          },
+        ]),
+      ))
+      const totalTopics = Object.values(categoryPages).reduce((sum, page) => sum + page.items.length, 0)
+      if (totalTopics <= 1) {
         void loadTopics()
       }
     } catch (err) {
@@ -208,7 +237,15 @@ export default function TopicList() {
   }, [currentUser])
 
   const updateTopicInteraction = useCallback((topicId: string, interaction: TopicListItem['interaction']) => {
-    setTopics(prev => prev.map(item => item.id === topicId ? { ...item, interaction } : item))
+    setCategoryPages(prev => Object.fromEntries(
+      Object.entries(prev).map(([categoryId, page]) => [
+        categoryId,
+        {
+          ...page,
+          items: page.items.map(item => item.id === topicId ? { ...item, interaction } : item),
+        },
+      ]),
+    ))
   }, [])
 
   const handleTopicLike = useCallback(async (topic: TopicListItem) => {
@@ -285,8 +322,7 @@ export default function TopicList() {
   const throttledLike = useThrottledCallbackByKey(handleTopicLike, (t) => t.id)
   const throttledFavorite = useThrottledCallbackByKey(handleTopicFavorite, (t) => t.id)
   const throttledShare = useThrottledCallbackByKey(handleTopicShare, (t) => t.id)
-  const visibleTopics = topics.slice(0, visibleCount)
-  const topicColumns = groupTopicsByCategory(visibleTopics)
+  const topicColumns = groupTopicsByCategory(categoryPages)
   const activeIndex = topicColumns.findIndex(({ category }) => category.id === activeCategory)
   const resolvedActiveIndex = activeIndex >= 0 ? activeIndex : 0
   const activeColumn = topicColumns[resolvedActiveIndex] ?? null
@@ -508,7 +544,7 @@ export default function TopicList() {
           <p className="text-gray-500 font-serif">加载中...</p>
         )}
 
-        {!loading && topics.length === 0 && (
+        {!loading && topicColumns.length === 0 && (
           <p className="text-gray-500 font-serif">
             {searchQuery ? '没有找到匹配的话题' : '当前板块暂无话题'}
           </p>
@@ -566,33 +602,21 @@ export default function TopicList() {
           </div>
         ) : null}
 
-        {visibleCount < topics.length ? (
-          <div ref={revealMoreRef} className="py-6 text-center">
-            <button
-              type="button"
-              onClick={() => setVisibleCount((prev) => Math.min(prev + VISIBLE_TOPICS_STEP, topics.length))}
-              className="rounded-full border border-gray-200 bg-white px-4 py-2 text-sm text-gray-600 hover:border-gray-300 hover:text-black"
-            >
-              继续显示更多卡片
-            </button>
-          </div>
-        ) : null}
-
-        {!loading && (nextCursor || loadingMore) ? (
+        {!loading && activeCategory && ((categoryPages[activeCategory]?.nextCursor ?? null) || loadingMoreCategory === activeCategory) ? (
           <div ref={loadMoreRef} className="py-8 text-center text-sm text-gray-500">
-            {loadingMore ? '加载更多话题中...' : '继续下滑加载更多'}
+            {loadingMoreCategory === activeCategory ? '加载更多话题中...' : '继续下滑加载更多'}
           </div>
         ) : null}
 
-        {!loading && nextCursor ? (
+        {!loading && activeCategory && (categoryPages[activeCategory]?.nextCursor ?? null) ? (
           <div className="pb-6 text-center">
             <button
               type="button"
-              onClick={() => { void loadMoreTopics() }}
-              disabled={loadingMore}
+              onClick={() => { void loadMoreTopics(activeCategory) }}
+              disabled={loadingMoreCategory === activeCategory}
               className="rounded-full border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 hover:border-gray-300 hover:text-black disabled:opacity-50"
             >
-              {loadingMore ? '加载中...' : '加载更多'}
+              {loadingMoreCategory === activeCategory ? '加载中...' : '加载更多'}
             </button>
           </div>
         ) : null}

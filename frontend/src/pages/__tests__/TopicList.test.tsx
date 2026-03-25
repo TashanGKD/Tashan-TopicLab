@@ -23,6 +23,29 @@ vi.mock('../../api/client', async () => {
 const mockedTopicsApiList = vi.mocked(topicsApi.list)
 const mockedTopicsApiDelete = vi.mocked(topicsApi.delete)
 
+function mockTopicListByCategory(
+  items: any[],
+  options?: {
+    nextCursorByCategory?: Record<string, string | null>
+    pagedResults?: Record<string, Record<string, { items: any[]; next_cursor: string | null }>>
+  },
+) {
+  mockedTopicsApiList.mockImplementation(async (params?: { category?: string; cursor?: string | null }) => {
+    const categoryId = params?.category ?? 'plaza'
+    const cursorKey = params?.cursor ?? '__initial__'
+    const paged = options?.pagedResults?.[categoryId]?.[cursorKey]
+    if (paged) {
+      return { data: paged } as any
+    }
+    return {
+      data: {
+        items: items.filter((item) => (item.category ?? 'plaza') === categoryId),
+        next_cursor: options?.nextCursorByCategory?.[categoryId] ?? null,
+      },
+    } as any
+  })
+}
+
 describe('TopicList', () => {
   afterEach(() => {
     cleanup()
@@ -41,28 +64,23 @@ describe('TopicList', () => {
       takeRecords() { return [] }
     }
     globalThis.IntersectionObserver = MockIntersectionObserver as unknown as typeof IntersectionObserver
-    mockedTopicsApiList.mockResolvedValue({
-      data: {
-        items: [
-          {
-            id: 'topic-1',
-            session_id: 'topic-1',
-            category: 'research',
-            title: '带图片的话题',
-            body: '正文中没有图片',
-            status: 'open',
-            discussion_status: 'completed',
-            preview_image: '../generated_images/list_preview.png',
-            source_feed_name: 'Nature',
-            creator_name: 'openclaw-user',
-            creator_auth_type: 'openclaw_key',
-            created_at: '2026-03-12T00:00:00Z',
-            updated_at: '2026-03-12T00:00:00Z',
-          },
-        ],
-        next_cursor: null,
+    mockTopicListByCategory([
+      {
+        id: 'topic-1',
+        session_id: 'topic-1',
+        category: 'research',
+        title: '带图片的话题',
+        body: '正文中没有图片',
+        status: 'open',
+        discussion_status: 'completed',
+        preview_image: '../generated_images/list_preview.png',
+        source_feed_name: 'Nature',
+        creator_name: 'openclaw-user',
+        creator_auth_type: 'openclaw_key',
+        created_at: '2026-03-12T00:00:00Z',
+        updated_at: '2026-03-12T00:00:00Z',
       },
-    } as any)
+    ])
   })
 
   it('renders one topic preview image when topic contains image markdown', async () => {
@@ -85,9 +103,7 @@ describe('TopicList', () => {
   })
 
   it('filters topics by selected category', async () => {
-    mockedTopicsApiList.mockResolvedValueOnce({
-      data: {
-        items: [
+    mockTopicListByCategory([
           {
             id: 'topic-1',
             session_id: 'topic-1',
@@ -110,10 +126,7 @@ describe('TopicList', () => {
             created_at: '2026-03-12T00:00:00Z',
             updated_at: '2026-03-12T00:00:00Z',
           },
-        ],
-        next_cursor: null,
-      },
-    } as any)
+        ])
 
     render(
       <MemoryRouter>
@@ -124,16 +137,14 @@ describe('TopicList', () => {
     fireEvent.click((await screen.findAllByRole('button', { name: '思考' }))[0])
 
     await waitFor(() => {
-      expect(mockedTopicsApiList).toHaveBeenCalledTimes(1)
+      expect(mockedTopicsApiList).toHaveBeenCalled()
     })
-    expect(mockedTopicsApiList).toHaveBeenLastCalledWith({ q: undefined, limit: 20 })
+    expect(mockedTopicsApiList).toHaveBeenCalledWith({ category: 'thought', q: undefined, limit: 20 })
     expect(screen.getByTestId('topic-category-thought')).toHaveAttribute('data-active', 'true')
   })
 
   it('shows only the adjacent preview columns around the active category', async () => {
-    mockedTopicsApiList.mockResolvedValueOnce({
-      data: {
-        items: [
+    mockTopicListByCategory([
           {
             id: 'topic-1',
             session_id: 'topic-1',
@@ -178,10 +189,7 @@ describe('TopicList', () => {
             created_at: '2026-03-12T00:00:00Z',
             updated_at: '2026-03-12T00:00:00Z',
           },
-        ],
-        next_cursor: null,
-      },
-    } as any)
+        ])
 
     render(
       <MemoryRouter>
@@ -211,7 +219,7 @@ describe('TopicList', () => {
     })
 
     await waitFor(() => {
-      expect(mockedTopicsApiList).toHaveBeenLastCalledWith({ q: '多智能体', limit: 20 })
+      expect(mockedTopicsApiList).toHaveBeenCalledWith({ category: 'research', q: '多智能体', limit: 20 })
     })
   })
 
@@ -239,18 +247,23 @@ describe('TopicList', () => {
       updated_at: '2026-03-12T00:00:00Z',
     }))
 
-    mockedTopicsApiList.mockResolvedValueOnce({
-      data: {
-        items: firstPageItems,
-        next_cursor: 'cursor-1',
+    mockTopicListByCategory(firstPageItems, {
+      nextCursorByCategory: {
+        research: 'cursor-1',
       },
-    } as any)
-    mockedTopicsApiList.mockResolvedValueOnce({
-      data: {
-        items: secondPageItems,
-        next_cursor: null,
+      pagedResults: {
+        research: {
+          __initial__: {
+            items: firstPageItems,
+            next_cursor: 'cursor-1',
+          },
+          'cursor-1': {
+            items: secondPageItems,
+            next_cursor: null,
+          },
+        },
       },
-    } as any)
+    })
 
     render(
       <MemoryRouter>
@@ -258,14 +271,12 @@ describe('TopicList', () => {
       </MemoryRouter>,
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: '继续显示更多卡片' }))
-    expect(await screen.findByText('科研话题 20')).toBeInTheDocument()
-
     fireEvent.click(await screen.findByRole('button', { name: '加载更多' }))
 
     await waitFor(() => {
-      expect(mockedTopicsApiList).toHaveBeenNthCalledWith(2, { q: undefined, cursor: 'cursor-1', limit: 20 })
+      expect(mockedTopicsApiList).toHaveBeenCalledWith({ category: 'research', q: undefined, cursor: 'cursor-1', limit: 20 })
       expect(screen.getByText('科研话题 20')).toBeInTheDocument()
+      expect(screen.getByText('科研话题 40')).toBeInTheDocument()
     })
   })
 
@@ -295,9 +306,7 @@ describe('TopicList', () => {
   })
 
   it('keeps latest order inside each category column', async () => {
-    mockedTopicsApiList.mockResolvedValueOnce({
-      data: {
-        items: [
+    mockTopicListByCategory([
           {
             id: 'topic-1',
             session_id: 'topic-1',
@@ -346,10 +355,7 @@ describe('TopicList', () => {
             created_at: '2026-03-12T00:00:00Z',
             updated_at: '2026-03-12T00:00:00Z',
           },
-        ],
-        next_cursor: null,
-      },
-    } as any)
+        ])
 
     render(
       <MemoryRouter>
@@ -371,9 +377,7 @@ describe('TopicList', () => {
   })
 
   it('defaults the center slot to the category with the highest topic count', async () => {
-    mockedTopicsApiList.mockResolvedValueOnce({
-      data: {
-        items: [
+    mockTopicListByCategory([
           {
             id: 'topic-1',
             session_id: 'topic-1',
@@ -418,10 +422,7 @@ describe('TopicList', () => {
             created_at: '2026-03-12T00:00:00Z',
             updated_at: '2026-03-12T00:00:00Z',
           },
-        ],
-        next_cursor: null,
-      },
-    } as any)
+        ])
 
     render(
       <MemoryRouter>
@@ -435,9 +436,7 @@ describe('TopicList', () => {
   })
 
   it('keeps the tab strip order fixed after switching categories', async () => {
-    mockedTopicsApiList.mockResolvedValueOnce({
-      data: {
-        items: [
+    mockTopicListByCategory([
           {
             id: 'topic-1',
             session_id: 'topic-1',
@@ -504,10 +503,7 @@ describe('TopicList', () => {
             created_at: '2026-03-12T00:00:00Z',
             updated_at: '2026-03-12T00:00:00Z',
           },
-        ],
-        next_cursor: null,
-      },
-    } as any)
+        ])
 
     render(
       <MemoryRouter>
@@ -527,9 +523,7 @@ describe('TopicList', () => {
   })
 
   it('widens the active category tab after selection', async () => {
-    mockedTopicsApiList.mockResolvedValueOnce({
-      data: {
-        items: [
+    mockTopicListByCategory([
           {
             id: 'topic-1',
             session_id: 'topic-1',
@@ -552,10 +546,7 @@ describe('TopicList', () => {
             created_at: '2026-03-12T00:00:00Z',
             updated_at: '2026-03-12T00:00:00Z',
           },
-        ],
-        next_cursor: null,
-      },
-    } as any)
+        ])
 
     render(
       <MemoryRouter>
@@ -573,9 +564,7 @@ describe('TopicList', () => {
   })
 
   it('renders the underline inside the active tab label', async () => {
-    mockedTopicsApiList.mockResolvedValueOnce({
-      data: {
-        items: [
+    mockTopicListByCategory([
           {
             id: 'topic-1',
             session_id: 'topic-1',
@@ -598,10 +587,7 @@ describe('TopicList', () => {
             created_at: '2026-03-12T00:00:00Z',
             updated_at: '2026-03-12T00:00:00Z',
           },
-        ],
-        next_cursor: null,
-      },
-    } as any)
+        ])
 
     render(
       <MemoryRouter>
@@ -621,9 +607,7 @@ describe('TopicList', () => {
   })
 
   it('adds directional animation when switching categories', async () => {
-    mockedTopicsApiList.mockResolvedValueOnce({
-      data: {
-        items: [
+    mockTopicListByCategory([
           {
             id: 'topic-1',
             session_id: 'topic-1',
@@ -646,10 +630,7 @@ describe('TopicList', () => {
             created_at: '2026-03-12T00:00:00Z',
             updated_at: '2026-03-12T00:00:00Z',
           },
-        ],
-        next_cursor: null,
-      },
-    } as any)
+        ])
 
     render(
       <MemoryRouter>
@@ -667,9 +648,7 @@ describe('TopicList', () => {
   })
 
   it('wraps the preview columns when the active category is at either edge', async () => {
-    mockedTopicsApiList.mockResolvedValueOnce({
-      data: {
-        items: [
+    mockTopicListByCategory([
           {
             id: 'topic-1',
             session_id: 'topic-1',
@@ -703,10 +682,7 @@ describe('TopicList', () => {
             created_at: '2026-03-12T00:00:00Z',
             updated_at: '2026-03-12T00:00:00Z',
           },
-        ],
-        next_cursor: null,
-      },
-    } as any)
+        ])
 
     render(
       <MemoryRouter>
