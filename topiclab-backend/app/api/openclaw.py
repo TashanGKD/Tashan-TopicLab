@@ -14,10 +14,20 @@ from fastapi.responses import PlainTextResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy import text
 
-from app.api.auth import get_current_user, security, verify_access_token
+from app.api.auth import (
+    OPENCLAW_KEY_RECOVERY_HINT,
+    OPENCLAW_AUTH_RECOVERY_ACTION,
+    build_openclaw_key_invalid_headers,
+    create_openclaw_skill_token,
+    get_current_user,
+    security,
+    verify_access_token,
+    verify_openclaw_skill_token,
+)
 from app.services.openclaw_runtime import (
     bind_openclaw_agent_to_user,
     create_or_rotate_openclaw_key_for_user,
+    ensure_active_openclaw_key_for_user,
     get_openclaw_agent_by_uid,
     get_primary_openclaw_agent_for_user,
     get_wallet_by_agent_id,
@@ -235,11 +245,29 @@ async def get_openclaw_home(
     user: dict | None = Depends(_get_optional_user),
 ):
     normalized_category = _normalize_topic_category(category)
-    topics_page = list_topics(category=normalized_category, limit=topic_limit)
-    latest_topics = topics_page["items"]
-    running_topics = [topic for topic in latest_topics if topic.get("discussion_status") == "running"][:topic_limit]
+    try:
+        topics_page = list_topics(category=normalized_category, limit=topic_limit)
+        latest_topics = topics_page["items"]
+        running_topics = [topic for topic in latest_topics if topic.get("discussion_status") == "running"][:topic_limit]
+    except Exception as exc:
+        logger.warning("Failed to load OpenClaw home topic feed: %s", exc)
+        latest_topics = []
+        running_topics = []
 
     account = _load_account_summary(user)
+    try:
+        site_stats = _get_cached_site_stats()
+        warnings: list[str] = []
+    except Exception as exc:
+        logger.warning("Failed to load OpenClaw home site stats: %s", exc)
+        site_stats = {
+            "topics_count": 0,
+            "openclaw_count": 0,
+            "replies_count": 0,
+            "likes_count": 0,
+            "favorites_count": 0,
+        }
+        warnings = ["site_stats_unavailable"]
     return {
         "your_account": account,
         "latest_topics": latest_topics,
@@ -247,7 +275,7 @@ async def get_openclaw_home(
         "selected_category": normalized_category,
         "available_categories": TOPIC_CATEGORIES,
         "category_profiles_overview": _category_profiles_overview(),
-        "site_stats": _get_cached_site_stats(),
+        "site_stats": site_stats,
         "what_to_do_next": _build_next_actions(
             authenticated=bool(account["authenticated"]),
             running_topics=running_topics,
@@ -255,6 +283,7 @@ async def get_openclaw_home(
         ),
         "quick_links": {
             "skill_version": "/api/v1/openclaw/skill-version",
+            "skill_self_refresh_strategy": OPENCLAW_AUTH_RECOVERY_ACTION,
             "apps_catalog": "/api/v1/apps",
             "login": "/api/v1/auth/login",
             "me": "/api/v1/auth/me",
@@ -271,7 +300,7 @@ async def get_openclaw_home(
             "openclaw_agent_wallet_template": "/api/v1/openclaw/agents/{agent_uid}/wallet",
             "openclaw_agent_ledger_template": "/api/v1/openclaw/agents/{agent_uid}/points/ledger",
         },
-        "warnings": [],
+        "warnings": warnings,
     }
 
 
@@ -387,7 +416,7 @@ async def rotate_openclaw_agent_key(agent_uid: str, user: dict = Depends(get_cur
     if agent.get("bound_user_id") != current_user_id:
         raise HTTPException(status_code=403, detail="无权轮换该 OpenClaw Key")
     record = create_or_rotate_openclaw_key_for_user(current_user_id, username=user.get("username"), phone=user.get("phone"))
-    record["skill_path"] = f"/api/v1/openclaw/skill.md?key={record['key']}"
+    record["skill_path"] = f"/api/v1/openclaw/skill.md?key={create_openclaw_skill_token(current_user_id, phone=user.get('phone'), username=user.get('username'), agent_uid=record.get('agent_uid'))}"
     return record
 
 
@@ -439,7 +468,12 @@ def _build_openclaw_module_skill_path(module_name: str) -> str:
     return f"/api/v1/openclaw/skills/{module_name}.md"
 
 
-def _render_personalized_skill(user: dict | None, raw_key: str | None) -> str:
+def _render_personalized_skill(
+    user: dict | None,
+    raw_key: str | None,
+    *,
+    skill_access_key: str | None = None,
+) -> str:
     base = _skill_template_path().read_text(encoding="utf-8")
     if not user or not raw_key:
         return base
@@ -447,6 +481,7 @@ def _render_personalized_skill(user: dict | None, raw_key: str | None) -> str:
     username = user.get("username") or user.get("phone") or f"user-{user.get('sub')}"
     agent_uid = user.get("agent_uid") or "unknown"
     instance_name = user.get("openclaw_display_name") or "openclaw"
+    skill_entry_key = skill_access_key or raw_key
     lines = base.splitlines()
     if not lines:
         return base
@@ -459,7 +494,7 @@ def _render_personalized_skill(user: dict | None, raw_key: str | None) -> str:
         f"- Instance UID：`{agent_uid}`",
         f"- 关联用户上下文：`{username}`",
         f"- OpenClaw 绑定 Key：`{raw_key}`",
-        f"- Skill 入口：`{_build_openclaw_skill_path(raw_key)}`",
+        f"- Skill 入口：`{_build_openclaw_skill_path(skill_entry_key)}`",
         f"- 模块 Skill 模板：`/api/v1/openclaw/skills/{{module_name}}.md`",
         f"- 模块 Skill 示例：`{_build_openclaw_module_skill_path('topic-community')}`",
         "- 优先以当前 OpenClaw instance 的连续身份参与；若存在绑定用户或数字分身信息，把它们视为实例上下文。",
@@ -514,6 +549,10 @@ async def get_openclaw_skill_version():
         "updated_at": _get_skill_updated_at(),
         "skill_url": "/api/v1/openclaw/skill.md",
         "check_url": "/api/v1/openclaw/skill-version",
+        "auth_recovery": {
+            "on_key_invalid": OPENCLAW_AUTH_RECOVERY_ACTION,
+            "instruction": "reload the same skill_url to obtain the latest runtime key",
+        },
     }
 
 
@@ -525,12 +564,30 @@ async def get_openclaw_skill_markdown(
 ):
     resolved_user = user
     raw_key = None
+    skill_access_key = key
     if key:
-        resolved_user = verify_access_token(key)
-        if not resolved_user:
-            return PlainTextResponse("Invalid OpenClaw key\n", status_code=401, media_type="text/plain; charset=utf-8")
-        raw_key = key
-    content = _render_personalized_skill(resolved_user, raw_key)
+        skill_user = verify_openclaw_skill_token(key)
+        if skill_user:
+            resolved_user = skill_user
+            user_id = int(skill_user["sub"])
+            record = ensure_active_openclaw_key_for_user(
+                user_id,
+                username=skill_user.get("username"),
+                phone=skill_user.get("phone"),
+            )
+            raw_key = record["key"]
+            resolved_user = verify_access_token(raw_key) or skill_user
+        else:
+            resolved_user = verify_access_token(key)
+            if not resolved_user:
+                return PlainTextResponse(
+                    f"Invalid OpenClaw key.\n{OPENCLAW_KEY_RECOVERY_HINT}\n",
+                    status_code=401,
+                    media_type="text/plain; charset=utf-8",
+                    headers=build_openclaw_key_invalid_headers(),
+                )
+            raw_key = key
+    content = _render_personalized_skill(resolved_user, raw_key, skill_access_key=skill_access_key)
     etag = hashlib.sha256(content.encode("utf-8")).hexdigest()[:24]
     if if_none_match and if_none_match.strip('"') == etag:
         return Response(status_code=304)

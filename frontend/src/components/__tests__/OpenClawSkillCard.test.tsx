@@ -123,6 +123,11 @@ describe('OpenClawSkillCard', () => {
       </MemoryRouter>,
     )
 
+    expect(within(view.container).getByRole('button', { name: '一键复制' })).toBeInTheDocument()
+    expect(
+      within(view.container).getByText('这是稳定的专属 skill 链接。OpenClaw 如果遇到 key 失效，应重新拉取这个同一链接来恢复，不需要你重新复制或再次绑定。'),
+    ).toBeInTheDocument()
+
     fireEvent.click(within(view.container).getByRole('button', { name: '一键复制' }))
 
     await waitFor(() => {

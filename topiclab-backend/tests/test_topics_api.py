@@ -166,6 +166,7 @@ def register_login_and_openclaw_key(client, *, phone: str, username: str, passwo
     return {
         **auth,
         "openclaw_key": payload["key"],
+        "skill_path": payload["skill_path"],
         "agent_uid": payload["agent_uid"],
         "openclaw_agent": payload["openclaw_agent"],
         "key_id": payload["key_id"],
@@ -1046,9 +1047,10 @@ def test_openclaw_key_can_bind_user_identity_and_render_personal_skill(client):
     key_payload = key_resp.json()
     raw_key = key_payload["key"]
     assert raw_key.startswith("tloc_")
-    assert key_payload["skill_path"].endswith(raw_key)
+    assert "/api/v1/openclaw/skill.md?key=" in key_payload["skill_path"]
+    assert raw_key not in key_payload["skill_path"]
 
-    skill_resp = client.get(f"/api/v1/openclaw/skill.md?key={raw_key}")
+    skill_resp = client.get(key_payload["skill_path"])
     assert skill_resp.status_code == 200, skill_resp.text
     assert "OpenClaw 绑定 Key" in skill_resp.text
     assert raw_key in skill_resp.text
@@ -1319,6 +1321,8 @@ def test_openclaw_invalid_key_rejected_on_general_routes(client):
     )
     assert topic_resp.status_code == 401, topic_resp.text
     assert "OpenClaw" in topic_resp.json().get("detail", "")
+    assert topic_resp.headers.get("X-OpenClaw-Auth-Error") == "key_invalid_or_expired"
+    assert topic_resp.headers.get("X-OpenClaw-Auth-Recovery") == "reload_skill_url"
 
 
 def test_openclaw_dedicated_routes_require_openclaw_key(client):
@@ -1527,12 +1531,42 @@ def test_openclaw_skill_returns_etag_and_supports_304(client):
     assert len(cond_resp.content) == 0
 
 
+def test_openclaw_skill_invalid_key_returns_recovery_hint(client):
+    resp = client.get("/api/v1/openclaw/skill.md?key=tloc_invalid_key_12345")
+    assert resp.status_code == 401, resp.text
+    assert "Invalid OpenClaw key." in resp.text
+    assert "重新拉取你当前持有的 skill 链接" in resp.text
+    assert resp.headers.get("X-OpenClaw-Auth-Error") == "key_invalid_or_expired"
+    assert resp.headers.get("X-OpenClaw-Auth-Recovery") == "reload_skill_url"
+
+
+def test_openclaw_skill_link_is_stable_and_reusable(client):
+    auth = register_login_and_openclaw_key(client, phone="13800009993", username="stable-skill")
+    skill_url = auth["skill_path"]
+
+    first = client.get(skill_url)
+    assert first.status_code == 200, first.text
+    assert auth["openclaw_key"] in first.text
+
+    second = client.get(skill_url)
+    assert second.status_code == 200, second.text
+    assert auth["openclaw_key"] in second.text
+
+
 def test_openclaw_home_includes_skill_version_in_quick_links(client):
     """home 的 quick_links 包含 skill_version。"""
     resp = client.get("/api/v1/home")
     assert resp.status_code == 200, resp.text
     quick = resp.json().get("quick_links", {})
     assert quick.get("skill_version") == "/api/v1/openclaw/skill-version"
+    assert quick.get("skill_self_refresh_strategy") == "reload_skill_url"
+
+
+def test_openclaw_skill_version_includes_auth_recovery_contract(client):
+    resp = client.get("/api/v1/openclaw/skill-version")
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["auth_recovery"]["on_key_invalid"] == "reload_skill_url"
 
 
 def test_posts_pagination_and_reply_thread_endpoints(client):

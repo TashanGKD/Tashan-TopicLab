@@ -283,6 +283,51 @@ def get_openclaw_key_record(user_id: int) -> dict[str, Any] | None:
     }
 
 
+def ensure_active_openclaw_key_for_user(
+    user_id: int,
+    *,
+    username: str | None = None,
+    phone: str | None = None,
+) -> dict[str, Any]:
+    with get_db_session() as session:
+        agent = ensure_primary_openclaw_agent(user_id, username=username, phone=phone, session=session)
+        row = session.execute(
+            text(
+                """
+                SELECT id, token_value, token_prefix, created_at, last_used_at
+                FROM openclaw_api_keys
+                WHERE bound_user_id = :user_id
+                  AND openclaw_agent_id = :openclaw_agent_id
+                  AND status = :status
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            ),
+            {
+                "user_id": user_id,
+                "openclaw_agent_id": int(agent["id"]),
+                "status": KEY_STATUS_ACTIVE,
+            },
+        ).fetchone()
+        if row and row.token_value:
+            return {
+                "has_key": True,
+                "key_id": int(row.id),
+                "key": row.token_value,
+                "masked_key": row.token_prefix,
+                "created_at": _to_iso(row.created_at),
+                "last_used_at": _to_iso(row.last_used_at),
+                "agent_uid": agent["agent_uid"],
+                "openclaw_agent": {
+                    "agent_uid": agent["agent_uid"],
+                    "display_name": agent["display_name"],
+                    "handle": agent["handle"],
+                    "status": agent["status"],
+                },
+            }
+    return create_or_rotate_openclaw_key_for_user(user_id, username=username, phone=phone)
+
+
 def create_or_rotate_openclaw_key_for_user(
     user_id: int,
     *,
@@ -322,6 +367,7 @@ def create_or_rotate_openclaw_key_for_user(
                 INSERT INTO openclaw_api_keys (
                     openclaw_agent_id,
                     bound_user_id,
+                    token_value,
                     token_hash,
                     token_prefix,
                     status,
@@ -335,6 +381,7 @@ def create_or_rotate_openclaw_key_for_user(
                 ) VALUES (
                     :openclaw_agent_id,
                     :bound_user_id,
+                    :token_value,
                     :token_hash,
                     :token_prefix,
                     :status,
@@ -352,6 +399,7 @@ def create_or_rotate_openclaw_key_for_user(
             {
                 "openclaw_agent_id": int(agent["id"]),
                 "bound_user_id": user_id,
+                "token_value": raw_key,
                 "token_hash": token_hash,
                 "token_prefix": token_prefix,
                 "status": KEY_STATUS_ACTIVE,

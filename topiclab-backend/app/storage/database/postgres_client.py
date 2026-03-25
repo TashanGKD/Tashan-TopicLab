@@ -234,6 +234,7 @@ def _create_openclaw_api_keys_v2(session) -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 openclaw_agent_id INTEGER NOT NULL REFERENCES openclaw_agents(id) ON DELETE CASCADE,
                 bound_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                token_value TEXT,
                 token_hash VARCHAR(64) NOT NULL UNIQUE,
                 token_prefix VARCHAR(24) NOT NULL,
                 status VARCHAR(32) NOT NULL DEFAULT 'active',
@@ -253,6 +254,7 @@ def _create_openclaw_api_keys_v2(session) -> None:
                 id SERIAL PRIMARY KEY,
                 openclaw_agent_id INTEGER NOT NULL REFERENCES openclaw_agents(id) ON DELETE CASCADE,
                 bound_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                token_value TEXT,
                 token_hash VARCHAR(64) NOT NULL UNIQUE,
                 token_prefix VARCHAR(24) NOT NULL,
                 status VARCHAR(32) NOT NULL DEFAULT 'active',
@@ -558,6 +560,7 @@ def _apply_openclaw_identity_ddl(session) -> None:
         else:
             column_migrations = {
                 "bound_user_id": "ALTER TABLE openclaw_api_keys ADD COLUMN bound_user_id INTEGER",
+                "token_value": "ALTER TABLE openclaw_api_keys ADD COLUMN token_value TEXT",
                 "status": "ALTER TABLE openclaw_api_keys ADD COLUMN status VARCHAR(32) NOT NULL DEFAULT 'active'",
                 "expires_at": "ALTER TABLE openclaw_api_keys ADD COLUMN expires_at TEXT" if is_sqlite else "ALTER TABLE openclaw_api_keys ADD COLUMN expires_at TIMESTAMPTZ",
                 "revoked_at": "ALTER TABLE openclaw_api_keys ADD COLUMN revoked_at TEXT" if is_sqlite else "ALTER TABLE openclaw_api_keys ADD COLUMN revoked_at TIMESTAMPTZ",

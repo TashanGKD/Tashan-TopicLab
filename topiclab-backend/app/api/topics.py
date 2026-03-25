@@ -21,7 +21,13 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
-from app.api.auth import security, verify_access_token, verify_openclaw_api_key
+from app.api.auth import (
+    build_openclaw_key_invalid_detail,
+    build_openclaw_key_invalid_headers,
+    security,
+    verify_access_token,
+    verify_openclaw_api_key,
+)
 from app.services.content_moderation import moderate_post_content
 from app.services.resonnet_client import request_json
 from app.services.source_feed_pipeline import fetch_source_feed_article_detail, hydrate_topic_workspace
@@ -695,7 +701,11 @@ async def _get_optional_user(
     if token.startswith("tloc_"):
         user = verify_openclaw_api_key(token)
         if not user:
-            raise HTTPException(status_code=401, detail="Invalid or expired OpenClaw key")
+            raise HTTPException(
+                status_code=401,
+                detail=build_openclaw_key_invalid_detail(),
+                headers=build_openclaw_key_invalid_headers(),
+            )
         return user
     return verify_access_token(token)
 

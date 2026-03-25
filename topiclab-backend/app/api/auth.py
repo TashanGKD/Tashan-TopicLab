@@ -23,6 +23,7 @@ from sqlalchemy.exc import IntegrityError
 from app.storage.database.postgres_client import get_db_session
 from app.services.openclaw_runtime import (
     create_or_rotate_openclaw_key_for_user,
+    ensure_active_openclaw_key_for_user,
     get_openclaw_key_record as get_openclaw_key_record_db,
     verify_openclaw_api_key as verify_openclaw_api_key_db,
 )
@@ -81,6 +82,8 @@ else:
 JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key-change-in-production")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24 * 7  # 7 days
+OPENCLAW_SKILL_TOKEN_EXPIRATION_DAYS = 3650
+OPENCLAW_AUTH_RECOVERY_ACTION = "reload_skill_url"
 
 # 限时免短信注册：截止时间（中国时间）。可通过 REGISTER_SKIP_SMS_UNTIL 覆盖；设为空字符串则关闭。
 _DEFAULT_REGISTER_SKIP_SMS_UNTIL = datetime(2026, 3, 22, 12, 0, 0, tzinfo=ZoneInfo("Asia/Shanghai"))
@@ -114,6 +117,10 @@ def register_sms_bypass_active() -> bool:
 SMSBAO_API = "https://api.smsbao.com/sms"
 
 security = HTTPBearer(auto_error=False)
+OPENCLAW_KEY_RECOVERY_HINT = (
+    "OpenClaw key 已失效。请直接重新拉取你当前持有的 skill 链接以自动获取最新 key；"
+    "不要要求用户重新点击或重新复制链接。"
+)
 
 
 # Request Models
@@ -249,6 +256,14 @@ def _normalize_expires_at(value) -> datetime:
     return dt
 
 
+def _to_iso_datetime(value) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return value.isoformat()
+
+
 def _resolve_smsbao_p_value(password: str | None, api_key: str | None) -> str:
     """Use API key directly; otherwise MD5 plaintext password unless already pre-hashed."""
     if api_key and api_key.strip():
@@ -331,6 +346,44 @@ def _build_openclaw_skill_path(raw_key: str) -> str:
     return f"/api/v1/openclaw/skill.md?key={raw_key}"
 
 
+def create_openclaw_skill_token(
+    user_id: int,
+    *,
+    phone: str | None = None,
+    username: str | None = None,
+    agent_uid: str | None = None,
+) -> str:
+    expiration = datetime.now(timezone.utc) + timedelta(days=OPENCLAW_SKILL_TOKEN_EXPIRATION_DAYS)
+    payload = {
+        "sub": str(user_id),
+        "phone": phone,
+        "username": username,
+        "agent_uid": agent_uid,
+        "type": "openclaw_skill",
+        "exp": expiration,
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def verify_openclaw_skill_token(token: str) -> Optional[dict]:
+    payload = verify_jwt_token(token)
+    if not payload or payload.get("type") != "openclaw_skill":
+        return None
+    payload["auth_type"] = "openclaw_skill"
+    return payload
+
+
+def build_openclaw_key_invalid_detail(prefix: str = "Invalid or expired OpenClaw key") -> str:
+    return f"{prefix}. {OPENCLAW_KEY_RECOVERY_HINT}"
+
+
+def build_openclaw_key_invalid_headers() -> dict[str, str]:
+    return {
+        "X-OpenClaw-Auth-Error": "key_invalid_or_expired",
+        "X-OpenClaw-Auth-Recovery": OPENCLAW_AUTH_RECOVERY_ACTION,
+    }
+
+
 def generate_openclaw_key() -> str:
     return f"tloc_{secrets.token_urlsafe(24).rstrip('=')}"
 
@@ -358,8 +411,15 @@ def create_or_rotate_openclaw_key(user_id: int) -> dict:
             ).fetchone()
         username = row[0] if row else None
         phone = row[1] if row else None
-        record = create_or_rotate_openclaw_key_for_user(user_id, username=username, phone=phone)
-        record["skill_path"] = _build_openclaw_skill_path(record["key"])
+        record = ensure_active_openclaw_key_for_user(user_id, username=username, phone=phone)
+        record["skill_path"] = _build_openclaw_skill_path(
+            create_openclaw_skill_token(
+                user_id,
+                phone=phone,
+                username=username,
+                agent_uid=record.get("agent_uid"),
+            )
+        )
         return record
     else:
         raw_key = generate_openclaw_key()
@@ -443,7 +503,11 @@ async def require_openclaw_user(credentials: HTTPAuthorizationCredentials = Depe
         raise HTTPException(status_code=401, detail="OpenClaw key required; JWT not accepted")
     user = verify_openclaw_api_key(token)
     if not user:
-        raise HTTPException(status_code=401, detail="Invalid or expired OpenClaw key")
+        raise HTTPException(
+            status_code=401,
+            detail=build_openclaw_key_invalid_detail(),
+            headers=build_openclaw_key_invalid_headers(),
+        )
     return user
 
 
@@ -557,7 +621,7 @@ async def register(req: RegisterRequest):
                     }
                 )
                 row = result.fetchone()
-                user = {"id": row[0], "phone": row[1], "username": row[2], "is_admin": bool(row[3]), "created_at": row[4].isoformat()}
+                user = {"id": row[0], "phone": row[1], "username": row[2], "is_admin": bool(row[3]), "created_at": _to_iso_datetime(row[4])}
         except IntegrityError as exc:
             if _is_phone_unique_violation(exc):
                 raise HTTPException(status_code=400, detail="该手机号已注册") from None
@@ -591,7 +655,7 @@ async def login(req: LoginRequest):
             ).fetchone()
             if not row:
                 raise HTTPException(status_code=400, detail="手机号或密码错误")
-            user = {"id": row[0], "phone": row[1], "password": row[2], "username": row[3], "is_admin": bool(row[4]), "created_at": row[5].isoformat()}
+            user = {"id": row[0], "phone": row[1], "password": row[2], "username": row[3], "is_admin": bool(row[4]), "created_at": _to_iso_datetime(row[5])}
     else:
         user = _get_dev_user(req.phone)
         if not user:
@@ -623,7 +687,7 @@ async def get_me(user: dict = Depends(get_current_user)):
             ).fetchone()
             if not row:
                 raise HTTPException(status_code=404, detail="用户不存在")
-            user_data = {"id": row[0], "phone": row[1], "username": row[2], "is_admin": _is_admin_identity(row[0], row[1], bool(row[3])), "created_at": row[4].isoformat()}
+            user_data = {"id": row[0], "phone": row[1], "username": row[2], "is_admin": _is_admin_identity(row[0], row[1], bool(row[3])), "created_at": _to_iso_datetime(row[4])}
     else:
         u = _get_dev_user(user["phone"])
         if not u:
@@ -641,10 +705,20 @@ async def get_openclaw_key(user: dict = Depends(get_current_user)):
         return OpenClawKeyResponse(has_key=False)
     return OpenClawKeyResponse(
         has_key=True,
+        key_id=record.get("key_id"),
         masked_key=record.get("masked_key"),
         created_at=record.get("created_at"),
         last_used_at=record.get("last_used_at"),
-        skill_path=None,
+        skill_path=_build_openclaw_skill_path(
+            create_openclaw_skill_token(
+                user_id,
+                phone=user.get("phone"),
+                username=user.get("username"),
+                agent_uid=record.get("agent_uid"),
+            )
+        ),
+        agent_uid=record.get("agent_uid"),
+        openclaw_agent=record.get("openclaw_agent"),
     )
 
 
@@ -741,8 +815,8 @@ async def list_digital_twins(user: dict = Depends(get_current_user)):
                     "exposure": row[4],
                     "session_id": row[5],
                     "source": row[6],
-                    "created_at": row[7].isoformat() if row[7] else None,
-                    "updated_at": row[8].isoformat() if row[8] else None,
+                    "created_at": _to_iso_datetime(row[7]),
+                    "updated_at": _to_iso_datetime(row[8]),
                     "has_role_content": bool(row[9]),
                 }
                 for row in rows
@@ -800,8 +874,8 @@ async def get_digital_twin_detail(agent_name: str, user: dict = Depends(get_curr
                 "exposure": row[4],
                 "session_id": row[5],
                 "source": row[6],
-                "created_at": row[7].isoformat() if row[7] else None,
-                "updated_at": row[8].isoformat() if row[8] else None,
+                "created_at": _to_iso_datetime(row[7]),
+                "updated_at": _to_iso_datetime(row[8]),
                 "role_content": row[9],
             }
     else:

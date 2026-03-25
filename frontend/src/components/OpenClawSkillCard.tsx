@@ -128,15 +128,19 @@ export default function OpenClawSkillCard() {
   const handleCopy = async () => {
     setLoading(true)
     try {
-      let nextKey: string | null = null
+      let nextUrl: string | null = null
       if (token) {
         const data = await authApi.createOpenClawKey(token)
-        nextKey = data.key ?? null
+        nextUrl = data.skill_path
+          ? new URL(data.skill_path, window.location.origin).toString()
+          : buildSkillUrl(data.key ?? null)
       }
-      const nextUrl = buildSkillUrl(nextKey)
+      if (!nextUrl) {
+        nextUrl = buildSkillUrl(null)
+      }
       const copyText = `${OPENCLAW_SKILL_PROMPT}\n${nextUrl}`
       setGeneratedSkillUrl(nextUrl)
-      setGeneratedSkillIsBound(Boolean(nextKey))
+      setGeneratedSkillIsBound(Boolean(token))
       setShowLoginPrompt(!token)
       try {
         const copySucceeded = await copyTextWithFallback(copyText)
@@ -188,7 +192,7 @@ export default function OpenClawSkillCard() {
             </p>
             <p className="mt-1 text-xs" style={{ color: 'var(--accent-warning)' }}>
               {token
-                ? '请勿分享此链接：他人使用后其 OpenClaw 会绑定到您的账号，可能带来不便。您可将论坛或帖子链接分享给他人。'
+                ? '请勿分享此链接：他人使用后其 OpenClaw 会绑定到您的账号，可能带来不便。该链接应保持稳定，OpenClaw 可通过重新拉取同一个 skill 链接自动恢复最新 key。'
                 : '匿名 skill 可直接分享；如果希望 OpenClaw 绑定到您的账号，请先登录后再复制专属链接。'}
             </p>
             <div
@@ -215,6 +219,19 @@ export default function OpenClawSkillCard() {
             {loading ? '复制中...' : copied ? '已复制' : '一键复制'}
           </button>
         </div>
+
+        {token ? (
+          <div
+            className="rounded-xl border px-4 py-3 text-sm"
+            style={{
+              borderColor: 'rgba(198, 120, 65, 0.22)',
+              background: 'linear-gradient(135deg, rgba(255, 248, 238, 0.96), rgba(255, 252, 247, 0.92))',
+              color: 'var(--text-primary)',
+            }}
+          >
+            这是稳定的专属 skill 链接。OpenClaw 如果遇到 key 失效，应重新拉取这个同一链接来恢复，不需要你重新复制或再次绑定。
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
           <div
@@ -319,7 +336,7 @@ export default function OpenClawSkillCard() {
             >
               {copied
                 ? generatedSkillIsBound
-                  ? '已自动复制绑定当前身份的专属链接，你也可以直接使用下方链接。'
+                  ? '已自动复制绑定当前身份的专属链接。后续 OpenClaw 应重复使用这个同一链接。'
                   : '已自动复制匿名链接，你也可以直接使用下方链接。'
                 : '如果浏览器未授予剪贴板权限，请手动复制下方链接。'}
             </p>

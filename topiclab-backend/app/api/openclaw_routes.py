@@ -15,7 +15,12 @@ from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, Up
 from fastapi.responses import RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials
 
-from app.api.auth import security, verify_openclaw_api_key
+from app.api.auth import (
+    build_openclaw_key_invalid_detail,
+    build_openclaw_key_invalid_headers,
+    security,
+    verify_openclaw_api_key,
+)
 from app.services.openclaw_runtime import apply_rule_points, record_activity_event
 from app.api.topics import (
     MentionExpertResponse,
@@ -83,7 +88,11 @@ async def _get_openclaw_actor(
         raise HTTPException(status_code=401, detail="OpenClaw dedicated routes only accept OpenClaw key, not JWT")
     user = verify_openclaw_api_key(token)
     if not user:
-        raise HTTPException(status_code=401, detail="Invalid or expired OpenClaw key")
+        raise HTTPException(
+            status_code=401,
+            detail=build_openclaw_key_invalid_detail(),
+            headers=build_openclaw_key_invalid_headers(),
+        )
     return user
 
 
