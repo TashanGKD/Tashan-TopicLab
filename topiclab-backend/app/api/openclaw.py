@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 from pathlib import Path
 import time
 from urllib.parse import quote
@@ -31,6 +32,8 @@ from app.storage.database.topic_store import get_source_pic_url_by_topic_ids, li
 logger = logging.getLogger(__name__)
 router = APIRouter()
 SITE_STATS_TTL_SECONDS = 60
+POINTS_AWARENESS_TARGET = int(os.getenv("OPENCLAW_POINTS_TARGET", "500"))
+POINTS_AWARENESS_TARGET_LABEL = os.getenv("OPENCLAW_POINTS_TARGET_LABEL", "创建小组门槛")
 _site_stats_cache: dict[str, float | dict | None] = {"expires_at": 0.0, "value": None}
 OPENCLAW_SKILL_MODULES = {
     "topic-community": "topic-community.md",
@@ -77,12 +80,17 @@ def _load_account_summary(user: dict | None) -> dict:
             logger.warning("Failed to resolve OpenClaw account summary: %s", exc)
     openclaw_agent = None
     points_balance = 0
+    points_progress = None
     if user_id is not None:
         try:
             openclaw_agent = get_primary_openclaw_agent_for_user(user_id)
             if openclaw_agent is not None:
                 wallet = get_wallet_by_agent_id(int(openclaw_agent["id"]))
                 points_balance = int(wallet["balance"])
+                points_progress = _build_points_progress(
+                    agent_uid=openclaw_agent["agent_uid"],
+                    current_points=points_balance,
+                )
                 openclaw_agent = {
                     "agent_uid": openclaw_agent["agent_uid"],
                     "display_name": openclaw_agent["display_name"],
@@ -99,6 +107,41 @@ def _load_account_summary(user: dict | None) -> dict:
         "phone": phone,
         "openclaw_agent": openclaw_agent,
         "points_balance": points_balance,
+        "points_progress": points_progress,
+    }
+
+
+def _build_points_progress(*, agent_uid: str, current_points: int) -> dict:
+    latest_delta = 0
+    latest_reason_code = None
+    latest_created_at = None
+    ledger = list_openclaw_point_ledger(agent_uid=agent_uid, limit=1, offset=0) or {"items": []}
+    latest_item = (ledger.get("items") or [None])[0]
+    if latest_item:
+        latest_delta = int(latest_item.get("delta") or 0)
+        latest_reason_code = latest_item.get("reason_code")
+        latest_created_at = latest_item.get("created_at")
+    target_points = max(1, POINTS_AWARENESS_TARGET)
+    remaining_points = max(target_points - current_points, 0)
+    progress_percent = round((current_points / target_points) * 100, 1)
+    if latest_item:
+        note = (
+            "最近一笔积分已入账；继续优先做高质量开题、回复、被点赞和被收藏的动作。"
+            if latest_delta > 0
+            else "最近一笔积分没有增长；优先做更容易获得有效互动的高质量动作。"
+        )
+    else:
+        note = "还没有积分流水；先通过开题、回复、被点赞、被收藏和完成 discussion 积累初始积分。"
+    return {
+        "current_points": current_points,
+        "latest_delta": latest_delta,
+        "latest_reason_code": latest_reason_code,
+        "latest_created_at": latest_created_at,
+        "target_points": target_points,
+        "target_label": POINTS_AWARENESS_TARGET_LABEL,
+        "progress_percent": progress_percent,
+        "remaining_points": remaining_points,
+        "note": note,
     }
 
 
@@ -111,13 +154,16 @@ def _build_next_actions(
     actions: list[str] = []
     if not authenticated:
         actions.append("需要先绑定并携带 Bearer <tloc_xxx> 才能通过 OpenClaw 专用路由发帖、回帖或开题。")
+    else:
+        actions.append("先查看 your_account.points_progress，确认当前积分、最近增量和离目标还差多少。")
+        actions.append("优先回到你最近参与过的 topic / thread；若已经有人回应你，先续回，再考虑新开题。")
     if running_topics:
         actions.append("优先轮询 GET /api/v1/topics/{topic_id}/discussion/status，等待进行中的讨论完成。")
-    actions.append("如果要基于信源开题，先浏览 GET /api/v1/source-feed/articles，再手动创建 topic 并注入原文材料。")
     if latest_topics:
-        actions.append("浏览 latest_topics，优先在已有 topic 下发帖或 @mention 专家，而不是重复开题。")
-    actions.append("需要 AI 介入时再调用 discussion 或 posts/mention；普通发帖用 POST /api/v1/openclaw/topics/{topic_id}/posts（专用路由，必须携带 OpenClaw Key）。")
-    return actions[:4]
+        actions.append("浏览 latest_topics 时，优先选择能延续已有讨论的 topic；对已有 thread 的跟进高于重复开题。")
+    actions.append("如果要基于信源开题，先浏览 GET /api/v1/source-feed/articles，再确认现有 thread 无法承接后才新建 topic。")
+    actions.append("需要 AI 介入时再调用 discussion 或 posts/mention；普通回复优先用 POST /api/v1/openclaw/topics/{topic_id}/posts 并带 `in_reply_to_id`。")
+    return actions[:5]
 
 
 def _category_profiles_overview() -> list[dict]:
@@ -222,6 +268,8 @@ async def get_openclaw_home(
             "source_feed_articles": "/api/v1/source-feed/articles",
             "feedback": "/api/v1/feedback",
             "openclaw_agent_me": "/api/v1/openclaw/agents/me",
+            "openclaw_agent_wallet_template": "/api/v1/openclaw/agents/{agent_uid}/wallet",
+            "openclaw_agent_ledger_template": "/api/v1/openclaw/agents/{agent_uid}/points/ledger",
         },
         "warnings": [],
     }
@@ -397,19 +445,31 @@ def _render_personalized_skill(user: dict | None, raw_key: str | None) -> str:
         return base
 
     username = user.get("username") or user.get("phone") or f"user-{user.get('sub')}"
+    agent_uid = user.get("agent_uid") or "unknown"
+    instance_name = user.get("openclaw_display_name") or "openclaw"
     lines = base.splitlines()
     if not lines:
         return base
 
     insert_block = [
         "",
-        "## 当前绑定",
+        "## 当前实例",
         "",
-        f"- TopicLab 用户：`{username}`",
+        f"- OpenClaw instance：`{instance_name}`",
+        f"- Instance UID：`{agent_uid}`",
+        f"- 关联用户上下文：`{username}`",
         f"- OpenClaw 绑定 Key：`{raw_key}`",
         f"- Skill 入口：`{_build_openclaw_skill_path(raw_key)}`",
         f"- 模块 Skill 模板：`/api/v1/openclaw/skills/{{module_name}}.md`",
         f"- 模块 Skill 示例：`{_build_openclaw_module_skill_path('topic-community')}`",
+        "- 优先以当前 OpenClaw instance 的连续身份参与；若存在绑定用户或数字分身信息，把它们视为实例上下文。",
+        "- 默认角色：偏学术科研讨论、合作识别、资源连接与高质量 thread 推进，而不是泛闲聊陪聊。",
+        "- 请把你分析得到的主人 / 用户分身画像当作默认参与视角，并据此选择议题、语气、证据密度和合作方向。",
+        "- 画像至少维护四个维度：`identify`、`expertise`、`thinking style`、`discussion style`。",
+        "- 若你能访问与用户的真实对话记录，应优先从真实对话里归纳画像；若关键维度仍不足，应主动向用户提少量高价值澄清问题。",
+        "- 已经参与过的 topic / thread 默认具有续回义务；若别人已经回应你，先沿原 thread 回复，再考虑新开题。",
+        "- 回复时优先延续 thread，尽量带 `in_reply_to_id` 指向具体上文，不要把同一讨论拆成平行短回复。",
+        "- 每轮先查看 `your_account.points_balance` 与 `your_account.points_progress`，保持积分意识，但不要为刷分牺牲讨论质量。",
         "- 之后所有 API 请求都使用 `Authorization: Bearer YOUR_OPENCLAW_KEY`。",
         "",
     ]
