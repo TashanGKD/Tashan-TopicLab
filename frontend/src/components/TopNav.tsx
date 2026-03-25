@@ -6,6 +6,7 @@ import { useMobileChromeHidden } from '../hooks/useMobileChromeHidden'
 
 const navLinks = [
   { to: '/', label: '话题列表', match: (path: string) => path === '/' && !path.startsWith('/topics') && !path.startsWith('/source-feed') && !path.startsWith('/library') && !path.startsWith('/profile-helper') && !path.startsWith('/agent-links') },
+  { to: '/arcade', label: 'Arcade', match: (path: string) => path.startsWith('/arcade') },
   { to: '/source-feed', label: '信源', match: (path: string) => path.startsWith('/source-feed') },
   { to: '/apps', label: '应用', match: (path: string) => path.startsWith('/apps') },
   { to: '/library', label: '库', match: (path: string) => path.startsWith('/library') || path.startsWith('/experts') || path.startsWith('/skills') || path.startsWith('/mcp') || path.startsWith('/moderator-modes') },
@@ -32,6 +33,17 @@ const mobileTabs = [
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M5.75 6.5A1.75 1.75 0 017.5 4.75h8.25A1.75 1.75 0 0117.5 6.5v11.25A1.5 1.5 0 0019 19.25h-10.5A2.75 2.75 0 015.75 16.5v-10z" />
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8.5 8.25h6M8.5 11.5h6M8.5 14.75h3.25" />
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 19.25a1.5 1.5 0 001.5-1.5V9.5h-3" />
+      </svg>
+    ),
+  },
+  {
+    to: '/arcade',
+    label: 'Arcade',
+    match: (path: string) => path.startsWith('/arcade'),
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7.75 8.25h8.5A2.75 2.75 0 0119 11v4.25A2.75 2.75 0 0116.25 18h-8.5A2.75 2.75 0 015 15.25V11a2.75 2.75 0 012.75-2.75z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8.25 5.75l-1.8 2.5m9.3-2.5l1.8 2.5M9 13.25h2.5m-1.25-1.25v2.5m4.5-.75h.01m1.75-1.75h.01" />
       </svg>
     ),
   },
@@ -359,7 +371,7 @@ export default function TopNav() {
       >
         <div className="mx-auto max-w-md">
           <div
-            className="relative grid h-[4.25rem] grid-cols-3 items-stretch rounded-[1.7rem] border p-1"
+            className="relative grid h-[4.25rem] grid-cols-4 items-stretch rounded-[1.7rem] border p-1"
             style={{
               background: 'linear-gradient(180deg, rgba(255,255,255,0.62) 0%, rgba(248,250,252,0.84) 100%)',
               borderColor: 'rgba(255, 255, 255, 0.34)',
@@ -370,8 +382,8 @@ export default function TopNav() {
             <div
               className="absolute inset-y-1 rounded-[1.35rem] transition-all duration-300 ease-out"
               style={{
-                left: `calc(0.25rem + ${activeMobileTabIndex} * ((100% - 0.5rem) / 3))`,
-                width: 'calc((100% - 0.5rem) / 3)',
+                left: `calc(0.25rem + ${activeMobileTabIndex} * ((100% - 0.5rem) / 4))`,
+                width: 'calc((100% - 0.5rem) / 4)',
                 background: 'linear-gradient(180deg, rgba(241,245,249,0.98) 0%, rgba(226,232,240,0.92) 100%)',
                 boxShadow: '0 10px 18px rgba(148, 163, 184, 0.14), inset 0 1px 0 rgba(255,255,255,0.76)',
               }}

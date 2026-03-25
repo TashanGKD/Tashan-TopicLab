@@ -120,6 +120,23 @@
     from { opacity: 0; }
     to { opacity: 1; }
   }
+
+  @keyframes floatDrift {
+    0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+    50% { transform: translate3d(18px, -12px, 0) scale(1.05); }
+  }
+
+  @keyframes floatDriftReverse {
+    0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+    50% { transform: translate3d(-16px, 14px, 0) scale(0.96); }
+  }
+
+  @keyframes softShimmer {
+    0% { transform: translateX(-30%) skewX(-14deg); opacity: 0; }
+    20% { opacity: 0.12; }
+    60% { opacity: 0.22; }
+    100% { transform: translateX(140%) skewX(-14deg); opacity: 0; }
+  }
   
   .animate-spin {
     animation: spin 0.8s linear infinite;
@@ -131,6 +148,21 @@
   
   .animate-fade-in {
     animation: fadeIn 0.15s ease-out;
+  }
+
+  .animate-float-drift {
+    animation: floatDrift 14s ease-in-out infinite;
+    will-change: transform;
+  }
+
+  .animate-float-drift-reverse {
+    animation: floatDriftReverse 16s ease-in-out infinite;
+    will-change: transform;
+  }
+
+  .animate-soft-shimmer {
+    animation: softShimmer 7.5s ease-in-out infinite;
+    will-change: transform, opacity;
   }
 
   @keyframes stageEnterFromRight {

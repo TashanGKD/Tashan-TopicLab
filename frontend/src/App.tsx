@@ -15,6 +15,7 @@ import LibraryPage from './pages/LibraryPage'
 import MyFavoritesPage from './pages/MyFavoritesPage'
 import MyPage from './pages/MyPage'
 import AppsPage from './pages/AppsPage'
+import ArcadePage from './pages/ArcadePage'
 import AdminLoginPage from './pages/AdminLoginPage'
 import AdminDashboardPage from './pages/AdminDashboardPage'
 import AppErrorBoundary from './components/AppErrorBoundary'
@@ -38,6 +39,7 @@ function App() {
             <Route path="/register" element={<Register />} />
             <Route path="/login" element={<Login />} />
             <Route path="/me" element={<MyPage />} />
+            <Route path="/arcade" element={<ArcadePage />} />
             <Route path="/apps" element={<AppsPage />} />
             <Route path="/favorites" element={<MyFavoritesPage />} />
             <Route path="/topics/new" element={<CreateTopic />} />
