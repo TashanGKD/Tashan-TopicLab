@@ -83,6 +83,7 @@ def _build_agent_summary(row) -> dict[str, Any]:
         "agent_uid": row.agent_uid,
         "display_name": row.display_name,
         "handle": row.handle,
+        "skill_token": getattr(row, "skill_token", None),
         "status": row.status,
         "bound_user_id": int(row.bound_user_id) if row.bound_user_id is not None else None,
         "is_primary": bool(row.is_primary),
@@ -104,6 +105,10 @@ def _build_wallet_summary(row) -> dict[str, Any]:
 
 def _generate_agent_uid() -> str:
     return f"oc_{secrets.token_hex(8)}"
+
+
+def _generate_skill_token() -> str:
+    return f"tlos_{secrets.token_urlsafe(9).rstrip('=')}"
 
 
 def ensure_primary_openclaw_agent(
@@ -138,9 +143,9 @@ def ensure_primary_openclaw_agent(
                 text(
                     """
                     INSERT INTO openclaw_agents (
-                        agent_uid, display_name, handle, status, bound_user_id, is_primary, profile_json, created_at, updated_at, last_seen_at
+                        agent_uid, display_name, handle, status, bound_user_id, is_primary, skill_token, profile_json, created_at, updated_at, last_seen_at
                     ) VALUES (
-                        :agent_uid, :display_name, :handle, :status, :bound_user_id, TRUE, :profile_json, :created_at, :updated_at, NULL
+                        :agent_uid, :display_name, :handle, :status, :bound_user_id, TRUE, :skill_token, :profile_json, :created_at, :updated_at, NULL
                     )
                     RETURNING *
                     """
@@ -151,6 +156,7 @@ def ensure_primary_openclaw_agent(
                     "handle": handle,
                     "status": AGENT_STATUS_ACTIVE,
                     "bound_user_id": user_id,
+                    "skill_token": _generate_skill_token(),
                     "profile_json": _json_dumps({}),
                     "created_at": now,
                     "updated_at": now,
@@ -170,6 +176,22 @@ def ensure_primary_openclaw_agent(
                 {"openclaw_agent_id": inserted.id, "updated_at": now},
             )
             row = inserted
+        elif not getattr(row, "skill_token", None):
+            session.execute(
+                text(
+                    """
+                    UPDATE openclaw_agents
+                    SET skill_token = :skill_token,
+                        updated_at = :updated_at
+                    WHERE id = :id
+                    """
+                ),
+                {"id": row.id, "skill_token": _generate_skill_token(), "updated_at": now},
+            )
+            row = session.execute(
+                text("SELECT * FROM openclaw_agents WHERE id = :id"),
+                {"id": row.id},
+            ).fetchone()
         return _build_agent_summary(row)
     finally:
         if owns_session:
@@ -210,6 +232,17 @@ def get_primary_openclaw_agent_for_user(user_id: int) -> dict[str, Any] | None:
                 """
             ),
             {"user_id": user_id},
+        ).fetchone()
+    if not row:
+        return None
+    return _build_agent_summary(row)
+
+
+def get_openclaw_agent_by_skill_token(skill_token: str) -> dict[str, Any] | None:
+    with get_db_session() as session:
+        row = session.execute(
+            text("SELECT * FROM openclaw_agents WHERE skill_token = :skill_token LIMIT 1"),
+            {"skill_token": skill_token},
         ).fetchone()
     if not row:
         return None

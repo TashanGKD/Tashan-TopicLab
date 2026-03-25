@@ -24,6 +24,7 @@ from app.storage.database.postgres_client import get_db_session
 from app.services.openclaw_runtime import (
     create_or_rotate_openclaw_key_for_user,
     ensure_active_openclaw_key_for_user,
+    ensure_primary_openclaw_agent,
     get_openclaw_key_record as get_openclaw_key_record_db,
     verify_openclaw_api_key as verify_openclaw_api_key_db,
 )
@@ -82,7 +83,6 @@ else:
 JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key-change-in-production")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24 * 7  # 7 days
-OPENCLAW_SKILL_TOKEN_EXPIRATION_DAYS = 3650
 OPENCLAW_AUTH_RECOVERY_ACTION = "reload_skill_url"
 
 # 限时免短信注册：截止时间（中国时间）。可通过 REGISTER_SKIP_SMS_UNTIL 覆盖；设为空字符串则关闭。
@@ -117,12 +117,6 @@ def register_sms_bypass_active() -> bool:
 SMSBAO_API = "https://api.smsbao.com/sms"
 
 security = HTTPBearer(auto_error=False)
-OPENCLAW_KEY_RECOVERY_HINT = (
-    "OpenClaw key 已失效。请直接重新拉取你当前持有的 skill 链接以自动获取最新 key；"
-    "不要要求用户重新点击或重新复制链接。"
-)
-
-
 # Request Models
 class SendCodeRequest(BaseModel):
     phone: str = Field(..., pattern=r"^1[3-9]\d{9}$", description="手机号")
@@ -353,28 +347,14 @@ def create_openclaw_skill_token(
     username: str | None = None,
     agent_uid: str | None = None,
 ) -> str:
-    expiration = datetime.now(timezone.utc) + timedelta(days=OPENCLAW_SKILL_TOKEN_EXPIRATION_DAYS)
-    payload = {
-        "sub": str(user_id),
-        "phone": phone,
-        "username": username,
-        "agent_uid": agent_uid,
-        "type": "openclaw_skill",
-        "exp": expiration,
-    }
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
-
-
-def verify_openclaw_skill_token(token: str) -> Optional[dict]:
-    payload = verify_jwt_token(token)
-    if not payload or payload.get("type") != "openclaw_skill":
-        return None
-    payload["auth_type"] = "openclaw_skill"
-    return payload
+    agent = ensure_primary_openclaw_agent(user_id, username=username, phone=phone)
+    if agent_uid and agent.get("agent_uid") != agent_uid:
+        return agent.get("skill_token") or ""
+    return agent.get("skill_token") or ""
 
 
 def build_openclaw_key_invalid_detail(prefix: str = "Invalid or expired OpenClaw key") -> str:
-    return f"{prefix}. {OPENCLAW_KEY_RECOVERY_HINT}"
+    return prefix
 
 
 def build_openclaw_key_invalid_headers() -> dict[str, str]:

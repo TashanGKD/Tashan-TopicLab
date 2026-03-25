@@ -133,9 +133,332 @@ def _invalidate_read_cache(*, topic_id: str | None = None, invalidate_topic_list
         _read_cache.pop(key, None)
 
 
+def _init_topic_tables_sqlite(session) -> None:
+    statements = [
+        """
+        CREATE TABLE IF NOT EXISTS topics (
+            id VARCHAR(36) PRIMARY KEY,
+            session_id VARCHAR(36) NOT NULL,
+            title VARCHAR(200) NOT NULL,
+            body TEXT NOT NULL DEFAULT '',
+            category VARCHAR(255),
+            status VARCHAR(32) NOT NULL,
+            mode VARCHAR(32) NOT NULL,
+            num_rounds INTEGER NOT NULL DEFAULT 5,
+            expert_names TEXT NOT NULL DEFAULT '[]',
+            discussion_status VARCHAR(32) NOT NULL DEFAULT 'pending',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            moderator_mode_id VARCHAR(64),
+            moderator_mode_name VARCHAR(255),
+            preview_image TEXT,
+            preview_image_synced_at TEXT,
+            creator_user_id INTEGER,
+            creator_name VARCHAR(255),
+            creator_auth_type VARCHAR(64),
+            creator_openclaw_agent_id INTEGER,
+            posts_count INTEGER NOT NULL DEFAULT 0,
+            likes_count INTEGER NOT NULL DEFAULT 0,
+            favorites_count INTEGER NOT NULL DEFAULT 0,
+            shares_count INTEGER NOT NULL DEFAULT 0
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS discussion_runs (
+            topic_id VARCHAR(36) PRIMARY KEY REFERENCES topics(id) ON DELETE CASCADE,
+            status VARCHAR(32) NOT NULL DEFAULT 'pending',
+            turns_count INTEGER NOT NULL DEFAULT 0,
+            cost_usd REAL,
+            completed_at TEXT,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            discussion_summary TEXT NOT NULL DEFAULT '',
+            discussion_history TEXT NOT NULL DEFAULT ''
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS topic_source_article_links (
+            article_id BIGINT PRIMARY KEY,
+            topic_id VARCHAR(36) NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+            snapshot_title TEXT NOT NULL DEFAULT '',
+            snapshot_source_feed_name TEXT NOT NULL DEFAULT '',
+            snapshot_source_type TEXT NOT NULL DEFAULT '',
+            snapshot_url TEXT NOT NULL DEFAULT '',
+            snapshot_pic_url TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_topic_source_article_links_topic_id
+        ON topic_source_article_links(topic_id)
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS topic_app_links (
+            app_id VARCHAR(255) PRIMARY KEY,
+            topic_id VARCHAR(36) NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+            snapshot_name TEXT NOT NULL DEFAULT '',
+            snapshot_command TEXT NOT NULL DEFAULT '',
+            snapshot_summary TEXT NOT NULL DEFAULT '',
+            snapshot_docs_url TEXT NOT NULL DEFAULT '',
+            snapshot_repo_url TEXT NOT NULL DEFAULT '',
+            snapshot_icon TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_topic_app_links_topic_id
+        ON topic_app_links(topic_id)
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS posts (
+            id VARCHAR(36) PRIMARY KEY,
+            topic_id VARCHAR(36) NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+            author VARCHAR(255) NOT NULL,
+            author_type VARCHAR(32) NOT NULL,
+            owner_user_id INTEGER,
+            owner_auth_type VARCHAR(64),
+            owner_openclaw_agent_id INTEGER,
+            delete_token_hash VARCHAR(64),
+            expert_name VARCHAR(255),
+            expert_label VARCHAR(255),
+            body TEXT NOT NULL DEFAULT '',
+            mentions TEXT NOT NULL DEFAULT '[]',
+            in_reply_to_id VARCHAR(36),
+            status VARCHAR(32) NOT NULL DEFAULT 'completed',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            root_post_id VARCHAR(36),
+            depth INTEGER NOT NULL DEFAULT 0,
+            reply_count INTEGER NOT NULL DEFAULT 0,
+            likes_count INTEGER NOT NULL DEFAULT 0,
+            shares_count INTEGER NOT NULL DEFAULT 0
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_posts_topic_created
+        ON posts(topic_id, created_at)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_posts_reply
+        ON posts(in_reply_to_id)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_posts_topic_root_created
+        ON posts(topic_id, root_post_id, created_at)
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS discussion_turns (
+            id VARCHAR(36) PRIMARY KEY,
+            topic_id VARCHAR(36) NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+            turn_key VARCHAR(255) NOT NULL,
+            round_num INTEGER,
+            expert_name VARCHAR(255),
+            expert_label VARCHAR(255),
+            body TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(topic_id, turn_key)
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_discussion_turns_topic
+        ON discussion_turns(topic_id, round_num)
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS topic_experts (
+            topic_id VARCHAR(36) NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+            expert_name VARCHAR(255) NOT NULL,
+            expert_label VARCHAR(255) NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            source VARCHAR(64) NOT NULL DEFAULT 'preset',
+            is_from_topic_creation BOOLEAN NOT NULL DEFAULT FALSE,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (topic_id, expert_name)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS topic_moderator_configs (
+            topic_id VARCHAR(36) PRIMARY KEY REFERENCES topics(id) ON DELETE CASCADE,
+            mode_id VARCHAR(64) NOT NULL,
+            num_rounds INTEGER NOT NULL DEFAULT 5,
+            custom_prompt TEXT,
+            skill_list TEXT NOT NULL DEFAULT '[]',
+            mcp_server_ids TEXT NOT NULL DEFAULT '[]',
+            model VARCHAR(255),
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS topic_generated_images (
+            id VARCHAR(36) PRIMARY KEY,
+            topic_id VARCHAR(36) NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+            asset_path TEXT NOT NULL,
+            content_type VARCHAR(64) NOT NULL DEFAULT 'image/webp',
+            image_bytes BLOB NOT NULL,
+            width INTEGER,
+            height INTEGER,
+            byte_size INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(topic_id, asset_path)
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_topic_generated_images_topic
+        ON topic_generated_images(topic_id)
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS topic_user_actions (
+            topic_id VARCHAR(36) NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL,
+            auth_type VARCHAR(64) NOT NULL DEFAULT 'jwt',
+            liked BOOLEAN NOT NULL DEFAULT FALSE,
+            favorited BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (topic_id, user_id, auth_type)
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_topic_user_actions_topic
+        ON topic_user_actions(topic_id)
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS post_user_actions (
+            post_id VARCHAR(36) NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+            topic_id VARCHAR(36) NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL,
+            auth_type VARCHAR(64) NOT NULL DEFAULT 'jwt',
+            liked BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (post_id, user_id, auth_type)
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_post_user_actions_topic
+        ON post_user_actions(topic_id, post_id)
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS source_article_user_actions (
+            article_id BIGINT NOT NULL,
+            user_id INTEGER NOT NULL,
+            auth_type VARCHAR(64) NOT NULL DEFAULT 'jwt',
+            liked BOOLEAN NOT NULL DEFAULT FALSE,
+            favorited BOOLEAN NOT NULL DEFAULT FALSE,
+            snapshot_title TEXT NOT NULL DEFAULT '',
+            snapshot_source_feed_name TEXT NOT NULL DEFAULT '',
+            snapshot_source_type TEXT NOT NULL DEFAULT '',
+            snapshot_url TEXT NOT NULL DEFAULT '',
+            snapshot_pic_url TEXT,
+            snapshot_description TEXT NOT NULL DEFAULT '',
+            snapshot_publish_time TEXT NOT NULL DEFAULT '',
+            snapshot_created_at TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (article_id, user_id, auth_type)
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_source_article_user_actions_article
+        ON source_article_user_actions(article_id)
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS source_article_stats (
+            article_id BIGINT PRIMARY KEY,
+            likes_count INTEGER NOT NULL DEFAULT 0,
+            favorites_count INTEGER NOT NULL DEFAULT 0,
+            shares_count INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS favorite_categories (
+            id VARCHAR(36) PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            auth_type VARCHAR(64) NOT NULL DEFAULT 'jwt',
+            name VARCHAR(120) NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            topics_count INTEGER NOT NULL DEFAULT 0,
+            source_articles_count INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (user_id, auth_type, name)
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_favorite_categories_owner
+        ON favorite_categories(user_id, auth_type, updated_at DESC)
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS favorite_category_items (
+            id VARCHAR(36) PRIMARY KEY,
+            category_id VARCHAR(36) NOT NULL REFERENCES favorite_categories(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL,
+            auth_type VARCHAR(64) NOT NULL DEFAULT 'jwt',
+            item_type VARCHAR(32) NOT NULL,
+            item_key VARCHAR(160) NOT NULL,
+            topic_id VARCHAR(36),
+            article_id BIGINT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (category_id, item_key)
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_favorite_category_items_owner
+        ON favorite_category_items(user_id, auth_type, item_type, created_at DESC)
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS topic_share_events (
+            id VARCHAR(36) PRIMARY KEY,
+            topic_id VARCHAR(36) NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+            user_id INTEGER,
+            auth_type VARCHAR(64),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_topic_share_events_topic
+        ON topic_share_events(topic_id)
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS post_share_events (
+            id VARCHAR(36) PRIMARY KEY,
+            post_id VARCHAR(36) NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+            topic_id VARCHAR(36) NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+            user_id INTEGER,
+            auth_type VARCHAR(64),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_post_share_events_post
+        ON post_share_events(post_id)
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS source_article_share_events (
+            id VARCHAR(36) PRIMARY KEY,
+            article_id BIGINT NOT NULL,
+            user_id INTEGER,
+            auth_type VARCHAR(64),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_source_article_share_events_article
+        ON source_article_share_events(article_id)
+        """,
+    ]
+    for statement in statements:
+        session.execute(text(statement))
+
+
 def init_topic_tables() -> None:
     """Create topic business tables if they do not exist."""
     with get_db_session() as session:
+        if session.bind.dialect.name == "sqlite":
+            _init_topic_tables_sqlite(session)
+            return
         session.execute(text("""
             CREATE TABLE IF NOT EXISTS topics (
                 id VARCHAR(36) PRIMARY KEY,
@@ -2355,6 +2678,8 @@ def delete_post(topic_id: str, post_id: str) -> int:
                 )
     if deleted_count > 0:
         _invalidate_read_cache(topic_id=topic_id, invalidate_topic_lists=True)
+    if deleted_count > 0:
+        return deleted_count
     return int(result.rowcount or 0)
 
 

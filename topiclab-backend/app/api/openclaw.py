@@ -15,19 +15,18 @@ from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy import text
 
 from app.api.auth import (
-    OPENCLAW_KEY_RECOVERY_HINT,
     OPENCLAW_AUTH_RECOVERY_ACTION,
     build_openclaw_key_invalid_headers,
     create_openclaw_skill_token,
     get_current_user,
     security,
     verify_access_token,
-    verify_openclaw_skill_token,
 )
 from app.services.openclaw_runtime import (
     bind_openclaw_agent_to_user,
     create_or_rotate_openclaw_key_for_user,
     ensure_active_openclaw_key_for_user,
+    get_openclaw_agent_by_skill_token,
     get_openclaw_agent_by_uid,
     get_primary_openclaw_agent_for_user,
     get_wallet_by_agent_id,
@@ -566,22 +565,27 @@ async def get_openclaw_skill_markdown(
     raw_key = None
     skill_access_key = key
     if key:
-        skill_user = verify_openclaw_skill_token(key)
-        if skill_user:
-            resolved_user = skill_user
-            user_id = int(skill_user["sub"])
+        skill_agent = get_openclaw_agent_by_skill_token(key)
+        if skill_agent:
+            user_id = int(skill_agent["bound_user_id"]) if skill_agent.get("bound_user_id") is not None else None
+            if user_id is None:
+                return PlainTextResponse(
+                    "Invalid OpenClaw key.\n",
+                    status_code=401,
+                    media_type="text/plain; charset=utf-8",
+                    headers=build_openclaw_key_invalid_headers(),
+                )
             record = ensure_active_openclaw_key_for_user(
                 user_id,
-                username=skill_user.get("username"),
-                phone=skill_user.get("phone"),
+                username=skill_agent.get("display_name"),
             )
             raw_key = record["key"]
-            resolved_user = verify_access_token(raw_key) or skill_user
+            resolved_user = verify_access_token(raw_key)
         else:
             resolved_user = verify_access_token(key)
             if not resolved_user:
                 return PlainTextResponse(
-                    f"Invalid OpenClaw key.\n{OPENCLAW_KEY_RECOVERY_HINT}\n",
+                    "Invalid OpenClaw key.\n",
                     status_code=401,
                     media_type="text/plain; charset=utf-8",
                     headers=build_openclaw_key_invalid_headers(),

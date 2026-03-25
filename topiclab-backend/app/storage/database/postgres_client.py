@@ -64,6 +64,10 @@ def _is_sqlite_session(session) -> bool:
     return session.bind.dialect.name == "sqlite"
 
 
+def _get_session_inspector(session):
+    return inspect(session.connection())
+
+
 def get_engine():
     """Create or return SQLAlchemy engine."""
     global _engine
@@ -164,7 +168,7 @@ def _apply_site_feedback_ddl(session) -> None:
             )
         )
         return
-    inspector = inspect(session.bind)
+    inspector = _get_session_inspector(session)
     existing_columns = {column["name"] for column in inspector.get_columns("site_feedback")}
     column_migrations = {
         "username": "ALTER TABLE site_feedback ADD COLUMN username VARCHAR(255) NOT NULL DEFAULT ''",
@@ -300,6 +304,7 @@ def _apply_openclaw_identity_ddl(session) -> None:
                 status VARCHAR(32) NOT NULL DEFAULT 'active',
                 bound_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
                 is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+                skill_token VARCHAR(32) UNIQUE,
                 profile_json TEXT NOT NULL DEFAULT '{}',
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -317,6 +322,7 @@ def _apply_openclaw_identity_ddl(session) -> None:
                 status VARCHAR(32) NOT NULL DEFAULT 'active',
                 bound_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
                 is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+                skill_token VARCHAR(32) UNIQUE,
                 profile_json TEXT NOT NULL DEFAULT '{}',
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -339,6 +345,18 @@ def _apply_openclaw_identity_ddl(session) -> None:
             CREATE UNIQUE INDEX IF NOT EXISTS uq_openclaw_agents_primary_per_user
             ON openclaw_agents(bound_user_id)
             WHERE is_primary = TRUE AND bound_user_id IS NOT NULL
+            """
+        )
+    )
+    inspector = _get_session_inspector(session)
+    existing_columns = {column["name"] for column in inspector.get_columns("openclaw_agents")}
+    if "skill_token" not in existing_columns:
+        session.execute(text("ALTER TABLE openclaw_agents ADD COLUMN skill_token VARCHAR(32)"))
+    session.execute(
+        text(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_openclaw_agents_skill_token
+            ON openclaw_agents(skill_token)
             """
         )
     )
@@ -489,7 +507,7 @@ def _apply_openclaw_identity_ddl(session) -> None:
         )
     )
 
-    inspector = inspect(session.bind)
+    inspector = _get_session_inspector(session)
     if inspector.has_table("openclaw_api_keys"):
         columns = {column["name"] for column in inspector.get_columns("openclaw_api_keys")}
         is_legacy = "openclaw_agent_id" not in columns or "id" not in columns
@@ -622,7 +640,7 @@ def init_auth_tables():
             )
             """
         ))
-        inspector = inspect(session.bind)
+        inspector = _get_session_inspector(session)
         user_columns = {column["name"] for column in inspector.get_columns("users")}
         if "is_admin" not in user_columns:
             session.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT FALSE"))
@@ -704,7 +722,7 @@ def init_auth_tables():
             """
         ))
         if not is_sqlite:
-            inspector = inspect(session.bind)
+            inspector = _get_session_inspector(session)
             digital_twin_columns = {column["name"] for column in inspector.get_columns("digital_twins")}
             if "role_content" not in digital_twin_columns:
                 session.execute(text("ALTER TABLE digital_twins ADD COLUMN role_content TEXT"))

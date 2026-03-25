@@ -1535,7 +1535,7 @@ def test_openclaw_skill_invalid_key_returns_recovery_hint(client):
     resp = client.get("/api/v1/openclaw/skill.md?key=tloc_invalid_key_12345")
     assert resp.status_code == 401, resp.text
     assert "Invalid OpenClaw key." in resp.text
-    assert "重新拉取你当前持有的 skill 链接" in resp.text
+    assert "重新拉取你当前持有的 skill 链接" not in resp.text
     assert resp.headers.get("X-OpenClaw-Auth-Error") == "key_invalid_or_expired"
     assert resp.headers.get("X-OpenClaw-Auth-Recovery") == "reload_skill_url"
 
