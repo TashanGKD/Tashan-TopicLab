@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import { refreshCurrentUserProfile, tokenManager, User } from '../api/auth'
+import { inboxApi } from '../api/client'
 import { useMobileChromeHidden } from '../hooks/useMobileChromeHidden'
 
 const navLinks = [
@@ -52,6 +53,7 @@ const mobileTabs = [
     label: '我的',
     match: (path: string) =>
       path.startsWith('/me') ||
+      path.startsWith('/inbox') ||
       path.startsWith('/apps') ||
       path.startsWith('/profile-helper') ||
       path.startsWith('/favorites') ||
@@ -73,6 +75,7 @@ export default function TopNav() {
   const location = useLocation()
   const navigate = useNavigate()
   const [user, setUser] = useState<User | null>(null)
+  const [unreadInboxCount, setUnreadInboxCount] = useState(0)
   const [adminMode, setAdminMode] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [userMenuPosition, setUserMenuPosition] = useState({ top: 0, left: 0 })
@@ -110,20 +113,46 @@ export default function TopNav() {
     }
   }, [])
 
+  const loadInboxSummary = useCallback(async () => {
+    const token = tokenManager.get()
+    if (!token) {
+      setUnreadInboxCount(0)
+      return
+    }
+    try {
+      const res = await inboxApi.list({ limit: 1, offset: 0 })
+      setUnreadInboxCount(res.data.unread_count ?? 0)
+    } catch {
+      setUnreadInboxCount(0)
+    }
+  }, [])
+
   useEffect(() => {
     void loadUser()
-  }, [location.pathname, loadUser])
+    void loadInboxSummary()
+  }, [location.pathname, loadUser, loadInboxSummary])
 
   useEffect(() => {
     const handleStorageChange = () => { void loadUser() }
     const handleAuthChange = () => { void loadUser() }
+    const handleInboxChange = () => { void loadInboxSummary() }
     window.addEventListener('storage', handleStorageChange)
     window.addEventListener('auth-change', handleAuthChange)
+    window.addEventListener('inbox-change', handleInboxChange)
     return () => {
       window.removeEventListener('storage', handleStorageChange)
       window.removeEventListener('auth-change', handleAuthChange)
+      window.removeEventListener('inbox-change', handleInboxChange)
     }
-  }, [loadUser])
+  }, [loadUser, loadInboxSummary])
+
+  useEffect(() => {
+    if (!user) return
+    const timer = window.setInterval(() => {
+      void loadInboxSummary()
+    }, 30000)
+    return () => window.clearInterval(timer)
+  }, [user, loadInboxSummary])
 
   const updateUserMenuPosition = useCallback(() => {
     const trigger = userMenuTriggerRef.current
@@ -176,6 +205,7 @@ export default function TopNav() {
     tokenManager.remove()
     tokenManager.clearUser()
     setUser(null)
+    setUnreadInboxCount(0)
     setUserMenuOpen(false)
     window.dispatchEvent(new CustomEvent('auth-change'))
     navigate('/')
@@ -286,11 +316,20 @@ export default function TopNav() {
                   className="flex items-center gap-2 text-sm font-serif transition-all hover:opacity-80"
                   style={{ color: 'var(--color-gray)' }}
                 >
-                  <div
-                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium text-white"
-                    style={{ background: 'var(--color-dark)' }}
-                  >
-                    {(user.username || user.phone).charAt(0)}
+                  <div className="relative">
+                    <div
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium text-white"
+                      style={{ background: 'var(--color-dark)' }}
+                    >
+                      {(user.username || user.phone).charAt(0)}
+                    </div>
+                    {unreadInboxCount > 0 ? (
+                      <span
+                        className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white"
+                        style={{ backgroundColor: '#d23b3b' }}
+                        aria-label={`有 ${unreadInboxCount} 条未读消息`}
+                      />
+                    ) : null}
                   </div>
                   <span className="max-w-[100px] truncate">{user.username || user.phone}</span>
                 </button>
@@ -325,7 +364,7 @@ export default function TopNav() {
         createPortal(
           <div
             ref={userMenuRef}
-            className="fixed bg-white rounded-[var(--radius-md)] py-1 min-w-[120px] z-[9999]"
+            className="fixed bg-white rounded-[var(--radius-md)] py-1 min-w-[168px] z-[9999]"
             style={{
               top: `${userMenuPosition.top}px`,
               left: `${userMenuPosition.left}px`,
@@ -335,8 +374,16 @@ export default function TopNav() {
             }}
           >
             <Link
+              to="/inbox"
+              className="block whitespace-nowrap px-4 py-2 text-sm font-serif transition-all hover:bg-gray-50"
+              style={{ color: 'var(--color-gray-dark)' }}
+              onClick={() => setUserMenuOpen(false)}
+            >
+              消息信箱{unreadInboxCount > 0 ? `（${unreadInboxCount}）` : ''}
+            </Link>
+            <Link
               to="/favorites"
-              className="block px-4 py-2 text-sm font-serif transition-all hover:bg-gray-50"
+              className="block whitespace-nowrap px-4 py-2 text-sm font-serif transition-all hover:bg-gray-50"
               style={{ color: 'var(--color-gray-dark)' }}
               onClick={() => setUserMenuOpen(false)}
             >
@@ -344,7 +391,7 @@ export default function TopNav() {
             </Link>
             <Link
               to="/profile-helper"
-              className="block px-4 py-2 text-sm font-serif transition-all hover:bg-gray-50"
+              className="block whitespace-nowrap px-4 py-2 text-sm font-serif transition-all hover:bg-gray-50"
               style={{ color: 'var(--color-gray-dark)' }}
               onClick={() => setUserMenuOpen(false)}
             >

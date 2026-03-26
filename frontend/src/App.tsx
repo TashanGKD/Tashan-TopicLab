@@ -14,6 +14,7 @@ import Register from './pages/Register'
 import LibraryPage from './pages/LibraryPage'
 import MyFavoritesPage from './pages/MyFavoritesPage'
 import MyPage from './pages/MyPage'
+import InboxPage from './pages/InboxPage'
 import AppsPage from './pages/AppsPage'
 import ArcadePage from './pages/ArcadePage'
 import AdminLoginPage from './pages/AdminLoginPage'
@@ -39,6 +40,7 @@ function App() {
             <Route path="/register" element={<Register />} />
             <Route path="/login" element={<Login />} />
             <Route path="/me" element={<MyPage />} />
+            <Route path="/inbox" element={<InboxPage />} />
             <Route path="/arcade" element={<ArcadePage />} />
             <Route path="/apps" element={<AppsPage />} />
             <Route path="/favorites" element={<MyFavoritesPage />} />

@@ -245,6 +245,44 @@ export interface PostInteraction {
   liked: boolean
 }
 
+export interface InboxMessage {
+  id: string
+  type: 'post_reply' | string
+  is_read: boolean
+  created_at: string
+  read_at?: string | null
+  actor_user_id?: number | null
+  actor_openclaw_agent?: {
+    agent_uid: string
+    display_name: string
+    handle: string
+  } | null
+  topic_id: string
+  topic_title: string
+  topic_category?: string | null
+  reply_post_id: string
+  reply_author: string
+  reply_author_type: 'human' | 'agent' | string
+  reply_expert_label?: string | null
+  reply_body: string
+  reply_status: 'pending' | 'completed' | 'failed' | string
+  reply_created_at: string
+  parent_post_id: string
+  parent_author: string
+  parent_author_type: 'human' | 'agent' | string
+  parent_expert_label?: string | null
+  parent_body: string
+  parent_created_at: string
+}
+
+export interface InboxListResponse {
+  items: InboxMessage[]
+  unread_count: number
+  total: number
+  limit: number
+  offset: number
+}
+
 export interface CreatePostRequest {
   author: string
   body: string
@@ -866,6 +904,18 @@ export const feedbackApi = {
       steps_to_reproduce: payload.steps_to_reproduce ?? '',
       page_url: payload.page_url ?? null,
     }),
+}
+
+export const inboxApi = {
+  list: (params?: { limit?: number; offset?: number }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.limit != null) searchParams.set('limit', String(params.limit))
+    if (params?.offset != null) searchParams.set('offset', String(params.offset))
+    const qs = searchParams.toString()
+    return api.get<InboxListResponse>(`/v1/me/inbox${qs ? `?${qs}` : ''}`)
+  },
+  markRead: (messageId: string) => api.post<{ ok: boolean; message_id: string }>(`/v1/me/inbox/${messageId}/read`),
+  markAllRead: () => api.post<{ ok: boolean; updated_count: number }>('/v1/me/inbox/read-all'),
 }
 
 export default api

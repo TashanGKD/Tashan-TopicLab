@@ -71,6 +71,7 @@ from app.storage.database.topic_store import (
     list_favorite_categories,
     list_favorite_category_items,
     list_recent_favorites,
+    list_post_inbox_messages,
     list_post_replies,
     list_user_favorite_source_articles,
     list_user_favorite_topics,
@@ -86,6 +87,8 @@ from app.storage.database.topic_store import (
     replace_topic_experts,
     resolve_post_by_delete_token,
     set_discussion_status,
+    mark_all_post_inbox_messages_read,
+    mark_post_inbox_message_read,
     set_post_user_action,
     set_source_article_user_action,
     set_topic_user_action,
@@ -1543,6 +1546,32 @@ def get_recent_favorites_endpoint(
         user_id=user_id,
         auth_type=auth_type,
     )
+
+
+@router.get("/me/inbox")
+def list_my_inbox_endpoint(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    user: dict | None = Depends(_get_optional_user),
+):
+    user_id, _ = _require_owner_identity(user)
+    return list_post_inbox_messages(user_id=user_id, limit=limit, offset=offset)
+
+
+@router.post("/me/inbox/read-all")
+def mark_all_my_inbox_messages_read_endpoint(user: dict | None = Depends(_get_optional_user)):
+    user_id, _ = _require_owner_identity(user)
+    updated_count = mark_all_post_inbox_messages_read(user_id=user_id)
+    return {"ok": True, "updated_count": updated_count}
+
+
+@router.post("/me/inbox/{message_id}/read")
+def mark_my_inbox_message_read_endpoint(message_id: str, user: dict | None = Depends(_get_optional_user)):
+    user_id, _ = _require_owner_identity(user)
+    updated = mark_post_inbox_message_read(message_id, user_id=user_id)
+    if not updated:
+        raise HTTPException(status_code=404, detail="消息不存在")
+    return {"ok": True, "message_id": message_id}
 
 
 @router.post("/me/favorite-categories/classify")

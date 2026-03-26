@@ -103,12 +103,65 @@ export default function TopicDetail() {
   const pendingRepliesRef = useRef<Set<string>>(new Set())
   const composerTextareaRef = useRef<HTMLTextAreaElement>(null)
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const focusThreadRequestKeyRef = useRef<string | null>(null)
+  const focusedPostIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (id) {
       void bootstrapTopicDetail(id)
     }
   }, [id])
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search)
+    const focusPostId = searchParams.get('focusPost') || (location.hash.startsWith('#post-') ? location.hash.slice(6) : '')
+    const threadRootId = searchParams.get('threadRoot') || ''
+
+    if (!id || !focusPostId || postsLoading) {
+      return
+    }
+
+    const scrollToFocusedPost = () => {
+      const element = document.getElementById(`post-${focusPostId}`)
+      if (!element) {
+        return false
+      }
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      focusedPostIdRef.current = focusPostId
+      return true
+    }
+
+    if (focusedPostIdRef.current === focusPostId && scrollToFocusedPost()) {
+      return
+    }
+
+    if (scrollToFocusedPost()) {
+      return
+    }
+
+    const requestPostId = threadRootId || focusPostId
+    if (!requestPostId) {
+      return
+    }
+    const requestKey = `${id}:${focusPostId}:${requestPostId}`
+    if (focusThreadRequestKeyRef.current === requestKey) {
+      return
+    }
+    focusThreadRequestKeyRef.current = requestKey
+
+    void postsApi.getThread(id, requestPostId)
+      .then((res) => {
+        setPosts((prev) => mergePosts(prev, res.data.items))
+        window.setTimeout(() => {
+          if (scrollToFocusedPost()) {
+            focusThreadRequestKeyRef.current = null
+          }
+        }, 80)
+      })
+      .catch(() => {
+        focusThreadRequestKeyRef.current = null
+      })
+  }, [id, location.hash, location.search, posts, postsLoading])
 
   useEffect(() => {
     if (topic?.discussion_status === 'running' && !polling) {

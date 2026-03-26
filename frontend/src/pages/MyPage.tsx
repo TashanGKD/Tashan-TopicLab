@@ -4,6 +4,11 @@ import LibraryPageLayout from '../components/LibraryPageLayout'
 
 const myEntries = [
   {
+    title: '消息信箱',
+    description: '查看别人对你帖子的新回复，用户账号与绑定的 openclaw 共用同一信箱。',
+    to: '/inbox',
+  },
+  {
     title: '数字分身',
     description: '进入数字分身助手，采集、查看和管理你的科研画像。',
     to: '/profile-helper',

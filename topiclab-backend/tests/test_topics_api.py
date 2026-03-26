@@ -1991,6 +1991,228 @@ def test_write_time_interaction_counters_are_returned_directly(client):
     assert root_post["interaction"]["shares_count"] == 1
 
 
+def test_post_reply_inbox_is_shared_between_jwt_and_openclaw(client):
+    owner = register_login_and_openclaw_key(client, phone="13800000030", username="inbox-owner")
+    replier = register_and_login(client, phone="13800000031", username="inbox-replier")
+    owner_headers = {"Authorization": f"Bearer {owner['token']}"}
+    owner_openclaw_headers = {"Authorization": f"Bearer {owner['openclaw_key']}"}
+    replier_headers = {"Authorization": f"Bearer {replier['token']}"}
+
+    topic = client.post(
+        "/topics",
+        json={"title": "消息信箱", "body": "验证回帖通知"},
+        headers=owner_headers,
+    ).json()
+    topic_id = topic["id"]
+
+    root_resp = client.post(
+        f"/topics/{topic_id}/posts",
+        json={"author": "inbox-owner", "body": "这是我的根帖。"},
+        headers=owner_headers,
+    )
+    assert root_resp.status_code == 201, root_resp.text
+    root_post = root_resp.json()["post"]
+
+    self_reply = client.post(
+        f"/topics/{topic_id}/posts",
+        json={"author": "inbox-owner", "body": "这是我自己的回复。", "in_reply_to_id": root_post["id"]},
+        headers=owner_headers,
+    )
+    assert self_reply.status_code == 201, self_reply.text
+
+    inbox_after_self_reply = client.get("/api/v1/me/inbox", headers=owner_headers)
+    assert inbox_after_self_reply.status_code == 200, inbox_after_self_reply.text
+    assert inbox_after_self_reply.json()["items"] == []
+    assert inbox_after_self_reply.json()["unread_count"] == 0
+
+    reply_resp = client.post(
+        f"/topics/{topic_id}/posts",
+        json={"author": "inbox-replier", "body": "这是别人给你的回复。", "in_reply_to_id": root_post["id"]},
+        headers=replier_headers,
+    )
+    assert reply_resp.status_code == 201, reply_resp.text
+    reply_post = reply_resp.json()["post"]
+
+    jwt_inbox = client.get("/api/v1/me/inbox", headers=owner_headers)
+    assert jwt_inbox.status_code == 200, jwt_inbox.text
+    jwt_payload = jwt_inbox.json()
+    assert jwt_payload["unread_count"] == 1
+    assert jwt_payload["total"] == 1
+    assert jwt_payload["items"][0]["reply_post_id"] == reply_post["id"]
+    assert jwt_payload["items"][0]["parent_post_id"] == root_post["id"]
+    assert jwt_payload["items"][0]["is_read"] is False
+
+    openclaw_inbox = client.get("/api/v1/me/inbox", headers=owner_openclaw_headers)
+    assert openclaw_inbox.status_code == 200, openclaw_inbox.text
+    openclaw_payload = openclaw_inbox.json()
+    assert openclaw_payload["unread_count"] == 1
+    assert openclaw_payload["items"][0]["id"] == jwt_payload["items"][0]["id"]
+
+    mark_read = client.post(
+        f"/api/v1/me/inbox/{jwt_payload['items'][0]['id']}/read",
+        headers=owner_openclaw_headers,
+    )
+    assert mark_read.status_code == 200, mark_read.text
+
+    jwt_after_read = client.get("/api/v1/me/inbox", headers=owner_headers)
+    assert jwt_after_read.status_code == 200, jwt_after_read.text
+    assert jwt_after_read.json()["unread_count"] == 0
+    assert jwt_after_read.json()["items"][0]["is_read"] is True
+
+
+def test_user_posts_and_openclaw_posts_share_same_inbox(client):
+    import app.api.topics as topics_module
+
+    async def approve_all(*args, **kwargs):
+        return None
+
+    topics_module._moderate_or_raise = approve_all
+
+    owner = register_login_and_openclaw_key(client, phone="13800000033", username="mixed-inbox-owner")
+    replier = register_and_login(client, phone="13800000034", username="mixed-inbox-replier")
+    owner_headers = {"Authorization": f"Bearer {owner['token']}"}
+    owner_openclaw_headers = {"Authorization": f"Bearer {owner['openclaw_key']}"}
+    replier_headers = {"Authorization": f"Bearer {replier['token']}"}
+
+    topic = client.post(
+        "/topics",
+        json={"title": "混合信箱", "body": "验证用户帖与 OpenClaw 帖共用信箱"},
+        headers=owner_headers,
+    ).json()
+    topic_id = topic["id"]
+
+    user_root_resp = client.post(
+        f"/topics/{topic_id}/posts",
+        json={"author": "mixed-inbox-owner", "body": "这是用户账号发的帖子。"},
+        headers=owner_headers,
+    )
+    assert user_root_resp.status_code == 201, user_root_resp.text
+    user_root = user_root_resp.json()["post"]
+
+    openclaw_root_resp = client.post(
+        f"/api/v1/openclaw/topics/{topic_id}/posts",
+        json={"body": "这是 OpenClaw 发的帖子。"},
+        headers=owner_openclaw_headers,
+    )
+    assert openclaw_root_resp.status_code == 201, openclaw_root_resp.text
+    openclaw_root = openclaw_root_resp.json()["post"]
+
+    reply_to_user = client.post(
+        f"/topics/{topic_id}/posts",
+        json={"author": "mixed-inbox-replier", "body": "回复用户帖子。", "in_reply_to_id": user_root["id"]},
+        headers=replier_headers,
+    )
+    assert reply_to_user.status_code == 201, reply_to_user.text
+
+    reply_to_openclaw = client.post(
+        f"/topics/{topic_id}/posts",
+        json={"author": "mixed-inbox-replier", "body": "回复 OpenClaw 帖子。", "in_reply_to_id": openclaw_root["id"]},
+        headers=replier_headers,
+    )
+    assert reply_to_openclaw.status_code == 201, reply_to_openclaw.text
+
+    inbox = client.get("/api/v1/me/inbox", headers=owner_headers)
+    assert inbox.status_code == 200, inbox.text
+    payload = inbox.json()
+    assert payload["unread_count"] == 2
+    assert payload["total"] == 2
+    parent_ids = {item["parent_post_id"] for item in payload["items"]}
+    assert parent_ids == {user_root["id"], openclaw_root["id"]}
+
+
+def test_expert_reply_inbox_message_is_created_only_after_completed_reply(client, monkeypatch):
+    import app.api.topics as topics_module
+
+    original_request_json = topics_module.request_json
+
+    async def approve_all(*args, **kwargs):
+        return None
+
+    async def delayed_request_json(method, path, *, json_body=None, headers=None, params=None, timeout=600.0):
+        if path == "/executor/expert-replies":
+            await asyncio.sleep(0.2)
+        return await original_request_json(
+            method,
+            path,
+            json_body=json_body,
+            headers=headers,
+            params=params,
+            timeout=timeout,
+        )
+
+    monkeypatch.setattr(topics_module, "request_json", delayed_request_json)
+    monkeypatch.setattr(topics_module, "_moderate_or_raise", approve_all)
+
+    owner = register_and_login(client, phone="13800000032", username="mention-owner")
+    headers = {"Authorization": f"Bearer {owner['token']}"}
+
+    topic = client.post(
+        "/topics",
+        json={"title": "专家回帖通知", "body": "验证 pending 不应先入箱"},
+        headers=headers,
+    ).json()
+    topic_id = topic["id"]
+
+    root_resp = client.post(
+        f"/topics/{topic_id}/posts",
+        json={"author": "mention-owner", "body": "请专家看看这个问题。"},
+        headers=headers,
+    )
+    assert root_resp.status_code == 201, root_resp.text
+    root_post = root_resp.json()["post"]
+
+    start = client.post(
+        f"/topics/{topic_id}/discussion",
+        json={"num_rounds": 1, "max_turns": 20, "max_budget_usd": 1.0},
+        headers=headers,
+    )
+    assert start.status_code == 202, start.text
+
+    deadline = time.time() + 3
+    while time.time() < deadline:
+        status_resp = client.get(f"/topics/{topic_id}/discussion/status", headers=headers)
+        assert status_resp.status_code == 200, status_resp.text
+        if status_resp.json()["status"] == "completed":
+            break
+        time.sleep(0.05)
+
+    mention = client.post(
+        f"/topics/{topic_id}/posts/mention",
+        json={
+            "author": "mention-owner",
+            "body": "@physicist 请继续回复",
+            "expert_name": "physicist",
+            "in_reply_to_id": root_post["id"],
+        },
+        headers=headers,
+    )
+    assert mention.status_code == 202, mention.text
+    reply_post_id = mention.json()["reply_post_id"]
+
+    pending_inbox = client.get("/api/v1/me/inbox", headers=headers)
+    assert pending_inbox.status_code == 200, pending_inbox.text
+    assert pending_inbox.json()["items"] == []
+
+    deadline = time.time() + 3
+    latest_reply = None
+    while time.time() < deadline:
+        latest_reply = client.get(f"/topics/{topic_id}/posts/mention/{reply_post_id}", headers=headers)
+        assert latest_reply.status_code == 200, latest_reply.text
+        if latest_reply.json()["status"] == "completed":
+            break
+        time.sleep(0.05)
+
+    assert latest_reply is not None
+    assert latest_reply.json()["status"] == "completed"
+
+    completed_inbox = client.get("/api/v1/me/inbox", headers=headers)
+    assert completed_inbox.status_code == 200, completed_inbox.text
+    payload = completed_inbox.json()
+    assert payload["unread_count"] == 1
+    assert payload["items"][0]["reply_post_id"] == reply_post_id
+    assert payload["items"][0]["reply_author_type"] == "agent"
+
+
 def test_short_ttl_read_cache_hits_and_invalidates_on_write(client, monkeypatch):
     from app.storage.database import topic_store
 
