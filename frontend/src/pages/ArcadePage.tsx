@@ -99,7 +99,7 @@ export default function ArcadePage() {
   return (
     <LibraryPageLayout title="Arcade 竞技场">
       <section
-        className="relative min-h-[15rem] overflow-hidden rounded-[32px] border px-6 py-8 sm:min-h-[16rem] sm:px-8 sm:py-10 lg:min-h-[17rem] lg:px-12 lg:py-12"
+        className="relative min-h-[14rem] overflow-hidden rounded-[28px] border px-5 py-6 sm:min-h-[16rem] sm:rounded-[32px] sm:px-8 sm:py-10 lg:min-h-[17rem] lg:px-12 lg:py-12"
         style={{
           background: activeTrack.heroStyle.background,
           borderColor: activeTrack.heroStyle.borderColor,
@@ -127,11 +127,11 @@ export default function ArcadePage() {
           style={{ background: 'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.78) 50%, rgba(255,255,255,0) 100%)' }}
         />
 
-        <div className="grid min-h-[inherit] gap-10 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+        <div className="grid min-h-[inherit] gap-6 sm:gap-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:gap-10">
           <div key={activeTrack.id} className="animate-stage-enter-left flex min-h-[inherit] max-w-3xl flex-col justify-between">
             <div>
             <span
-              className="inline-flex items-center rounded-full px-4 py-1.5 text-[11px] tracking-[0.28em]"
+              className="inline-flex items-center rounded-full px-3.5 py-1.5 text-[10px] tracking-[0.24em] sm:px-4 sm:text-[11px] sm:tracking-[0.28em]"
               style={{
                 color: 'rgba(100,116,139,0.9)',
                 backgroundColor: 'rgba(255,255,255,0.52)',
@@ -142,7 +142,7 @@ export default function ArcadePage() {
               {activeTrack.eyebrow}
             </span>
 
-            <h2 className="mt-7 max-w-2xl whitespace-pre-line text-4xl font-serif font-semibold leading-[0.98] sm:text-5xl lg:text-[4.4rem]">
+            <h2 className="mt-5 max-w-2xl whitespace-pre-line text-[2.35rem] font-serif font-semibold leading-[0.94] sm:mt-7 sm:text-5xl sm:leading-[0.98] lg:text-[4.4rem]">
               <span
                 style={{
                   color: '#1f2937',
@@ -154,19 +154,19 @@ export default function ArcadePage() {
             </h2>
 
             <p
-              className="mt-6 max-w-lg text-sm leading-7 sm:text-[15px]"
+              className="mt-4 max-w-md text-[13px] leading-6 sm:mt-6 sm:max-w-lg sm:text-[15px] sm:leading-7"
               style={{ color: '#64748b' }}
             >
               {activeTrack.description}
             </p>
             </div>
 
-            <div className="mt-10 flex flex-wrap items-center gap-3">
+            <div className="mt-8 flex flex-wrap items-center gap-3 sm:mt-10">
               <a
                 href={activeTrack.githubHref}
                 target="_blank"
                 rel="noreferrer"
-                className="group inline-flex items-center gap-2 rounded-full border px-5 py-2.5 text-sm transition-all duration-300 hover:-translate-y-0.5"
+                className="group inline-flex items-center gap-2 rounded-full border px-4 py-2 text-[13px] transition-all duration-300 hover:-translate-y-0.5 sm:px-5 sm:py-2.5 sm:text-sm"
                 style={{
                   borderColor: 'rgba(148,163,184,0.34)',
                   color: '#334155',
@@ -196,11 +196,11 @@ export default function ArcadePage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 lg:pt-1">
+          <div className="flex items-center justify-end gap-3 lg:pt-1">
             <button
               type="button"
               onClick={goPrev}
-              className="inline-flex h-12 w-12 items-center justify-center rounded-full border transition-all duration-300 hover:-translate-y-0.5"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border text-sm transition-all duration-300 hover:-translate-y-0.5 sm:h-12 sm:w-12 sm:text-base"
               style={{
                 borderColor: 'rgba(148,163,184,0.28)',
                 backgroundColor: 'rgba(255,255,255,0.42)',
@@ -214,7 +214,7 @@ export default function ArcadePage() {
             <button
               type="button"
               onClick={goNext}
-              className="inline-flex h-12 w-12 items-center justify-center rounded-full border transition-all duration-300 hover:-translate-y-0.5"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border text-sm transition-all duration-300 hover:-translate-y-0.5 sm:h-12 sm:w-12 sm:text-base"
               style={{
                 borderColor: 'rgba(148,163,184,0.28)',
                 backgroundColor: 'rgba(255,255,255,0.42)',
@@ -229,16 +229,16 @@ export default function ArcadePage() {
         </div>
       </section>
       <section className="mt-10">
-        <div className="mb-4 flex items-end justify-between gap-3">
+        <div className="mb-5 flex flex-col gap-3 sm:mb-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-[11px] tracking-[0.22em]" style={{ color: '#94a3b8' }}>
               LIVE TASKS
             </p>
-            <h3 className="mt-2 text-2xl font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>
+            <h3 className="mt-2 text-[1.75rem] font-serif font-semibold leading-[1.02] sm:text-2xl sm:leading-none" style={{ color: 'var(--text-primary)' }}>
               当前 Arcade 题目
             </h3>
           </div>
-          <p className="text-sm" style={{ color: '#64748b' }}>
+          <p className="max-w-md text-[13px] leading-6 sm:text-sm sm:leading-6" style={{ color: '#64748b' }}>
             公开查看所有分支，进入题目页阅读迭代过程。
           </p>
         </div>
@@ -272,7 +272,7 @@ export default function ArcadePage() {
                 <Link
                   key={topic.id}
                   to={`/topics/${topic.id}`}
-                  className="rounded-[24px] border px-5 py-5 transition-all duration-300 hover:-translate-y-0.5"
+                  className="rounded-[24px] border px-4 py-4 transition-all duration-300 hover:-translate-y-0.5 sm:px-5 sm:py-5"
                   style={{
                     borderColor: 'rgba(148,163,184,0.22)',
                     backgroundColor: 'rgba(255,255,255,0.76)',
@@ -280,19 +280,21 @@ export default function ArcadePage() {
                     backdropFilter: 'blur(10px)',
                   }}
                 >
-                  <div className="flex flex-wrap items-center gap-2 text-[11px]" style={{ color: '#94a3b8' }}>
+                  <div className="flex flex-wrap items-center gap-2 text-[10px] sm:text-[11px]" style={{ color: '#94a3b8' }}>
                     {displayTags.map((tag) => (
-                      <span key={`${topic.id}-${tag}`} className="rounded-full border px-2 py-1" style={{ borderColor: 'rgba(203,213,225,0.8)' }}>
+                      <span key={`${topic.id}-${tag}`} className="rounded-full border px-2.5 py-1" style={{ borderColor: 'rgba(203,213,225,0.8)' }}>
                         {tag}
                       </span>
                     ))}
-                    <span>跟贴 {topic.posts_count ?? 0}</span>
+                    <span className="rounded-full border px-2.5 py-1" style={{ borderColor: 'rgba(226,232,240,0.92)' }}>
+                      跟贴 {topic.posts_count ?? 0}
+                    </span>
                   </div>
-                  <h4 className="mt-3 text-xl font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  <h4 className="mt-3 text-[1.7rem] font-serif font-semibold leading-[1.08] sm:text-xl sm:leading-tight" style={{ color: 'var(--text-primary)' }}>
                     {topic.title}
                   </h4>
                   {prompt?.trim() ? (
-                    <p className="mt-3 line-clamp-3 text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
+                    <p className="mt-3 line-clamp-4 text-[13px] leading-6 sm:line-clamp-3 sm:text-sm" style={{ color: 'var(--text-secondary)' }}>
                       {prompt}
                     </p>
                   ) : null}
