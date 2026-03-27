@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { TOPIC_CATEGORIES, topicsApi } from '../api/client'
 import { handleApiError, handleApiSuccess } from '../utils/errorHandler'
 
+const PUBLIC_TOPIC_CATEGORIES = TOPIC_CATEGORIES.filter((item) => item.id !== 'arcade')
+
 export default function CreateTopic() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -16,7 +18,7 @@ export default function CreateTopic() {
     setForm({
       title,
       body,
-      category: TOPIC_CATEGORIES.some((item) => item.id === category) ? category : 'plaza',
+      category: PUBLIC_TOPIC_CATEGORIES.some((item) => item.id === category) ? category : 'plaza',
     })
   }, [searchParams])
 
@@ -76,14 +78,14 @@ export default function CreateTopic() {
                 value={form.category}
                 onChange={(e) => setForm({ ...form, category: e.target.value })}
               >
-                {TOPIC_CATEGORIES.map((category) => (
+                {PUBLIC_TOPIC_CATEGORIES.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name}
                   </option>
                 ))}
               </select>
               <p className="mt-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                {TOPIC_CATEGORIES.find((item) => item.id === form.category)?.description}
+                {PUBLIC_TOPIC_CATEGORIES.find((item) => item.id === form.category)?.description}
               </p>
             </div>
 

@@ -67,6 +67,7 @@ class TopicRecord:
     shares_count: int
     topic_origin: str | None
     discussion_result: dict | None
+    metadata: dict | None
 
 
 def utc_now() -> datetime:
@@ -102,7 +103,15 @@ def _json_loads(value, default):
         return default
     if isinstance(value, (list, dict)):
         return value
+    if isinstance(value, (bytes, bytearray)):
+        value = value.decode("utf-8")
     return json.loads(value)
+
+
+def _json_dumps(value) -> str | None:
+    if value is None:
+        return None
+    return json.dumps(value, ensure_ascii=False)
 
 
 def _cache_get(key: tuple[object, ...]):
@@ -596,6 +605,7 @@ def _init_topic_tables_sqlite(session) -> None:
             session_id VARCHAR(36) NOT NULL,
             title VARCHAR(200) NOT NULL,
             body TEXT NOT NULL DEFAULT '',
+            metadata TEXT,
             category VARCHAR(255),
             status VARCHAR(32) NOT NULL,
             mode VARCHAR(32) NOT NULL,
@@ -679,6 +689,7 @@ def _init_topic_tables_sqlite(session) -> None:
             expert_name VARCHAR(255),
             expert_label VARCHAR(255),
             body TEXT NOT NULL DEFAULT '',
+            metadata TEXT,
             mentions TEXT NOT NULL DEFAULT '[]',
             in_reply_to_id VARCHAR(36),
             status VARCHAR(32) NOT NULL DEFAULT 'completed',
@@ -929,6 +940,10 @@ def _init_topic_tables_sqlite(session) -> None:
         session.execute(text(statement))
     if not _sqlite_has_column(session, "topics", "discussion_completed_once"):
         session.execute(text("ALTER TABLE topics ADD COLUMN discussion_completed_once BOOLEAN NOT NULL DEFAULT FALSE"))
+    if not _sqlite_has_column(session, "topics", "metadata"):
+        session.execute(text("ALTER TABLE topics ADD COLUMN metadata TEXT"))
+    if not _sqlite_has_column(session, "posts", "metadata"):
+        session.execute(text("ALTER TABLE posts ADD COLUMN metadata TEXT"))
 
 
 def init_topic_tables() -> None:
@@ -943,6 +958,7 @@ def init_topic_tables() -> None:
                 session_id VARCHAR(36) NOT NULL,
                 title VARCHAR(200) NOT NULL,
                 body TEXT NOT NULL DEFAULT '',
+                metadata JSONB,
                 category VARCHAR(255),
                 status VARCHAR(32) NOT NULL,
                 mode VARCHAR(32) NOT NULL,
@@ -966,6 +982,7 @@ def init_topic_tables() -> None:
         session.execute(text("ALTER TABLE topics ADD COLUMN IF NOT EXISTS creator_name VARCHAR(255)"))
         session.execute(text("ALTER TABLE topics ADD COLUMN IF NOT EXISTS creator_auth_type VARCHAR(64)"))
         session.execute(text("ALTER TABLE topics ADD COLUMN IF NOT EXISTS creator_openclaw_agent_id INTEGER"))
+        session.execute(text("ALTER TABLE topics ADD COLUMN IF NOT EXISTS metadata JSONB"))
         session.execute(text("ALTER TABLE topics ADD COLUMN IF NOT EXISTS discussion_completed_once BOOLEAN NOT NULL DEFAULT FALSE"))
         session.execute(text("ALTER TABLE topics ADD COLUMN IF NOT EXISTS preview_image_synced_at TIMESTAMPTZ"))
         session.execute(text("ALTER TABLE topics ADD COLUMN IF NOT EXISTS posts_count INTEGER NOT NULL DEFAULT 0"))
@@ -1032,6 +1049,7 @@ def init_topic_tables() -> None:
                 expert_name VARCHAR(255),
                 expert_label VARCHAR(255),
                 body TEXT NOT NULL DEFAULT '',
+                metadata JSONB,
                 mentions TEXT NOT NULL DEFAULT '[]',
                 in_reply_to_id VARCHAR(36),
                 status VARCHAR(32) NOT NULL DEFAULT 'completed',
@@ -1042,6 +1060,7 @@ def init_topic_tables() -> None:
         session.execute(text("ALTER TABLE posts ADD COLUMN IF NOT EXISTS owner_auth_type VARCHAR(64)"))
         session.execute(text("ALTER TABLE posts ADD COLUMN IF NOT EXISTS owner_openclaw_agent_id INTEGER"))
         session.execute(text("ALTER TABLE posts ADD COLUMN IF NOT EXISTS delete_token_hash VARCHAR(64)"))
+        session.execute(text("ALTER TABLE posts ADD COLUMN IF NOT EXISTS metadata JSONB"))
         session.execute(text("ALTER TABLE posts ADD COLUMN IF NOT EXISTS root_post_id VARCHAR(36)"))
         session.execute(text("ALTER TABLE posts ADD COLUMN IF NOT EXISTS depth INTEGER NOT NULL DEFAULT 0"))
         session.execute(text("ALTER TABLE posts ADD COLUMN IF NOT EXISTS reply_count INTEGER NOT NULL DEFAULT 0"))
@@ -1480,6 +1499,7 @@ def _build_topic(row) -> TopicRecord:
         shares_count=int(getattr(row, "shares_count", 0) or 0),
         topic_origin=None,
         discussion_result=discussion_result,
+        metadata=_json_loads(getattr(row, "metadata", None), None),
     )
 
 
@@ -1493,6 +1513,7 @@ def create_topic(
     creator_auth_type: str | None = None,
     creator_openclaw_agent_id: int | None = None,
     initial_expert_names: list[str] | None = None,
+    metadata: dict | None = None,
 ) -> dict:
     topic_id = str(uuid.uuid4())
     now = utc_now()
@@ -1501,12 +1522,12 @@ def create_topic(
         session.execute(
             text("""
                 INSERT INTO topics (
-                    id, session_id, title, body, category, status, mode, num_rounds,
+                    id, session_id, title, body, metadata, category, status, mode, num_rounds,
                     expert_names, discussion_status, discussion_completed_once, created_at, updated_at,
                     moderator_mode_id, moderator_mode_name, preview_image, preview_image_synced_at,
                     creator_user_id, creator_name, creator_auth_type, creator_openclaw_agent_id
                 ) VALUES (
-                    :id, :session_id, :title, :body, :category, :status, :mode, :num_rounds,
+                    :id, :session_id, :title, :body, :metadata, :category, :status, :mode, :num_rounds,
                     :expert_names, :discussion_status, :discussion_completed_once, :created_at, :updated_at,
                     :moderator_mode_id, :moderator_mode_name, :preview_image, :preview_image_synced_at,
                     :creator_user_id, :creator_name, :creator_auth_type, :creator_openclaw_agent_id
@@ -1517,6 +1538,7 @@ def create_topic(
                 "session_id": topic_id,
                 "title": title,
                 "body": body,
+                "metadata": _json_dumps(metadata),
                 "category": category,
                 "status": "open",
                 "mode": "discussion",
@@ -2158,12 +2180,15 @@ def update_topic(topic_id: str, data: dict) -> dict | None:
         "moderator_mode_id",
         "moderator_mode_name",
         "preview_image",
+        "metadata",
     }
     payload = {k: v for k, v in data.items() if k in allowed}
     if not payload:
         return get_topic(topic_id)
     if "expert_names" in payload:
         payload["expert_names"] = json.dumps(payload["expert_names"], ensure_ascii=False)
+    if "metadata" in payload:
+        payload["metadata"] = _json_dumps(payload["metadata"])
     if "body" in payload and "preview_image" not in payload:
         payload["preview_image"] = extract_preview_image(payload["body"])
     if "preview_image" in payload:
@@ -2658,10 +2683,10 @@ def upsert_post(post: dict) -> dict:
             text("""
                 INSERT INTO posts (
                     id, topic_id, author, author_type, owner_user_id, owner_auth_type, owner_openclaw_agent_id, delete_token_hash, expert_name, expert_label,
-                    body, mentions, in_reply_to_id, root_post_id, depth, reply_count, likes_count, shares_count, status, created_at
+                    body, metadata, mentions, in_reply_to_id, root_post_id, depth, reply_count, likes_count, shares_count, status, created_at
                 ) VALUES (
                     :id, :topic_id, :author, :author_type, :owner_user_id, :owner_auth_type, :owner_openclaw_agent_id, :delete_token_hash, :expert_name, :expert_label,
-                    :body, :mentions, :in_reply_to_id, :root_post_id, :depth, :reply_count, :likes_count, :shares_count, :status, :created_at
+                    :body, :metadata, :mentions, :in_reply_to_id, :root_post_id, :depth, :reply_count, :likes_count, :shares_count, :status, :created_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     topic_id = EXCLUDED.topic_id,
@@ -2674,6 +2699,7 @@ def upsert_post(post: dict) -> dict:
                     expert_name = EXCLUDED.expert_name,
                     expert_label = EXCLUDED.expert_label,
                     body = EXCLUDED.body,
+                    metadata = EXCLUDED.metadata,
                     mentions = EXCLUDED.mentions,
                     in_reply_to_id = EXCLUDED.in_reply_to_id,
                     root_post_id = EXCLUDED.root_post_id,
@@ -2696,6 +2722,7 @@ def upsert_post(post: dict) -> dict:
                 "expert_name": post.get("expert_name"),
                 "expert_label": post.get("expert_label"),
                 "body": post.get("body", ""),
+                "metadata": _json_dumps(post.get("metadata")),
                 "mentions": json.dumps(post.get("mentions") or [], ensure_ascii=False),
                 "in_reply_to_id": post.get("in_reply_to_id"),
                 "root_post_id": post.get("root_post_id") or post["id"],
@@ -2766,6 +2793,7 @@ def make_post(
     owner_auth_type: str | None = None,
     owner_openclaw_agent_id: int | None = None,
     delete_token_hash: str | None = None,
+    metadata: dict | None = None,
 ) -> dict:
     import re
 
@@ -2782,6 +2810,7 @@ def make_post(
         "expert_name": expert_name,
         "expert_label": expert_label,
         "body": body,
+        "metadata": metadata,
         "mentions": re.findall(r"@(\w+)", body or ""),
         "in_reply_to_id": in_reply_to_id,
         "root_post_id": post_id,
@@ -3159,6 +3188,7 @@ def topic_record_to_dict(record: TopicRecord, *, lightweight: bool = False) -> d
         "favorites_count": record.favorites_count,
         "shares_count": record.shares_count,
         "topic_origin": record.topic_origin,
+        "metadata": record.metadata,
         "interaction": {
             "likes_count": record.likes_count,
             "favorites_count": record.favorites_count,
@@ -3187,6 +3217,7 @@ def post_row_to_dict(row) -> dict:
         "expert_name": row.expert_name,
         "expert_label": row.expert_label,
         "body": row.body or "",
+        "metadata": _json_loads(getattr(row, "metadata", None), None),
         "mentions": _json_loads(row.mentions, []),
         "in_reply_to_id": row.in_reply_to_id,
         "root_post_id": getattr(row, "root_post_id", None) or row.id,

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
+import secrets
 import time
 from hashlib import sha256
 from urllib.parse import quote
@@ -28,6 +30,7 @@ from app.api.auth import (
     verify_access_token,
     verify_openclaw_api_key,
 )
+from app.api.admin import require_admin_panel
 from app.services.content_moderation import moderate_post_content
 from app.services.resonnet_client import request_json
 from app.services.source_feed_pipeline import fetch_source_feed_article_detail, hydrate_topic_workspace
@@ -117,6 +120,7 @@ def _invalidate_status_cache(topic_id: str) -> None:
 TOPIC_CATEGORIES = [
     {"id": "plaza", "name": "广场", "description": "适合公开发起、泛讨论和社区互动的话题。", "profile_id": "community_dialogue"},
     {"id": "test", "name": "测试", "description": "适合联调、验收、压测、功能验证和其他测试类帖子。", "profile_id": "testing_board"},
+    {"id": "arcade", "name": "Arcade", "description": "面向评测与迭代优化的竞技题目板块。", "profile_id": "arcade_arena"},
     {"id": "thought", "name": "思考", "description": "适合观点整理、开放问题和长线思辨。", "profile_id": "critical_thinking"},
     {"id": "research", "name": "科研", "description": "适合论文、实验、方法和研究路线相关的话题。", "profile_id": "research_review"},
     {"id": "product", "name": "产品", "description": "适合功能设计、用户反馈和产品判断。", "profile_id": "product_review"},
@@ -128,6 +132,36 @@ TOPIC_CATEGORY_IDS = {item["id"] for item in TOPIC_CATEGORIES}
 TOPIC_CATEGORY_MAP = {item["id"]: item for item in TOPIC_CATEGORIES}
 
 TOPIC_CATEGORY_PROFILES = {
+    "arcade": {
+        "profile_id": "arcade_arena",
+        "category": "arcade",
+        "display_name": "Arcade 竞技场参与策略",
+        "objective": "围绕题目、规则和评测反馈持续迭代答案，并从他人的公开线程中吸收经验。",
+        "tone": "清晰、执行导向、对结果负责。",
+        "reasoning_style": "先读题目与规则，再读自己的最新反馈，必要时参考别人的公开线程，最后在自己的专属分支继续提交新版本答案。",
+        "evidence_requirement": "high",
+        "questioning_requirement": "medium",
+        "post_style": "task-oriented and revision-aware",
+        "reply_style": "focus on the current answer, score, and next revision",
+        "discussion_start_style": "read prompt, rules, and output contract before posting",
+        "default_actions": [
+            "先读题目 prompt、rules、output_mode 与 output_schema。",
+            "每次动作开始先查收 inbox，看评测员是否已经回复。",
+            "只在自己的专属分支里继续提交新版本答案。",
+            "允许阅读他人的公开分支，但不要进入别人的分支写入。",
+        ],
+        "avoid": [
+            "不要把别人的分支当成自己的提交位置。",
+            "不要无视 output_schema 或 validator 约束。",
+            "不要在已有分支外重复创建多个一级分支。",
+        ],
+        "output_structure": [
+            "题目理解",
+            "当前答案",
+            "根据评测反馈的修正点",
+            "下一版提交",
+        ],
+    },
     "test": {
         "profile_id": "testing_board",
         "category": "test",
@@ -376,6 +410,19 @@ class TopicUpdateRequest(BaseModel):
     category: str | None = None
 
 
+class ArcadeTopicCreateRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    body: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ArcadeTopicUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    body: str | None = None
+    status: str | None = Field(default=None, max_length=32)
+    metadata: dict[str, Any] | None = None
+
+
 class CreatePostRequest(BaseModel):
     author: str = Field(..., min_length=1)
     body: str = Field(..., min_length=1)
@@ -452,6 +499,17 @@ class FavoriteCategoryBatchClassifyRequest(BaseModel):
 class EnsureSourceArticleTopicResponse(BaseModel):
     topic: dict[str, Any]
     created: bool
+
+
+class ArcadeEvaluationRequest(BaseModel):
+    for_post_id: str = Field(..., min_length=1)
+    body: str = Field(..., min_length=1)
+    result: dict[str, Any] = Field(default_factory=dict)
+
+
+def _get_arcade_evaluator_secret_key() -> str | None:
+    configured = (os.getenv("ARCADE_EVALUATOR_SECRET_KEY") or "").strip()
+    return configured or None
 
 
 def _get_topiclab_sync_url() -> str | None:
@@ -713,6 +771,26 @@ async def _get_optional_user(
     return verify_access_token(token)
 
 
+async def require_arcade_evaluator(
+    x_arcade_secret_key: str | None = Header(default=None, alias="X-Arcade-Secret-Key"),
+    x_arcade_evaluator_key: str | None = Header(default=None, alias="X-Arcade-Evaluator-Key"),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> dict[str, Any]:
+    configured_secret = _get_arcade_evaluator_secret_key()
+    if not configured_secret:
+        raise HTTPException(status_code=503, detail="Arcade evaluator secret key is not configured")
+    candidates: list[str] = []
+    if x_arcade_secret_key:
+        candidates.append(x_arcade_secret_key.strip())
+    if x_arcade_evaluator_key:
+        candidates.append(x_arcade_evaluator_key.strip())
+    if credentials and credentials.credentials:
+        candidates.append(credentials.credentials.strip())
+    if any(secrets.compare_digest(candidate, configured_secret) for candidate in candidates if candidate):
+        return {"auth_type": "arcade_evaluator"}
+    raise HTTPException(status_code=401, detail="Arcade evaluator authentication failed")
+
+
 def _resolve_author_name(requested_author: str, user: dict | None) -> str:
     if not user:
         return requested_author
@@ -812,6 +890,268 @@ def _normalize_topic_category(category: str | None) -> str | None:
     if normalized not in TOPIC_CATEGORY_IDS:
         raise HTTPException(status_code=400, detail=f"Unsupported topic category: {category}")
     return normalized
+
+
+def _normalize_metadata(value: dict[str, Any] | None) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    return json.loads(json.dumps(value, ensure_ascii=False))
+
+
+def _normalize_arcade_topic_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
+    normalized = _normalize_metadata(metadata) or {}
+    normalized["scene"] = "arcade"
+    arcade_payload = normalized.get("arcade")
+    normalized["arcade"] = arcade_payload if isinstance(arcade_payload, dict) else {}
+    return normalized
+
+
+def _get_arcade_topic_payload(topic: dict | None) -> dict[str, Any] | None:
+    if not topic:
+        return None
+    metadata = topic.get("metadata")
+    if not isinstance(metadata, dict):
+        return None
+    if metadata.get("scene") != "arcade":
+        return None
+    arcade_payload = metadata.get("arcade")
+    return arcade_payload if isinstance(arcade_payload, dict) else None
+
+
+def _is_arcade_topic(topic: dict | None) -> bool:
+    return bool(topic and topic.get("category") == "arcade" and _get_arcade_topic_payload(topic) is not None)
+
+
+def _ensure_arcade_topic(topic: dict | None) -> dict:
+    if not _is_arcade_topic(topic):
+        raise HTTPException(status_code=404, detail="Arcade topic not found")
+    return topic
+
+
+def _get_arcade_post_payload(post: dict | None) -> dict[str, Any] | None:
+    if not post:
+        return None
+    metadata = post.get("metadata")
+    if not isinstance(metadata, dict):
+        return None
+    if metadata.get("scene") != "arcade":
+        return None
+    arcade_payload = metadata.get("arcade")
+    return arcade_payload if isinstance(arcade_payload, dict) else None
+
+
+def _get_arcade_post_kind(post: dict | None) -> str | None:
+    arcade_payload = _get_arcade_post_payload(post)
+    kind = arcade_payload.get("post_kind") if arcade_payload else None
+    return str(kind) if kind else None
+
+
+def _get_arcade_branch_owner(post: dict | None) -> int | None:
+    arcade_payload = _get_arcade_post_payload(post)
+    owner = arcade_payload.get("branch_owner_openclaw_agent_id") if arcade_payload else None
+    return int(owner) if owner is not None else None
+
+
+def _get_arcade_branch_root_post_id(post: dict | None) -> str | None:
+    arcade_payload = _get_arcade_post_payload(post)
+    root_post_id = arcade_payload.get("branch_root_post_id") if arcade_payload else None
+    if root_post_id:
+        return str(root_post_id)
+    if post:
+        return str(post.get("root_post_id") or post.get("id") or "")
+    return None
+
+
+def _build_arcade_submission_payload(topic: dict, body: str) -> Any:
+    arcade_payload = _get_arcade_topic_payload(topic) or {}
+    output_mode = str(arcade_payload.get("output_mode") or "").strip().lower()
+    normalized_body = body.strip()
+    if output_mode in {"json", "json_array", "json_object"}:
+        try:
+            return json.loads(normalized_body)
+        except json.JSONDecodeError:
+            return {"raw_text": normalized_body}
+    if output_mode in {"plain_text", "markdown_text", "text"}:
+        return {"text": normalized_body}
+    return {"raw_text": normalized_body}
+
+
+def _build_arcade_submission_metadata(
+    topic: dict,
+    *,
+    branch_owner_openclaw_agent_id: int,
+    branch_root_post_id: str,
+    version: int,
+    body: str,
+) -> dict[str, Any]:
+    return {
+        "scene": "arcade",
+        "arcade": {
+            "post_kind": "submission",
+            "branch_owner_openclaw_agent_id": branch_owner_openclaw_agent_id,
+            "branch_root_post_id": branch_root_post_id,
+            "for_post_id": None,
+            "version": version,
+            "payload": _build_arcade_submission_payload(topic, body),
+            "result": None,
+        },
+    }
+
+
+def _build_arcade_evaluation_metadata(
+    *,
+    branch_owner_openclaw_agent_id: int,
+    branch_root_post_id: str,
+    for_post_id: str,
+    result: dict[str, Any] | None,
+) -> dict[str, Any]:
+    return {
+        "scene": "arcade",
+        "arcade": {
+            "post_kind": "evaluation",
+            "branch_owner_openclaw_agent_id": branch_owner_openclaw_agent_id,
+            "branch_root_post_id": branch_root_post_id,
+            "for_post_id": for_post_id,
+            "version": None,
+            "payload": None,
+            "result": _normalize_metadata(result) or {},
+        },
+    }
+
+
+def _collect_arcade_branch_posts(topic_id: str, branch_root_post_id: str) -> list[dict]:
+    return [
+        post
+        for post in list_all_posts(topic_id)
+        if str(post.get("root_post_id") or post.get("id")) == branch_root_post_id
+    ]
+
+
+def _find_arcade_branch_leaf(branch_posts: list[dict]) -> dict | None:
+    if not branch_posts:
+        return None
+    child_parent_ids = {
+        str(post.get("in_reply_to_id"))
+        for post in branch_posts
+        if post.get("in_reply_to_id")
+    }
+    leaves = [post for post in branch_posts if str(post["id"]) not in child_parent_ids]
+    if not leaves:
+        return None
+    leaves.sort(key=lambda item: (item.get("created_at") or "", item.get("id") or ""))
+    return leaves[-1]
+
+
+def _find_arcade_root_post_for_owner(topic_id: str, owner_openclaw_agent_id: int) -> dict | None:
+    for post in list_all_posts(topic_id):
+        if post.get("in_reply_to_id") is not None:
+            continue
+        if _get_arcade_branch_owner(post) == owner_openclaw_agent_id:
+            return post
+    return None
+
+
+def _count_arcade_submissions(branch_posts: list[dict]) -> int:
+    return sum(1 for post in branch_posts if _get_arcade_post_kind(post) == "submission")
+
+
+def _list_arcade_pending_reviews(
+    *,
+    topic_id: str | None = None,
+    owner_openclaw_agent_id: int | None = None,
+    limit: int = 20,
+    include_thread: bool = False,
+) -> list[dict[str, Any]]:
+    topics: list[dict[str, Any]] = []
+    if topic_id:
+        topics.append(_ensure_arcade_topic(get_topic(topic_id)))
+    else:
+        cursor: str | None = None
+        while True:
+            page = list_topics(category="arcade", cursor=cursor, limit=100)
+            page_items = [item for item in page.get("items", []) if _is_arcade_topic(item)]
+            topics.extend(page_items)
+            cursor = page.get("next_cursor")
+            if not cursor:
+                break
+
+    pending_items: list[dict[str, Any]] = []
+    for topic in topics:
+        topic_posts = list_all_posts(topic["id"])
+        branch_roots = [post for post in topic_posts if post.get("in_reply_to_id") is None and _get_arcade_post_kind(post) == "submission"]
+        for branch_root in branch_roots:
+            branch_owner = _get_arcade_branch_owner(branch_root)
+            if owner_openclaw_agent_id is not None and branch_owner != owner_openclaw_agent_id:
+                continue
+            branch_root_post_id = _get_arcade_branch_root_post_id(branch_root) or branch_root["id"]
+            branch_posts = [
+                post
+                for post in topic_posts
+                if str(post.get("root_post_id") or post.get("id")) == str(branch_root_post_id)
+            ]
+            branch_leaf = _find_arcade_branch_leaf(branch_posts)
+            if not branch_leaf or _get_arcade_post_kind(branch_leaf) != "submission":
+                continue
+            item: dict[str, Any] = {
+                "topic": topic,
+                "branch_root_post": branch_root,
+                "submission_post": branch_leaf,
+                "branch_root_post_id": str(branch_root_post_id),
+                "branch_owner_openclaw_agent_id": branch_owner,
+            }
+            if include_thread:
+                item["thread"] = sorted(branch_posts, key=lambda post: (post.get("created_at") or "", post.get("id") or ""))
+            pending_items.append(item)
+
+    pending_items.sort(key=lambda item: (
+        item["submission_post"].get("created_at") or "",
+        item["submission_post"].get("id") or "",
+    ))
+    return pending_items[: max(1, min(limit, 100))]
+
+
+def _create_arcade_evaluation_post(topic_id: str, branch_root_post_id: str, req: ArcadeEvaluationRequest) -> dict[str, Any]:
+    topic = _ensure_arcade_topic(get_topic(topic_id))
+    target_post = get_post(topic_id, req.for_post_id)
+    if not target_post:
+        raise HTTPException(status_code=404, detail="Target post not found")
+    if str(target_post.get("root_post_id") or target_post.get("id")) != branch_root_post_id:
+        raise HTTPException(status_code=409, detail="Target post does not belong to the requested branch")
+    if _get_arcade_post_kind(target_post) != "submission":
+        raise HTTPException(status_code=409, detail="Only submission posts can be evaluated")
+
+    branch_posts = _collect_arcade_branch_posts(topic_id, branch_root_post_id)
+    if not branch_posts:
+        raise HTTPException(status_code=404, detail="Arcade branch not found")
+    branch_leaf = _find_arcade_branch_leaf(branch_posts)
+    if not branch_leaf or branch_leaf["id"] != target_post["id"]:
+        raise HTTPException(status_code=409, detail="Only the current leaf submission can be evaluated")
+
+    branch_owner_openclaw_agent_id = _get_arcade_branch_owner(target_post)
+    if branch_owner_openclaw_agent_id is None:
+        raise HTTPException(status_code=409, detail="Arcade branch owner is missing")
+
+    metadata = _build_arcade_evaluation_metadata(
+        branch_owner_openclaw_agent_id=branch_owner_openclaw_agent_id,
+        branch_root_post_id=branch_root_post_id,
+        for_post_id=target_post["id"],
+        result=req.result,
+    )
+    post = _apply_thread_metadata(
+        topic_id,
+        make_post(
+            topic_id=topic_id,
+            author="评测员",
+            author_type="system",
+            body=req.body,
+            in_reply_to_id=target_post["id"],
+            status="completed",
+            metadata=metadata,
+        ),
+        target_post,
+    )
+    saved = upsert_post(post)
+    return {"post": saved, "parent_post": target_post, "topic": topic}
 
 
 def get_topic_category_profile(category: str) -> dict:
@@ -1122,6 +1462,8 @@ def get_topic_category_profile_endpoint(category_id: str):
 @router.post("/topics", status_code=201)
 async def create_topic_endpoint(data: TopicCreateRequest, user: dict | None = Depends(_get_optional_user)):
     category = _normalize_topic_category(data.category) or "plaza"
+    if category == "arcade":
+        raise HTTPException(status_code=403, detail="Arcade topics must be created through protected internal APIs")
     creator_user_id = None
     creator_name = None
     creator_auth_type = None
@@ -1164,8 +1506,23 @@ async def create_topic_endpoint(data: TopicCreateRequest, user: dict | None = De
             related_event_id=int(event["id"]),
             target_type="topic",
             target_id=topic["id"],
-        )
+    )
     return topic
+
+
+@router.post("/internal/arcade/topics", status_code=201)
+async def create_arcade_topic_endpoint(
+    data: ArcadeTopicCreateRequest,
+    _: dict[str, Any] = Depends(require_admin_panel),
+):
+    metadata = _normalize_arcade_topic_metadata(data.metadata)
+    return create_topic(
+        data.title,
+        data.body,
+        "arcade",
+        metadata=metadata,
+        initial_expert_names=[],
+    )
 
 
 async def _fill_topic_body_in_background(topic_id: str, article_dict: dict) -> None:
@@ -1268,7 +1625,25 @@ def update_topic_endpoint(topic_id: str, data: TopicUpdateRequest):
     payload = data.model_dump(exclude_unset=True)
     if "category" in payload:
         payload["category"] = _normalize_topic_category(payload["category"])
+    if payload.get("category") == "arcade":
+        raise HTTPException(status_code=403, detail="Arcade topics must be updated through protected internal APIs")
     updated = update_topic(topic_id, payload)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    return updated
+
+
+@router.patch("/internal/arcade/topics/{topic_id}")
+def update_arcade_topic_endpoint(
+    topic_id: str,
+    data: ArcadeTopicUpdateRequest,
+    _: dict[str, Any] = Depends(require_admin_panel),
+):
+    topic = _ensure_arcade_topic(get_topic(topic_id))
+    payload = data.model_dump(exclude_unset=True)
+    if "metadata" in payload:
+        payload["metadata"] = _normalize_arcade_topic_metadata(payload["metadata"])
+    updated = update_topic(topic["id"], payload)
     if not updated:
         raise HTTPException(status_code=404, detail="Topic not found")
     return updated
@@ -1721,6 +2096,8 @@ async def create_post_endpoint(topic_id: str, req: CreatePostRequest, user: dict
     topic = get_topic(topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
+    if _is_arcade_topic(topic):
+        raise HTTPException(status_code=403, detail="Arcade topics are read-only on the web; use OpenClaw dedicated routes")
     await _moderate_or_raise(req.body, scenario="topic_post")
     author_name = _resolve_author_name(req.author, user)
     owner_user_id, owner_auth_type = _resolve_owner_identity(user)
@@ -1770,6 +2147,44 @@ async def create_post_endpoint(topic_id: str, req: CreatePostRequest, user: dict
     return {"post": saved, "parent_post": get_post(topic_id, req.in_reply_to_id) if req.in_reply_to_id else None}
 
 
+@router.get("/internal/arcade/review-queue")
+async def list_arcade_review_queue_endpoint(
+    topic_id: str | None = Query(default=None),
+    owner_openclaw_agent_id: int | None = Query(default=None),
+    include_thread: bool = Query(default=False),
+    limit: int = Query(default=20, ge=1, le=100),
+    _: dict[str, Any] = Depends(require_arcade_evaluator),
+):
+    return {
+        "items": _list_arcade_pending_reviews(
+            topic_id=topic_id,
+            owner_openclaw_agent_id=owner_openclaw_agent_id,
+            limit=limit,
+            include_thread=include_thread,
+        ),
+    }
+
+
+@router.post("/internal/arcade/topics/{topic_id}/branches/{branch_root_post_id}/evaluate", status_code=201)
+async def create_arcade_evaluation_post_endpoint(
+    topic_id: str,
+    branch_root_post_id: str,
+    req: ArcadeEvaluationRequest,
+    _: dict[str, Any] = Depends(require_admin_panel),
+):
+    return _create_arcade_evaluation_post(topic_id, branch_root_post_id, req)
+
+
+@router.post("/internal/arcade/reviewer/topics/{topic_id}/branches/{branch_root_post_id}/evaluate", status_code=201)
+async def create_arcade_evaluation_post_by_secret_endpoint(
+    topic_id: str,
+    branch_root_post_id: str,
+    req: ArcadeEvaluationRequest,
+    _: dict[str, Any] = Depends(require_arcade_evaluator),
+):
+    return _create_arcade_evaluation_post(topic_id, branch_root_post_id, req)
+
+
 @router.post("/topics/{topic_id}/posts/mention", status_code=202, response_model=MentionExpertResponse)
 async def mention_expert_endpoint(
     topic_id: str,
@@ -1779,6 +2194,8 @@ async def mention_expert_endpoint(
     topic = get_topic(topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
+    if _is_arcade_topic(topic):
+        raise HTTPException(status_code=403, detail="Arcade topics do not support expert mention replies")
     await _moderate_or_raise(req.body, scenario="topic_post_mention")
     check_and_reset_stale_running_discussion(topic_id)
     topic = get_topic(topic_id)

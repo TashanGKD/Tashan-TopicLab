@@ -23,6 +23,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("RESONNET_BASE_URL", "http://resonnet.test")
     monkeypatch.setenv("ADMIN_PHONE_NUMBERS", "13800000001")
     monkeypatch.setenv("ADMIN_PANEL_PASSWORD", "admin-panel-secret")
+    monkeypatch.setenv("ARCADE_EVALUATOR_SECRET_KEY", "arcade-review-secret")
     monkeypatch.setenv("TOPICLAB_TESTING", "1")
 
     from app.storage.database import postgres_client, topic_store
@@ -104,6 +105,19 @@ def client(tmp_path, monkeypatch):
         return {}
 
     monkeypatch.setattr(topics_module, "request_json", fake_request_json)
+    monkeypatch.setattr(
+        topics_module,
+        "moderate_post_content",
+        lambda body, scenario: asyncio.sleep(
+            0,
+            result=ModerationDecision(
+                approved=True,
+                reason="ok",
+                suggestion="",
+                category="safe",
+            ),
+        ),
+    )
 
     from fastapi.testclient import TestClient
 
@@ -218,22 +232,238 @@ def test_topic_create_list_and_posts(client):
     assert bundle["posts"]["items"][0]["topic_id"] == topic_id
     assert bundle["experts"][0]["name"] == "physicist"
 
-    delete_resp = client.delete(
-        f"/topics/{topic_id}/posts/{post_payload['post']['id']}",
+
+def test_arcade_topic_internal_create_and_metadata_roundtrip(client):
+    admin = admin_panel_login(client)
+    metadata = {
+        "scene": "arcade",
+        "arcade": {
+            "board": "ml",
+            "task_type": "list_output",
+            "prompt": "请输出一个 JSON 列表。",
+            "rules": "必须输出合法 JSON。",
+            "output_mode": "json_array",
+            "output_schema": {"type": "array", "items": {"type": "string"}},
+            "validator": {"type": "custom"},
+            "heartbeat_interval_minutes": 30,
+            "visibility": "public_read",
+        },
+    }
+    create = client.post(
+        "/api/v1/internal/arcade/topics",
+        json={"title": "Arcade 题目", "body": "题目正文", "metadata": metadata},
         headers={"Authorization": f"Bearer {admin['token']}"},
     )
-    assert delete_resp.status_code == 200, delete_resp.text
-    assert delete_resp.json()["ok"] is True
+    assert create.status_code == 201, create.text
+    topic = create.json()
+    assert topic["category"] == "arcade"
+    assert topic["metadata"]["scene"] == "arcade"
+    assert topic["metadata"]["arcade"]["output_mode"] == "json_array"
 
-    topic_delete_resp = client.delete(
-        f"/topics/{topic_id}",
+    fetched = client.get(f"/topics/{topic['id']}")
+    assert fetched.status_code == 200, fetched.text
+    assert fetched.json()["metadata"]["arcade"]["prompt"] == "请输出一个 JSON 列表。"
+
+    listed = client.get("/topics?category=arcade")
+    assert listed.status_code == 200, listed.text
+    assert any(item["id"] == topic["id"] and item["metadata"]["scene"] == "arcade" for item in listed.json()["items"])
+
+    updated = client.patch(
+        f"/api/v1/internal/arcade/topics/{topic['id']}",
+        json={"metadata": {"arcade": {"rules": "更新后的规则", "output_mode": "json_array"}}},
         headers={"Authorization": f"Bearer {admin['token']}"},
     )
-    assert topic_delete_resp.status_code == 200, topic_delete_resp.text
-    assert topic_delete_resp.json()["ok"] is True
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["metadata"]["scene"] == "arcade"
+    assert updated.json()["metadata"]["arcade"]["rules"] == "更新后的规则"
 
-    topic_missing = client.get(f"/topics/{topic_id}")
-    assert topic_missing.status_code == 404
+    forbidden = client.post("/topics", json={"title": "非法 arcade", "body": "x", "category": "arcade"})
+    assert forbidden.status_code == 403, forbidden.text
+
+
+def test_arcade_openclaw_branch_rules_are_enforced(client):
+    admin = admin_panel_login(client)
+    create = client.post(
+        "/api/v1/internal/arcade/topics",
+        json={
+            "title": "Arcade 分支题",
+            "body": "题目正文",
+            "metadata": {"arcade": {"prompt": "输出答案", "rules": "沿自己的分支继续回复", "output_mode": "plain_text"}},
+        },
+        headers={"Authorization": f"Bearer {admin['token']}"},
+    )
+    assert create.status_code == 201, create.text
+    topic_id = create.json()["id"]
+
+    jwt_user = register_and_login(client, phone="13800009001", username="arcade-jwt-user")
+    openclaw_a = register_login_and_openclaw_key(client, phone="13800009002", username="arcade-a")
+    openclaw_b = register_login_and_openclaw_key(client, phone="13800009003", username="arcade-b")
+
+    web_post = client.post(
+        f"/topics/{topic_id}/posts",
+        json={"author": "arcade-jwt-user", "body": "网页端不该能发"},
+        headers={"Authorization": f"Bearer {jwt_user['token']}"},
+    )
+    assert web_post.status_code == 403, web_post.text
+
+    branch_a_root_resp = client.post(
+        f"/api/v1/openclaw/topics/{topic_id}/posts",
+        json={"body": '["alpha", "beta"]'},
+        headers={"Authorization": f"Bearer {openclaw_a['openclaw_key']}"},
+    )
+    assert branch_a_root_resp.status_code == 201, branch_a_root_resp.text
+    branch_a_root = branch_a_root_resp.json()["post"]
+    assert branch_a_root["metadata"]["arcade"]["post_kind"] == "submission"
+    assert branch_a_root["metadata"]["arcade"]["version"] == 1
+    assert branch_a_root["metadata"]["arcade"]["branch_owner_openclaw_agent_id"] == branch_a_root["owner_openclaw_agent_id"]
+
+    duplicate_root = client.post(
+        f"/api/v1/openclaw/topics/{topic_id}/posts",
+        json={"body": '["duplicate"]'},
+        headers={"Authorization": f"Bearer {openclaw_a['openclaw_key']}"},
+    )
+    assert duplicate_root.status_code == 409, duplicate_root.text
+
+    write_other_branch = client.post(
+        f"/api/v1/openclaw/topics/{topic_id}/posts",
+        json={"body": '["hijack"]', "in_reply_to_id": branch_a_root["id"]},
+        headers={"Authorization": f"Bearer {openclaw_b['openclaw_key']}"},
+    )
+    assert write_other_branch.status_code == 403, write_other_branch.text
+
+    branch_b_root_resp = client.post(
+        f"/api/v1/openclaw/topics/{topic_id}/posts",
+        json={"body": "这是 B 的答案"},
+        headers={"Authorization": f"Bearer {openclaw_b['openclaw_key']}"},
+    )
+    assert branch_b_root_resp.status_code == 201, branch_b_root_resp.text
+
+    branch_a_second_resp = client.post(
+        f"/api/v1/openclaw/topics/{topic_id}/posts",
+        json={"body": '["alpha", "beta", "gamma"]', "in_reply_to_id": branch_a_root["id"]},
+        headers={"Authorization": f"Bearer {openclaw_a['openclaw_key']}"},
+    )
+    assert branch_a_second_resp.status_code == 201, branch_a_second_resp.text
+    branch_a_second = branch_a_second_resp.json()["post"]
+    assert branch_a_second["metadata"]["arcade"]["version"] == 2
+
+    non_leaf_reply = client.post(
+        f"/api/v1/openclaw/topics/{topic_id}/posts",
+        json={"body": '["should fail"]', "in_reply_to_id": branch_a_root["id"]},
+        headers={"Authorization": f"Bearer {openclaw_a['openclaw_key']}"},
+    )
+    assert non_leaf_reply.status_code == 409, non_leaf_reply.text
+
+
+def test_arcade_internal_evaluation_creates_system_post_and_inbox(client):
+    admin = admin_panel_login(client)
+    create = client.post(
+        "/api/v1/internal/arcade/topics",
+        json={
+            "title": "Arcade 评测题",
+            "body": "题目正文",
+            "metadata": {"arcade": {"prompt": "输出一句话", "rules": "等评测再继续", "output_mode": "plain_text"}},
+        },
+        headers={"Authorization": f"Bearer {admin['token']}"},
+    )
+    assert create.status_code == 201, create.text
+    topic_id = create.json()["id"]
+
+    owner = register_login_and_openclaw_key(client, phone="13800009004", username="arcade-owner")
+    owner_headers = {"Authorization": f"Bearer {owner['token']}"}
+
+    submission_resp = client.post(
+        f"/api/v1/openclaw/topics/{topic_id}/posts",
+        json={"body": "第一版答案"},
+        headers={"Authorization": f"Bearer {owner['openclaw_key']}"},
+    )
+    assert submission_resp.status_code == 201, submission_resp.text
+    submission = submission_resp.json()["post"]
+
+    evaluation_resp = client.post(
+        f"/api/v1/internal/arcade/topics/{topic_id}/branches/{submission['id']}/evaluate",
+        json={
+            "for_post_id": submission["id"],
+            "body": "未通过，请补充更具体的表达。",
+            "result": {"passed": False, "score": 0.4, "feedback": "不够具体"},
+        },
+        headers={"Authorization": f"Bearer {admin['token']}"},
+    )
+    assert evaluation_resp.status_code == 201, evaluation_resp.text
+    evaluation_post = evaluation_resp.json()["post"]
+    assert evaluation_post["author_type"] == "system"
+    assert evaluation_post["author"] == "评测员"
+    assert evaluation_post["metadata"]["arcade"]["post_kind"] == "evaluation"
+    assert evaluation_post["metadata"]["arcade"]["for_post_id"] == submission["id"]
+
+    thread = client.get(f"/topics/{topic_id}/posts/{submission['id']}/thread", headers=owner_headers)
+    assert thread.status_code == 200, thread.text
+    assert [item["author_type"] for item in thread.json()["items"]] == ["human", "system"]
+
+    inbox = client.get("/api/v1/me/inbox", headers=owner_headers)
+    assert inbox.status_code == 200, inbox.text
+    assert inbox.json()["unread_count"] == 1
+    assert inbox.json()["items"][0]["reply_post_id"] == evaluation_post["id"]
+
+
+def test_arcade_evaluator_secret_can_list_pending_submissions_and_reply(client):
+    admin = admin_panel_login(client)
+    create = client.post(
+        "/api/v1/internal/arcade/topics",
+        json={
+            "title": "Arcade Secret Review",
+            "body": "题目正文",
+            "metadata": {"arcade": {"prompt": "给出最终答案", "rules": "等评测再继续", "output_mode": "plain_text"}},
+        },
+        headers={"Authorization": f"Bearer {admin['token']}"},
+    )
+    assert create.status_code == 201, create.text
+    topic_id = create.json()["id"]
+
+    owner = register_login_and_openclaw_key(client, phone="13800009005", username="arcade-secret-owner")
+    submission_resp = client.post(
+        f"/api/v1/openclaw/topics/{topic_id}/posts",
+        json={"body": "需要评测的答案"},
+        headers={"Authorization": f"Bearer {owner['openclaw_key']}"},
+    )
+    assert submission_resp.status_code == 201, submission_resp.text
+    submission = submission_resp.json()["post"]
+
+    unauthorized_queue = client.get("/api/v1/internal/arcade/review-queue")
+    assert unauthorized_queue.status_code == 401, unauthorized_queue.text
+
+    queue = client.get(
+        "/api/v1/internal/arcade/review-queue?include_thread=true",
+        headers={"X-Arcade-Secret-Key": "arcade-review-secret"},
+    )
+    assert queue.status_code == 200, queue.text
+    items = queue.json()["items"]
+    assert len(items) == 1
+    assert items[0]["topic"]["id"] == topic_id
+    assert items[0]["branch_root_post_id"] == submission["id"]
+    assert items[0]["submission_post"]["id"] == submission["id"]
+    assert [post["id"] for post in items[0]["thread"]] == [submission["id"]]
+
+    evaluation_resp = client.post(
+        f"/api/v1/internal/arcade/reviewer/topics/{topic_id}/branches/{submission['id']}/evaluate",
+        json={
+            "for_post_id": submission["id"],
+            "body": "通过，保持这个答案。",
+            "result": {"passed": True, "score": 1.0, "feedback": "答案可接受"},
+        },
+        headers={"X-Arcade-Secret-Key": "arcade-review-secret"},
+    )
+    assert evaluation_resp.status_code == 201, evaluation_resp.text
+    evaluation_post = evaluation_resp.json()["post"]
+    assert evaluation_post["author_type"] == "system"
+    assert evaluation_post["metadata"]["arcade"]["post_kind"] == "evaluation"
+
+    empty_queue = client.get(
+        "/api/v1/internal/arcade/review-queue",
+        headers={"X-Arcade-Secret-Key": "arcade-review-secret"},
+    )
+    assert empty_queue.status_code == 200, empty_queue.text
+    assert empty_queue.json()["items"] == []
 
 
 def test_topic_list_uses_latest_post_oss_image_as_preview_fallback(client):
@@ -2291,6 +2521,19 @@ def test_app_topic_is_singleton(client):
     second_payload = second.json()
     assert second_payload["created"] is False
     assert second_payload["topic"]["id"] == topic_id
+
+
+def test_apps_catalog_exposes_scientify_install_command(client):
+    resp = client.get("/api/v1/apps")
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+
+    scientify = next((item for item in payload["list"] if item["id"] == "scientify"), None)
+    assert scientify is not None
+    assert scientify["name"] == "Scientify"
+    assert scientify["install_command"] == "openclaw plugins install scientify"
+    assert scientify["links"]["docs"] == "https://scientify.tech/zh"
+    assert scientify["links"]["repo"] == "https://github.com/tsingyuai/scientify"
 
 
 def test_feedback_submit_migrates_legacy_site_feedback_schema(client):

@@ -574,6 +574,10 @@ export default function TopicDetail() {
   const handleSubmitPost = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!id || !postText.trim() || !currentUser) return
+    if (topic?.category === 'arcade' && topic.metadata?.scene === 'arcade') {
+      setSubmitError('Arcade 题目在 Web 端只读，只有 OpenClaw 和系统评测员可以在分支内写入。')
+      return
+    }
 
     const submittedText = postText
     const replyTarget = replyingTo
@@ -882,7 +886,19 @@ export default function TopicDetail() {
   }
 
   const isDiscussionMode = topic.mode === 'discussion' || topic.mode === 'both'
-  const canMentionExperts = topic.discussion_status !== 'pending' && topic.discussion_status !== 'running' && topicExperts.length > 0
+  const arcadeConfig = topic.metadata?.scene === 'arcade' ? topic.metadata.arcade : undefined
+  const isArcadeTopic = topic.category === 'arcade' && topic.metadata?.scene === 'arcade'
+  const arcadePrompt = typeof arcadeConfig?.prompt === 'string' ? arcadeConfig.prompt : ''
+  const arcadeRules = typeof arcadeConfig?.rules === 'string' ? arcadeConfig.rules : ''
+  const arcadeMetadataTags = Array.isArray(arcadeConfig?.tags)
+    ? arcadeConfig.tags.map((tag) => String(tag ?? '').trim()).filter(Boolean)
+    : []
+  const arcadeFallbackTags = [
+    typeof arcadeConfig?.board === 'string' ? arcadeConfig.board.trim().toUpperCase() : '',
+    typeof arcadeConfig?.difficulty === 'string' ? arcadeConfig.difficulty.trim() : '',
+  ].filter(Boolean)
+  const arcadeDisplayTags = arcadeMetadataTags.length > 0 ? arcadeMetadataTags : arcadeFallbackTags
+  const canMentionExperts = !isArcadeTopic && topic.discussion_status !== 'pending' && topic.discussion_status !== 'running' && topicExperts.length > 0
   const shouldUseReplyDock = viewportWidth < 1024
   const shouldShowReplyDock = topic.status === 'open' && replyingTo !== null && shouldUseReplyDock
   const closeReplyDock = () => setReplyingTo(null)
@@ -976,6 +992,37 @@ export default function TopicDetail() {
           ) : null}
 
           <div className="border-t border-gray-100 my-5 sm:my-6" />
+
+          {isArcadeTopic ? (
+            <section className="mb-5 rounded-[24px] border border-gray-200 bg-gray-50 px-4 py-4 sm:px-5">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                <span className="rounded-full bg-black px-2.5 py-1 text-white">Arcade 题目</span>
+                <span className="rounded-full bg-white px-2.5 py-1 text-gray-600">Web 端只读</span>
+                {arcadeDisplayTags.map((tag) => (
+                  <span key={`arcade-tag-${tag}`} className="rounded-full bg-white px-2.5 py-1 text-gray-600">{tag}</span>
+                ))}
+              </div>
+              <p className="mt-3 text-sm text-gray-600">
+                这个题目使用 Arcade 受限分支模式。真人用户可以阅读所有分支；只有 OpenClaw 能在自己的专属分支里提交答案，系统评测员会在同一分支里回复评测结果。
+              </p>
+              {arcadePrompt ? (
+                <div className="mt-4">
+                  <h2 className="text-sm font-semibold text-gray-900">题目要求</h2>
+                  <div className="markdown-content markdown-content-compact mt-2 text-sm text-gray-700">
+                    {renderMarkdown(arcadePrompt, topic.id)}
+                  </div>
+                </div>
+              ) : null}
+              {arcadeRules ? (
+                <div className="mt-4">
+                  <h2 className="text-sm font-semibold text-gray-900">比赛规则</h2>
+                  <div className="markdown-content markdown-content-compact mt-2 text-sm text-gray-700">
+                    {renderMarkdown(arcadeRules, topic.id)}
+                  </div>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
 
           {/* Mobile TOC - horizontal scroll, sticky */}
           {hasDiscussion && navItems.length > 0 && (
@@ -1112,6 +1159,9 @@ export default function TopicDetail() {
               {canMentionExperts && (
                 <span className="text-xs font-normal text-gray-400 ml-2">— 输入 @ 可追问角色</span>
               )}
+              {isArcadeTopic && (
+                <span className="text-xs font-normal text-gray-400 ml-2">— 公开读取全部分支，Web 端只读</span>
+              )}
             </h2>
 
             {postsLoading ? (
@@ -1129,7 +1179,7 @@ export default function TopicDetail() {
                 onLike={throttledLikePost}
                 onShare={throttledSharePost}
                 onLoadReplies={handleLoadReplies}
-                canReply={topic.status === 'open'}
+                canReply={topic.status === 'open' && !isArcadeTopic}
                 canDelete={canDeletePost}
                 canLike
                 pendingLikePostIds={postLikePendingIds}
@@ -1153,7 +1203,16 @@ export default function TopicDetail() {
 
             {topic.status === 'open' ? (
               <div className="mt-6 pt-4 border-t border-gray-100">
-                {replyingTo ? (
+                {isArcadeTopic ? (
+                  <div className="ml-auto w-full max-w-[42rem] rounded-xl border border-gray-200 bg-white px-4 py-4 shadow-sm">
+                    <div className="flex flex-col gap-2">
+                      <p className="text-sm font-medium text-black">Arcade 题目在 Web 端只读</p>
+                      <p className="text-xs text-gray-500">
+                        只有 OpenClaw 可以在自己的专属分支里继续提交答案，系统评测员会在同一分支回复评测结果。你可以阅读所有分支，把它们当作公开经验库。
+                      </p>
+                    </div>
+                  </div>
+                ) : replyingTo ? (
                   shouldUseReplyDock ? (
                     <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
                       <div className="min-w-0">
@@ -1375,7 +1434,7 @@ export default function TopicDetail() {
 
       <div id="topic-detail-bottom-anchor" className="h-px w-full" aria-hidden />
 
-      {shouldShowReplyDock && (
+      {shouldShowReplyDock && !isArcadeTopic && (
         <div
           className="fixed inset-0 z-40 flex items-end justify-end px-4 sm:px-6 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
           onClick={closeReplyDock}

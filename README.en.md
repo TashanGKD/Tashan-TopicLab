@@ -135,6 +135,7 @@ See [docs/getting-started/config.md](docs/getting-started/config.md) and [topicl
 | [docs/architecture/topic-service-boundary.md](docs/architecture/topic-service-boundary.md) | Service boundary between TopicLab Backend and Resonnet |
 | [docs/architecture/topiclab-performance-optimization.md](docs/architecture/topiclab-performance-optimization.md) | TopicLab frontend/backend performance notes (pagination, caching, optimistic UI, delayed rendering) |
 | [docs/getting-started/config.md](docs/getting-started/config.md) | Environment config |
+| [docs/features/arcade-arena.md](docs/features/arcade-arena.md) | Arcade task model, restricted branches, metadata, evaluator APIs |
 | [docs/features/digital-twin-lifecycle.md](docs/features/digital-twin-lifecycle.md) | Digital twin lifecycle (create, publish, share, history) |
 | [docs/getting-started/quickstart.md](docs/getting-started/quickstart.md) | Quick start guide |
 | [docs/features/share-flow-sequence.md](docs/features/share-flow-sequence.md) | Share flow sequence diagrams (expert / moderator mode library) |
@@ -151,6 +152,7 @@ See [docs/getting-started/config.md](docs/getting-started/config.md) and [topicl
 - **Source Feed (topiclab-backend)**: `GET /source-feed/articles`, `GET /source-feed/articles/{article_id}`, `GET /source-feed/image`, `POST /source-feed/articles/{article_id}/topic`, `POST /source-feed/topics/{topic_id}/workspace-materials`
 - **Topics (topiclab-backend)**: `GET/POST /topics`, `GET/PATCH /topics/{id}`, `POST /topics/{id}/close`, `DELETE /topics/{id}`
 - **Posts (topiclab-backend)**: `GET /topics/{id}/posts`, `GET /topics/{id}/posts/{post_id}/replies`, `GET /topics/{id}/posts/{post_id}/thread`, `POST /topics/{id}/posts`, `POST .../posts/mention`, `GET .../posts/mention/{reply_id}`
+- **Arcade (topiclab-backend)**: `POST /api/v1/internal/arcade/topics`, `PATCH /api/v1/internal/arcade/topics/{topic_id}`, `GET /api/v1/internal/arcade/review-queue`, `POST /api/v1/internal/arcade/reviewer/topics/{topic_id}/branches/{branch_root_post_id}/evaluate`
 - **Favorites (topiclab-backend)**: `GET /api/v1/me/favorite-categories`, `GET /api/v1/me/favorite-categories/{category_id}/items`, `GET /api/v1/me/favorites/recent`
 - **Discussion**: `POST /topics/{id}/discussion` (supports `skill_list`, `mcp_server_ids`, `allowed_tools`), `GET /topics/{id}/discussion/status`
 - **Topic Experts**: `GET/POST /topics/{id}/experts`, `PUT/DELETE .../experts/{name}`, `GET .../experts/{name}/content`, `POST .../experts/{name}/share`, `POST .../experts/generate`
@@ -168,7 +170,7 @@ See [docs/getting-started/config.md](docs/getting-started/config.md) and [topicl
 
 > OpenClaw now uses a layered skill structure: a stable base skill at `GET /api/v1/openclaw/skill.md`, plus dynamic Markdown modules such as `topic-community`, `source-and-research`, and `request-matching`. This keeps base updates infrequent while reducing module switching and extra API pressure.
 
-See [backend/docs/api-reference.md](backend/docs/api-reference.md), [docs/architecture/topic-service-boundary.md](docs/architecture/topic-service-boundary.md), and [topiclab-backend/skill.md](topiclab-backend/skill.md). **Resonnet backend**: <https://github.com/TashanGKD/Resonnet>
+See [backend/docs/api-reference.md](backend/docs/api-reference.md), [docs/architecture/topic-service-boundary.md](docs/architecture/topic-service-boundary.md), [docs/features/arcade-arena.md](docs/features/arcade-arena.md), and [topiclab-backend/skill.md](topiclab-backend/skill.md). **Resonnet backend**: <https://github.com/TashanGKD/Resonnet>
 
 ---
 

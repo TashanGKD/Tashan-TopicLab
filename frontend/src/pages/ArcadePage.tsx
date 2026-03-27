@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import LibraryPageLayout from '../components/LibraryPageLayout'
-import ArcadeCabinetList, { ArcadeCabinetItem } from '../components/ArcadeCabinetList'
+import { TopicListItem, topicsApi } from '../api/client'
 
 interface ArcadeTrack {
   id: string
@@ -15,8 +16,9 @@ interface ArcadeTrack {
     glowRight: string
     shimmer: string
   }
-  cabinets: ArcadeCabinetItem[]
 }
+
+const HERO_AUTOPLAY_MS = 5000
 
 const tracks: ArcadeTrack[] = [
   {
@@ -32,25 +34,12 @@ const tracks: ArcadeTrack[] = [
       glowRight: 'radial-gradient(circle, rgba(129, 140, 248, 0.10) 0%, rgba(129, 140, 248, 0) 72%)',
       shimmer: 'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.22) 48%, rgba(255,255,255,0) 100%)',
     },
-    cabinets: [
-      {
-        id: 'cabinet-101',
-        cabinetLabel: 'CABINET 101',
-        title: '101-CIFAR',
-        subtitle: '深度学习调参',
-        metrics: [
-          { label: '输入', value: '配置参数' },
-          { label: '反馈', value: '曲线与得分' },
-          { label: '目标', value: '持续提分' },
-        ],
-      },
-    ],
   },
   {
     id: 'humanity-showdown',
     eyebrow: 'HUMANITY SHOWDOWN',
     title: '人味大比拼！',
-    description: '比较 agent 在语气、体感、分寸与共情上的表现，而不是只看任务是否完成。',
+    description: '比较语气、体感、分寸与共情上的表现，而不是只看任务是否完成。',
     githubHref: 'https://github.com/TashanGKD/ClawArcade',
     heroStyle: {
       background: 'linear-gradient(135deg, rgba(245,241,246,0.98) 0%, rgba(237,232,241,0.97) 44%, rgba(229,224,236,0.98) 100%)',
@@ -59,36 +48,45 @@ const tracks: ArcadeTrack[] = [
       glowRight: 'radial-gradient(circle, rgba(99, 102, 241, 0.10) 0%, rgba(99, 102, 241, 0) 72%)',
       shimmer: 'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.2) 48%, rgba(255,255,255,0) 100%)',
     },
-    cabinets: [
-      {
-        id: 'cabinet-h01',
-        cabinetLabel: 'CABINET H01',
-        title: '人味大比拼',
-        subtitle: '情境表达',
-        metrics: [
-          { label: '输入', value: '同题对话场景' },
-          { label: '反馈', value: '语气与共情评分' },
-          { label: '目标', value: '更像真人回应' },
-        ],
-      },
-      {
-        id: 'cabinet-h02',
-        cabinetLabel: 'CABINET H02',
-        title: '边界感测试',
-        subtitle: '分寸拿捏',
-        metrics: [
-          { label: '输入', value: '高敏感用户请求' },
-          { label: '反馈', value: '稳态与礼貌度' },
-          { label: '目标', value: '克制但不冷淡' },
-        ],
-      },
-    ],
   },
 ]
 
 export default function ArcadePage() {
   const [activeIndex, setActiveIndex] = useState(0)
+  const [topics, setTopics] = useState<TopicListItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const activeTrack = tracks[activeIndex]
+
+  useEffect(() => {
+    let mounted = true
+    const loadTopics = async () => {
+      try {
+        setLoading(true)
+        const res = await topicsApi.list({ category: 'arcade', limit: 24 })
+        if (!mounted) return
+        setTopics(res.data.items)
+        setError('')
+      } catch {
+        if (!mounted) return
+        setTopics([])
+        setError('Arcade 题目加载失败')
+      } finally {
+        if (mounted) setLoading(false)
+      }
+    }
+    void loadTopics()
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setActiveIndex((prev) => (prev === tracks.length - 1 ? 0 : prev + 1))
+    }, HERO_AUTOPLAY_MS)
+    return () => window.clearInterval(timer)
+  }, [])
 
   const goPrev = () => {
     setActiveIndex((prev) => (prev === 0 ? tracks.length - 1 : prev - 1))
@@ -230,8 +228,80 @@ export default function ArcadePage() {
           </div>
         </div>
       </section>
+      <section className="mt-10">
+        <div className="mb-4 flex items-end justify-between gap-3">
+          <div>
+            <p className="text-[11px] tracking-[0.22em]" style={{ color: '#94a3b8' }}>
+              LIVE TASKS
+            </p>
+            <h3 className="mt-2 text-2xl font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>
+              当前 Arcade 题目
+            </h3>
+          </div>
+          <p className="text-sm" style={{ color: '#64748b' }}>
+            公开查看所有分支，进入题目页阅读迭代过程。
+          </p>
+        </div>
 
-      <ArcadeCabinetList items={activeTrack.cabinets} />
+        {loading ? (
+          <div className="rounded-[24px] border px-5 py-6 text-sm text-gray-500" style={{ borderColor: 'rgba(148,163,184,0.22)' }}>
+            加载中...
+          </div>
+        ) : error ? (
+          <div className="rounded-[24px] border px-5 py-6 text-sm text-red-600" style={{ borderColor: 'rgba(248,113,113,0.25)' }}>
+            {error}
+          </div>
+        ) : topics.length === 0 ? (
+          <div className="rounded-[24px] border px-5 py-6 text-sm text-gray-500" style={{ borderColor: 'rgba(148,163,184,0.22)' }}>
+            还没有发布 Arcade 题目。
+          </div>
+        ) : (
+          <div className="grid gap-4">
+            {topics.map((topic) => {
+              const arcadeMeta = topic.metadata?.scene === 'arcade' ? topic.metadata.arcade : undefined
+              const prompt = typeof arcadeMeta?.prompt === 'string' ? arcadeMeta.prompt : topic.body
+              const metadataTags = Array.isArray(arcadeMeta?.tags)
+                ? arcadeMeta.tags.map((tag) => String(tag ?? '').trim()).filter(Boolean)
+                : []
+              const fallbackTags = [
+                typeof arcadeMeta?.board === 'string' ? arcadeMeta.board.trim().toUpperCase() : '',
+                typeof arcadeMeta?.difficulty === 'string' ? arcadeMeta.difficulty.trim() : '',
+              ].filter(Boolean)
+              const displayTags = metadataTags.length > 0 ? metadataTags : fallbackTags
+              return (
+                <Link
+                  key={topic.id}
+                  to={`/topics/${topic.id}`}
+                  className="rounded-[24px] border px-5 py-5 transition-all duration-300 hover:-translate-y-0.5"
+                  style={{
+                    borderColor: 'rgba(148,163,184,0.22)',
+                    backgroundColor: 'rgba(255,255,255,0.76)',
+                    boxShadow: '0 10px 30px rgba(148, 163, 184, 0.08)',
+                    backdropFilter: 'blur(10px)',
+                  }}
+                >
+                  <div className="flex flex-wrap items-center gap-2 text-[11px]" style={{ color: '#94a3b8' }}>
+                    {displayTags.map((tag) => (
+                      <span key={`${topic.id}-${tag}`} className="rounded-full border px-2 py-1" style={{ borderColor: 'rgba(203,213,225,0.8)' }}>
+                        {tag}
+                      </span>
+                    ))}
+                    <span>跟贴 {topic.posts_count ?? 0}</span>
+                  </div>
+                  <h4 className="mt-3 text-xl font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    {topic.title}
+                  </h4>
+                  {prompt?.trim() ? (
+                    <p className="mt-3 line-clamp-3 text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
+                      {prompt}
+                    </p>
+                  ) : null}
+                </Link>
+              )
+            })}
+          </div>
+        )}
+      </section>
     </LibraryPageLayout>
   )
 }

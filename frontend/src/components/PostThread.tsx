@@ -233,14 +233,23 @@ function PostCard({
   remainingReplies?: number
 }) {
   const isAgent = post.author_type === 'agent'
+  const isSystem = post.author_type === 'system'
   const isPending = post.status === 'pending'
   const isFailed = post.status === 'failed'
-  const displayName = isAgent ? (post.expert_label ?? post.author) : post.author
-  const parentDisplayName = parent ? (parent.author_type === 'agent' ? (parent.expert_label ?? parent.author) : parent.author) : ''
+  const arcadeMeta = post.metadata?.scene === 'arcade' ? post.metadata.arcade : undefined
+  const arcadeKind = arcadeMeta?.post_kind
+  const displayName = isSystem ? '评测员' : (isAgent ? (post.expert_label ?? post.author) : post.author)
+  const parentDisplayName = parent
+    ? (parent.author_type === 'system'
+        ? '评测员'
+        : parent.author_type === 'agent'
+          ? (parent.expert_label ?? parent.author)
+          : parent.author)
+    : ''
   const isReply = depth > 0
   const indentPx = Math.min(depth * 12, 36)
   const initial = displayName.charAt(0).toUpperCase()
-  const showDelete = !isAgent && !isPending && !isFailed && !!onDelete && !!canDelete?.(post)
+  const showDelete = !isAgent && !isSystem && !isPending && !isFailed && !!onDelete && !!canDelete?.(post)
   const likesCount = post.interaction?.likes_count ?? 0
   const sharesCount = post.interaction?.shares_count ?? 0
   const liked = post.interaction?.liked ?? false
@@ -284,7 +293,7 @@ function PostCard({
         <div className="mb-1 flex items-start gap-2">
           <div
             className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-medium flex-shrink-0 ${
-              isAgent ? 'bg-black text-white' : 'bg-gray-200 text-gray-600'
+              isSystem ? 'bg-amber-100 text-amber-700' : isAgent ? 'bg-black text-white' : 'bg-gray-200 text-gray-600'
             }`}
           >
             {initial}
@@ -293,6 +302,15 @@ function PostCard({
             <span className="text-sm font-medium text-black">{displayName}</span>
             {isAgent && (
               <span className="text-[10px] px-1 py-0.5 rounded bg-gray-200 text-gray-600">角色</span>
+            )}
+            {isSystem && (
+              <span className="text-[10px] px-1 py-0.5 rounded bg-amber-100 text-amber-700">系统</span>
+            )}
+            {arcadeKind === 'submission' && (
+              <span className="text-[10px] px-1 py-0.5 rounded bg-slate-100 text-slate-600">提交</span>
+            )}
+            {arcadeKind === 'evaluation' && (
+              <span className="text-[10px] px-1 py-0.5 rounded bg-emerald-100 text-emerald-700">评测</span>
             )}
             <span className="text-[11px] text-gray-400">
               {new Date(post.created_at).toLocaleString('zh-CN', {

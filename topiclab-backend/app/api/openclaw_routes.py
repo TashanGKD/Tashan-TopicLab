@@ -25,7 +25,15 @@ from app.services.openclaw_runtime import apply_rule_points, record_activity_eve
 from app.api.topics import (
     MentionExpertResponse,
     _apply_thread_metadata,
+    _build_arcade_submission_metadata,
     _build_posts_context,
+    _collect_arcade_branch_posts,
+    _count_arcade_submissions,
+    _find_arcade_branch_leaf,
+    _find_arcade_root_post_for_owner,
+    _get_arcade_branch_owner,
+    _get_arcade_branch_root_post_id,
+    _is_arcade_topic,
     _moderate_or_raise,
     _normalize_topic_category,
     _resolve_author_name,
@@ -133,6 +141,8 @@ async def create_topic_openclaw(
     x_forwarded_for: str | None = Header(default=None, alias="X-Forwarded-For"),
 ):
     category = _resolve_openclaw_topic_category(data.title, data.body, data.category)
+    if category == "arcade":
+        raise HTTPException(status_code=403, detail="Arcade topics must be created through protected internal APIs")
     creator_name, creator_user_id, creator_auth_type, creator_openclaw_agent_id = _resolve_openclaw_author_identity(user)
     try:
         topic = create_topic(
@@ -204,29 +214,65 @@ async def create_post_openclaw(
         topic = get_topic(topic_id)
         if not topic:
             raise HTTPException(status_code=404, detail="Topic not found")
-        await _moderate_or_raise(req.body, scenario="topic_post")
         parent_post = None
+        metadata = None
         if req.in_reply_to_id:
             parent_post = get_post(topic_id, req.in_reply_to_id)
             if not parent_post:
                 raise HTTPException(status_code=404, detail="Parent post not found")
+        if _is_arcade_topic(topic):
+            if parent_post is None:
+                if _find_arcade_root_post_for_owner(topic_id, owner_openclaw_agent_id):
+                    raise HTTPException(status_code=409, detail="OpenClaw already has an Arcade branch in this topic")
+                metadata = _build_arcade_submission_metadata(
+                    topic,
+                    branch_owner_openclaw_agent_id=owner_openclaw_agent_id,
+                    branch_root_post_id="__pending__",
+                    version=1,
+                    body=req.body,
+                )
+            else:
+                branch_owner = _get_arcade_branch_owner(parent_post)
+                if branch_owner != owner_openclaw_agent_id:
+                    raise HTTPException(status_code=403, detail="OpenClaw can only write inside its own Arcade branch")
+                branch_root_post_id = _get_arcade_branch_root_post_id(parent_post)
+                if not branch_root_post_id:
+                    raise HTTPException(status_code=409, detail="Arcade branch root is missing")
+                branch_posts = _collect_arcade_branch_posts(topic_id, branch_root_post_id)
+                branch_leaf = _find_arcade_branch_leaf(branch_posts)
+                if not branch_leaf or branch_leaf["id"] != parent_post["id"]:
+                    raise HTTPException(status_code=409, detail="OpenClaw can only reply to the current leaf in its Arcade branch")
+                metadata = _build_arcade_submission_metadata(
+                    topic,
+                    branch_owner_openclaw_agent_id=owner_openclaw_agent_id,
+                    branch_root_post_id=branch_root_post_id,
+                    version=_count_arcade_submissions(branch_posts) + 1,
+                    body=req.body,
+                )
+        await _moderate_or_raise(req.body, scenario="topic_post")
         raw_delete_token = generate_post_delete_token()
-        post = _apply_thread_metadata(
+        draft_post = make_post(
             topic_id,
-            make_post(
-                topic_id=topic_id,
-                author=author_name,
-                author_type="human",
-                body=req.body,
-                in_reply_to_id=req.in_reply_to_id,
-                status="completed",
-                owner_user_id=owner_user_id,
-                owner_auth_type=owner_auth_type,
-                owner_openclaw_agent_id=owner_openclaw_agent_id,
-                delete_token_hash=hash_post_delete_token(raw_delete_token),
-            ),
-            parent_post,
+            author=author_name,
+            author_type="human",
+            body=req.body,
+            in_reply_to_id=req.in_reply_to_id,
+            status="completed",
+            owner_user_id=owner_user_id,
+            owner_auth_type=owner_auth_type,
+            owner_openclaw_agent_id=owner_openclaw_agent_id,
+            delete_token_hash=hash_post_delete_token(raw_delete_token),
+            metadata=metadata,
         )
+        if _is_arcade_topic(topic):
+            draft_post["metadata"] = _build_arcade_submission_metadata(
+                topic,
+                branch_owner_openclaw_agent_id=owner_openclaw_agent_id,
+                branch_root_post_id=(draft_post["id"] if parent_post is None else (_get_arcade_branch_root_post_id(parent_post) or draft_post["id"])),
+                version=((metadata or {}).get("arcade") or {}).get("version", 1),
+                body=req.body,
+            )
+        post = _apply_thread_metadata(topic_id, draft_post, parent_post)
         saved = upsert_post(post)
         saved["delete_token"] = raw_delete_token
         event = record_activity_event(
@@ -397,6 +443,8 @@ async def mention_expert_openclaw(
         topic = get_topic(topic_id)
         if not topic:
             raise HTTPException(status_code=404, detail="Topic not found")
+        if _is_arcade_topic(topic):
+            raise HTTPException(status_code=403, detail="Arcade topics do not support expert mention replies")
         await _moderate_or_raise(req.body, scenario="topic_post_mention")
         check_and_reset_stale_running_discussion(topic_id)
         topic = get_topic(topic_id)

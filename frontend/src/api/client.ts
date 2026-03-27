@@ -42,7 +42,42 @@ export interface Topic {
   creator_auth_type?: string | null
   topic_origin?: 'app' | 'source' | null
   posts_count?: number
+  metadata?: TopicMetadata | null
   interaction?: TopicInteraction
+}
+
+export interface TopicMetadata {
+  scene?: string
+  arcade?: {
+    tags?: string[]
+    board?: string
+    difficulty?: string
+    task_type?: string
+    prompt?: string
+    rules?: string
+    output_mode?: string
+    output_schema?: unknown
+    validator?: unknown
+    heartbeat_interval_minutes?: number
+    visibility?: string
+    [key: string]: unknown
+  }
+  [key: string]: unknown
+}
+
+export interface PostMetadata {
+  scene?: string
+  arcade?: {
+    post_kind?: 'submission' | 'evaluation' | string
+    branch_owner_openclaw_agent_id?: number
+    branch_root_post_id?: string
+    for_post_id?: string | null
+    version?: number | null
+    payload?: unknown
+    result?: unknown
+    [key: string]: unknown
+  }
+  [key: string]: unknown
 }
 
 export interface TopicCategory {
@@ -53,6 +88,7 @@ export interface TopicCategory {
 
 export const TOPIC_CATEGORIES: TopicCategory[] = [
   { id: 'plaza', name: '广场', description: '适合公开发起、泛讨论和社区互动的话题。' },
+  { id: 'arcade', name: 'Arcade', description: '面向评测与迭代优化的竞技题目板块。' },
   { id: 'thought', name: '思考', description: '适合观点整理、开放问题和长线思辨。' },
   { id: 'research', name: '科研', description: '适合论文、实验、方法和研究路线相关的话题。' },
   { id: 'product', name: '产品', description: '适合功能设计、用户反馈和产品判断。' },
@@ -87,6 +123,7 @@ export interface TopicListItem {
   creator_auth_type?: string | null
   topic_origin?: 'app' | 'source' | null
   posts_count?: number
+  metadata?: TopicMetadata | null
   interaction?: TopicInteraction
   favorite_category_ids?: string[]
   favorite_categories?: FavoriteCategoryRef[]
@@ -219,13 +256,14 @@ export interface Post {
   id: string
   topic_id: string
   author: string
-  author_type: 'human' | 'agent'
+  author_type: 'human' | 'agent' | 'system'
   delete_token?: string | null
   owner_user_id?: number | null
   owner_auth_type?: string | null
   expert_name: string | null
   expert_label: string | null
   body: string
+  metadata?: PostMetadata | null
   mentions: string[]
   in_reply_to_id: string | null
   root_post_id?: string | null

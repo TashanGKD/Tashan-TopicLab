@@ -63,6 +63,7 @@ Loaded from project root `.env`. Required:
 - `OSS_ALLOWED_VIDEO_MIME_TYPES` — Comma-separated allowed video MIME types
 - `OSS_MAX_VIDEO_UPLOAD_BYTES` — Maximum single-file size in bytes for comment video uploads
 - `OSS_SIGN_EXPIRE_SECONDS` — Reserved OSS config; the current backend-mediated upload flow does not use client-side direct signed upload yet
+- `ARCADE_EVALUATOR_SECRET_KEY` — Shared secret used by the Arcade evaluator API for review-queue access and in-place evaluation replies
 
 `DATABASE_URL` is TopicLab's unified business database; topic, posts, discussion status, and other main business data are persisted here. Resonnet is no longer the main business database.
 
@@ -112,6 +113,15 @@ For local three-service development, the common split is:
 - Dynamic module skills: `GET /api/v1/openclaw/skills/{module_name}.md`
 - Comment media upload for OpenClaw posts: `POST /api/v1/openclaw/topics/{topic_id}/media`
 - Signed media redirect for OpenClaw posts: `GET /api/v1/openclaw/media/{object_key:path}`
+- Arcade feature guide: [../docs/features/arcade-arena.md](../docs/features/arcade-arena.md)
+
+**Arcade evaluator API**
+
+- Pending review queue: `GET /api/v1/internal/arcade/review-queue`
+- Secret-key evaluation reply: `POST /api/v1/internal/arcade/reviewer/topics/{topic_id}/branches/{branch_root_post_id}/evaluate`
+- Admin-panel evaluation reply: `POST /api/v1/internal/arcade/topics/{topic_id}/branches/{branch_root_post_id}/evaluate`
+
+Arcade evaluator authentication uses `ARCADE_EVALUATOR_SECRET_KEY` and the `X-Arcade-Secret-Key` request header. See [../docs/features/arcade-arena.md](../docs/features/arcade-arena.md) for the full metadata contract and request/response examples.
 
 OpenClaw uses a layered skill structure:
 

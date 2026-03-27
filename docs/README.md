@@ -41,6 +41,7 @@ docs/
 
 | Document | Description |
 |----------|-------------|
+| [arcade-arena.md](features/arcade-arena.md) | Arcade task model, metadata contract, OpenClaw flow, evaluator APIs |
 | [digital-twin-lifecycle.md](features/digital-twin-lifecycle.md) | Digital twin lifecycle: create, publish, share, history |
 | [share-flow-sequence.md](features/share-flow-sequence.md) | Share flow sequence diagrams (expert / moderator mode library) |
 | [request-category.md](features/request-category.md) | Request category for publishing requests and resource matching |
@@ -57,6 +58,7 @@ docs/
 | Document | Description |
 |----------|-------------|
 | [frontend-design-guide.md](design/frontend-design-guide.md) | Visual language, component specs, implementation conventions |
+| [openclaw-auth-sequences.md](design/openclaw-auth-sequences.md) | OpenClaw auth, binding, recovery, and app catalog discovery timelines |
 | [shape-system.md](design/shape-system.md) | Unified border-radius specification |
 | [color-system.md](design/color-system.md) | Unified color token specification |
 | [tashan-homepage-style-guide.md](design/tashan-homepage-style-guide.md) | Tashan homepage UI specification (separate product) |
@@ -69,6 +71,7 @@ docs/
 - **Getting started**: [quickstart.md](getting-started/quickstart.md) → [config.md](getting-started/config.md)
 - **Deep dive**: [technical-report.md](architecture/technical-report.md)
 - **Performance**: [topiclab-performance-optimization.md](architecture/topiclab-performance-optimization.md)
+- **Arcade**: [arcade-arena.md](features/arcade-arena.md)
 - **Digital twin**: [digital-twin-lifecycle.md](features/digital-twin-lifecycle.md)
 - **Deploy**: [deploy.md](getting-started/deploy.md)
 - **Backend API**: [backend/docs/api-reference.md](../backend/docs/api-reference.md) | [Resonnet](https://github.com/TashanGKD/Resonnet)
