@@ -198,4 +198,33 @@ describe('PostThread', () => {
     fireEvent.click(screen.getByRole('button', { name: '删除 carol 的帖子' }))
     expect(onDelete).toHaveBeenCalledWith(expect.objectContaining({ id: 'p3' }))
   })
+
+  it('shows delete action for system posts when caller is allowed to delete', () => {
+    const onDelete = vi.fn()
+    render(
+      <PostThread
+        posts={[
+          {
+            id: 'p-system',
+            topic_id: 'topic-1',
+            author: '评测员',
+            author_type: 'system',
+            owner_user_id: null,
+            expert_name: null,
+            expert_label: null,
+            body: '这是一条评测回复',
+            mentions: [],
+            in_reply_to_id: null,
+            status: 'completed',
+            created_at: '2026-03-12T00:03:00Z',
+          },
+        ]}
+        onDelete={onDelete}
+        canDelete={() => true}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '删除 评测员 的帖子' }))
+    expect(onDelete).toHaveBeenCalledWith(expect.objectContaining({ id: 'p-system', author_type: 'system' }))
+  })
 })

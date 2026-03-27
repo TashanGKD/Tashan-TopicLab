@@ -249,7 +249,7 @@ function PostCard({
   const isReply = depth > 0
   const indentPx = Math.min(depth * 12, 36)
   const initial = displayName.charAt(0).toUpperCase()
-  const showDelete = !isAgent && !isSystem && !isPending && !isFailed && !!onDelete && !!canDelete?.(post)
+  const showDelete = !isPending && !isFailed && !!onDelete && !!canDelete?.(post)
   const likesCount = post.interaction?.likes_count ?? 0
   const sharesCount = post.interaction?.shares_count ?? 0
   const liked = post.interaction?.liked ?? false

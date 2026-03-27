@@ -21,6 +21,7 @@ import {
 import TopicConfigTabs from '../components/TopicConfigTabs'
 import ResizableToc from '../components/ResizableToc'
 import PostThread from '../components/PostThread'
+import ArcadeBranchTimeline from '../components/ArcadeBranchTimeline'
 import MentionTextarea from '../components/MentionTextarea'
 import ReactionButton from '../components/ReactionButton'
 import { refreshCurrentUserProfile, tokenManager, User } from '../api/auth'
@@ -312,6 +313,27 @@ export default function TopicDetail() {
     return flat
   }
 
+  const isArcadeTopicData = (value: Topic | null | undefined) =>
+    Boolean(value?.category === 'arcade' && value?.metadata?.scene === 'arcade')
+
+  const hydrateVisiblePosts = async (topicId: string, items: Post[], arcadeMode: boolean) => {
+    const flat = flattenPostPage(items)
+    if (!arcadeMode || items.length === 0) {
+      return flat
+    }
+    const threadPages = await Promise.all(
+      items.map(async (post) => {
+        try {
+          const res = await postsApi.getThread(topicId, post.id)
+          return res.data.items
+        } catch {
+          return [post]
+        }
+      }),
+    )
+    return mergePosts([], [...flat, ...threadPages.flat()])
+  }
+
   const bootstrapTopicDetail = async (topicId: string) => {
     setLoading(true)
     setPostsLoading(true)
@@ -322,17 +344,17 @@ export default function TopicDetail() {
     try {
       const res = await topicsApi.get(topicId)
       setTopic(res.data)
+      setLoading(false)
+      void loadPosts(topicId, isArcadeTopicData(res.data))
+      window.setTimeout(() => {
+        void loadTopicExperts(topicId)
+      }, 0)
     } catch (err) {
       handleApiError(err, '加载话题失败')
       setLoading(false)
       setPostsLoading(false)
       return
     }
-    setLoading(false)
-    void loadPosts(topicId)
-    window.setTimeout(() => {
-      void loadTopicExperts(topicId)
-    }, 0)
   }
 
   const loadTopicExperts = async (topicId: string) => {
@@ -355,16 +377,19 @@ export default function TopicDetail() {
     }
   }
 
-  const loadPosts = async (topicId: string) => {
+  const loadPosts = async (topicId: string, arcadeMode = isArcadeTopicData(topic)) => {
     setPostsLoading(true)
     try {
       const res = await postsApi.list(topicId, { previewReplies: 0 })
+      const hydratedPosts = await hydrateVisiblePosts(topicId, res.data.items, arcadeMode)
       startTransition(() => {
-        setPosts(flattenPostPage(res.data.items))
+        setPosts(hydratedPosts)
       })
       setPostNextCursor(res.data.next_cursor)
       setReplyNextCursorByPostId(
-        Object.fromEntries(res.data.items.map(post => [post.id, (post.reply_count ?? 0) > (post.latest_replies?.length ?? 0) ? '__more__' : null]))
+        arcadeMode
+          ? {}
+          : Object.fromEntries(res.data.items.map(post => [post.id, (post.reply_count ?? 0) > (post.latest_replies?.length ?? 0) ? '__more__' : null]))
       )
     } catch { /* ignore */ }
     finally {
@@ -377,11 +402,15 @@ export default function TopicDetail() {
     setLoadingMorePosts(true)
     try {
       const res = await postsApi.list(id, { cursor: postNextCursor, previewReplies: 0 })
-      setPosts(prev => mergePosts(prev, flattenPostPage(res.data.items)))
+      const arcadeMode = isArcadeTopicData(topic)
+      const hydratedPosts = await hydrateVisiblePosts(id, res.data.items, arcadeMode)
+      setPosts(prev => mergePosts(prev, hydratedPosts))
       setPostNextCursor(res.data.next_cursor)
       setReplyNextCursorByPostId(prev => ({
         ...prev,
-        ...Object.fromEntries(res.data.items.map(post => [post.id, (post.reply_count ?? 0) > (post.latest_replies?.length ?? 0) ? '__more__' : null])),
+        ...(arcadeMode
+          ? {}
+          : Object.fromEntries(res.data.items.map(post => [post.id, (post.reply_count ?? 0) > (post.latest_replies?.length ?? 0) ? '__more__' : null]))),
       }))
     } catch (err) {
       handleApiError(err, '加载更多帖子失败')
@@ -1172,20 +1201,32 @@ export default function TopicDetail() {
             ) : null}
 
             {!postsLoading ? (
-              <PostThread
-                posts={posts}
-                onReply={handleReplyToPost}
-                onDelete={handleDeletePost}
-                onLike={throttledLikePost}
-                onShare={throttledSharePost}
-                onLoadReplies={handleLoadReplies}
-                canReply={topic.status === 'open' && !isArcadeTopic}
-                canDelete={canDeletePost}
-                canLike
-                pendingLikePostIds={postLikePendingIds}
-                replyLoadingPostIds={replyLoadingPostIds}
-                replyNextCursorByPostId={replyNextCursorByPostId}
-              />
+              isArcadeTopic ? (
+                <ArcadeBranchTimeline
+                  posts={posts}
+                  onDelete={handleDeletePost}
+                  onLike={throttledLikePost}
+                  onShare={throttledSharePost}
+                  canDelete={canDeletePost}
+                  canLike
+                  pendingLikePostIds={postLikePendingIds}
+                />
+              ) : (
+                <PostThread
+                  posts={posts}
+                  onReply={handleReplyToPost}
+                  onDelete={handleDeletePost}
+                  onLike={throttledLikePost}
+                  onShare={throttledSharePost}
+                  onLoadReplies={handleLoadReplies}
+                  canReply={topic.status === 'open' && !isArcadeTopic}
+                  canDelete={canDeletePost}
+                  canLike
+                  pendingLikePostIds={postLikePendingIds}
+                  replyLoadingPostIds={replyLoadingPostIds}
+                  replyNextCursorByPostId={replyNextCursorByPostId}
+                />
+              )
             ) : null}
 
             {postNextCursor ? (
