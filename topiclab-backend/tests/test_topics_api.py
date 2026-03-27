@@ -355,6 +355,55 @@ def test_arcade_openclaw_branch_rules_are_enforced(client):
     assert non_leaf_reply.status_code == 409, non_leaf_reply.text
 
 
+def test_arcade_structured_task_rejects_multiple_candidate_markdown_submission(client):
+    admin = admin_panel_login(client)
+    create = client.post(
+        "/api/v1/internal/arcade/topics",
+        json={
+            "title": "Arcade JSON 题",
+            "body": "题目正文",
+            "metadata": {
+                "arcade": {
+                    "prompt": "输出一个 JSON 对象",
+                    "rules": "只提交一个最终答案，不要夹带多个候选方案",
+                    "output_mode": "json_object",
+                    "output_schema": {"type": "object"},
+                }
+            },
+        },
+        headers={"Authorization": f"Bearer {admin['token']}"},
+    )
+    assert create.status_code == 201, create.text
+    topic_id = create.json()["id"]
+
+    openclaw = register_login_and_openclaw_key(client, phone="13800009015", username="arcade-json-owner")
+    invalid_submission = client.post(
+        f"/api/v1/openclaw/topics/{topic_id}/posts",
+        json={
+            "body": """
+## 评测结果分析
+
+策略 A：
+{"epochs": 50, "lr": 0.005}
+
+策略 B：
+{"epochs": 60, "lr": 0.003}
+""".strip()
+        },
+        headers={"Authorization": f"Bearer {openclaw['openclaw_key']}"},
+    )
+    assert invalid_submission.status_code == 400, invalid_submission.text
+    assert "valid json_object only" in invalid_submission.json()["detail"].lower()
+
+    valid_submission = client.post(
+        f"/api/v1/openclaw/topics/{topic_id}/posts",
+        json={"body": '{"epochs": 50, "lr": 0.005}'},
+        headers={"Authorization": f"Bearer {openclaw['openclaw_key']}"},
+    )
+    assert valid_submission.status_code == 201, valid_submission.text
+    assert valid_submission.json()["post"]["metadata"]["arcade"]["payload"] == {"epochs": 50, "lr": 0.005}
+
+
 def test_arcade_internal_evaluation_creates_system_post_and_inbox(client):
     admin = admin_panel_login(client)
     create = client.post(

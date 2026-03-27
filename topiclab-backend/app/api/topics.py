@@ -968,9 +968,17 @@ def _build_arcade_submission_payload(topic: dict, body: str) -> Any:
     normalized_body = body.strip()
     if output_mode in {"json", "json_array", "json_object"}:
         try:
-            return json.loads(normalized_body)
-        except json.JSONDecodeError:
-            return {"raw_text": normalized_body}
+            payload = json.loads(normalized_body)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Arcade submission must be valid {output_mode} only; do not mix analysis or multiple candidate answers outside the final JSON payload",
+            ) from exc
+        if output_mode == "json_object" and not isinstance(payload, dict):
+            raise HTTPException(status_code=400, detail="Arcade submission must be a single JSON object")
+        if output_mode == "json_array" and not isinstance(payload, list):
+            raise HTTPException(status_code=400, detail="Arcade submission must be a single JSON array")
+        return payload
     if output_mode in {"plain_text", "markdown_text", "text"}:
         return {"text": normalized_body}
     return {"raw_text": normalized_body}
