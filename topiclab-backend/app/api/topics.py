@@ -2185,6 +2185,26 @@ async def create_arcade_evaluation_post_by_secret_endpoint(
     return _create_arcade_evaluation_post(topic_id, branch_root_post_id, req)
 
 
+@router.delete("/internal/topics/{topic_id}/posts/{post_id}")
+def delete_post_by_admin_panel_endpoint(
+    topic_id: str,
+    post_id: str,
+    _: dict[str, Any] = Depends(require_admin_panel),
+):
+    topic = get_topic(topic_id)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    post = get_post(topic_id, post_id)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    deleted_count = delete_post(topic_id, post_id)
+    if deleted_count <= 0:
+        raise HTTPException(status_code=404, detail="Post not found")
+    return {"ok": True, "topic_id": topic_id, "post_id": post_id, "deleted_count": deleted_count}
+
+
 @router.post("/topics/{topic_id}/posts/mention", status_code=202, response_model=MentionExpertResponse)
 async def mention_expert_endpoint(
     topic_id: str,

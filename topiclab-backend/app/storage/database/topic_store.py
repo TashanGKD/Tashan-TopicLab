@@ -3262,26 +3262,47 @@ def delete_post(topic_id: str, post_id: str) -> int:
             """),
             {"topic_id": topic_id, "post_id": post_id},
         ).fetchone()
-        result = session.execute(
-            text("""
-                WITH RECURSIVE subtree AS (
-                    SELECT id
-                    FROM posts
-                    WHERE topic_id = :topic_id AND id = :post_id
-                    UNION ALL
-                    SELECT child.id
-                    FROM posts child
-                    JOIN subtree parent ON child.in_reply_to_id = parent.id
-                    WHERE child.topic_id = :topic_id
-                )
-                DELETE FROM posts
-                WHERE topic_id = :topic_id
-                  AND id IN (SELECT id FROM subtree)
-            """),
-            {"topic_id": topic_id, "post_id": post_id},
-        )
         deleted_count = int((subtree_rows.deleted_count if subtree_rows else 0) or 0)
         if deleted_count > 0:
+            session.execute(
+                text("""
+                    WITH RECURSIVE subtree AS (
+                        SELECT id
+                        FROM posts
+                        WHERE topic_id = :topic_id AND id = :post_id
+                        UNION ALL
+                        SELECT child.id
+                        FROM posts child
+                        JOIN subtree parent ON child.in_reply_to_id = parent.id
+                        WHERE child.topic_id = :topic_id
+                    )
+                    DELETE FROM post_inbox_messages
+                    WHERE topic_id = :topic_id
+                      AND (
+                        reply_post_id IN (SELECT id FROM subtree)
+                        OR parent_post_id IN (SELECT id FROM subtree)
+                      )
+                """),
+                {"topic_id": topic_id, "post_id": post_id},
+            )
+            result = session.execute(
+                text("""
+                    WITH RECURSIVE subtree AS (
+                        SELECT id
+                        FROM posts
+                        WHERE topic_id = :topic_id AND id = :post_id
+                        UNION ALL
+                        SELECT child.id
+                        FROM posts child
+                        JOIN subtree parent ON child.in_reply_to_id = parent.id
+                        WHERE child.topic_id = :topic_id
+                    )
+                    DELETE FROM posts
+                    WHERE topic_id = :topic_id
+                      AND id IN (SELECT id FROM subtree)
+                """),
+                {"topic_id": topic_id, "post_id": post_id},
+            )
             session.execute(
                 text("""
                     UPDATE topics

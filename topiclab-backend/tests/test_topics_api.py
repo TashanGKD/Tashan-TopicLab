@@ -406,6 +406,65 @@ def test_arcade_internal_evaluation_creates_system_post_and_inbox(client):
     assert inbox.json()["items"][0]["reply_post_id"] == evaluation_post["id"]
 
 
+def test_admin_panel_can_delete_arcade_evaluation_post_and_inbox_message(client):
+    admin = admin_panel_login(client)
+    create = client.post(
+        "/api/v1/internal/arcade/topics",
+        json={
+            "title": "Arcade 删除评测回复",
+            "body": "题目正文",
+            "metadata": {"arcade": {"prompt": "输出一句话", "rules": "等评测再继续", "output_mode": "plain_text"}},
+        },
+        headers={"Authorization": f"Bearer {admin['token']}"},
+    )
+    assert create.status_code == 201, create.text
+    topic_id = create.json()["id"]
+
+    owner = register_login_and_openclaw_key(client, phone="13800009014", username="arcade-delete-owner")
+    owner_headers = {"Authorization": f"Bearer {owner['token']}"}
+
+    submission_resp = client.post(
+        f"/api/v1/openclaw/topics/{topic_id}/posts",
+        json={"body": "第一版答案"},
+        headers={"Authorization": f"Bearer {owner['openclaw_key']}"},
+    )
+    assert submission_resp.status_code == 201, submission_resp.text
+    submission = submission_resp.json()["post"]
+
+    evaluation_resp = client.post(
+        f"/api/v1/internal/arcade/topics/{topic_id}/branches/{submission['id']}/evaluate",
+        json={
+            "for_post_id": submission["id"],
+            "body": "这是一条要被删掉的评测回复。",
+            "result": {"passed": False, "score": 0.2, "feedback": "继续修改"},
+        },
+        headers={"Authorization": f"Bearer {admin['token']}"},
+    )
+    assert evaluation_resp.status_code == 201, evaluation_resp.text
+    evaluation_post = evaluation_resp.json()["post"]
+
+    inbox_before = client.get("/api/v1/me/inbox", headers=owner_headers)
+    assert inbox_before.status_code == 200, inbox_before.text
+    assert inbox_before.json()["unread_count"] == 1
+    assert inbox_before.json()["items"][0]["reply_post_id"] == evaluation_post["id"]
+
+    delete_resp = client.delete(
+        f"/api/v1/internal/topics/{topic_id}/posts/{evaluation_post['id']}",
+        headers={"Authorization": f"Bearer {admin['token']}"},
+    )
+    assert delete_resp.status_code == 200, delete_resp.text
+    assert delete_resp.json()["ok"] is True
+
+    thread_after = client.get(f"/topics/{topic_id}/posts/{submission['id']}/thread", headers=owner_headers)
+    assert thread_after.status_code == 200, thread_after.text
+    assert [item["id"] for item in thread_after.json()["items"]] == [submission["id"]]
+
+    inbox_after = client.get("/api/v1/me/inbox", headers=owner_headers)
+    assert inbox_after.status_code == 200, inbox_after.text
+    assert inbox_after.json()["unread_count"] == 0
+    assert inbox_after.json()["items"] == []
+
+
 def test_arcade_evaluator_secret_can_list_pending_submissions_and_reply(client):
     admin = admin_panel_login(client)
     create = client.post(
