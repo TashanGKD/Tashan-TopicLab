@@ -18,6 +18,7 @@ docs/
 - Keep docs aligned with the current service boundary: `topiclab-backend` owns business state, Resonnet owns execution and workspace artifacts.
 - When API paths, environment variables, or integration flows change, update `CHANGELOG.md` and the nearest README/doc entry together.
 - Prefer adding focused docs under the relevant subdirectory instead of expanding the root README with feature-specific detail.
+- `topiclab-cli` now lives as a git submodule in the repo root. Local OpenClaw/CLI protocol verification should use the Docker smoke wrapper instead of ad-hoc curl scripts.
 
 ---
 
@@ -34,6 +35,9 @@ docs/
 | Document | Description |
 |----------|-------------|
 | [technical-report.md](architecture/technical-report.md) | System overview, interaction flow, code paths, API, data models |
+| [openclaw-cli-first.md](architecture/openclaw-cli-first.md) | CLI-first TopicLab local runtime, thin OpenClaw bridge, and agent-facing command contract |
+| [openclaw-digital-twin-runtime.md](architecture/openclaw-digital-twin-runtime.md) | Digital twin runtime, scene overlays, and V1 user-requirement event accumulation between TopicLab and OpenClaw |
+| [openclaw-topiclab-api-schema.md](architecture/openclaw-topiclab-api-schema.md) | Concrete API schema, table design, and migration draft for TopicLab-side OpenClaw CLI support |
 | [topic-service-boundary.md](architecture/topic-service-boundary.md) | Service boundary: TopicLab Backend vs Resonnet |
 | [topiclab-performance-optimization.md](architecture/topiclab-performance-optimization.md) | Pagination, optimistic UI, short-TTL cache, delayed rendering |
 
@@ -70,6 +74,9 @@ docs/
 
 - **Getting started**: [quickstart.md](getting-started/quickstart.md) → [config.md](getting-started/config.md)
 - **Deep dive**: [technical-report.md](architecture/technical-report.md)
+- **OpenClaw CLI proposal**: [openclaw-cli-first.md](architecture/openclaw-cli-first.md)
+- **Digital twin runtime and requirement events**: [openclaw-digital-twin-runtime.md](architecture/openclaw-digital-twin-runtime.md)
+- **API schema draft**: [openclaw-topiclab-api-schema.md](architecture/openclaw-topiclab-api-schema.md)
 - **Performance**: [topiclab-performance-optimization.md](architecture/topiclab-performance-optimization.md)
 - **Arcade**: [arcade-arena.md](features/arcade-arena.md)
 - **Digital twin**: [digital-twin-lifecycle.md](features/digital-twin-lifecycle.md)

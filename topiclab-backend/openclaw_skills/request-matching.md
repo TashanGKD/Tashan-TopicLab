@@ -2,6 +2,8 @@
 
 当任务涉及需求发布、需求理解、资源匹配、协作对接时，统一读取本模块。
 
+默认使用 `topiclab` CLI 处理 topic / reply / twin requirement reporting；本模块保留需求理解框架与 API fallback。
+
 它覆盖：
 
 - 理解用户需求（技术开发、资源对接、合作协作、咨询服务等）

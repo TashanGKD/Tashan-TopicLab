@@ -1,5 +1,7 @@
 """User authentication API: send-code, register, login. Uses PostgreSQL (DATABASE_URL)."""
 
+from __future__ import annotations
+
 import hashlib
 import os
 import random
@@ -28,6 +30,7 @@ from app.services.openclaw_runtime import (
     get_openclaw_key_record as get_openclaw_key_record_db,
     verify_openclaw_api_key as verify_openclaw_api_key_db,
 )
+from app.services.twin_runtime import create_or_update_active_twin_for_user, get_or_backfill_active_twin_for_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -141,23 +144,24 @@ class TwinUpsertRequest(BaseModel):
     expert_name: str = Field(default="my_twin", min_length=1, max_length=100, description="导入角色库名称")
     visibility: str = Field(default="private", description="private/public")
     exposure: str = Field(default="brief", description="brief/full")
-    session_id: str | None = Field(default=None, description="来源 session_id")
+    session_id: Optional[str] = Field(default=None, description="来源 session_id")
     source: str = Field(default="profile_twin", description="记录来源")
-    role_content: str | None = Field(default=None, description="分身角色详情内容")
+    role_content: Optional[str] = Field(default=None, description="分身角色详情内容")
+    twin_id: Optional[str] = Field(default=None, description="稳定 twin id（预留）")
 
 
 class OpenClawKeyResponse(BaseModel):
     has_key: bool
-    key_id: int | None = None
-    key: str | None = None
-    masked_key: str | None = None
-    created_at: str | None = None
-    last_used_at: str | None = None
-    skill_path: str | None = None
-    bind_key: str | None = None
-    bootstrap_path: str | None = None
-    agent_uid: str | None = None
-    openclaw_agent: dict | None = None
+    key_id: Optional[int] = None
+    key: Optional[str] = None
+    masked_key: Optional[str] = None
+    created_at: Optional[str] = None
+    last_used_at: Optional[str] = None
+    skill_path: Optional[str] = None
+    bind_key: Optional[str] = None
+    bootstrap_path: Optional[str] = None
+    agent_uid: Optional[str] = None
+    openclaw_agent: Optional[dict] = None
 
 
 def _split_csv_env(name: str) -> set[str]:
@@ -790,13 +794,34 @@ async def upsert_digital_twin(req: TwinUpsertRequest, user: dict = Depends(get_c
             **payload,
             "updated_at": now.isoformat(),
         }
+    twin = (
+        create_or_update_active_twin_for_user(
+            user_id,
+            source_agent_name=req.agent_name,
+            display_name=req.display_name,
+            expert_name=req.expert_name,
+            visibility=req.visibility,
+            exposure=req.exposure,
+            base_profile_markdown=req.role_content or "",
+            source=req.source,
+        )
+        if DATABASE_CONFIGURED
+        else {}
+    )
 
-    return {"ok": True, "agent_name": req.agent_name}
+    return {
+        "ok": True,
+        "agent_name": req.agent_name,
+        "twin_id": twin.get("twin_id"),
+        "twin_version": twin.get("version"),
+    }
 
 
 @router.get("/digital-twins")
 async def list_digital_twins(user: dict = Depends(get_current_user)):
     user_id = int(user["sub"])
+    active_twin = get_or_backfill_active_twin_for_user(user_id) if DATABASE_CONFIGURED else None
+    active_twin_id = active_twin.get("twin_id") if active_twin else None
 
     if DATABASE_CONFIGURED:
         with get_db_session() as session:
@@ -827,6 +852,7 @@ async def list_digital_twins(user: dict = Depends(get_current_user)):
                     "created_at": _to_iso_datetime(row[7]),
                     "updated_at": _to_iso_datetime(row[8]),
                     "has_role_content": bool(row[9]),
+                    "twin_id": active_twin_id,
                 }
                 for row in rows
             ]
@@ -846,6 +872,7 @@ async def list_digital_twins(user: dict = Depends(get_current_user)):
                     "created_at": twin.get("updated_at"),
                     "updated_at": twin.get("updated_at"),
                     "has_role_content": bool(twin.get("role_content")),
+                    "twin_id": active_twin_id,
                 }
             )
         twins.sort(key=lambda item: item.get("updated_at") or "", reverse=True)
@@ -856,6 +883,7 @@ async def list_digital_twins(user: dict = Depends(get_current_user)):
 @router.get("/digital-twins/{agent_name}")
 async def get_digital_twin_detail(agent_name: str, user: dict = Depends(get_current_user)):
     user_id = int(user["sub"])
+    active_twin = get_or_backfill_active_twin_for_user(user_id) if DATABASE_CONFIGURED else None
 
     if DATABASE_CONFIGURED:
         with get_db_session() as session:
@@ -886,6 +914,7 @@ async def get_digital_twin_detail(agent_name: str, user: dict = Depends(get_curr
                 "created_at": _to_iso_datetime(row[7]),
                 "updated_at": _to_iso_datetime(row[8]),
                 "role_content": row[9],
+                "twin_id": active_twin.get("twin_id") if active_twin else None,
             }
     else:
         user_twins = _dev_twins.get(user_id, {})
@@ -903,6 +932,7 @@ async def get_digital_twin_detail(agent_name: str, user: dict = Depends(get_curr
             "created_at": twin.get("updated_at"),
             "updated_at": twin.get("updated_at"),
             "role_content": twin.get("role_content"),
+            "twin_id": active_twin.get("twin_id") if active_twin else None,
         }
 
     return {"digital_twin": twin}

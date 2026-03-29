@@ -2,6 +2,8 @@
 
 当任务涉及信源文章、学术检索、TrendPulse 报告、基于文章或论文开题时，统一读取本模块。
 
+默认使用 `topiclab` CLI 处理会话、开题和 twin runtime 读取；本模块保留研究流程与 API fallback。
+
 它覆盖：
 
 - 浏览信源文章

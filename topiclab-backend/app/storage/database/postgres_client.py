@@ -1,13 +1,13 @@
-"""Database client for TopicLab backend. Uses DATABASE_URL from .env."""
-
-import os
 import logging
+import os
 import sys
 from contextlib import contextmanager
+from time import sleep
 from typing import Optional
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 
 from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import QueuePool
 
@@ -48,6 +48,8 @@ def _get_engine_url() -> Optional[str]:
     if not database_url:
         return None
     parsed = urlparse(database_url)
+    if parsed.scheme.startswith("sqlite"):
+        return database_url
     query = parse_qs(parsed.query)
     if parsed.scheme.startswith("postgresql") and "sslmode" not in query and PGSSLMODE:
         query["sslmode"] = [PGSSLMODE]
@@ -227,6 +229,237 @@ def _apply_site_feedback_ddl(session) -> None:
             """
         )
     )
+
+
+def _apply_twin_runtime_ddl(session) -> None:
+    """Create twin runtime tables and indexes (idempotent)."""
+    is_sqlite = _is_sqlite_session(session)
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS twin_core (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                twin_id VARCHAR(64) NOT NULL UNIQUE,
+                owner_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                source_agent_name VARCHAR(100),
+                display_name VARCHAR(100) NOT NULL,
+                expert_name VARCHAR(100),
+                visibility VARCHAR(20) NOT NULL DEFAULT 'private',
+                exposure VARCHAR(20) NOT NULL DEFAULT 'brief',
+                base_profile_json TEXT NOT NULL DEFAULT '{}',
+                base_profile_markdown TEXT,
+                version INTEGER NOT NULL DEFAULT 1,
+                is_active BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            if is_sqlite
+            else
+            """
+            CREATE TABLE IF NOT EXISTS twin_core (
+                id SERIAL PRIMARY KEY,
+                twin_id VARCHAR(64) NOT NULL UNIQUE,
+                owner_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                source_agent_name VARCHAR(100),
+                display_name VARCHAR(100) NOT NULL,
+                expert_name VARCHAR(100),
+                visibility VARCHAR(20) NOT NULL DEFAULT 'private',
+                exposure VARCHAR(20) NOT NULL DEFAULT 'brief',
+                base_profile_json TEXT NOT NULL DEFAULT '{}',
+                base_profile_markdown TEXT,
+                version INTEGER NOT NULL DEFAULT 1,
+                is_active BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS idx_twin_core_owner_user_id
+            ON twin_core(owner_user_id)
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_twin_core_active_per_user
+            ON twin_core(owner_user_id)
+            WHERE is_active = TRUE
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS twin_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                snapshot_id VARCHAR(64) NOT NULL UNIQUE,
+                twin_id VARCHAR(64) NOT NULL REFERENCES twin_core(twin_id) ON DELETE CASCADE,
+                source VARCHAR(50) NOT NULL DEFAULT 'profile_twin',
+                source_agent_name VARCHAR(100),
+                profile_markdown TEXT NOT NULL,
+                profile_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            if is_sqlite
+            else
+            """
+            CREATE TABLE IF NOT EXISTS twin_snapshots (
+                id SERIAL PRIMARY KEY,
+                snapshot_id VARCHAR(64) NOT NULL UNIQUE,
+                twin_id VARCHAR(64) NOT NULL REFERENCES twin_core(twin_id) ON DELETE CASCADE,
+                source VARCHAR(50) NOT NULL DEFAULT 'profile_twin',
+                source_agent_name VARCHAR(100),
+                profile_markdown TEXT NOT NULL,
+                profile_json TEXT NOT NULL DEFAULT '{}',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS idx_twin_snapshots_twin_id_created_at
+            ON twin_snapshots(twin_id, created_at DESC)
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS twin_scene_overlays (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                overlay_id VARCHAR(64) NOT NULL UNIQUE,
+                twin_id VARCHAR(64) NOT NULL REFERENCES twin_core(twin_id) ON DELETE CASCADE,
+                scene_name VARCHAR(64) NOT NULL,
+                overlay_json TEXT NOT NULL DEFAULT '{}',
+                overlay_markdown TEXT,
+                version INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(twin_id, scene_name)
+            )
+            """
+            if is_sqlite
+            else
+            """
+            CREATE TABLE IF NOT EXISTS twin_scene_overlays (
+                id SERIAL PRIMARY KEY,
+                overlay_id VARCHAR(64) NOT NULL UNIQUE,
+                twin_id VARCHAR(64) NOT NULL REFERENCES twin_core(twin_id) ON DELETE CASCADE,
+                scene_name VARCHAR(64) NOT NULL,
+                overlay_json TEXT NOT NULL DEFAULT '{}',
+                overlay_markdown TEXT,
+                version INTEGER NOT NULL DEFAULT 1,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE(twin_id, scene_name)
+            )
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS twin_runtime_states (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                twin_id VARCHAR(64) NOT NULL REFERENCES twin_core(twin_id) ON DELETE CASCADE,
+                instance_id VARCHAR(64) NOT NULL,
+                active_scene VARCHAR(64),
+                current_focus_json TEXT NOT NULL DEFAULT '{}',
+                recent_threads_json TEXT NOT NULL DEFAULT '[]',
+                recent_style_shift_json TEXT NOT NULL DEFAULT '{}',
+                version INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(twin_id, instance_id)
+            )
+            """
+            if is_sqlite
+            else
+            """
+            CREATE TABLE IF NOT EXISTS twin_runtime_states (
+                id SERIAL PRIMARY KEY,
+                twin_id VARCHAR(64) NOT NULL REFERENCES twin_core(twin_id) ON DELETE CASCADE,
+                instance_id VARCHAR(64) NOT NULL,
+                active_scene VARCHAR(64),
+                current_focus_json TEXT NOT NULL DEFAULT '{}',
+                recent_threads_json TEXT NOT NULL DEFAULT '[]',
+                recent_style_shift_json TEXT NOT NULL DEFAULT '{}',
+                version INTEGER NOT NULL DEFAULT 1,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE(twin_id, instance_id)
+            )
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS twin_observations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                observation_id VARCHAR(64) NOT NULL UNIQUE,
+                twin_id VARCHAR(64) NOT NULL REFERENCES twin_core(twin_id) ON DELETE CASCADE,
+                instance_id VARCHAR(64) NOT NULL,
+                source VARCHAR(64) NOT NULL DEFAULT 'topiclab_cli',
+                observation_type VARCHAR(64) NOT NULL,
+                confidence REAL,
+                payload_json TEXT NOT NULL DEFAULT '{}',
+                merge_status VARCHAR(32) NOT NULL DEFAULT 'pending_review',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            if is_sqlite
+            else
+            """
+            CREATE TABLE IF NOT EXISTS twin_observations (
+                id SERIAL PRIMARY KEY,
+                observation_id VARCHAR(64) NOT NULL UNIQUE,
+                twin_id VARCHAR(64) NOT NULL REFERENCES twin_core(twin_id) ON DELETE CASCADE,
+                instance_id VARCHAR(64) NOT NULL,
+                source VARCHAR(64) NOT NULL DEFAULT 'topiclab_cli',
+                observation_type VARCHAR(64) NOT NULL,
+                confidence DOUBLE PRECISION,
+                payload_json TEXT NOT NULL DEFAULT '{}',
+                merge_status VARCHAR(32) NOT NULL DEFAULT 'pending_review',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS idx_twin_observations_twin_id_created_at
+            ON twin_observations(twin_id, created_at DESC)
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS idx_twin_observations_merge_status
+            ON twin_observations(merge_status)
+            """
+        )
+    )
+    if not is_sqlite:
+        session.execute(
+            text(
+                """
+                ALTER TABLE twin_observations
+                ALTER COLUMN source SET DEFAULT 'topiclab_cli'
+                """
+            )
+        )
 
 
 def _create_openclaw_api_keys_v2(session) -> None:
@@ -610,7 +843,16 @@ def ensure_site_feedback_schema() -> None:
     logger.info("site_feedback schema ensured")
 
 
-def init_auth_tables():
+def _is_retryable_init_error(exc: Exception) -> bool:
+    """Return whether auth DDL init should retry after a transient database lock issue."""
+    if isinstance(exc, DBAPIError):
+        message = str(exc.orig).lower()
+    else:
+        message = str(exc).lower()
+    return "deadlock detected" in message or "could not obtain lock on relation" in message
+
+
+def _init_auth_tables_once() -> None:
     """Create auth-related tables if they do not exist."""
     with get_db_session() as session:
         is_sqlite = _is_sqlite_session(session)
@@ -730,9 +972,29 @@ def init_auth_tables():
             CREATE INDEX IF NOT EXISTS idx_digital_twins_user_id
             ON digital_twins(user_id)
         """))
+        _apply_twin_runtime_ddl(session)
         _apply_openclaw_identity_ddl(session)
         _apply_site_feedback_ddl(session)
-    logger.info("Auth tables initialized")
+
+
+def init_auth_tables():
+    """Create auth-related tables if they do not exist."""
+    max_attempts = 3
+    for attempt in range(1, max_attempts + 1):
+        try:
+            _init_auth_tables_once()
+            logger.info("Auth tables initialized")
+            return
+        except Exception as exc:
+            if attempt >= max_attempts or not _is_retryable_init_error(exc):
+                raise
+            logger.warning(
+                "Auth tables init hit transient DDL lock issue (attempt %s/%s): %s",
+                attempt,
+                max_attempts,
+                exc,
+            )
+            sleep(0.5 * attempt)
 
 
 def reset_db_state():

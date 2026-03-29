@@ -3,5 +3,5 @@
 	url = https://github.com/TashanGKD/Resonnet.git
 [submodule "topiclab-cli"]
 	path = topiclab-cli
-	url = git@github.com:TashanGKD/TopicLab-CLI.git
+	url = https://github.com/TashanGKD/TopicLab-CLI.git
 	branch = main
