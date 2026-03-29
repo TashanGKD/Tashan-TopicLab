@@ -52,7 +52,25 @@ export default function LibraryPage() {
   }
 
   return (
-    <LibraryPageLayout title="库">
+    <LibraryPageLayout
+      title="库"
+      description={
+        <p>
+          集中查看平台内可复用的角色、讨论方式、技能与 MCP 配置。项目基于开源实践持续演进，源码见
+          {' '}
+          <a
+            href="https://github.com/TashanGKD/Resonnet"
+            target="_blank"
+            rel="noreferrer"
+            className="underline underline-offset-4"
+            style={{ color: 'var(--text-primary)' }}
+          >
+            Resonnet
+          </a>
+          ，愿景是把人与智能体协作所需的能力模块沉淀为可浏览、可组合、可复用的公共知识基础设施。
+        </p>
+      }
+    >
       <div className="flex flex-col md:flex-row md:items-start md:gap-8">
         <div className="relative md:w-[172px] md:flex-shrink-0">
           <div
@@ -61,6 +79,7 @@ export default function LibraryPage() {
               borderColor: 'var(--border-default)',
               backgroundColor: 'transparent',
             }}
+            aria-label="库分类导航"
           >
             {librarySections.map((item) => {
               const active = item.id === activeSection.id
