@@ -922,6 +922,136 @@ def list_observations(
             ctx.__exit__(None, None, None)
 
 
+def list_admin_observations(
+    *,
+    q: str | None = None,
+    observation_type: str | None = None,
+    merge_status: str | None = None,
+    topic: str | None = None,
+    explicitness: str | None = None,
+    scope: str | None = None,
+    scene: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    session=None,
+) -> dict[str, Any]:
+    owns_session = session is None
+    if owns_session:
+        ctx = get_db_session()
+        session = ctx.__enter__()
+    try:
+        rows = session.execute(
+            text(
+                """
+                SELECT
+                    o.id,
+                    o.observation_id,
+                    o.twin_id,
+                    o.instance_id,
+                    o.source,
+                    o.observation_type,
+                    o.confidence,
+                    o.payload_json,
+                    o.merge_status,
+                    o.created_at,
+                    t.owner_user_id,
+                    t.display_name AS twin_display_name,
+                    u.username,
+                    u.phone
+                FROM twin_observations o
+                JOIN twin_core t ON t.twin_id = o.twin_id
+                LEFT JOIN users u ON u.id = t.owner_user_id
+                ORDER BY o.created_at DESC, o.id DESC
+                """
+            )
+        ).fetchall()
+
+        clean_q = (q or "").strip().lower()
+        filtered: list[dict[str, Any]] = []
+        for row in rows:
+            payload = _json_loads(row.payload_json, {})
+            payload_topic = str(payload.get("topic") or "")
+            payload_explicitness = str(payload.get("explicitness") or "")
+            payload_scope = str(payload.get("scope") or "")
+            payload_scene = str(payload.get("scene") or "")
+            payload_statement = str(payload.get("statement") or "")
+            payload_normalized = payload.get("normalized") if isinstance(payload.get("normalized"), dict) else None
+            payload_evidence = payload.get("evidence") if isinstance(payload.get("evidence"), list) else []
+
+            if observation_type and row.observation_type != observation_type:
+                continue
+            if merge_status and row.merge_status != merge_status:
+                continue
+            if topic and payload_topic != topic:
+                continue
+            if explicitness and payload_explicitness != explicitness:
+                continue
+            if scope and payload_scope != scope:
+                continue
+            if scene and payload_scene != scene:
+                continue
+            if clean_q:
+                search_parts = [
+                    str(row.observation_id or ""),
+                    str(row.twin_id or ""),
+                    str(row.instance_id or ""),
+                    str(row.source or ""),
+                    str(row.observation_type or ""),
+                    str(row.merge_status or ""),
+                    str(getattr(row, "twin_display_name", None) or ""),
+                    str(getattr(row, "username", None) or ""),
+                    str(getattr(row, "phone", None) or ""),
+                    payload_topic,
+                    payload_explicitness,
+                    payload_scope,
+                    payload_scene,
+                    payload_statement,
+                    _json_dumps(payload_normalized or {}),
+                ]
+                haystack = " ".join(part.lower() for part in search_parts if part)
+                if clean_q not in haystack:
+                    continue
+
+            filtered.append(
+                {
+                    "id": int(row.id),
+                    "observation_id": row.observation_id,
+                    "twin_id": row.twin_id,
+                    "twin_display_name": getattr(row, "twin_display_name", None),
+                    "owner_user_id": int(row.owner_user_id),
+                    "owner_username": getattr(row, "username", None),
+                    "owner_phone": getattr(row, "phone", None),
+                    "instance_id": row.instance_id,
+                    "source": row.source,
+                    "observation_type": row.observation_type,
+                    "confidence": row.confidence,
+                    "topic": payload_topic or None,
+                    "explicitness": payload_explicitness or None,
+                    "scope": payload_scope or None,
+                    "scene": payload_scene or None,
+                    "statement": payload_statement or None,
+                    "normalized": payload_normalized or {},
+                    "evidence_count": len(payload_evidence),
+                    "payload": payload,
+                    "merge_status": row.merge_status,
+                    "created_at": _to_iso(row.created_at),
+                }
+            )
+
+        total = len(filtered)
+        start = max(0, int(offset))
+        end = start + max(1, int(limit))
+        return {
+            "items": filtered[start:end],
+            "total": total,
+            "limit": max(1, int(limit)),
+            "offset": start,
+        }
+    finally:
+        if owns_session:
+            ctx.__exit__(None, None, None)
+
+
 def build_runtime_profile(
     *,
     twin_id: str,

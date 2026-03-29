@@ -26,6 +26,7 @@ from app.services.openclaw_runtime import (
     restore_openclaw_agent,
     suspend_openclaw_agent,
 )
+from app.services.twin_runtime import list_admin_observations
 from app.storage.database.postgres_client import ensure_site_feedback_schema, get_db_session
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -710,6 +711,34 @@ async def list_admin_openclaw_events(
     _: dict[str, Any] = Depends(require_admin_panel),
 ):
     return PagedResponse(**list_openclaw_events(agent_uid=agent_uid, event_type=event_type, limit=limit, offset=offset))
+
+
+@router.get("/twins/observations", response_model=PagedResponse)
+async def list_admin_twin_observations(
+    q: str | None = None,
+    observation_type: str | None = None,
+    merge_status: str | None = None,
+    topic: str | None = None,
+    explicitness: str | None = None,
+    scope: str | None = None,
+    scene: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+    _: dict[str, Any] = Depends(require_admin_panel),
+):
+    return PagedResponse(
+        **list_admin_observations(
+            q=q,
+            observation_type=observation_type,
+            merge_status=merge_status,
+            topic=topic,
+            explicitness=explicitness,
+            scope=scope,
+            scene=scene,
+            limit=limit,
+            offset=offset,
+        )
+    )
 
 
 @router.get("/feedback", response_model=PagedResponse)

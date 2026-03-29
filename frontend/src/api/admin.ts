@@ -50,6 +50,84 @@ export interface AdminFeedbackItem {
   created_at: string
 }
 
+export interface AdminOpenClawAgentItem {
+  id: number
+  agent_uid: string
+  display_name: string
+  handle: string
+  skill_token: string | null
+  status: string
+  bound_user_id: number | null
+  is_primary: boolean
+  profile_json: Record<string, unknown>
+  username: string | null
+  phone: string | null
+  points_balance: number
+  created_at: string
+  updated_at: string
+  last_seen_at: string | null
+}
+
+export interface AdminOpenClawEventItem {
+  id: number
+  event_uid: string
+  openclaw_agent_id: number | null
+  agent_uid: string | null
+  display_name: string | null
+  bound_user_id: number | null
+  session_id: string | null
+  request_id: string | null
+  event_type: string
+  action_name: string
+  target_type: string | null
+  target_id: string | null
+  http_method: string | null
+  route: string | null
+  success: boolean
+  status_code: number | null
+  error_code: string | null
+  payload: Record<string, unknown>
+  result: Record<string, unknown>
+  created_at: string
+}
+
+export interface AdminOpenClawLedgerItem {
+  id: number
+  delta: number
+  balance_after: number
+  reason_code: string
+  target_type: string | null
+  target_id: string | null
+  related_event_id: number | null
+  operator_type: string | null
+  metadata: Record<string, unknown>
+  created_at: string
+}
+
+export interface AdminTwinObservationItem {
+  id: number
+  observation_id: string
+  twin_id: string
+  twin_display_name: string | null
+  owner_user_id: number
+  owner_username: string | null
+  owner_phone: string | null
+  instance_id: string
+  source: string
+  observation_type: string
+  confidence: number | null
+  topic: string | null
+  explicitness: string | null
+  scope: string | null
+  scene: string | null
+  statement: string | null
+  normalized: Record<string, unknown>
+  evidence_count: number
+  payload: Record<string, unknown>
+  merge_status: string
+  created_at: string
+}
+
 export interface AdminAuthResponse {
   token: string
   expires_in_hours: number
@@ -59,6 +137,32 @@ export interface AdminListParams {
   q?: string
   sort_by?: string
   sort_order?: 'asc' | 'desc'
+  limit?: number
+  offset?: number
+}
+
+export interface AdminOpenClawAgentListParams {
+  q?: string
+  status?: string
+  limit?: number
+  offset?: number
+}
+
+export interface AdminOpenClawEventListParams {
+  agent_uid?: string
+  event_type?: string
+  limit?: number
+  offset?: number
+}
+
+export interface AdminTwinObservationListParams {
+  q?: string
+  observation_type?: string
+  merge_status?: string
+  topic?: string
+  explicitness?: string
+  scope?: string
+  scene?: string
   limit?: number
   offset?: number
 }
@@ -146,4 +250,81 @@ export const adminApi = {
     }),
   deleteFeedback: (id: number) =>
     adminRequest<{ ok: boolean; feedback_id: number }>(`/feedback/${id}`, { method: 'DELETE' }),
+  listOpenClawAgents: (params?: AdminOpenClawAgentListParams) => {
+    const search = new URLSearchParams()
+    if (params?.q) search.set('q', params.q)
+    if (params?.status) search.set('status', params.status)
+    if (params?.limit != null) search.set('limit', String(params.limit))
+    if (params?.offset != null) search.set('offset', String(params.offset))
+    return adminRequest<AdminPagedResponse<AdminOpenClawAgentItem>>(
+      `/openclaw/agents${search.toString() ? `?${search.toString()}` : ''}`
+    )
+  },
+  getOpenClawAgent: (agentUid: string) =>
+    adminRequest<{ agent: AdminOpenClawAgentItem }>(`/openclaw/agents/${agentUid}`),
+  listOpenClawAgentEvents: (agentUid: string, params?: Pick<AdminListParams, 'limit' | 'offset'>) => {
+    const search = new URLSearchParams()
+    if (params?.limit != null) search.set('limit', String(params.limit))
+    if (params?.offset != null) search.set('offset', String(params.offset))
+    return adminRequest<AdminPagedResponse<AdminOpenClawEventItem>>(
+      `/openclaw/agents/${agentUid}/events${search.toString() ? `?${search.toString()}` : ''}`
+    )
+  },
+  listOpenClawAgentLedger: (agentUid: string, params?: Pick<AdminListParams, 'limit' | 'offset'>) => {
+    const search = new URLSearchParams()
+    if (params?.limit != null) search.set('limit', String(params.limit))
+    if (params?.offset != null) search.set('offset', String(params.offset))
+    return adminRequest<AdminPagedResponse<AdminOpenClawLedgerItem>>(
+      `/openclaw/agents/${agentUid}/points/ledger${search.toString() ? `?${search.toString()}` : ''}`
+    )
+  },
+  adjustOpenClawPoints: (agentUid: string, payload: { delta: number; note?: string }) =>
+    adminRequest<{
+      agent: AdminOpenClawAgentItem
+      event: AdminOpenClawEventItem
+      ledger: AdminOpenClawLedgerItem
+      wallet: {
+        balance: number
+        lifetime_earned: number
+        lifetime_spent: number
+        updated_at: string
+      }
+    }>(`/openclaw/agents/${agentUid}/points/adjust`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  suspendOpenClawAgent: (agentUid: string, payload: { reason?: string }) =>
+    adminRequest<{ agent: AdminOpenClawAgentItem; event: AdminOpenClawEventItem }>(`/openclaw/agents/${agentUid}/suspend`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  restoreOpenClawAgent: (agentUid: string) =>
+    adminRequest<{ agent: AdminOpenClawAgentItem; event: AdminOpenClawEventItem }>(`/openclaw/agents/${agentUid}/restore`, {
+      method: 'POST',
+    }),
+  listOpenClawEvents: (params?: AdminOpenClawEventListParams) => {
+    const search = new URLSearchParams()
+    if (params?.agent_uid) search.set('agent_uid', params.agent_uid)
+    if (params?.event_type) search.set('event_type', params.event_type)
+    if (params?.limit != null) search.set('limit', String(params.limit))
+    if (params?.offset != null) search.set('offset', String(params.offset))
+    return adminRequest<AdminPagedResponse<AdminOpenClawEventItem>>(
+      `/openclaw/events${search.toString() ? `?${search.toString()}` : ''}`
+    )
+  },
+  listTwinObservations: (params?: AdminTwinObservationListParams) => {
+    const search = new URLSearchParams()
+    if (params?.q) search.set('q', params.q)
+    if (params?.observation_type) search.set('observation_type', params.observation_type)
+    if (params?.merge_status) search.set('merge_status', params.merge_status)
+    if (params?.topic) search.set('topic', params.topic)
+    if (params?.explicitness) search.set('explicitness', params.explicitness)
+    if (params?.scope) search.set('scope', params.scope)
+    if (params?.scene) search.set('scene', params.scene)
+    if (params?.limit != null) search.set('limit', String(params.limit))
+    if (params?.offset != null) search.set('offset', String(params.offset))
+    return adminRequest<AdminPagedResponse<AdminTwinObservationItem>>(
+      `/twins/observations${search.toString() ? `?${search.toString()}` : ''}`
+    )
+  },
 }

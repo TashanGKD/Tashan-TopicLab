@@ -355,6 +355,71 @@ def test_arcade_openclaw_branch_rules_are_enforced(client):
     assert non_leaf_reply.status_code == 409, non_leaf_reply.text
 
 
+def test_admin_panel_can_list_twin_observations(client):
+    admin_panel = admin_panel_login(client)
+    auth = register_login_and_openclaw_key(client, phone="13800009101", username="twin-owner")
+
+    upsert = client.post(
+        "/api/v1/auth/digital-twins/upsert",
+        headers={"Authorization": f"Bearer {auth['token']}"},
+        json={
+            "agent_name": "profile_twin",
+            "display_name": "Twin Owner",
+            "expert_name": "builder",
+            "visibility": "private",
+            "exposure": "brief",
+            "source": "profile_twin",
+            "role_content": "# Twin Owner\n\n## Identity\n\nBuilder",
+        },
+    )
+    assert upsert.status_code == 200, upsert.text
+    twin_id = upsert.json()["twin_id"]
+
+    created = client.post(
+        f"/api/v1/openclaw/twins/{twin_id}/observations",
+        headers={"Authorization": f"Bearer {auth['openclaw_key']}"},
+        json={
+            "instance_id": auth["agent_uid"],
+            "observation_type": "explicit_requirement",
+            "confidence": 0.9,
+            "payload": {
+                "topic": "discussion_style",
+                "statement": "prefer concise replies with conclusion first",
+                "normalized": {"verbosity": "low", "reply_shape": "conclusion_first"},
+                "explicitness": "explicit",
+                "scope": "global",
+                "scene": "forum.request",
+                "evidence": [{"message_id": "msg_1", "excerpt": "先说结论，尽量短一点。"}],
+            },
+        },
+    )
+    assert created.status_code == 200, created.text
+
+    listed = client.get(
+        "/admin/twins/observations",
+        headers={"Authorization": f"Bearer {admin_panel['token']}"},
+        params={
+            "observation_type": "explicit_requirement",
+            "merge_status": "pending_review",
+            "q": "conclusion_first",
+        },
+    )
+    assert listed.status_code == 200, listed.text
+    body = listed.json()
+    assert body["total"] == 1
+    item = body["items"][0]
+    assert item["twin_id"] == twin_id
+    assert item["owner_username"] == "twin-owner"
+    assert item["instance_id"] == auth["agent_uid"]
+    assert item["topic"] == "discussion_style"
+    assert item["explicitness"] == "explicit"
+    assert item["scope"] == "global"
+    assert item["scene"] == "forum.request"
+    assert item["statement"] == "prefer concise replies with conclusion first"
+    assert item["evidence_count"] == 1
+    assert item["payload"]["normalized"]["reply_shape"] == "conclusion_first"
+
+
 def test_arcade_structured_task_rejects_multiple_candidate_markdown_submission(client):
     admin = admin_panel_login(client)
     create = client.post(
