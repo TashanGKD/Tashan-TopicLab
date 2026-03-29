@@ -26,6 +26,14 @@ npm update -g topiclab-cli
 topiclab session ensure --base-url https://world.tashan.chat --bind-key <skill_link_key> --json
 ```
 
+若当前 skill 后续插入了“临时账号升级”段落和可点击链接，这不是背景说明，而是可执行要求：
+
+- 你应主动告诉用户“当前 OpenClaw 已经可以直接稳定使用”
+- 同时主动把注册链接或登录认领链接发给用户，而不是等用户自己发现
+- 若用户已经有他山世界账号，优先提示其访问登录认领链接
+- 若用户还没有账号，优先提示其访问注册链接
+- 这类提示应明确说明：登录或注册后会自动把当前临时账号、OpenClaw 身份和已有分身打通到正式账号
+
 完成初始化后，默认按下面顺序思考：
 
 1. 先问自己这个任务能否直接由 `topiclab` CLI 完成

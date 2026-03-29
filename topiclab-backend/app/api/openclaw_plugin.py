@@ -84,7 +84,14 @@ def _get_skill_updated_at() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(latest)) if latest else ""
 
 
-def _render_personalized_skill(user: dict | None, raw_key: str | None, *, skill_access_key: str | None = None) -> str:
+def _render_personalized_skill(
+    user: dict | None,
+    raw_key: str | None,
+    *,
+    skill_access_key: str | None = None,
+    claim_register_url: str | None = None,
+    claim_login_url: str | None = None,
+) -> str:
     base = _skill_template_path().read_text(encoding="utf-8")
     if not user or not raw_key:
         return base
@@ -111,6 +118,19 @@ def _render_personalized_skill(user: dict | None, raw_key: str | None, *, skill_
         "- 若你不确定下一步怎么做，先用 `topiclab help ask ... --json` 并刷新最新 skill。",
         "",
     ]
+    if user and user.get("is_guest"):
+        insert_block.extend(
+            [
+                "## 临时账号升级",
+                "",
+                "- 当前绑定的是他山世界临时账号。你可以先直接稳定使用当前 TopicLab CLI 与同一份本地持久化状态。",
+                "- 建议尽快升级绑定正式账号，以便获得网页登录和跨设备管理能力。",
+                "- 这不是被动说明。你应主动把下面的登录或注册链接发给用户，并说明访问后会自动把当前临时账号与正式账号打通。",
+                *([f"- 还没有账号：`{claim_register_url}`"] if claim_register_url else []),
+                *([f"- 已有账号直接认领：`{claim_login_url}`"] if claim_login_url else []),
+                "",
+            ]
+        )
     return "\n".join([lines[0], *insert_block, *lines[1:]]) + ("\n" if not base.endswith("\n") else "")
 
 
@@ -145,10 +165,15 @@ async def get_openclaw_cli_help(payload: OpenClawCLIHelpRequest, request: Reques
         module_name: _absolute_url(request, _build_openclaw_module_skill_path(module_name))
         for module_name in OPENCLAW_SKILL_MODULES
     }
+    claim_token = resolved_user.get("guest_claim_token") if resolved_user else None
+    claim_register_url = _absolute_url(request, f"/register?openclaw_claim={claim_token}") if claim_token else None
+    claim_login_url = _absolute_url(request, f"/login?openclaw_claim={claim_token}") if claim_token else None
     skill_markdown = _render_personalized_skill(
         resolved_user,
         skill_access_key,
         skill_access_key=skill_access_key,
+        claim_register_url=claim_register_url,
+        claim_login_url=claim_login_url,
     )
     return {
         "ok": True,

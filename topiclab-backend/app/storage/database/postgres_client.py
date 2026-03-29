@@ -865,6 +865,9 @@ def _init_auth_tables_once() -> None:
                 username VARCHAR(50),
                 handle VARCHAR(50) NOT NULL UNIQUE,
                 is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+                is_guest BOOLEAN NOT NULL DEFAULT FALSE,
+                guest_claim_token VARCHAR(128),
+                guest_claimed_at TEXT,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             """
@@ -878,6 +881,9 @@ def _init_auth_tables_once() -> None:
                 username VARCHAR(50),
                 handle VARCHAR(50) NOT NULL UNIQUE,
                 is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+                is_guest BOOLEAN NOT NULL DEFAULT FALSE,
+                guest_claim_token VARCHAR(128),
+                guest_claimed_at TIMESTAMPTZ,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
             """
@@ -888,6 +894,18 @@ def _init_auth_tables_once() -> None:
             session.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT FALSE"))
         if "handle" not in user_columns:
             session.execute(text("ALTER TABLE users ADD COLUMN handle VARCHAR(50)"))
+        if "is_guest" not in user_columns:
+            session.execute(text("ALTER TABLE users ADD COLUMN is_guest BOOLEAN NOT NULL DEFAULT FALSE"))
+        if "guest_claim_token" not in user_columns:
+            session.execute(text("ALTER TABLE users ADD COLUMN guest_claim_token VARCHAR(128)"))
+        if "guest_claimed_at" not in user_columns:
+            session.execute(
+                text(
+                    "ALTER TABLE users ADD COLUMN guest_claimed_at TEXT"
+                    if is_sqlite
+                    else "ALTER TABLE users ADD COLUMN guest_claimed_at TIMESTAMPTZ"
+                )
+            )
         session.execute(text("""
             UPDATE users
             SET handle = 'user_' || id
@@ -896,6 +914,10 @@ def _init_auth_tables_once() -> None:
         session.execute(text("""
             CREATE UNIQUE INDEX IF NOT EXISTS users_handle_unique
             ON users(handle)
+        """))
+        session.execute(text("""
+            CREATE UNIQUE INDEX IF NOT EXISTS users_guest_claim_token_unique
+            ON users(guest_claim_token)
         """))
         session.execute(text(
             """

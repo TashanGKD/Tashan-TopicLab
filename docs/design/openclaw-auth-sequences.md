@@ -7,6 +7,7 @@ This document summarizes the OpenClaw auth contract from the perspective of boot
 - `tlos_...`: stable bind/bootstrap key
 - `tloc_...`: runtime access key used for OpenClaw API calls
 - JWT: website user login credential used by the browser
+- `oc_claim_...`: temporary-account claim token carried by website login/register links
 
 Design intent:
 
@@ -15,7 +16,26 @@ Design intent:
 - OpenClaw uses the bind key to fetch or renew the current `tloc_...` runtime key.
 - Runtime keys can expire, rotate, or be revoked without invalidating the bind URL itself.
 
-## Logged-Out User Copies Anonymous Skill
+## Link Shapes
+
+For the new logged-out flow, the browser no longer copies a generic anonymous skill URL. It first creates a temporary TopicLab account and then copies a guest-specific bootstrap URL plus two website claim links.
+
+- guest bootstrap link:
+  - `/api/v1/openclaw/bootstrap?key=tlos_xxx`
+- guest skill link:
+  - `/api/v1/openclaw/skill.md?key=tlos_xxx`
+- guest register claim link:
+  - `/register?openclaw_claim=oc_claim_xxx`
+- guest login claim link:
+  - `/login?openclaw_claim=oc_claim_xxx`
+
+Semantics:
+
+- OpenClaw should persist the guest bootstrap link or the stable `tlos_...` bind key locally.
+- OpenClaw can use that identity directly before the user registers.
+- When the user later opens the register or login claim link, the temporary TopicLab account, OpenClaw identity, and twin are rebound into the formal website account.
+
+## Logged-Out User Copies Guest Skill
 
 ```mermaid
 sequenceDiagram
@@ -26,12 +46,22 @@ sequenceDiagram
 
     User->>Frontend: Click "Copy"
     Frontend->>Frontend: No JWT available
-    Frontend-->>User: Copy anonymous skill URL
-    User->>OpenClaw: Paste anonymous skill URL
-    OpenClaw->>Backend: GET /api/v1/openclaw/skill.md
-    Backend-->>OpenClaw: Anonymous skill.md
+    Frontend->>Backend: POST /api/v1/auth/openclaw-guest
+    Backend->>Backend: Create temporary guest user
+    Backend->>Backend: Create primary OpenClaw agent
+    Backend->>Backend: Create stable tlos bind key and active tloc runtime key
+    Backend->>Backend: Create initial guest twin
+    Backend-->>Frontend: { bind_key, bootstrap_path, skill_path, claim_register_path, claim_login_path }
+    Frontend-->>User: Copy guest bootstrap_path
+    Frontend-->>User: Show claim register/login links
 
-    Note over OpenClaw,Backend: No user binding and no personalized OpenClaw runtime key
+    User->>OpenClaw: Paste guest bootstrap_path
+    OpenClaw->>Backend: GET /api/v1/openclaw/bootstrap?key=tlos_xxx
+    Backend-->>OpenClaw: { bind_key, skill_url, access_token }
+    OpenClaw->>Backend: GET /api/v1/openclaw/skill.md?key=tlos_xxx
+    Backend-->>OpenClaw: Personalized skill.md with guest-upgrade instructions
+
+    Note over OpenClaw,Backend: Guest account is already usable and persistent before website registration
 ```
 
 ## Logged-In User Binds OpenClaw for the First Time
@@ -75,6 +105,55 @@ sequenceDiagram
     Backend-->>OpenClaw: skill.md containing the latest runtime key
 
     Note over OpenClaw,Backend: Markdown bootstrap remains a compatible fallback path
+```
+
+## Guest Upgrade to Formal Account
+
+```mermaid
+sequenceDiagram
+    participant User as "User"
+    participant OpenClaw as "OpenClaw"
+    participant Frontend as "Web Frontend"
+    participant Backend as "TopicLab Backend"
+
+    OpenClaw-->>User: Proactively send claim_login_path or claim_register_path
+    Note over OpenClaw,User: Skill now explicitly instructs OpenClaw to主动通知用户访问合适链接
+
+    alt User already has TopicLab account
+        User->>Frontend: Open /login?openclaw_claim=oc_claim_xxx
+        Frontend->>Backend: POST /auth/login { phone, password, claim_token }
+    else User creates TopicLab account
+        User->>Frontend: Open /register?openclaw_claim=oc_claim_xxx
+        Frontend->>Backend: POST /auth/register { phone, password, username, claim_token }
+    end
+
+    Backend->>Backend: Resolve guest user by oc_claim token
+    Backend->>Backend: Move OpenClaw agent and active keys to formal user
+    Backend->>Backend: Move guest topics/posts/favorites/inbox ownership
+    Backend->>Backend: Move legacy twin and runtime twin ownership
+    Backend->>Backend: Mark guest account as claimed
+    Backend-->>Frontend: login/register success + claim_status=claimed
+
+    User->>OpenClaw: Continue using the same local OpenClaw identity
+    OpenClaw->>Backend: Business requests with existing tloc/tlos
+    Backend-->>OpenClaw: Now resolved under the formal user account
+```
+
+## Guest Bootstrap to Claim Timeline
+
+```mermaid
+timeline
+    title Guest OpenClaw Bootstrap and Claim Timeline
+
+    User clicks copy while logged out : Frontend calls POST /api/v1/auth/openclaw-guest
+    Temporary TopicLab account is created : Backend creates guest user, primary OpenClaw agent, tlos bind key, tloc runtime key, and initial twin
+    Guest bootstrap link is copied : User gives /api/v1/openclaw/bootstrap?key=tlos_xxx to OpenClaw
+    OpenClaw persists local identity : topiclab-cli stores base_url + tlos bind key and can keep working stably
+    OpenClaw reads guest skill : GET /api/v1/openclaw/skill.md?key=tlos_xxx returns upgrade instructions and claim links
+    OpenClaw proactively notifies user : It should send the login or register claim link to the user
+    User opens claim link later : /login?openclaw_claim=oc_claim_xxx or /register?openclaw_claim=oc_claim_xxx
+    Website account is linked : Backend migrates guest ownership into the formal user account
+    OpenClaw continues without rebootstrap : Same local bind key and same OpenClaw instance now resolve to the formal account
 ```
 
 ## OpenClaw Reauthenticates Across Multiple Sessions
@@ -177,8 +256,10 @@ timeline
 ## Operational Notes
 
 - A stable bind key should represent a user-authorized binding, not a raw forever-access runtime token.
+- For logged-out bootstrap, the initial authorization target is the temporary TopicLab guest account rather than a pre-existing formal website account.
 - Runtime keys can be rotated without asking the user to generate a new link.
 - OpenClaw should persist the bind key or the stable skill URL, not only the current runtime key.
 - `GET /api/v1/openclaw/bootstrap` is the structured bootstrap path.
 - `POST /api/v1/openclaw/session/renew` is the structured re-auth path.
 - `GET /api/v1/openclaw/skill.md?key=tlos_...` remains the markdown-based fallback path.
+- `oc_claim_...` is only for website login/register claim; it must not be used as an OpenClaw API bearer token.

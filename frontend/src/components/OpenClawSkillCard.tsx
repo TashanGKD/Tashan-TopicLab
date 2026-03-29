@@ -73,6 +73,8 @@ export default function OpenClawSkillCard() {
   const [showLoginPrompt, setShowLoginPrompt] = useState(false)
   const [generatedSkillUrl, setGeneratedSkillUrl] = useState<string | null>(null)
   const [generatedSkillIsBound, setGeneratedSkillIsBound] = useState(false)
+  const [guestClaimLoginPath, setGuestClaimLoginPath] = useState<string | null>(null)
+  const [guestClaimRegisterPath, setGuestClaimRegisterPath] = useState<string | null>(null)
   const [siteStats, setSiteStats] = useState<OpenClawSiteStats>(EMPTY_SITE_STATS)
 
   useEffect(() => {
@@ -82,6 +84,8 @@ export default function OpenClawSkillCard() {
       setCopied(false)
       setGeneratedSkillUrl(null)
       setGeneratedSkillIsBound(false)
+      setGuestClaimLoginPath(null)
+      setGuestClaimRegisterPath(null)
     }
     window.addEventListener('auth-change', syncAuth)
     window.addEventListener('storage', syncAuth)
@@ -136,9 +140,17 @@ export default function OpenClawSkillCard() {
           : data.skill_path
             ? new URL(data.skill_path, window.location.origin).toString()
           : buildSkillUrl(data.key ?? null)
-      }
-      if (!nextUrl) {
-        nextUrl = buildSkillUrl(null)
+        setGuestClaimLoginPath(null)
+        setGuestClaimRegisterPath(null)
+      } else {
+        const data = await authApi.createGuestOpenClawKey()
+        nextUrl = data.bootstrap_path
+          ? new URL(data.bootstrap_path, window.location.origin).toString()
+          : data.skill_path
+            ? new URL(data.skill_path, window.location.origin).toString()
+            : buildSkillUrl(data.key ?? null)
+        setGuestClaimLoginPath(data.claim_login_path ?? null)
+        setGuestClaimRegisterPath(data.claim_register_path ?? null)
       }
       const copyText = `${OPENCLAW_SKILL_PROMPT}\n${nextUrl}`
       setGeneratedSkillUrl(nextUrl)
@@ -191,11 +203,12 @@ export default function OpenClawSkillCard() {
               style={{ color: 'var(--text-secondary)' }}
             >
               未登录时复制匿名 skill，登录后复制绑定当前身份的专属 skill；发给 OpenClaw 即可创建。
+              未登录时现在会直接创建一个可长期使用的临时账号。
             </p>
             <p className="mt-1 text-xs" style={{ color: 'var(--accent-warning)' }}>
               {token
                 ? '请勿分享此链接：他人使用后其 OpenClaw 会绑定到您的账号，可能带来不便。'
-                : '匿名 skill 可直接分享；如果希望 OpenClaw 绑定到您的账号，请先登录后再复制专属链接。'}
+                : '未登录复制到的是临时账号专属链接；后续可通过自动认领链接升级绑定到您的正式账号。'}
             </p>
             <div
               className="mt-3 rounded-xl border px-3 py-2.5 text-sm"
@@ -294,14 +307,23 @@ export default function OpenClawSkillCard() {
               color: '#92400E',
             }}
           >
-            <p>当前已复制匿名 OpenClaw skill。若要绑定到您的他山世界账号，请先登录后再复制专属链接。</p>
-            <Link
-              to="/login"
-              className="inline-flex shrink-0 items-center justify-center rounded-lg px-4 py-2 text-sm font-medium text-white transition-all hover:opacity-90"
-              style={{ backgroundColor: 'var(--accent-warning)' }}
-            >
-              去登录
-            </Link>
+            <p>当前已复制临时账号专属 skill。OpenClaw 可以先直接稳定使用；若要升级绑定到您的他山世界账号，请使用下方自动认领入口。</p>
+            <div className="flex shrink-0 gap-2">
+              <Link
+                to={guestClaimRegisterPath || '/register'}
+                className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium text-white transition-all hover:opacity-90"
+                style={{ backgroundColor: 'var(--accent-warning)' }}
+              >
+                去注册
+              </Link>
+              <Link
+                to={guestClaimLoginPath || '/login'}
+                className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium text-white transition-all hover:opacity-90"
+                style={{ backgroundColor: 'var(--accent-warning)' }}
+              >
+                去登录
+              </Link>
+            </div>
           </div>
         ) : null}
 
@@ -326,7 +348,7 @@ export default function OpenClawSkillCard() {
               {copied
                 ? generatedSkillIsBound
                   ? '已自动复制绑定当前身份的专属链接。后续 OpenClaw 应重复使用这个同一链接。'
-                  : '已自动复制匿名链接，你也可以直接使用下方链接。'
+                  : '已自动复制临时账号专属链接。后续 OpenClaw 应重复使用这个同一链接；升级正式账号后也无需更换。'
                 : '如果浏览器未授予剪贴板权限，请手动复制下方链接。'}
             </p>
             <div

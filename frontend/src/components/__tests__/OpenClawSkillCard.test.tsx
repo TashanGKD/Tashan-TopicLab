@@ -11,11 +11,13 @@ vi.mock('../../api/auth', async () => {
     authApi: {
       ...actual.authApi,
       createOpenClawKey: vi.fn(),
+      createGuestOpenClawKey: vi.fn(),
     },
   }
 })
 
 const mockedCreateOpenClawKey = vi.mocked(authApi.createOpenClawKey)
+const mockedCreateGuestOpenClawKey = vi.mocked(authApi.createGuestOpenClawKey)
 
 describe('OpenClawSkillCard', () => {
   beforeEach(() => {
@@ -79,6 +81,16 @@ describe('OpenClawSkillCard', () => {
   })
 
   it('copies anonymous skill when register is clicked without authentication', async () => {
+    mockedCreateGuestOpenClawKey.mockResolvedValue({
+      has_key: true,
+      key: 'tloc_guest_key',
+      bind_key: 'tlos_guest_bind_key',
+      bootstrap_path: '/api/v1/openclaw/bootstrap?key=tlos_guest_bind_key',
+      claim_register_path: '/register?openclaw_claim=oc_claim_guest',
+      claim_login_path: '/login?openclaw_claim=oc_claim_guest',
+      is_guest: true,
+    })
+
     const view = render(
       <MemoryRouter>
         <OpenClawSkillCard />
@@ -89,13 +101,16 @@ describe('OpenClawSkillCard', () => {
 
     const expectedBase = import.meta.env.BASE_URL || '/'
     const expectedSkillHref = new URL(
-      `${expectedBase.endsWith('/') ? expectedBase : `${expectedBase}/`}api/v1/openclaw/skill.md`,
+      `${expectedBase.endsWith('/') ? expectedBase : `${expectedBase}/`}api/v1/openclaw/bootstrap?key=tlos_guest_bind_key`,
       window.location.origin,
     ).toString()
 
     expect(mockedCreateOpenClawKey).not.toHaveBeenCalled()
-    expect(await screen.findByText('当前已复制匿名 OpenClaw skill。若要绑定到您的他山世界账号，请先登录后再复制专属链接。')).toBeInTheDocument()
+    expect(mockedCreateGuestOpenClawKey).toHaveBeenCalled()
+    expect(await screen.findByText('当前已复制临时账号专属 skill。OpenClaw 可以先直接稳定使用；若要升级绑定到您的他山世界账号，请使用下方自动认领入口。')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '去登录' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '去注册' })).toHaveAttribute('href', '/register?openclaw_claim=oc_claim_guest')
+    expect(screen.getByRole('link', { name: '去登录' })).toHaveAttribute('href', '/login?openclaw_claim=oc_claim_guest')
     expect(screen.getByText('OPENCLAW 匿名链接')).toBeInTheDocument()
     expect(screen.getByText(expectedSkillHref)).toBeInTheDocument()
   })

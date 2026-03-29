@@ -9,7 +9,7 @@ from pathlib import Path
 import time
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel
@@ -169,6 +169,10 @@ def _build_points_progress(*, agent_uid: str, current_points: int) -> dict:
         "remaining_points": remaining_points,
         "note": note,
     }
+
+
+def _absolute_url(request: Request, path: str) -> str:
+    return f"{str(request.base_url).rstrip('/')}{path}"
 
 
 def _build_next_actions(
@@ -493,6 +497,8 @@ def _render_personalized_skill(
     raw_key: str | None,
     *,
     skill_access_key: str | None = None,
+    claim_register_url: str | None = None,
+    claim_login_url: str | None = None,
 ) -> str:
     base = _skill_template_path().read_text(encoding="utf-8")
     if not user or not raw_key:
@@ -529,6 +535,21 @@ def _render_personalized_skill(
         "- 之后所有 API 请求都使用 `Authorization: Bearer YOUR_OPENCLAW_KEY`。",
         "",
     ]
+    if user.get("is_guest"):
+        insert_block.extend(
+            [
+                "## 临时账号升级",
+                "",
+                "- 当前绑定的是他山世界临时账号。你可以先直接稳定使用当前 TopicLab CLI 与同一份本地持久化状态，不需要先注册。",
+                "- 为了获得网页登录、跨设备管理和长期账号归属，仍然建议尽快升级绑定正式他山世界账号。",
+                "- 升级完成后继续沿用当前 OpenClaw 实例、bind key 和已有数字分身，不需要重建本地身份。",
+                "- 不要只把下面链接留在 skill 里不管。你应主动把合适的链接发给当前用户，并明确说明访问后会自动完成绑定。",
+                "- 若用户已经有他山世界账号，优先主动发送登录认领链接；若还没有账号，优先主动发送注册链接。",
+                *([f"- 还没有账号：`{claim_register_url}`"] if claim_register_url else []),
+                *([f"- 已有账号直接认领：`{claim_login_url}`"] if claim_login_url else []),
+                "",
+            ]
+        )
     return "\n".join([lines[0], *insert_block, *lines[1:]]) + ("\n" if not base.endswith("\n") else "")
 
 
@@ -649,6 +670,7 @@ async def renew_openclaw_runtime(
 
 @router.get("/openclaw/skill.md")
 async def get_openclaw_skill_markdown(
+    request: Request,
     key: str | None = Query(default=None),
     if_none_match: str | None = Header(default=None, alias="If-None-Match"),
     user: dict | None = Depends(_get_optional_user),
@@ -679,7 +701,16 @@ async def get_openclaw_skill_markdown(
                     headers=build_openclaw_key_invalid_headers(),
                 )
             raw_key = key
-    content = _render_personalized_skill(resolved_user, raw_key, skill_access_key=skill_access_key)
+    claim_token = resolved_user.get("guest_claim_token") if resolved_user else None
+    claim_register_url = _absolute_url(request, f"/register?openclaw_claim={quote(str(claim_token), safe='')}") if claim_token else None
+    claim_login_url = _absolute_url(request, f"/login?openclaw_claim={quote(str(claim_token), safe='')}") if claim_token else None
+    content = _render_personalized_skill(
+        resolved_user,
+        raw_key,
+        skill_access_key=skill_access_key,
+        claim_register_url=claim_register_url,
+        claim_login_url=claim_login_url,
+    )
     etag = hashlib.sha256(content.encode("utf-8")).hexdigest()[:24]
     if if_none_match and if_none_match.strip('"') == etag:
         return Response(status_code=304)

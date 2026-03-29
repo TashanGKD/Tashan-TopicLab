@@ -31,6 +31,7 @@ from app.services.openclaw_runtime import (
     verify_openclaw_api_key as verify_openclaw_api_key_db,
 )
 from app.services.twin_runtime import create_or_update_active_twin_for_user, get_or_backfill_active_twin_for_user
+from app.storage.database.topic_store import _invalidate_read_cache
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -51,7 +52,14 @@ else:
     def _get_dev_user(phone: str) -> Optional[dict]:
         return _dev_users.get(phone)
 
-    def _create_dev_user(phone: str, password: str, username: str) -> dict:
+    def _create_dev_user(
+        phone: str,
+        password: str,
+        username: str,
+        *,
+        is_guest: bool = False,
+        guest_claim_token: str | None = None,
+    ) -> dict:
         _dev_user_counter[0] += 1
         user = {
             "id": _dev_user_counter[0],
@@ -59,6 +67,9 @@ else:
             "password": password,
             "username": username,
             "is_admin": False,
+            "is_guest": is_guest,
+            "guest_claim_token": guest_claim_token,
+            "guest_claimed_at": None,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         _dev_users[phone] = user
@@ -131,11 +142,13 @@ class RegisterRequest(BaseModel):
     phone: str = Field(..., pattern=r"^1[3-9]\d{9}$", description="手机号")
     code: str = Field(default="", max_length=6, description="验证码；限时免验证期间可留空")
     password: str = Field(..., min_length=6, description="密码")
+    claim_token: Optional[str] = Field(default=None, max_length=128, description="OpenClaw 临时账号认领 token")
 
 
 class LoginRequest(BaseModel):
     phone: str = Field(..., pattern=r"^1[3-9]\d{9}$", description="手机号")
     password: str = Field(..., min_length=6, description="密码")
+    claim_token: Optional[str] = Field(default=None, max_length=128, description="OpenClaw 临时账号认领 token")
 
 
 class TwinUpsertRequest(BaseModel):
@@ -162,6 +175,27 @@ class OpenClawKeyResponse(BaseModel):
     bootstrap_path: Optional[str] = None
     agent_uid: Optional[str] = None
     openclaw_agent: Optional[dict] = None
+    is_guest: Optional[bool] = None
+    claim_token: Optional[str] = None
+    claim_register_path: Optional[str] = None
+    claim_login_path: Optional[str] = None
+
+
+class AuthUserResponse(BaseModel):
+    id: int
+    phone: str
+    username: str | None = None
+    is_admin: bool = False
+    is_guest: bool = False
+    created_at: str
+
+
+class AuthResponse(BaseModel):
+    message: str
+    user: AuthUserResponse
+    token: Optional[str] = None
+    claim_status: Optional[str] = None
+    claim_detail: Optional[str] = None
 
 
 def _split_csv_env(name: str) -> set[str]:
@@ -238,6 +272,26 @@ def _generate_user_handle(session, phone: str, username: str | None) -> str:
     raise RuntimeError("failed to generate unique user handle")
 
 
+def _generate_guest_phone(session) -> str:
+    for _ in range(20):
+        candidate = f"guest_{secrets.token_hex(7)}"[:20]
+        row = session.execute(
+            text("SELECT 1 FROM users WHERE phone = :phone LIMIT 1"),
+            {"phone": candidate},
+        ).fetchone()
+        if not row:
+            return candidate
+    raise RuntimeError("failed to generate unique guest phone")
+
+
+def _generate_guest_username() -> str:
+    return f"OpenClaw Guest {secrets.token_hex(2)}"
+
+
+def _generate_guest_claim_token() -> str:
+    return f"oc_claim_{secrets.token_urlsafe(18).rstrip('=')}"
+
+
 # Helper Functions
 def generate_code() -> str:
     return str(random.randint(100000, 999999))
@@ -262,6 +316,17 @@ def _to_iso_datetime(value) -> str | None:
     if isinstance(value, str):
         return value
     return value.isoformat()
+
+
+def _serialize_auth_user(user: dict) -> dict:
+    return {
+        "id": int(user["id"]),
+        "phone": str(user["phone"]),
+        "username": user.get("username"),
+        "is_admin": bool(user.get("is_admin")),
+        "is_guest": bool(user.get("is_guest")),
+        "created_at": str(user["created_at"]),
+    }
 
 
 def _resolve_smsbao_p_value(password: str | None, api_key: str | None) -> str:
@@ -348,6 +413,14 @@ def _build_openclaw_skill_path(raw_key: str) -> str:
 
 def _build_openclaw_bootstrap_path(raw_key: str) -> str:
     return f"/api/v1/openclaw/bootstrap?key={raw_key}"
+
+
+def _build_openclaw_claim_register_path(claim_token: str) -> str:
+    return f"/register?openclaw_claim={quote(claim_token, safe='')}"
+
+
+def _build_openclaw_claim_login_path(claim_token: str) -> str:
+    return f"/login?openclaw_claim={quote(claim_token, safe='')}"
 
 
 def create_openclaw_skill_token(
@@ -439,7 +512,896 @@ def create_or_rotate_openclaw_key(user_id: int) -> dict:
             "skill_path": _build_openclaw_skill_path(raw_key),
             "bind_key": raw_key,
             "bootstrap_path": _build_openclaw_bootstrap_path(raw_key),
+            "is_guest": False,
         }
+
+
+def _create_guest_user(session) -> dict:
+    phone = _generate_guest_phone(session)
+    username = _generate_guest_username()
+    claim_token = _generate_guest_claim_token()
+    password_hash = bcrypt.hashpw(secrets.token_urlsafe(24).encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    handle = _generate_user_handle(session, phone, username)
+    row = session.execute(
+        text(
+            """
+            INSERT INTO users (
+                phone, password, username, is_admin, handle, is_guest, guest_claim_token, guest_claimed_at
+            ) VALUES (
+                :phone, :password, :username, FALSE, :handle, TRUE, :guest_claim_token, NULL
+            )
+            RETURNING id, phone, username, is_admin, is_guest, created_at, guest_claim_token
+            """
+        ),
+        {
+            "phone": phone,
+            "password": password_hash,
+            "username": username,
+            "handle": handle,
+            "guest_claim_token": claim_token,
+        },
+    ).fetchone()
+    return {
+        "id": row[0],
+        "phone": row[1],
+        "username": row[2],
+        "is_admin": bool(row[3]),
+        "is_guest": bool(row[4]),
+        "created_at": _to_iso_datetime(row[5]),
+        "guest_claim_token": row[6],
+    }
+
+
+def _merge_guest_topic_user_actions(session, *, guest_user_id: int, target_user_id: int) -> None:
+    rows = session.execute(
+        text(
+            """
+            SELECT topic_id, auth_type, liked, favorited
+            FROM topic_user_actions
+            WHERE user_id = :guest_user_id
+            """
+        ),
+        {"guest_user_id": guest_user_id},
+    ).fetchall()
+    for row in rows:
+        existing = session.execute(
+            text(
+                """
+                SELECT liked, favorited
+                FROM topic_user_actions
+                WHERE topic_id = :topic_id
+                  AND user_id = :target_user_id
+                  AND auth_type = :auth_type
+                """
+            ),
+            {
+                "topic_id": row.topic_id,
+                "target_user_id": target_user_id,
+                "auth_type": row.auth_type,
+            },
+        ).fetchone()
+        if existing:
+            session.execute(
+                text(
+                    """
+                    UPDATE topic_user_actions
+                    SET liked = :liked,
+                        favorited = :favorited,
+                        updated_at = :updated_at
+                    WHERE topic_id = :topic_id
+                      AND user_id = :target_user_id
+                      AND auth_type = :auth_type
+                    """
+                ),
+                {
+                    "topic_id": row.topic_id,
+                    "target_user_id": target_user_id,
+                    "auth_type": row.auth_type,
+                    "liked": bool(existing.liked) or bool(row.liked),
+                    "favorited": bool(existing.favorited) or bool(row.favorited),
+                    "updated_at": datetime.now(timezone.utc),
+                },
+            )
+            session.execute(
+                text(
+                    """
+                    DELETE FROM topic_user_actions
+                    WHERE topic_id = :topic_id
+                      AND user_id = :guest_user_id
+                      AND auth_type = :auth_type
+                    """
+                ),
+                {
+                    "topic_id": row.topic_id,
+                    "guest_user_id": guest_user_id,
+                    "auth_type": row.auth_type,
+                },
+            )
+            continue
+        session.execute(
+            text(
+                """
+                UPDATE topic_user_actions
+                SET user_id = :target_user_id
+                WHERE topic_id = :topic_id
+                  AND user_id = :guest_user_id
+                  AND auth_type = :auth_type
+                """
+            ),
+            {
+                "topic_id": row.topic_id,
+                "guest_user_id": guest_user_id,
+                "target_user_id": target_user_id,
+                "auth_type": row.auth_type,
+            },
+        )
+
+
+def _merge_guest_post_user_actions(session, *, guest_user_id: int, target_user_id: int) -> None:
+    rows = session.execute(
+        text(
+            """
+            SELECT post_id, topic_id, auth_type, liked
+            FROM post_user_actions
+            WHERE user_id = :guest_user_id
+            """
+        ),
+        {"guest_user_id": guest_user_id},
+    ).fetchall()
+    for row in rows:
+        existing = session.execute(
+            text(
+                """
+                SELECT liked
+                FROM post_user_actions
+                WHERE post_id = :post_id
+                  AND user_id = :target_user_id
+                  AND auth_type = :auth_type
+                """
+            ),
+            {
+                "post_id": row.post_id,
+                "target_user_id": target_user_id,
+                "auth_type": row.auth_type,
+            },
+        ).fetchone()
+        if existing:
+            session.execute(
+                text(
+                    """
+                    UPDATE post_user_actions
+                    SET liked = :liked,
+                        updated_at = :updated_at
+                    WHERE post_id = :post_id
+                      AND user_id = :target_user_id
+                      AND auth_type = :auth_type
+                    """
+                ),
+                {
+                    "post_id": row.post_id,
+                    "target_user_id": target_user_id,
+                    "auth_type": row.auth_type,
+                    "liked": bool(existing.liked) or bool(row.liked),
+                    "updated_at": datetime.now(timezone.utc),
+                },
+            )
+            session.execute(
+                text(
+                    """
+                    DELETE FROM post_user_actions
+                    WHERE post_id = :post_id
+                      AND user_id = :guest_user_id
+                      AND auth_type = :auth_type
+                    """
+                ),
+                {
+                    "post_id": row.post_id,
+                    "guest_user_id": guest_user_id,
+                    "auth_type": row.auth_type,
+                },
+            )
+            continue
+        session.execute(
+            text(
+                """
+                UPDATE post_user_actions
+                SET user_id = :target_user_id
+                WHERE post_id = :post_id
+                  AND user_id = :guest_user_id
+                  AND auth_type = :auth_type
+                """
+            ),
+            {
+                "post_id": row.post_id,
+                "guest_user_id": guest_user_id,
+                "target_user_id": target_user_id,
+                "auth_type": row.auth_type,
+            },
+        )
+
+
+def _merge_guest_source_article_actions(session, *, guest_user_id: int, target_user_id: int) -> None:
+    rows = session.execute(
+        text(
+            """
+            SELECT article_id, auth_type, liked, favorited,
+                   snapshot_title, snapshot_source_feed_name, snapshot_source_type,
+                   snapshot_url, snapshot_pic_url, snapshot_description,
+                   snapshot_publish_time, snapshot_created_at
+            FROM source_article_user_actions
+            WHERE user_id = :guest_user_id
+            """
+        ),
+        {"guest_user_id": guest_user_id},
+    ).fetchall()
+    for row in rows:
+        existing = session.execute(
+            text(
+                """
+                SELECT liked, favorited
+                FROM source_article_user_actions
+                WHERE article_id = :article_id
+                  AND user_id = :target_user_id
+                  AND auth_type = :auth_type
+                """
+            ),
+            {
+                "article_id": row.article_id,
+                "target_user_id": target_user_id,
+                "auth_type": row.auth_type,
+            },
+        ).fetchone()
+        if existing:
+            session.execute(
+                text(
+                    """
+                    UPDATE source_article_user_actions
+                    SET liked = :liked,
+                        favorited = :favorited,
+                        updated_at = :updated_at
+                    WHERE article_id = :article_id
+                      AND user_id = :target_user_id
+                      AND auth_type = :auth_type
+                    """
+                ),
+                {
+                    "article_id": row.article_id,
+                    "target_user_id": target_user_id,
+                    "auth_type": row.auth_type,
+                    "liked": bool(existing.liked) or bool(row.liked),
+                    "favorited": bool(existing.favorited) or bool(row.favorited),
+                    "updated_at": datetime.now(timezone.utc),
+                },
+            )
+            session.execute(
+                text(
+                    """
+                    DELETE FROM source_article_user_actions
+                    WHERE article_id = :article_id
+                      AND user_id = :guest_user_id
+                      AND auth_type = :auth_type
+                    """
+                ),
+                {
+                    "article_id": row.article_id,
+                    "guest_user_id": guest_user_id,
+                    "auth_type": row.auth_type,
+                },
+            )
+            continue
+        session.execute(
+            text(
+                """
+                UPDATE source_article_user_actions
+                SET user_id = :target_user_id
+                WHERE article_id = :article_id
+                  AND user_id = :guest_user_id
+                  AND auth_type = :auth_type
+                """
+            ),
+            {
+                "article_id": row.article_id,
+                "guest_user_id": guest_user_id,
+                "target_user_id": target_user_id,
+                "auth_type": row.auth_type,
+            },
+        )
+
+
+def _merge_guest_favorite_categories(session, *, guest_user_id: int, target_user_id: int) -> None:
+    categories = session.execute(
+        text(
+            """
+            SELECT id, auth_type, name
+            FROM favorite_categories
+            WHERE user_id = :guest_user_id
+            ORDER BY created_at ASC
+            """
+        ),
+        {"guest_user_id": guest_user_id},
+    ).fetchall()
+    for category in categories:
+        target_category = session.execute(
+            text(
+                """
+                SELECT id
+                FROM favorite_categories
+                WHERE user_id = :target_user_id
+                  AND auth_type = :auth_type
+                  AND name = :name
+                LIMIT 1
+                """
+            ),
+            {
+                "target_user_id": target_user_id,
+                "auth_type": category.auth_type,
+                "name": category.name,
+            },
+        ).fetchone()
+        if target_category:
+            items = session.execute(
+                text(
+                    """
+                    SELECT id, item_key
+                    FROM favorite_category_items
+                    WHERE category_id = :category_id
+                    """
+                ),
+                {"category_id": category.id},
+            ).fetchall()
+            for item in items:
+                exists = session.execute(
+                    text(
+                        """
+                        SELECT 1
+                        FROM favorite_category_items
+                        WHERE category_id = :category_id
+                          AND item_key = :item_key
+                        LIMIT 1
+                        """
+                    ),
+                    {
+                        "category_id": target_category.id,
+                        "item_key": item.item_key,
+                    },
+                ).fetchone()
+                if exists:
+                    session.execute(
+                        text("DELETE FROM favorite_category_items WHERE id = :id"),
+                        {"id": item.id},
+                    )
+                else:
+                    session.execute(
+                        text(
+                            """
+                            UPDATE favorite_category_items
+                            SET category_id = :target_category_id,
+                                user_id = :target_user_id
+                            WHERE id = :id
+                            """
+                        ),
+                        {
+                            "id": item.id,
+                            "target_category_id": target_category.id,
+                            "target_user_id": target_user_id,
+                        },
+                    )
+            session.execute(
+                text("DELETE FROM favorite_categories WHERE id = :id"),
+                {"id": category.id},
+            )
+            continue
+        session.execute(
+            text(
+                """
+                UPDATE favorite_categories
+                SET user_id = :target_user_id
+                WHERE id = :id
+                """
+            ),
+            {
+                "id": category.id,
+                "target_user_id": target_user_id,
+            },
+        )
+        session.execute(
+            text(
+                """
+                UPDATE favorite_category_items
+                SET user_id = :target_user_id
+                WHERE category_id = :category_id
+                """
+            ),
+            {
+                "category_id": category.id,
+                "target_user_id": target_user_id,
+            },
+        )
+
+
+def _merge_guest_legacy_twins(session, *, guest_user_id: int, target_user_id: int) -> None:
+    rows = session.execute(
+        text(
+            """
+            SELECT id, agent_name, display_name, expert_name, visibility, exposure,
+                   session_id, source, role_content, updated_at, created_at
+            FROM digital_twins
+            WHERE user_id = :guest_user_id
+            """
+        ),
+        {"guest_user_id": guest_user_id},
+    ).fetchall()
+    for row in rows:
+        existing = session.execute(
+            text(
+                """
+                SELECT id
+                FROM digital_twins
+                WHERE user_id = :target_user_id
+                  AND agent_name = :agent_name
+                LIMIT 1
+                """
+            ),
+            {
+                "target_user_id": target_user_id,
+                "agent_name": row.agent_name,
+            },
+        ).fetchone()
+        if existing:
+            session.execute(
+                text(
+                    """
+                    UPDATE digital_twins
+                    SET display_name = :display_name,
+                        expert_name = :expert_name,
+                        visibility = :visibility,
+                        exposure = :exposure,
+                        session_id = :session_id,
+                        source = :source,
+                        role_content = :role_content,
+                        updated_at = :updated_at
+                    WHERE id = :id
+                    """
+                ),
+                {
+                    "id": existing.id,
+                    "display_name": row.display_name,
+                    "expert_name": row.expert_name,
+                    "visibility": row.visibility,
+                    "exposure": row.exposure,
+                    "session_id": row.session_id,
+                    "source": row.source,
+                    "role_content": row.role_content,
+                    "updated_at": row.updated_at,
+                },
+            )
+            session.execute(text("DELETE FROM digital_twins WHERE id = :id"), {"id": row.id})
+            continue
+        session.execute(
+            text(
+                """
+                UPDATE digital_twins
+                SET user_id = :target_user_id
+                WHERE id = :id
+                """
+            ),
+            {
+                "id": row.id,
+                "target_user_id": target_user_id,
+            },
+        )
+
+
+def _transfer_guest_runtime_twins(session, *, guest_user_id: int, target_user_id: int) -> None:
+    has_guest_active = session.execute(
+        text(
+            """
+            SELECT 1
+            FROM twin_core
+            WHERE owner_user_id = :guest_user_id
+              AND is_active = TRUE
+            LIMIT 1
+            """
+        ),
+        {"guest_user_id": guest_user_id},
+    ).fetchone()
+    if has_guest_active:
+        session.execute(
+            text(
+                """
+                UPDATE twin_core
+                SET is_active = FALSE,
+                    updated_at = :updated_at
+                WHERE owner_user_id = :target_user_id
+                  AND is_active = TRUE
+                """
+            ),
+            {
+                "target_user_id": target_user_id,
+                "updated_at": datetime.now(timezone.utc),
+            },
+        )
+    session.execute(
+        text(
+            """
+            UPDATE twin_core
+            SET owner_user_id = :target_user_id,
+                updated_at = :updated_at
+            WHERE owner_user_id = :guest_user_id
+            """
+        ),
+        {
+            "guest_user_id": guest_user_id,
+            "target_user_id": target_user_id,
+            "updated_at": datetime.now(timezone.utc),
+        },
+    )
+
+
+def _transfer_guest_openclaw_identity(
+    session,
+    *,
+    guest_user_id: int,
+    target_user_id: int,
+    target_username: str | None = None,
+) -> str | None:
+    guest_primary = session.execute(
+        text(
+            """
+            SELECT id, agent_uid
+            FROM openclaw_agents
+            WHERE bound_user_id = :guest_user_id
+              AND is_primary = TRUE
+            LIMIT 1
+            """
+        ),
+        {"guest_user_id": guest_user_id},
+    ).fetchone()
+    if guest_primary:
+        session.execute(
+            text(
+                """
+                UPDATE openclaw_agents
+                SET is_primary = FALSE,
+                    updated_at = :updated_at
+                WHERE bound_user_id = :target_user_id
+                  AND agent_uid <> :agent_uid
+                  AND is_primary = TRUE
+                """
+            ),
+            {
+                "target_user_id": target_user_id,
+                "agent_uid": guest_primary.agent_uid,
+                "updated_at": datetime.now(timezone.utc),
+            },
+        )
+    session.execute(
+        text(
+            """
+            UPDATE openclaw_agents
+            SET bound_user_id = :target_user_id,
+                display_name = COALESCE(:display_name, display_name),
+                updated_at = :updated_at
+            WHERE bound_user_id = :guest_user_id
+            """
+        ),
+        {
+            "guest_user_id": guest_user_id,
+            "target_user_id": target_user_id,
+            "display_name": f"{target_username}'s openclaw" if target_username else None,
+            "updated_at": datetime.now(timezone.utc),
+        },
+    )
+    session.execute(
+        text(
+            """
+            UPDATE openclaw_api_keys
+            SET bound_user_id = :target_user_id,
+                updated_at = :updated_at
+            WHERE bound_user_id = :guest_user_id
+            """
+        ),
+        {
+            "guest_user_id": guest_user_id,
+            "target_user_id": target_user_id,
+            "updated_at": datetime.now(timezone.utc),
+        },
+    )
+    session.execute(
+        text(
+            """
+            UPDATE openclaw_activity_events
+            SET bound_user_id = :target_user_id
+            WHERE bound_user_id = :guest_user_id
+            """
+        ),
+        {
+            "guest_user_id": guest_user_id,
+            "target_user_id": target_user_id,
+        },
+    )
+    return guest_primary.agent_uid if guest_primary else None
+
+
+def claim_guest_openclaw_account(
+    claim_token: str | None,
+    *,
+    target_user_id: int,
+    target_username: str | None = None,
+    session=None,
+) -> tuple[str | None, str | None]:
+    token = (claim_token or "").strip()
+    if not token:
+        return None, None
+
+    owns_session = session is None
+    if owns_session:
+        ctx = get_db_session()
+        session = ctx.__enter__()
+    try:
+        guest_row = session.execute(
+            text(
+                """
+                SELECT id, username, guest_claimed_at
+                FROM users
+                WHERE guest_claim_token = :claim_token
+                  AND is_guest = TRUE
+                LIMIT 1
+                """
+            ),
+            {"claim_token": token},
+        ).fetchone()
+        if not guest_row:
+            return "not_found", "OpenClaw 临时账号认领链接无效或已失效"
+        guest_user_id = int(guest_row.id)
+        if guest_user_id == target_user_id:
+            return "already_bound", "当前账号已经绑定到这个 OpenClaw 临时身份"
+        if guest_row.guest_claimed_at:
+            return "already_claimed", "该 OpenClaw 临时账号已经完成绑定"
+
+        touched_topic_rows = session.execute(
+            text(
+                """
+                SELECT id
+                FROM topics
+                WHERE creator_user_id = :guest_user_id
+                UNION
+                SELECT topic_id AS id
+                FROM posts
+                WHERE owner_user_id = :guest_user_id
+                """
+            ),
+            {"guest_user_id": guest_user_id},
+        ).fetchall()
+        touched_topic_ids = [str(row.id) for row in touched_topic_rows]
+
+        _merge_guest_topic_user_actions(session, guest_user_id=guest_user_id, target_user_id=target_user_id)
+        _merge_guest_post_user_actions(session, guest_user_id=guest_user_id, target_user_id=target_user_id)
+        _merge_guest_source_article_actions(session, guest_user_id=guest_user_id, target_user_id=target_user_id)
+        _merge_guest_favorite_categories(session, guest_user_id=guest_user_id, target_user_id=target_user_id)
+        _merge_guest_legacy_twins(session, guest_user_id=guest_user_id, target_user_id=target_user_id)
+        _transfer_guest_runtime_twins(session, guest_user_id=guest_user_id, target_user_id=target_user_id)
+        openclaw_display_name = f"{target_username}'s openclaw" if target_username else None
+        transferred_agent_uid = _transfer_guest_openclaw_identity(
+            session,
+            guest_user_id=guest_user_id,
+            target_user_id=target_user_id,
+            target_username=target_username,
+        )
+
+        session.execute(
+            text(
+                """
+                UPDATE topics
+                SET creator_user_id = :target_user_id,
+                    creator_name = CASE
+                        WHEN creator_auth_type = 'openclaw_key' AND :openclaw_display_name IS NOT NULL THEN :openclaw_display_name
+                        ELSE creator_name
+                    END
+                WHERE creator_user_id = :guest_user_id
+                """
+            ),
+            {
+                "guest_user_id": guest_user_id,
+                "target_user_id": target_user_id,
+                "openclaw_display_name": openclaw_display_name,
+            },
+        )
+        session.execute(
+            text(
+                """
+                UPDATE posts
+                SET owner_user_id = :target_user_id,
+                    author = CASE
+                        WHEN owner_auth_type = 'openclaw_key' AND :openclaw_display_name IS NOT NULL THEN :openclaw_display_name
+                        ELSE author
+                    END
+                WHERE owner_user_id = :guest_user_id
+                """
+            ),
+            {
+                "guest_user_id": guest_user_id,
+                "target_user_id": target_user_id,
+                "openclaw_display_name": openclaw_display_name,
+            },
+        )
+        session.execute(
+            text(
+                """
+                UPDATE topic_share_events
+                SET user_id = :target_user_id
+                WHERE user_id = :guest_user_id
+                """
+            ),
+            {"guest_user_id": guest_user_id, "target_user_id": target_user_id},
+        )
+        session.execute(
+            text(
+                """
+                UPDATE post_share_events
+                SET user_id = :target_user_id
+                WHERE user_id = :guest_user_id
+                """
+            ),
+            {"guest_user_id": guest_user_id, "target_user_id": target_user_id},
+        )
+        session.execute(
+            text(
+                """
+                UPDATE source_article_share_events
+                SET user_id = :target_user_id
+                WHERE user_id = :guest_user_id
+                """
+            ),
+            {"guest_user_id": guest_user_id, "target_user_id": target_user_id},
+        )
+        session.execute(
+            text(
+                """
+                UPDATE post_inbox_messages
+                SET recipient_user_id = :target_user_id
+                WHERE recipient_user_id = :guest_user_id
+                """
+            ),
+            {"guest_user_id": guest_user_id, "target_user_id": target_user_id},
+        )
+        session.execute(
+            text(
+                """
+                UPDATE post_inbox_messages
+                SET actor_user_id = :target_user_id
+                WHERE actor_user_id = :guest_user_id
+                """
+            ),
+            {"guest_user_id": guest_user_id, "target_user_id": target_user_id},
+        )
+        session.execute(
+            text(
+                """
+                UPDATE site_feedback
+                SET user_id = :target_user_id,
+                    username = :username
+                WHERE user_id = :guest_user_id
+                """
+            ),
+            {
+                "guest_user_id": guest_user_id,
+                "target_user_id": target_user_id,
+                "username": (target_username or "").strip() or f"user-{target_user_id}",
+            },
+        )
+        recalc_now = datetime.now(timezone.utc)
+        session.execute(
+            text(
+                """
+                UPDATE topics
+                SET likes_count = COALESCE((
+                        SELECT SUM(CASE WHEN liked THEN 1 ELSE 0 END)
+                        FROM topic_user_actions
+                        WHERE topic_id = topics.id
+                    ), 0),
+                    favorites_count = COALESCE((
+                        SELECT SUM(CASE WHEN favorited THEN 1 ELSE 0 END)
+                        FROM topic_user_actions
+                        WHERE topic_id = topics.id
+                    ), 0)
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                UPDATE posts
+                SET likes_count = COALESCE((
+                    SELECT SUM(CASE WHEN liked THEN 1 ELSE 0 END)
+                    FROM post_user_actions
+                    WHERE post_id = posts.id
+                ), 0)
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                INSERT INTO source_article_stats (article_id, likes_count, favorites_count, shares_count, updated_at)
+                SELECT
+                    article_id,
+                    COALESCE(SUM(CASE WHEN liked THEN 1 ELSE 0 END), 0),
+                    COALESCE(SUM(CASE WHEN favorited THEN 1 ELSE 0 END), 0),
+                    0,
+                    :updated_at
+                FROM source_article_user_actions
+                GROUP BY article_id
+                ON CONFLICT (article_id) DO UPDATE SET
+                    likes_count = EXCLUDED.likes_count,
+                    favorites_count = EXCLUDED.favorites_count,
+                    updated_at = EXCLUDED.updated_at
+                """
+            ),
+            {"updated_at": recalc_now},
+        )
+        session.execute(
+            text(
+                """
+                UPDATE source_article_stats
+                SET shares_count = COALESCE((
+                        SELECT COUNT(*)
+                        FROM source_article_share_events
+                        WHERE article_id = source_article_stats.article_id
+                    ), 0),
+                    updated_at = :updated_at
+                """
+            ),
+            {"updated_at": recalc_now},
+        )
+        session.execute(
+            text(
+                """
+                UPDATE favorite_categories
+                SET topics_count = COALESCE((
+                        SELECT COUNT(*)
+                        FROM favorite_category_items
+                        WHERE category_id = favorite_categories.id
+                          AND item_type = 'topic'
+                    ), 0),
+                    source_articles_count = COALESCE((
+                        SELECT COUNT(*)
+                        FROM favorite_category_items
+                        WHERE category_id = favorite_categories.id
+                          AND item_type = 'source_article'
+                    ), 0),
+                    updated_at = :updated_at
+                WHERE user_id = :target_user_id
+                """
+            ),
+            {
+                "target_user_id": target_user_id,
+                "updated_at": recalc_now,
+            },
+        )
+        session.execute(
+            text(
+                """
+                UPDATE users
+                SET guest_claimed_at = :claimed_at,
+                    guest_claim_token = NULL
+                WHERE id = :guest_user_id
+                """
+            ),
+            {
+                "guest_user_id": guest_user_id,
+                "claimed_at": datetime.now(timezone.utc),
+            },
+        )
+        for topic_id in touched_topic_ids:
+            _invalidate_read_cache(topic_id=topic_id, invalidate_topic_lists=True)
+        return "claimed", (
+            "OpenClaw 临时账号已自动绑定到当前他山世界账号"
+            + (f"（实例 {transferred_agent_uid} 已继承）" if transferred_agent_uid else "")
+        )
+    finally:
+        if owns_session:
+            ctx.__exit__(None, None, None)
 
 
 def verify_openclaw_api_key(token: str) -> Optional[dict]:
@@ -469,6 +1431,8 @@ def verify_openclaw_api_key(token: str) -> Optional[dict]:
                 "username": user.get("username"),
                 "auth_type": "openclaw_key",
                 "is_admin": _is_admin_identity(user_id, user["phone"], bool(user.get("is_admin"))),
+                "is_guest": bool(user.get("is_guest")),
+                "guest_claim_token": user.get("guest_claim_token"),
             }
     return None
 
@@ -607,9 +1571,9 @@ async def register(req: RegisterRequest):
                 handle = _generate_user_handle(session, req.phone, req.username)
                 result = session.execute(
                     text("""
-                        INSERT INTO users (phone, password, username, is_admin, handle)
-                        VALUES (:phone, :password, :username, :is_admin, :handle)
-                        RETURNING id, phone, username, is_admin, created_at
+                        INSERT INTO users (phone, password, username, is_admin, handle, is_guest, guest_claim_token, guest_claimed_at)
+                        VALUES (:phone, :password, :username, :is_admin, :handle, FALSE, NULL, NULL)
+                        RETURNING id, phone, username, is_admin, is_guest, created_at
                     """),
                     {
                         "phone": req.phone,
@@ -620,7 +1584,20 @@ async def register(req: RegisterRequest):
                     }
                 )
                 row = result.fetchone()
-                user = {"id": row[0], "phone": row[1], "username": row[2], "is_admin": bool(row[3]), "created_at": _to_iso_datetime(row[4])}
+                user = {
+                    "id": row[0],
+                    "phone": row[1],
+                    "username": row[2],
+                    "is_admin": bool(row[3]),
+                    "is_guest": bool(row[4]),
+                    "created_at": _to_iso_datetime(row[5]),
+                }
+                claim_status, claim_detail = claim_guest_openclaw_account(
+                    req.claim_token,
+                    target_user_id=int(user["id"]),
+                    target_username=user.get("username"),
+                    session=session,
+                )
         except IntegrityError as exc:
             if _is_phone_unique_violation(exc):
                 raise HTTPException(status_code=400, detail="该手机号已注册") from None
@@ -635,12 +1612,16 @@ async def register(req: RegisterRequest):
         user = _create_dev_user(req.phone, hashed_password, req.username)
         user["is_admin"] = _is_admin_identity(user["id"], req.phone)
         user["created_at"] = user["created_at"]
+        claim_status = None
+        claim_detail = None
 
     token = create_jwt_token(user["id"], user["phone"], is_admin=bool(user.get("is_admin")))
     return {
         "message": "注册成功",
         "token": token,
-        "user": {"id": user["id"], "phone": user["phone"], "username": user.get("username"), "is_admin": bool(user.get("is_admin")), "created_at": user["created_at"]},
+        "user": _serialize_auth_user(user),
+        "claim_status": claim_status,
+        "claim_detail": claim_detail,
     }
 
 
@@ -649,12 +1630,20 @@ async def login(req: LoginRequest):
     if DATABASE_CONFIGURED:
         with get_db_session() as session:
             row = session.execute(
-                text("SELECT id, phone, password, username, is_admin, created_at FROM users WHERE phone = :phone"),
+                text("SELECT id, phone, password, username, is_admin, is_guest, created_at FROM users WHERE phone = :phone"),
                 {"phone": req.phone}
             ).fetchone()
             if not row:
                 raise HTTPException(status_code=400, detail="手机号或密码错误")
-            user = {"id": row[0], "phone": row[1], "password": row[2], "username": row[3], "is_admin": bool(row[4]), "created_at": _to_iso_datetime(row[5])}
+            user = {
+                "id": row[0],
+                "phone": row[1],
+                "password": row[2],
+                "username": row[3],
+                "is_admin": bool(row[4]),
+                "is_guest": bool(row[5]),
+                "created_at": _to_iso_datetime(row[6]),
+            }
     else:
         user = _get_dev_user(req.phone)
         if not user:
@@ -668,11 +1657,23 @@ async def login(req: LoginRequest):
         raise HTTPException(status_code=400, detail="手机号或密码错误")
 
     user["is_admin"] = _is_admin_identity(user["id"], user["phone"], bool(user.get("is_admin")))
+    claim_status = None
+    claim_detail = None
+    if DATABASE_CONFIGURED:
+        with get_db_session() as session:
+            claim_status, claim_detail = claim_guest_openclaw_account(
+                req.claim_token,
+                target_user_id=int(user["id"]),
+                target_username=user.get("username"),
+                session=session,
+            )
     token = create_jwt_token(user["id"], user["phone"], is_admin=bool(user.get("is_admin")))
     return {
         "message": "登录成功",
         "token": token,
-        "user": {"id": user["id"], "phone": user["phone"], "username": user.get("username"), "is_admin": bool(user.get("is_admin")), "created_at": user["created_at"]},
+        "user": _serialize_auth_user(user),
+        "claim_status": claim_status,
+        "claim_detail": claim_detail,
     }
 
 
@@ -681,19 +1682,81 @@ async def get_me(user: dict = Depends(get_current_user)):
     if DATABASE_CONFIGURED:
         with get_db_session() as session:
             row = session.execute(
-                text("SELECT id, phone, username, is_admin, created_at FROM users WHERE id = :id"),
+                text("SELECT id, phone, username, is_admin, is_guest, created_at FROM users WHERE id = :id"),
                 {"id": int(user["sub"])}
             ).fetchone()
             if not row:
                 raise HTTPException(status_code=404, detail="用户不存在")
-            user_data = {"id": row[0], "phone": row[1], "username": row[2], "is_admin": _is_admin_identity(row[0], row[1], bool(row[3])), "created_at": _to_iso_datetime(row[4])}
+            user_data = {
+                "id": row[0],
+                "phone": row[1],
+                "username": row[2],
+                "is_admin": _is_admin_identity(row[0], row[1], bool(row[3])),
+                "is_guest": bool(row[4]),
+                "created_at": _to_iso_datetime(row[5]),
+            }
     else:
         u = _get_dev_user(user["phone"])
         if not u:
             raise HTTPException(status_code=404, detail="用户不存在")
-        user_data = {"id": u["id"], "phone": u["phone"], "username": u.get("username"), "is_admin": _is_admin_identity(u["id"], u["phone"], bool(u.get("is_admin"))), "created_at": u["created_at"]}
+        user_data = {
+            "id": u["id"],
+            "phone": u["phone"],
+            "username": u.get("username"),
+            "is_admin": _is_admin_identity(u["id"], u["phone"], bool(u.get("is_admin"))),
+            "is_guest": bool(u.get("is_guest")),
+            "created_at": u["created_at"],
+        }
 
     return {"user": user_data, "auth_type": user.get("auth_type", "jwt")}
+
+
+@router.post("/openclaw-guest", response_model=OpenClawKeyResponse)
+async def create_openclaw_guest():
+    if DATABASE_CONFIGURED:
+        with get_db_session() as session:
+            guest_user = _create_guest_user(session)
+        record = create_or_rotate_openclaw_key(int(guest_user["id"]))
+        claim_token = str(guest_user["guest_claim_token"])
+        record["is_guest"] = True
+        record["claim_token"] = claim_token
+        record["claim_register_path"] = _build_openclaw_claim_register_path(claim_token)
+        record["claim_login_path"] = _build_openclaw_claim_login_path(claim_token)
+        twin_display_name = guest_user.get("username") or "OpenClaw Guest"
+        create_or_update_active_twin_for_user(
+            int(guest_user["id"]),
+            source_agent_name=record.get("openclaw_agent", {}).get("handle") if isinstance(record.get("openclaw_agent"), dict) else None,
+            display_name=twin_display_name,
+            expert_name=(twin_display_name or "openclaw_guest").replace(" ", "_").lower()[:100],
+            visibility="private",
+            exposure="brief",
+            base_profile_markdown=(
+                f"# {twin_display_name}\n\n"
+                "## Identity\n\n"
+                "Temporary OpenClaw account for TopicLab CLI-first access.\n\n"
+                "## Discussion Style\n\n"
+                "Build identity and preferences continuously from future conversations."
+            ),
+            source="openclaw_guest_bootstrap",
+        )
+        return OpenClawKeyResponse(**record)
+
+    guest_phone = f"guest_{secrets.token_hex(7)}"[:20]
+    claim_token = _generate_guest_claim_token()
+    guest_user = _create_dev_user(
+        guest_phone,
+        bcrypt.hashpw(secrets.token_urlsafe(24).encode("utf-8"), bcrypt.gensalt()).decode("utf-8"),
+        _generate_guest_username(),
+        is_guest=True,
+        guest_claim_token=claim_token,
+    )
+    guest_user["is_admin"] = False
+    record = create_or_rotate_openclaw_key(int(guest_user["id"]))
+    record["is_guest"] = True
+    record["claim_token"] = claim_token
+    record["claim_register_path"] = _build_openclaw_claim_register_path(claim_token)
+    record["claim_login_path"] = _build_openclaw_claim_login_path(claim_token)
+    return OpenClawKeyResponse(**record)
 
 
 @router.get("/openclaw-key", response_model=OpenClawKeyResponse)

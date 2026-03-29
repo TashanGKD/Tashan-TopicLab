@@ -493,7 +493,9 @@ def verify_openclaw_api_key(token: str, *, route: str | None = None) -> dict[str
                     u.id AS user_id,
                     u.phone,
                     u.username,
-                    u.is_admin
+                    u.is_admin,
+                    u.is_guest,
+                    u.guest_claim_token
                 FROM openclaw_api_keys k
                 JOIN openclaw_agents a ON a.id = k.openclaw_agent_id
                 LEFT JOIN users u ON u.id = k.bound_user_id
@@ -563,6 +565,8 @@ def verify_openclaw_api_key(token: str, *, route: str | None = None) -> dict[str
         "openclaw_handle": row.handle,
         "bound_user_id": int(row.bound_user_id) if row.bound_user_id is not None else None,
         "is_admin": bool(row.is_admin),
+        "is_guest": bool(row.is_guest),
+        "guest_claim_token": row.guest_claim_token,
     }
 
 

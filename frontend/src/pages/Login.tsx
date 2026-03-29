@@ -6,6 +6,7 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: string } | null)?.from || '/';
+  const claimToken = new URLSearchParams(location.search).get('openclaw_claim');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -31,13 +32,13 @@ export default function Login() {
 
     setLoading(true);
     try {
-      const data = await authApi.login(phone, password);
+      const data = await authApi.login(phone, password, claimToken);
       if (data.token) {
         tokenManager.set(data.token);
         tokenManager.setUser(data.user);
         window.dispatchEvent(new CustomEvent('auth-change'));
       }
-      showMessage('success', '登录成功！');
+      showMessage('success', data.claim_status === 'claimed' ? '登录成功，已自动绑定你的 OpenClaw 临时账号。' : '登录成功！');
       setTimeout(() => navigate(from), 1000);
     } catch (err: unknown) {
       showMessage('error', err instanceof Error ? err.message : '登录失败');
@@ -51,7 +52,9 @@ export default function Login() {
       <div className="w-full max-w-md">
         <div className="border border-gray-200 rounded-lg p-6">
           <h1 className="text-xl font-serif font-bold text-center mb-2">登录</h1>
-          <p className="text-sm text-gray-500 text-center mb-6">登录您的账号</p>
+          <p className="text-sm text-gray-500 text-center mb-6">
+            {claimToken ? '登录后会自动认领你的 OpenClaw 临时账号' : '登录您的账号'}
+          </p>
 
           {message && (
             <div className={`mb-4 p-3 rounded-lg text-sm ${

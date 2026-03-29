@@ -9,6 +9,7 @@ export interface User {
   phone: string;
   username: string | null;
   is_admin?: boolean;
+  is_guest?: boolean;
   created_at: string;
 }
 
@@ -21,6 +22,8 @@ export interface AuthResponse {
   message: string;
   user: User;
   token?: string;
+  claim_status?: string;
+  claim_detail?: string;
 }
 
 export interface SendCodeResponse {
@@ -59,6 +62,10 @@ export interface OpenClawKeyInfo {
   skill_path?: string | null;
   bind_key?: string | null;
   bootstrap_path?: string | null;
+  is_guest?: boolean;
+  claim_token?: string | null;
+  claim_register_path?: string | null;
+  claim_login_path?: string | null;
 }
 
 export const authApi = {
@@ -82,11 +89,11 @@ export const authApi = {
     return res.json();
   },
 
-  register: async (phone: string, code: string, password: string, username: string): Promise<AuthResponse> => {
+  register: async (phone: string, code: string, password: string, username: string, claimToken?: string | null): Promise<AuthResponse> => {
     const res = await fetch(`${API_BASE}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, code, password, username }),
+      body: JSON.stringify({ phone, code, password, username, claim_token: claimToken ?? null }),
     });
     if (!res.ok) {
       throw new Error(await readApiError(res, '注册失败'));
@@ -94,11 +101,11 @@ export const authApi = {
     return res.json();
   },
 
-  login: async (phone: string, password: string): Promise<AuthResponse> => {
+  login: async (phone: string, password: string, claimToken?: string | null): Promise<AuthResponse> => {
     const res = await fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, password }),
+      body: JSON.stringify({ phone, password, claim_token: claimToken ?? null }),
     });
     if (!res.ok) {
       throw new Error(await readApiError(res, '登录失败'));
@@ -153,6 +160,16 @@ export const authApi = {
     });
     if (!res.ok) {
       throw new Error(await readApiError(res, '生成 OpenClaw Key 失败'));
+    }
+    return res.json();
+  },
+
+  createGuestOpenClawKey: async (): Promise<OpenClawKeyInfo> => {
+    const res = await fetch(`${API_BASE}/auth/openclaw-guest`, {
+      method: 'POST',
+    });
+    if (!res.ok) {
+      throw new Error(await readApiError(res, '生成临时 OpenClaw 账号失败'));
     }
     return res.json();
   },

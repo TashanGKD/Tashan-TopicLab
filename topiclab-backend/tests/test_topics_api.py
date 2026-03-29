@@ -1495,6 +1495,120 @@ def test_openclaw_bootstrap_and_renew_return_runtime_key(client):
     assert renew_payload["skill_url"] == auth["skill_path"]
 
 
+def test_openclaw_guest_bootstrap_returns_claim_links_and_guest_twin(client):
+    guest_resp = client.post("/api/v1/auth/openclaw-guest")
+    assert guest_resp.status_code == 200, guest_resp.text
+    guest = guest_resp.json()
+    assert guest["is_guest"] is True
+    assert guest["key"].startswith("tloc_")
+    assert guest["bind_key"].startswith("tlos_")
+    assert guest["claim_token"].startswith("oc_claim_")
+    assert guest["claim_register_path"].startswith("/register?openclaw_claim=")
+    assert guest["claim_login_path"].startswith("/login?openclaw_claim=")
+
+    skill_resp = client.get(guest["skill_path"])
+    assert skill_resp.status_code == 200, skill_resp.text
+    assert "## 临时账号升级" in skill_resp.text
+    assert "可以先直接稳定使用当前 TopicLab CLI" in skill_resp.text
+    assert f"http://testserver{guest['claim_register_path']}" in skill_resp.text
+    assert f"http://testserver{guest['claim_login_path']}" in skill_resp.text
+
+    twin_resp = client.get(
+        "/api/v1/openclaw/twins/current",
+        headers={"Authorization": f"Bearer {guest['key']}"},
+    )
+    assert twin_resp.status_code == 200, twin_resp.text
+    twin_payload = twin_resp.json()
+    assert twin_payload["twin"]["display_name"].startswith("OpenClaw Guest")
+
+
+def test_openclaw_guest_claim_on_register_preserves_identity_and_rebinds_account(client):
+    guest_resp = client.post("/api/v1/auth/openclaw-guest")
+    assert guest_resp.status_code == 200, guest_resp.text
+    guest = guest_resp.json()
+
+    topic_resp = client.post(
+        "/api/v1/topics",
+        headers={"Authorization": f"Bearer {guest['key']}"},
+        json={"title": "guest topic", "body": "guest body"},
+    )
+    assert topic_resp.status_code == 201, topic_resp.text
+    topic_payload = topic_resp.json()
+    topic_id = topic_payload["id"]
+    assert topic_payload["creator_name"].startswith("OpenClaw Guest")
+
+    from app.storage.database.postgres_client import get_db_session
+
+    claim_phone = "13800009989"
+    with get_db_session() as session:
+        session.execute(
+            text(
+                """
+                INSERT INTO verification_codes (phone, code, type, expires_at)
+                VALUES (:phone, :code, 'register', :expires_at)
+                """
+            ),
+            {
+                "phone": claim_phone,
+                "code": "123456",
+                "expires_at": datetime.now(timezone.utc) + timedelta(minutes=5),
+            },
+        )
+
+    register_resp = client.post(
+        "/auth/register",
+        json={
+            "phone": claim_phone,
+            "code": "123456",
+            "password": "password123",
+            "username": "claimed-user",
+            "claim_token": guest["claim_token"],
+        },
+    )
+    assert register_resp.status_code == 200, register_resp.text
+    register_payload = register_resp.json()
+    assert register_payload["claim_status"] == "claimed"
+
+    home_resp = client.get(
+        "/api/v1/home?include_source_preview=false",
+        headers={"Authorization": f"Bearer {guest['key']}"},
+    )
+    assert home_resp.status_code == 200, home_resp.text
+    home_payload = home_resp.json()
+    assert home_payload["your_account"]["username"] == "claimed-user"
+
+    claimed_topic = client.get(f"/api/v1/topics/{topic_id}", headers={"Authorization": f"Bearer {guest['key']}"})
+    assert claimed_topic.status_code == 200, claimed_topic.text
+    assert claimed_topic.json()["creator_name"] == "claimed-user's openclaw"
+
+    me_resp = client.get(
+        "/auth/me",
+        headers={"Authorization": f"Bearer {register_payload['token']}"},
+    )
+    assert me_resp.status_code == 200, me_resp.text
+    assert me_resp.json()["user"]["is_guest"] is False
+
+    with get_db_session() as session:
+        topic_row = session.execute(
+            text("SELECT creator_user_id, creator_name FROM topics WHERE id = :id"),
+            {"id": topic_id},
+        ).fetchone()
+        agent_row = session.execute(
+            text(
+                """
+                SELECT a.bound_user_id, a.display_name
+                FROM openclaw_agents a
+                WHERE a.agent_uid = :agent_uid
+                """
+            ),
+            {"agent_uid": guest["agent_uid"]},
+        ).fetchone()
+    assert topic_row.creator_name == "claimed-user's openclaw"
+    assert topic_row.creator_user_id == register_payload["user"]["id"]
+    assert agent_row.bound_user_id == register_payload["user"]["id"]
+    assert agent_row.display_name == "claimed-user's openclaw"
+
+
 def test_openclaw_renew_rejects_runtime_key(client):
     auth = register_login_and_openclaw_key(client, phone="13800009991", username="renew-guard-user")
 

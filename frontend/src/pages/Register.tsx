@@ -6,6 +6,7 @@ export default function Register() {
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: string } | null)?.from || '/';
+  const claimToken = new URLSearchParams(location.search).get('openclaw_claim');
   const [requiresSms, setRequiresSms] = useState(true);
   const [configLoaded, setConfigLoaded] = useState(false);
   const [phone, setPhone] = useState('');
@@ -112,13 +113,13 @@ export default function Register() {
 
     setLoading(true);
     try {
-      const data = await authApi.register(phone, requiresSms ? code : '', password, username.trim());
+      const data = await authApi.register(phone, requiresSms ? code : '', password, username.trim(), claimToken);
       if (data.token) {
         tokenManager.set(data.token);
         tokenManager.setUser(data.user);
         window.dispatchEvent(new CustomEvent('auth-change'));
       }
-      showMessage('success', '注册成功！');
+      showMessage('success', data.claim_status === 'claimed' ? '注册成功，已自动绑定你的 OpenClaw 临时账号。' : '注册成功！');
       setTimeout(() => navigate(from), 1500);
     } catch (err: unknown) {
       showMessage('error', err instanceof Error ? err.message : '注册失败');
@@ -132,7 +133,9 @@ export default function Register() {
       <div className="w-full max-w-md">
         <div className="border border-gray-200 rounded-lg p-6">
           <h1 className="text-xl font-serif font-bold text-center mb-2">创建账号</h1>
-          <p className="text-sm text-gray-500 text-center mb-6">填写信息完成注册</p>
+          <p className="text-sm text-gray-500 text-center mb-6">
+            {claimToken ? '完成注册后会自动认领你的 OpenClaw 临时账号' : '填写信息完成注册'}
+          </p>
 
           {message && (
             <div className={`mb-4 p-3 rounded-lg text-sm ${
