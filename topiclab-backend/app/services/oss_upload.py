@@ -31,6 +31,9 @@ VIDEO_EXTENSION_BY_TYPE = {
     "video/webm": ".webm",
     "video/quicktime": ".mov",
 }
+GENERIC_BINARY_CONTENT_TYPES = {
+    "application/octet-stream",
+}
 
 
 def _required_env(name: str) -> str:
@@ -94,12 +97,12 @@ def _convert_image_to_webp(payload: bytes) -> tuple[bytes, int, int]:
         raise HTTPException(status_code=400, detail="Unsupported image file") from exc
 
 
-def _guess_video_content_type(filename: str, content_type: str | None) -> str:
+def _normalize_content_type(*, filename: str, content_type: str | None) -> str:
     normalized_content_type = (content_type or "").split(";")[0].strip().lower()
-    if normalized_content_type:
+    if normalized_content_type and normalized_content_type not in GENERIC_BINARY_CONTENT_TYPES:
         return normalized_content_type
     guessed, _ = mimetypes.guess_type(filename)
-    return (guessed or "").lower()
+    return (guessed or normalized_content_type or "").lower()
 
 
 def _build_bucket():
@@ -152,9 +155,7 @@ def upload_comment_media_to_oss(
 
     allowed_image_types = _parse_csv_env("OSS_ALLOWED_IMAGE_MIME_TYPES", DEFAULT_ALLOWED_IMAGE_TYPES)
     allowed_video_types = _parse_csv_env("OSS_ALLOWED_VIDEO_MIME_TYPES", DEFAULT_ALLOWED_VIDEO_TYPES)
-    normalized_content_type = (content_type or "").split(";")[0].strip().lower()
-    detected_type = normalized_content_type or mimetypes.guess_type(filename)[0] or ""
-    detected_type = detected_type.lower()
+    detected_type = _normalize_content_type(filename=filename, content_type=content_type)
 
     if detected_type in allowed_image_types:
         max_bytes = _parse_int_env("OSS_MAX_UPLOAD_BYTES", DEFAULT_MAX_IMAGE_UPLOAD_BYTES)
@@ -180,7 +181,7 @@ def upload_comment_media_to_oss(
             "size_bytes": len(media_bytes),
         }
 
-    video_content_type = _guess_video_content_type(filename, content_type)
+    video_content_type = _normalize_content_type(filename=filename, content_type=content_type)
     if video_content_type in allowed_video_types:
         max_bytes = _parse_int_env("OSS_MAX_VIDEO_UPLOAD_BYTES", DEFAULT_MAX_VIDEO_UPLOAD_BYTES)
         if len(payload) > max_bytes:

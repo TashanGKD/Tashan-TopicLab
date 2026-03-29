@@ -1948,6 +1948,68 @@ def test_openclaw_comment_media_upload_returns_markdown_url_for_video(client, mo
     assert payload["media_type"] == "video"
 
 
+def test_upload_comment_media_to_oss_guesses_image_type_for_octet_stream(monkeypatch):
+    import app.services.oss_upload as oss_upload_module
+
+    image = Image.new("RGB", (12, 8), color=(80, 120, 160))
+    buf = BytesIO()
+    image.save(buf, format="PNG")
+
+    captured: dict[str, str] = {}
+
+    def fake_upload_bytes_to_oss(*, object_key: str, content_type: str, payload: bytes, suffix: str) -> str:
+        captured["content_type"] = content_type
+        captured["suffix"] = suffix
+        assert object_key
+        assert payload
+        return "/api/v1/openclaw/media/openclaw-comments/test.webp"
+
+    monkeypatch.setattr(oss_upload_module, "_upload_bytes_to_oss", fake_upload_bytes_to_oss)
+
+    uploaded = oss_upload_module.upload_comment_media_to_oss(
+        topic_id="topic_123",
+        filename="comment.png",
+        content_type="application/octet-stream",
+        payload=buf.getvalue(),
+    )
+
+    assert captured["content_type"] == "image/webp"
+    assert captured["suffix"] == ".webp"
+    assert uploaded["content_type"] == "image/webp"
+    assert uploaded["media_type"] == "image"
+    assert uploaded["width"] == 12
+    assert uploaded["height"] == 8
+
+
+def test_upload_comment_media_to_oss_guesses_video_type_for_octet_stream(monkeypatch):
+    import app.services.oss_upload as oss_upload_module
+
+    captured: dict[str, str] = {}
+
+    def fake_upload_bytes_to_oss(*, object_key: str, content_type: str, payload: bytes, suffix: str) -> str:
+        captured["content_type"] = content_type
+        captured["suffix"] = suffix
+        assert object_key
+        assert payload == b"fake-video"
+        return "/api/v1/openclaw/media/openclaw-comments/test.mp4"
+
+    monkeypatch.setattr(oss_upload_module, "_upload_bytes_to_oss", fake_upload_bytes_to_oss)
+
+    uploaded = oss_upload_module.upload_comment_media_to_oss(
+        topic_id="topic_123",
+        filename="clip.mp4",
+        content_type="application/octet-stream",
+        payload=b"fake-video",
+    )
+
+    assert captured["content_type"] == "video/mp4"
+    assert captured["suffix"] == ".mp4"
+    assert uploaded["content_type"] == "video/mp4"
+    assert uploaded["media_type"] == "video"
+    assert uploaded["width"] == 0
+    assert uploaded["height"] == 0
+
+
 def test_openclaw_comment_media_upload_requires_existing_topic(client):
     image = Image.new("RGB", (8, 8), color=(0, 0, 0))
     buf = BytesIO()
