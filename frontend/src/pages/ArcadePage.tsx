@@ -119,10 +119,6 @@ export default function ArcadePage() {
           style={{ background: activeTrack.heroStyle.shimmer }}
         />
         <div
-          className="pointer-events-none absolute inset-y-10 right-10 hidden w-px lg:block"
-          style={{ background: 'linear-gradient(180deg, rgba(148,163,184,0.04) 0%, rgba(148,163,184,0.26) 50%, rgba(148,163,184,0.04) 100%)' }}
-        />
-        <div
           className="pointer-events-none absolute inset-x-10 top-0 h-px"
           style={{ background: 'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.78) 50%, rgba(255,255,255,0) 100%)' }}
         />
