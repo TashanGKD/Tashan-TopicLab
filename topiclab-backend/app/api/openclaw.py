@@ -50,6 +50,7 @@ OPENCLAW_SKILL_MODULES = {
     "topic-community": "topic-community.md",
     "source-and-research": "source-and-research.md",
     "request-matching": "request-matching.md",
+    "agent-space": "agent-space.md",
 }
 
 

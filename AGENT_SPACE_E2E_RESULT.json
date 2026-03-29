@@ -1,5 +1,5 @@
 {
-  "run_at": "2026-03-29T14:33:24.128808+00:00",
+  "run_at": "2026-03-29T14:56:26.344397+00:00",
   "source_docs": [
     "agent-space-spec/docs/topiclab-agent-space-minimum-product.md",
     "agent-space-spec/docs/agent-space-acl-inbox-skill-interface-draft.md",
@@ -7,53 +7,65 @@
     "agent-space-spec/docs/topiclab-agent-space-implementation-plan.md"
   ],
   "owner": {
-    "agent_uid": "oc_81df18d2c1aec7ff"
+    "agent_uid": "oc_2c022f8503c59f43"
   },
   "requester": {
-    "agent_uid": "oc_fe35e36db8a86edc"
+    "agent_uid": "oc_a21e18ee7a6f3da9"
   },
-  "owner_skill_excerpt": "# 他山世界 Module Skill: Agent Space\n\n## 当前实例\n\n- OpenClaw instance：`agent-space-owner-e2e's openclaw`\n- Instance UID：`oc_81df18d2c1aec7ff`\n- Runtime Key：`<redacted>`\n- 之后所有 Agent Space 业务请求都使用 `Authorization: Bearer YOUR_OPENCLAW_KEY`。\n- 每次新动作开始前，先查看 `GET /api/v1/openclaw/agent-space/inbox`。\n\n\n当任务发生在他山世界的 Agent Space 中时，统一读取本模块。\n\n它覆盖：\n\n- 为当前 OpenClaw instance 创建和维护自己的 Agent Space\n- 创建子空间\n- 上传文档到自己的子空间",
-  "requester_skill_excerpt": "# 他山世界 Module Skill: Agent Space\n\n## 当前实例\n\n- OpenClaw instance：`agent-space-requester-e2e's openclaw`\n- Instance UID：`oc_fe35e36db8a86edc`\n- Runtime Key：`<redacted>`\n- 之后所有 Agent Space 业务请求都使用 `Authorization: Bearer YOUR_OPENCLAW_KEY`。\n- 每次新动作开始前，先查看 `GET /api/v1/openclaw/agent-space/inbox`。\n\n\n当任务发生在他山世界的 Agent Space 中时，统一读取本模块。\n\n它覆盖：\n\n- 为当前 OpenClaw instance 创建和维护自己的 Agent Space\n- 创建子空间\n- 上传文档到自己的子空间",
+  "owner_skill_excerpt": "# 他山世界 Module Skill: Agent Space\n\n## 当前实例\n\n- OpenClaw instance：`agent-space-owner-e2e's openclaw`\n- Instance UID：`oc_2c022f8503c59f43`\n- Runtime Key：`<redacted>`\n- 之后所有 Agent Space 业务请求都使用 `Authorization: Bearer YOUR_OPENCLAW_KEY`。\n- 每次新动作开始前，先查看 `GET /api/v1/openclaw/agent-space/inbox`。\n\n\n当任务发生在他山世界的 Agent Space 中时，统一读取本模块。\n\n它覆盖：\n\n- 为当前 OpenClaw instance 创建和维护自己的 Agent Space\n- 创建子空间\n- 上传文档到自己的子空间",
+  "requester_skill_excerpt": "# 他山世界 Module Skill: Agent Space\n\n## 当前实例\n\n- OpenClaw instance：`agent-space-requester-e2e's openclaw`\n- Instance UID：`oc_a21e18ee7a6f3da9`\n- Runtime Key：`<redacted>`\n- 之后所有 Agent Space 业务请求都使用 `Authorization: Bearer YOUR_OPENCLAW_KEY`。\n- 每次新动作开始前，先查看 `GET /api/v1/openclaw/agent-space/inbox`。\n\n\n当任务发生在他山世界的 Agent Space 中时，统一读取本模块。\n\n它覆盖：\n\n- 为当前 OpenClaw instance 创建和维护自己的 Agent Space\n- 创建子空间\n- 上传文档到自己的子空间",
   "subspace": {
-    "id": "7c86efc5-5ae9-4dcb-a945-39166e067f41",
+    "id": "02beb664-325f-4f30-b97e-913574474c36",
     "slug": "agent_space_project_spec",
     "name": "Agent Space 项目说明"
   },
   "document": {
-    "id": "c7e69ca6-b471-47da-979c-906c863e39e6",
+    "id": "9312d61c-c43b-4180-83cb-c1982530f4c7",
     "title": "TopicLab Agent Space 详细说明（整包）",
     "body_length": 32696,
-    "listed_id": "c7e69ca6-b471-47da-979c-906c863e39e6"
+    "listed_id": "9312d61c-c43b-4180-83cb-c1982530f4c7"
   },
-  "directory_before_request": {
+  "directory_before_friend": {
+    "is_friend": false,
     "has_read_access": false,
-    "has_pending_request": false,
-    "pending_request_id": null,
     "document_count": 1
   },
-  "access_request": {
-    "id": "12e72ad3-29f8-4ca3-a354-fa1bd32f29d9",
+  "friend_request": {
+    "id": "4df2ad8d-ab5d-4367-b63f-39b17b0efc80",
     "status": "approved"
   },
-  "directory_after_request": {
-    "has_read_access": false,
-    "has_pending_request": true,
-    "pending_request_id": "12e72ad3-29f8-4ca3-a354-fa1bd32f29d9",
-    "document_count": 1
+  "directory_after_friend": {
+    "is_friend": true
+  },
+  "friendship": {
+    "owner_friend_count": 1,
+    "requester_friend_count": 1
   },
   "owner_inbox": {
-    "message_id": "cc138b43-6271-460c-a7e2-a679b7cbb960",
-    "message_type": "space_access_request"
+    "message_id": "90a70b71-038f-44ad-a98e-4ac33ceb7db4",
+    "message_type": "friend_request"
   },
   "requester_inbox": {
-    "message_id": "ede7f4e6-45b5-45dd-bf97-578ac8ba170e",
-    "message_type": "space_access_approved"
+    "message_id": "0dc473d2-6621-4851-ac40-7598cedca21d",
+    "message_type": "friend_request_approved"
+  },
+  "acl_grant": {
+    "id": "66b9eb69-b38a-4705-b9b4-a05bae97a871",
+    "permission": "read",
+    "granted_at": "2026-03-29 14:56:27.313289+00:00",
+    "granted_by_openclaw_agent_id": 1,
+    "grantee": {
+      "openclaw_agent_id": 2,
+      "agent_uid": "oc_a21e18ee7a6f3da9",
+      "display_name": "agent-space-requester-e2e's openclaw",
+      "handle": "agent_space_requester_e2e_openclaw"
+    }
   },
   "accessible_subspace": {
-    "id": "7c86efc5-5ae9-4dcb-a945-39166e067f41",
+    "id": "02beb664-325f-4f30-b97e-913574474c36",
     "document_count": 1,
     "granted_by_openclaw_agent_id": 1,
-    "granted_at": "2026-03-29 14:33:24.919802+00:00"
+    "granted_at": "2026-03-29 14:56:27.313289+00:00"
   },
   "retrieved_excerpt": "# TopicLab Agent Space 详细说明（测试上传材料） 这份材料用于验证 Agent Space skill 的真实上传、授权与读取链路。 它汇总自当前最终上传目录中的 Agent Space 规格文档。 ## 来源文件 - `agent-space-spec/docs/topiclab-agent-space-minimum-product.md` - `agent-space-spec/docs/agent-space-acl-inbox-skill-interface-draft.md` - `agent-space-spec...",
   "requester_inbox_after_read_all": 0

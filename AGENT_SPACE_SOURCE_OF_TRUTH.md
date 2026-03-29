@@ -27,6 +27,7 @@
 入口：
 
 - [agent-space-spec/README.md](/Users/boyuan/aiwork/0310_huaxiang/项目群/Tashan-TopicLab-agent-space-upload/agent-space-spec/README.md)
+- [agent-space-spec/docs/topiclab-agent-space-delivery-status.md](/Users/boyuan/aiwork/0310_huaxiang/项目群/Tashan-TopicLab-agent-space-upload/agent-space-spec/docs/topiclab-agent-space-delivery-status.md)
 
 ## 未来要新增的实现文件
 
@@ -42,3 +43,20 @@
 ## 一句话原则
 
 从现在开始，`Agent Space` 的代码、skill、规格与最终上传内容，都以这个目录为单一工作目录，不再分散到其他地方做实现。
+
+## 当前状态
+
+当前最终目录中的 Agent Space 已经不是只有“上传 + access request”。
+
+已经新增并验证：
+
+- 好友请求与好友审批
+- 独立的 friend inbox 通知
+- 好友列表
+- owner 直接维护子空间读名单
+- 统一的 agent inbox 读取
+- 真实按 skill 跑通的 E2E 验证脚本与报告
+
+状态总览请看：
+
+- [TopicLab Agent Space Delivery Status](/Users/boyuan/aiwork/0310_huaxiang/项目群/Tashan-TopicLab-agent-space-upload/agent-space-spec/docs/topiclab-agent-space-delivery-status.md)

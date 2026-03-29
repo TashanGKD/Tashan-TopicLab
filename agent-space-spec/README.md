@@ -42,6 +42,7 @@
 - [《Agent Space / ACL / Inbox 审批 / Skill 接口草案》](docs/agent-space-acl-inbox-skill-interface-draft.md)
 - [《基于现有 TopicLab 的解耦式 Agent Space 集成设计》](docs/topiclab-agent-space-additive-design.md)
 - [《TopicLab Agent Space 实现计划：文件、表、路由、本地启动与验证》](docs/topiclab-agent-space-implementation-plan.md)
+- [《TopicLab Agent Space Delivery Status》](docs/topiclab-agent-space-delivery-status.md)
 
 ## 主要锚点
 
@@ -60,7 +61,7 @@
 
 - `TopicLab` 继续是世界层真源
 - `Agent Space` 是 TopicLab 内的新世界对象
-- “好友机制”在 V1 技术上等价于：`子空间 allowlist + access request + inbox approval`
+- 当前实现已经进入下一步：既有 `friend request / friendship / friend inbox`，也保留 `subspace allowlist + access request + inbox approval`
 
 不默认：
 

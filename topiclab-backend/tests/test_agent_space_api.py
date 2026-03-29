@@ -368,6 +368,150 @@ def test_agent_space_rejects_jwt_and_blocks_unauthorized_read(tmp_path, monkeypa
     postgres_client.reset_db_state()
 
 
+def test_agent_friendship_and_direct_acl_grant_flow(tmp_path, monkeypatch):
+    client, postgres_client = _make_client(tmp_path, monkeypatch)
+    with client:
+        owner = _register_login_and_openclaw_key(client, phone="13800011008", username="friend-owner")
+        requester = _register_login_and_openclaw_key(client, phone="13800011009", username="friend-requester")
+
+        owner_headers = {"Authorization": f"Bearer {owner['openclaw_key']}"}
+        requester_headers = {"Authorization": f"Bearer {requester['openclaw_key']}"}
+
+        create_subspace = client.post(
+            "/api/v1/openclaw/agent-space/subspaces",
+            headers=owner_headers,
+            json={
+                "slug": "friend_only_notes",
+                "name": "好友可读材料",
+                "description": "只想直接分享给好友的资料",
+                "default_policy": "allowlist",
+                "is_requestable": True,
+            },
+        )
+        assert create_subspace.status_code == 201, create_subspace.text
+        subspace = create_subspace.json()["subspace"]
+
+        upload = client.post(
+            f"/api/v1/openclaw/agent-space/subspaces/{subspace['id']}/documents",
+            headers=owner_headers,
+            json={
+                "title": "好友协作说明",
+                "content_format": "markdown",
+                "body_text": "这是只分享给好友的资料。",
+            },
+        )
+        assert upload.status_code == 201, upload.text
+        document_id = upload.json()["document"]["id"]
+
+        directory_before_friendship = client.get(
+            "/api/v1/openclaw/agent-space/directory?q=friend-owner",
+            headers=requester_headers,
+        )
+        assert directory_before_friendship.status_code == 200, directory_before_friendship.text
+        directory_item = next(
+            item
+            for item in directory_before_friendship.json()["items"]
+            if item["owner_agent_uid"] == owner["agent_uid"]
+        )
+        assert directory_item["viewer_context"]["is_friend"] is False
+
+        direct_grant_before_friendship = client.post(
+            f"/api/v1/openclaw/agent-space/subspaces/{subspace['id']}/acl/grants",
+            headers=owner_headers,
+            json={"grantee_agent_uid": requester["agent_uid"]},
+        )
+        assert direct_grant_before_friendship.status_code == 403, direct_grant_before_friendship.text
+
+        create_friend_request = client.post(
+            "/api/v1/openclaw/agent-space/friends/requests",
+            headers=requester_headers,
+            json={
+                "recipient_agent_uid": owner["agent_uid"],
+                "message": "希望成为好友，方便后续直接共享认知空间。",
+            },
+        )
+        assert create_friend_request.status_code == 201, create_friend_request.text
+        friend_request_id = create_friend_request.json()["request"]["id"]
+
+        owner_incoming_friend_requests = client.get(
+            "/api/v1/openclaw/agent-space/friends/requests/incoming",
+            headers=owner_headers,
+        )
+        assert owner_incoming_friend_requests.status_code == 200, owner_incoming_friend_requests.text
+        assert owner_incoming_friend_requests.json()["items"][0]["id"] == friend_request_id
+
+        owner_inbox = client.get("/api/v1/openclaw/agent-space/inbox", headers=owner_headers)
+        assert owner_inbox.status_code == 200, owner_inbox.text
+        assert owner_inbox.json()["items"][0]["message_type"] == "friend_request"
+        assert owner_inbox.json()["items"][0]["friend_request"]["id"] == friend_request_id
+
+        approve_friend_request = client.post(
+            f"/api/v1/openclaw/agent-space/friends/requests/{friend_request_id}/approve",
+            headers=owner_headers,
+        )
+        assert approve_friend_request.status_code == 200, approve_friend_request.text
+        assert approve_friend_request.json()["request"]["status"] == "approved"
+
+        owner_friends = client.get("/api/v1/openclaw/agent-space/friends", headers=owner_headers)
+        assert owner_friends.status_code == 200, owner_friends.text
+        assert owner_friends.json()["items"][0]["friend"]["agent_uid"] == requester["agent_uid"]
+
+        requester_me = client.get("/api/v1/openclaw/agent-space/me", headers=requester_headers)
+        assert requester_me.status_code == 200, requester_me.text
+        assert requester_me.json()["friends"][0]["friend"]["agent_uid"] == owner["agent_uid"]
+
+        requester_inbox = client.get("/api/v1/openclaw/agent-space/inbox", headers=requester_headers)
+        assert requester_inbox.status_code == 200, requester_inbox.text
+        assert requester_inbox.json()["items"][0]["message_type"] == "friend_request_approved"
+
+        directory_after_friendship = client.get(
+            "/api/v1/openclaw/agent-space/directory?q=friend-owner",
+            headers=requester_headers,
+        )
+        assert directory_after_friendship.status_code == 200, directory_after_friendship.text
+        directory_item = next(
+            item
+            for item in directory_after_friendship.json()["items"]
+            if item["owner_agent_uid"] == owner["agent_uid"]
+        )
+        assert directory_item["viewer_context"]["is_friend"] is True
+
+        direct_grant = client.post(
+            f"/api/v1/openclaw/agent-space/subspaces/{subspace['id']}/acl/grants",
+            headers=owner_headers,
+            json={"grantee_agent_uid": requester["agent_uid"]},
+        )
+        assert direct_grant.status_code == 201, direct_grant.text
+        assert direct_grant.json()["grant"]["grantee"]["agent_uid"] == requester["agent_uid"]
+
+        acl_list = client.get(
+            f"/api/v1/openclaw/agent-space/subspaces/{subspace['id']}/acl",
+            headers=owner_headers,
+        )
+        assert acl_list.status_code == 200, acl_list.text
+        assert acl_list.json()["items"][0]["grantee"]["agent_uid"] == requester["agent_uid"]
+
+        docs = client.get(
+            f"/api/v1/openclaw/agent-space/subspaces/{subspace['id']}/documents",
+            headers=requester_headers,
+        )
+        assert docs.status_code == 200, docs.text
+        assert docs.json()["items"][0]["id"] == document_id
+
+        revoke_grant = client.delete(
+            f"/api/v1/openclaw/agent-space/subspaces/{subspace['id']}/acl/grants/{requester_me.json()['agent']['openclaw_agent_id']}",
+            headers=owner_headers,
+        )
+        assert revoke_grant.status_code == 200, revoke_grant.text
+
+        docs_after_revoke = client.get(
+            f"/api/v1/openclaw/agent-space/subspaces/{subspace['id']}/documents",
+            headers=requester_headers,
+        )
+        assert docs_after_revoke.status_code == 403, docs_after_revoke.text
+    postgres_client.reset_db_state()
+
+
 def test_agent_space_skill_markdown_supports_bind_key(tmp_path, monkeypatch):
     client, postgres_client = _make_client(tmp_path, monkeypatch)
     with client:
@@ -376,4 +520,22 @@ def test_agent_space_skill_markdown_supports_bind_key(tmp_path, monkeypatch):
         assert resp.status_code == 200, resp.text
         assert "Module Skill: Agent Space" in resp.text
         assert actor["agent_uid"] in resp.text
+    postgres_client.reset_db_state()
+
+
+def test_openclaw_main_skill_and_module_skill_expose_agent_space(tmp_path, monkeypatch):
+    client, postgres_client = _make_client(tmp_path, monkeypatch)
+    with client:
+        actor = _register_login_and_openclaw_key(client, phone="13800011010", username="main-skill-owner")
+
+        main_skill = client.get(f"/api/v1/openclaw/skill.md?key={actor['bind_key']}")
+        assert main_skill.status_code == 200, main_skill.text
+        assert "/api/v1/openclaw/skills/agent-space.md" in main_skill.text
+        assert "读 `agent-space`" in main_skill.text
+
+        module_skill = client.get("/api/v1/openclaw/skills/agent-space.md")
+        assert module_skill.status_code == 200, module_skill.text
+        assert "Module Skill: Agent Space" in module_skill.text
+        assert "/friends/requests" in module_skill.text
+        assert "/acl/grants" in module_skill.text
     postgres_client.reset_db_state()

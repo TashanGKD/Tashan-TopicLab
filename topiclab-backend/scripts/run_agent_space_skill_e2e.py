@@ -178,11 +178,12 @@ def _write_report(result: dict) -> None:
             "",
             f"1. Owner 创建子空间 `{result['subspace']['slug']}`，ID 为 `{result['subspace']['id']}`。",
             f"2. Owner 上传文档 `{result['document']['title']}`，正文长度 `{result['document']['body_length']}` 字符。",
-            f"3. Requester 在 directory 中发现该空间，并看到 `viewer_context.has_pending_request={result['directory_before_request']['has_pending_request']}`。",
-            f"4. Requester 发起访问请求 `{result['access_request']['id']}`。",
-            f"5. Owner inbox 收到消息 `{result['owner_inbox']['message_id']}`，随后批准该请求。",
-            f"6. Requester inbox 收到 `{result['requester_inbox']['message_type']}` 消息，并调用 `read-all` 清空未读。",
-            f"7. Requester 成功读取文档，摘录如下：",
+            f"3. Requester 在 directory 中发现 owner，并看到 `viewer_context.is_friend={result['directory_before_friend']['is_friend']}`。",
+            f"4. Requester 发起好友请求 `{result['friend_request']['id']}`。",
+            f"5. Owner inbox 收到 `{result['owner_inbox']['message_type']}` 消息并批准，双方成为好友。",
+            f"6. Owner 直接把子空间读权限授予 requester，ACL grant 为 `{result['acl_grant']['id']}`。",
+            f"7. Requester inbox 收到 `{result['requester_inbox']['message_type']}` 消息，并调用 `read-all` 清空未读。",
+            f"8. Requester 成功读取文档，摘录如下：",
             "",
             "```text",
             result["retrieved_excerpt"],
@@ -190,12 +191,13 @@ def _write_report(result: dict) -> None:
             "",
             "## Verification",
             "",
-            f"- Directory Before Request: `has_read_access={result['directory_before_request']['has_read_access']}`, `has_pending_request={result['directory_before_request']['has_pending_request']}`",
-            f"- Directory After Request: `has_pending_request={result['directory_after_request']['has_pending_request']}`, `pending_request_id={result['directory_after_request']['pending_request_id']}`",
-            f"- Accessible Subspace After Approval: `document_count={result['accessible_subspace']['document_count']}`, `granted_by={result['accessible_subspace']['granted_by_openclaw_agent_id']}`",
+            f"- Directory Before Friendship: `is_friend={result['directory_before_friend']['is_friend']}`",
+            f"- Directory After Friendship: `is_friend={result['directory_after_friend']['is_friend']}`",
+            f"- Friend List: `owner_friend_count={result['friendship']['owner_friend_count']}`, `requester_friend_count={result['friendship']['requester_friend_count']}`",
+            f"- ACL Grant After Friendship: `document_count={result['accessible_subspace']['document_count']}`, `granted_by={result['accessible_subspace']['granted_by_openclaw_agent_id']}`",
             f"- Requester Inbox After Read-All: `unread_count={result['requester_inbox_after_read_all']}`",
             "",
-            "结论：本地 TopicLab 已经可以让智能体按 Agent Space skill 完成“上传详细说明 -> 申请访问 -> inbox 审批 -> 授权读取”的完整闭环。",
+            "结论：本地 TopicLab 已经可以让智能体按 Agent Space skill 完成“上传详细说明 -> 好友申请 -> inbox 审批 -> owner 直接授权 -> 授权读取”的完整闭环。",
             "",
         ]
     )
@@ -268,52 +270,64 @@ def main() -> None:
             upload.raise_for_status()
             document = upload.json()["document"]
 
-            directory_before_request = client.get(
+            directory_before_friend = client.get(
                 "/api/v1/openclaw/agent-space/directory?q=owner-e2e",
                 headers=requester_headers,
             )
-            directory_before_request.raise_for_status()
+            directory_before_friend.raise_for_status()
             directory_item_before = next(
                 item
-                for item in directory_before_request.json()["items"]
+                for item in directory_before_friend.json()["items"]
                 if item["owner_agent_uid"] == owner["agent_uid"]
             )
             subspace_before = next(
                 item for item in directory_item_before["requestable_subspaces"] if item["id"] == subspace["id"]
             )
 
-            create_request = client.post(
-                f"/api/v1/openclaw/agent-space/subspaces/{subspace['id']}/access-requests",
+            create_friend_request = client.post(
+                "/api/v1/openclaw/agent-space/friends/requests",
                 headers=requester_headers,
-                json={"message": "我想读取这份详细说明，验证 agent-to-agent 对齐链路。"},
+                json={
+                    "recipient_agent_uid": owner["agent_uid"],
+                    "message": "我想先成为好友，再直接读取这份详细说明。",
+                },
             )
-            create_request.raise_for_status()
-            access_request = create_request.json()["request"]
-
-            directory_after_request = client.get(
-                "/api/v1/openclaw/agent-space/directory?q=owner-e2e",
-                headers=requester_headers,
-            )
-            directory_after_request.raise_for_status()
-            directory_item_after = next(
-                item
-                for item in directory_after_request.json()["items"]
-                if item["owner_agent_uid"] == owner["agent_uid"]
-            )
-            subspace_after = next(
-                item for item in directory_item_after["requestable_subspaces"] if item["id"] == subspace["id"]
-            )
+            create_friend_request.raise_for_status()
+            friend_request = create_friend_request.json()["request"]
 
             owner_inbox = client.get("/api/v1/openclaw/agent-space/inbox", headers=owner_headers)
             owner_inbox.raise_for_status()
             owner_inbox_item = owner_inbox.json()["items"][0]
 
-            approve = client.post(
-                f"/api/v1/openclaw/agent-space/access-requests/{access_request['id']}/approve",
+            approve_friend_request = client.post(
+                f"/api/v1/openclaw/agent-space/friends/requests/{friend_request['id']}/approve",
                 headers=owner_headers,
             )
-            approve.raise_for_status()
-            approved_request = approve.json()["request"]
+            approve_friend_request.raise_for_status()
+
+            owner_friends = client.get("/api/v1/openclaw/agent-space/friends", headers=owner_headers)
+            owner_friends.raise_for_status()
+            requester_me = client.get("/api/v1/openclaw/agent-space/me", headers=requester_headers)
+            requester_me.raise_for_status()
+
+            directory_after_friend = client.get(
+                "/api/v1/openclaw/agent-space/directory?q=owner-e2e",
+                headers=requester_headers,
+            )
+            directory_after_friend.raise_for_status()
+            directory_item_after = next(
+                item
+                for item in directory_after_friend.json()["items"]
+                if item["owner_agent_uid"] == owner["agent_uid"]
+            )
+
+            grant_acl = client.post(
+                f"/api/v1/openclaw/agent-space/subspaces/{subspace['id']}/acl/grants",
+                headers=owner_headers,
+                json={"grantee_agent_uid": requester["agent_uid"]},
+            )
+            grant_acl.raise_for_status()
+            acl_grant = grant_acl.json()["grant"]
 
             requester_inbox = client.get(
                 "/api/v1/openclaw/agent-space/inbox",
@@ -376,21 +390,21 @@ def main() -> None:
                     "body_length": len(uploaded_body),
                     "listed_id": doc_item["id"],
                 },
-                "directory_before_request": {
+                "directory_before_friend": {
+                    "is_friend": directory_item_before["viewer_context"]["is_friend"],
                     "has_read_access": subspace_before["viewer_context"]["has_read_access"],
-                    "has_pending_request": subspace_before["viewer_context"]["has_pending_request"],
-                    "pending_request_id": subspace_before["viewer_context"]["pending_request_id"],
                     "document_count": subspace_before["document_count"],
                 },
-                "access_request": {
-                    "id": access_request["id"],
-                    "status": approved_request["status"],
+                "friend_request": {
+                    "id": friend_request["id"],
+                    "status": approve_friend_request.json()["request"]["status"],
                 },
-                "directory_after_request": {
-                    "has_read_access": subspace_after["viewer_context"]["has_read_access"],
-                    "has_pending_request": subspace_after["viewer_context"]["has_pending_request"],
-                    "pending_request_id": subspace_after["viewer_context"]["pending_request_id"],
-                    "document_count": subspace_after["document_count"],
+                "directory_after_friend": {
+                    "is_friend": directory_item_after["viewer_context"]["is_friend"],
+                },
+                "friendship": {
+                    "owner_friend_count": len(owner_friends.json()["items"]),
+                    "requester_friend_count": len(requester_me.json()["friends"]),
                 },
                 "owner_inbox": {
                     "message_id": owner_inbox_item["id"],
@@ -400,6 +414,7 @@ def main() -> None:
                     "message_id": requester_inbox_item["id"],
                     "message_type": requester_inbox_item["message_type"],
                 },
+                "acl_grant": acl_grant,
                 "accessible_subspace": {
                     "id": accessible_subspace["id"],
                     "document_count": accessible_subspace["document_count"],
@@ -417,7 +432,7 @@ def main() -> None:
             print(f"report_markdown={REPORT_PATH}")
             print(f"report_json={RESULT_JSON_PATH}")
             print(f"uploaded_document_id={document['id']}")
-            print(f"access_request_id={access_request['id']}")
+            print(f"friend_request_id={friend_request['id']}")
         postgres_client.reset_db_state()
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)

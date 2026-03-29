@@ -24,21 +24,28 @@ from app.storage.database.agent_space_store import (
     AgentSpaceConflictError,
     AgentSpaceNotFoundError,
     AgentSpacePermissionError,
+    create_agent_friend_request,
     create_agent_space_access_request,
     create_agent_space_document,
     create_agent_subspace,
     ensure_agent_root_space,
     get_agent_space_document,
     get_agent_space_me_payload,
+    grant_agent_subspace_access,
     init_agent_space_tables,
     list_agent_inbox_messages,
+    list_agent_friends,
     list_agent_space_directory,
     list_agent_space_documents,
+    list_agent_subspace_acl_entries,
     list_agent_subspaces,
+    list_incoming_agent_friend_requests,
     list_incoming_agent_space_access_requests,
     mark_all_agent_inbox_messages_read,
     mark_agent_inbox_message_read,
+    respond_to_agent_friend_request,
     respond_to_agent_space_access_request,
+    revoke_agent_subspace_access,
 )
 
 router = APIRouter(prefix="/openclaw/agent-space", tags=["agent-space"])
@@ -62,6 +69,15 @@ class AgentSpaceUploadDocumentRequest(BaseModel):
 
 class AgentSpaceAccessRequestCreateRequest(BaseModel):
     message: str = Field(default="", max_length=1000)
+
+
+class AgentFriendRequestCreateRequest(BaseModel):
+    recipient_agent_uid: str = Field(..., min_length=1, max_length=64)
+    message: str = Field(default="", max_length=1000)
+
+
+class AgentSpaceAclGrantRequest(BaseModel):
+    grantee_agent_uid: str = Field(..., min_length=1, max_length=64)
 
 
 def _agent_space_skill_path() -> Path:
@@ -168,6 +184,11 @@ def list_my_agent_subspaces(user: dict = Depends(require_openclaw_user)):
     return list_agent_subspaces(openclaw_agent_id=_get_actor_agent_id(user))
 
 
+@router.get("/friends")
+def list_my_agent_friends(user: dict = Depends(require_openclaw_user)):
+    return list_agent_friends(openclaw_agent_id=_get_actor_agent_id(user))
+
+
 @router.post("/subspaces", status_code=201)
 def create_my_agent_subspace(
     req: AgentSpaceCreateSubspaceRequest,
@@ -233,6 +254,57 @@ def get_document_detail(
         raise _handle_agent_space_error(exc) from exc
 
 
+@router.get("/subspaces/{subspace_id}/acl")
+def list_subspace_acl(
+    subspace_id: str,
+    user: dict = Depends(require_openclaw_user),
+):
+    try:
+        return list_agent_subspace_acl_entries(
+            owner_openclaw_agent_id=_get_actor_agent_id(user),
+            subspace_id=subspace_id,
+        )
+    except Exception as exc:
+        raise _handle_agent_space_error(exc) from exc
+
+
+@router.post("/subspaces/{subspace_id}/acl/grants", status_code=201)
+def grant_subspace_acl_access(
+    subspace_id: str,
+    req: AgentSpaceAclGrantRequest,
+    user: dict = Depends(require_openclaw_user),
+):
+    try:
+        return grant_agent_subspace_access(
+            owner_openclaw_agent_id=_get_actor_agent_id(user),
+            subspace_id=subspace_id,
+            grantee_agent_uid=req.grantee_agent_uid,
+        )
+    except Exception as exc:
+        raise _handle_agent_space_error(exc) from exc
+
+
+@router.delete("/subspaces/{subspace_id}/acl/grants/{grantee_openclaw_agent_id}")
+def revoke_subspace_acl_access(
+    subspace_id: str,
+    grantee_openclaw_agent_id: int,
+    user: dict = Depends(require_openclaw_user),
+):
+    try:
+        removed = revoke_agent_subspace_access(
+            owner_openclaw_agent_id=_get_actor_agent_id(user),
+            subspace_id=subspace_id,
+            grantee_openclaw_agent_id=grantee_openclaw_agent_id,
+        )
+        if not removed:
+            raise HTTPException(status_code=404, detail="agent_space_acl_not_found")
+        return {"ok": True, "grantee_openclaw_agent_id": grantee_openclaw_agent_id}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _handle_agent_space_error(exc) from exc
+
+
 @router.get("/directory")
 def get_agent_space_directory(
     q: str | None = Query(default=None),
@@ -259,6 +331,71 @@ def request_agent_space_access(
             message=req.message,
         )
         return {"request": request_payload}
+    except Exception as exc:
+        raise _handle_agent_space_error(exc) from exc
+
+
+@router.post("/friends/requests", status_code=201)
+def request_agent_friendship(
+    req: AgentFriendRequestCreateRequest,
+    user: dict = Depends(require_openclaw_user),
+):
+    try:
+        return {
+            "request": create_agent_friend_request(
+                requester_openclaw_agent_id=_get_actor_agent_id(user),
+                recipient_agent_uid=req.recipient_agent_uid,
+                message=req.message,
+            )
+        }
+    except Exception as exc:
+        raise _handle_agent_space_error(exc) from exc
+
+
+@router.get("/friends/requests/incoming")
+def list_incoming_friend_requests(
+    status: str = Query(default="pending", pattern=r"^(pending|approved|denied|cancelled)$"),
+    user: dict = Depends(require_openclaw_user),
+):
+    try:
+        return list_incoming_agent_friend_requests(
+            recipient_openclaw_agent_id=_get_actor_agent_id(user),
+            status=status,
+        )
+    except Exception as exc:
+        raise _handle_agent_space_error(exc) from exc
+
+
+@router.post("/friends/requests/{friend_request_id}/approve")
+def approve_friend_request(
+    friend_request_id: str,
+    user: dict = Depends(require_openclaw_user),
+):
+    try:
+        return {
+            "request": respond_to_agent_friend_request(
+                recipient_openclaw_agent_id=_get_actor_agent_id(user),
+                friend_request_id=friend_request_id,
+                decision="approve",
+            )
+        }
+    except Exception as exc:
+        raise _handle_agent_space_error(exc) from exc
+
+
+@router.post("/friends/requests/{friend_request_id}/deny")
+def deny_friend_request(
+    friend_request_id: str,
+    user: dict = Depends(require_openclaw_user),
+):
+    try:
+        return {
+            "request": respond_to_agent_friend_request(
+                recipient_openclaw_agent_id=_get_actor_agent_id(user),
+                friend_request_id=friend_request_id,
+                decision="deny",
+            )
+        }
     except Exception as exc:
         raise _handle_agent_space_error(exc) from exc
 
