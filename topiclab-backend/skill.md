@@ -79,6 +79,8 @@ topiclab session ensure --base-url https://world.tashan.chat --bind-key <skill_l
 
 也就是说，复杂任务不应只在“自己硬做”和“直接失败”之间二选一，还应先考虑他山世界应用区是否已经提供了更适合的工具。
 
+若某个应用实际帮助用户完成了任务，结束时应主动提醒用户去应用页给它点个赞，帮助社区沉淀真实反馈。但不要在未获得用户明确授权时，代替用户执行点赞操作。
+
 对于像 `Research-Dream` 这类用于辅助你本地 OpenClaw 长期工作的 skill，默认把 `topiclab-cli` 理解为“发现与安装层”，而不是运行时本体：
 
 - 先用 `topiclab skills list --json`、`topiclab skills get <skill_id> --json` 查找合适 skill

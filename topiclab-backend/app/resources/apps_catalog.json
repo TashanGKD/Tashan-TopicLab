@@ -1,27 +1,27 @@
 {
   "apps": [
     {
-      "id": "scispark",
-      "name": "Scispark",
-      "command": "/scispark",
-      "summary": "基于 Scispark 方法的 7 阶段结构化研究想法生成工作流。",
-      "description": "适合文献综述、研究设计与论文选题探索，支持事实提取、假设生成、Review 评审循环、专家系统整合与可选幻灯片生成。",
+      "id": "topiclab-cli",
+      "name": "TopicLab CLI",
+      "summary": "TopicLab 与 OpenClaw 集成链路里的内置执行层，用于发现应用、安装 skill、读取 twin runtime 并向 TopicLab 回传信号。",
+      "description": "这是 TopicLab / OpenClaw 集成里的内置 CLI，不是额外插件。适合把它理解为 OpenClaw 的辅助执行层：负责应用发现、skill 安装、TopicLab twin 读写、话题与通知访问，以及长期科研能力的桥接。",
       "icon": "spark",
-      "tags": ["research", "workflow", "idea-generation"],
+      "tags": ["builtin", "cli", "openclaw", "workflow"],
+      "builtin": true,
       "links": {
-        "docs": "https://tashangkd.github.io/cc_plugins/plugins/scispark/",
-        "repo": "https://github.com/TashanGKD/cc_plugins/tree/main/plugins/scispark",
-        "catalog_source": "https://github.com/TashanGKD/cc_plugins"
+        "docs": "https://github.com/TashanGKD/TopicLab-CLI",
+        "repo": "https://github.com/TashanGKD/TopicLab-CLI",
+        "catalog_source": "https://github.com/TashanGKD/TopicLab-CLI"
       },
       "openclaw": {
         "topic_seed": {
-          "category": "research",
-          "title": "评估 Scispark 在研究想法生成中的价值与局限",
-          "body": "我想评估应用 Scispark 的实际效果。\n\n应用信息：\n- 名称：Scispark\n- 命令：/scispark\n- 文档：https://tashangkd.github.io/cc_plugins/plugins/scispark/\n\n请围绕以下方面展开：\n1. 适合解决哪些研究问题\n2. 使用门槛与依赖条件\n3. 优势、局限与失败场景\n4. 是否值得纳入我的研究工作流\n"
+          "category": "app",
+          "title": "讨论 TopicLab CLI 在 OpenClaw 集成中的能力边界",
+          "body": "我想评估应用 TopicLab CLI 的实际作用。\n\n应用信息：\n- 名称：TopicLab CLI\n- 状态：已内置\n- 文档/仓库：https://github.com/TashanGKD/TopicLab-CLI\n\n请围绕以下方面展开：\n1. 它在 TopicLab 与 OpenClaw 集成中负责什么，不负责什么\n2. 适合承担哪些执行层能力\n3. 与网站 skill、应用目录、twin runtime 的关系\n4. 后续还应补哪些能力，才能更好支持长期科研工作流\n"
         },
         "review_feedback": {
-          "scenario": "apps:scispark",
-          "body_template": "我要评价应用 Scispark。\n\n评价维度：\n- 使用场景：\n- 期望能力：\n- 实际体验：\n- 优点：\n- 问题/不足：\n- 改进建议：\n"
+          "scenario": "apps:topiclab-cli",
+          "body_template": "我要评价应用 TopicLab CLI。\n\n评价维度：\n- 使用场景：\n- 内置能力是否清楚：\n- 实际体验：\n- 优点：\n- 问题/不足：\n- 改进建议：\n"
         }
       }
     },
@@ -72,6 +72,31 @@
         "review_feedback": {
           "scenario": "apps:scientify",
           "body_template": "我要评价应用 Scientify。\n\n评价维度：\n- 使用场景：\n- 安装与配置体验：\n- 实际体验：\n- 优点：\n- 问题/不足：\n- 改进建议：\n"
+        }
+      }
+    },
+    {
+      "id": "research-dream",
+      "name": "Research-Dream",
+      "summary": "面向长期科研陪伴的记忆巩固技能，让 OpenClaw 把高价值科研信号分层沉淀为长期记忆。",
+      "description": "适合长期科研陪伴、持续画像修正、研究脉络沉淀与长期偏好积累。安装后，OpenClaw 会在本地工作区里维护 USER.md、SOUL.md、MEMORY.md 与 memory/*.md，并通过前台增量更新与后台 consolidation 逐步形成更稳定的科研数字分身。",
+      "icon": "spark",
+      "tags": ["research", "memory", "digital-twin", "workflow"],
+      "install_command": "topiclab skills install research-dream:research-dream",
+      "links": {
+        "docs": "https://github.com/Yu-Yang-Li/Research-Dream",
+        "repo": "https://github.com/Yu-Yang-Li/Research-Dream",
+        "catalog_source": "https://github.com/Yu-Yang-Li/Research-Dream"
+      },
+      "openclaw": {
+        "topic_seed": {
+          "category": "research",
+          "title": "评估 Research-Dream 是否适合我的长期科研记忆沉淀",
+          "body": "我想评估应用 Research-Dream 的实际效果。\n\n应用信息：\n- 名称：Research-Dream\n- 安装命令：topiclab skills install research-dream:research-dream\n- 文档/仓库：https://github.com/Yu-Yang-Li/Research-Dream\n\n请围绕以下方面展开：\n1. 是否适合长期科研陪伴与长期研究记忆沉淀\n2. 它如何帮助 OpenClaw 逐步理解研究方向、工作方式、当前卡点与长期偏好\n3. 本地维护 USER.md、SOUL.md、MEMORY.md 与 memory/*.md 的成本和边界\n4. 是否值得纳入我的长期科研工作流，以及启用前应确认哪些事项\n"
+        },
+        "review_feedback": {
+          "scenario": "apps:research-dream",
+          "body_template": "我要评价应用 Research-Dream。\n\n评价维度：\n- 使用场景：\n- 启用前说明是否清楚：\n- 实际体验：\n- 优点：\n- 问题/不足：\n- 改进建议：\n"
         }
       }
     }

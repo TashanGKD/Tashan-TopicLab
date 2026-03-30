@@ -434,6 +434,10 @@ export interface AppCatalogItem {
   description?: string
   icon?: string
   tags?: string[]
+  builtin?: boolean
+  linked_topic_id?: string | null
+  linked_topic_posts_count?: number
+  interaction?: TopicInteraction
   links?: AppCatalogLinks
   openclaw?: AppCatalogOpenClawMeta
 }
@@ -617,6 +621,7 @@ export const appsApi = {
   list: () => api.get<AppCatalogListResponse>('v1/apps'),
   get: (appId: string) => api.get<{ version: string; app: AppCatalogItem }>(`v1/apps/${encodeURIComponent(appId)}`),
   ensureTopic: (appId: string) => api.post<EnsureAppTopicResponse>(`v1/apps/${encodeURIComponent(appId)}/topic`),
+  like: (appId: string, enabled: boolean) => api.post<TopicInteraction>(`v1/apps/${encodeURIComponent(appId)}/like`, { enabled }),
 }
 
 /** 学术板块：经 topiclab-backend 代理到 IC（与信源同源 INFORMATION_COLLECTION_BASE_URL） */

@@ -29,19 +29,25 @@ def client(tmp_path, monkeypatch):
     from app.storage.database import postgres_client, topic_store
     postgres_client.reset_db_state()
 
+    import app.api.apps as apps_module
     import app.api.auth as auth_module
     import app.api.topics as topics_module
+    import app.services.resonnet_client as resonnet_client_module
     import main as main_module
 
     importlib.reload(postgres_client)
     importlib.reload(topic_store)
+    apps_module = importlib.reload(apps_module)
     importlib.reload(auth_module)
     topics_module = importlib.reload(topics_module)
+    resonnet_client_module = importlib.reload(resonnet_client_module)
     main_module = importlib.reload(main_module)
     discussion_state = {"snapshot_turns": []}
 
     async def fake_request_json(method, path, *, json_body=None, headers=None, params=None, timeout=600.0):
         if path == "/executor/topics/bootstrap":
+            topic_root = workspace_base / "topics" / json_body["topic_id"]
+            (topic_root / "shared").mkdir(parents=True, exist_ok=True)
             return {"ok": True, "topic_id": json_body["topic_id"]}
         if path == "/executor/discussions":
             await asyncio.sleep(0.3)
@@ -105,6 +111,7 @@ def client(tmp_path, monkeypatch):
         return {}
 
     monkeypatch.setattr(topics_module, "request_json", fake_request_json)
+    monkeypatch.setattr(resonnet_client_module, "request_json", fake_request_json)
     monkeypatch.setattr(
         topics_module,
         "moderate_post_content",
@@ -2839,13 +2846,13 @@ def test_feedback_requires_auth(client):
 
 
 def test_app_topic_is_singleton(client):
-    first = client.post("/api/v1/apps/scispark/topic")
+    first = client.post("/api/v1/apps/research-dream/topic")
     assert first.status_code == 200, first.text
     first_payload = first.json()
     assert first_payload["created"] is True
     topic_id = first_payload["topic"]["id"]
 
-    second = client.post("/api/v1/apps/scispark/topic")
+    second = client.post("/api/v1/apps/research-dream/topic")
     assert second.status_code == 200, second.text
     second_payload = second.json()
     assert second_payload["created"] is False
@@ -2863,6 +2870,73 @@ def test_apps_catalog_exposes_scientify_install_command(client):
     assert scientify["install_command"] == "openclaw plugins install scientify"
     assert scientify["links"]["docs"] == "https://scientify.tech/zh"
     assert scientify["links"]["repo"] == "https://github.com/tsingyuai/scientify"
+
+
+def test_apps_catalog_exposes_builtin_topiclab_cli(client):
+    resp = client.get("/api/v1/apps")
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+
+    topiclab_cli = next((item for item in payload["list"] if item["id"] == "topiclab-cli"), None)
+    assert topiclab_cli is not None
+    assert topiclab_cli["name"] == "TopicLab CLI"
+    assert topiclab_cli["builtin"] is True
+    assert topiclab_cli["links"]["docs"] == "https://github.com/TashanGKD/TopicLab-CLI"
+    assert topiclab_cli["links"]["repo"] == "https://github.com/TashanGKD/TopicLab-CLI"
+
+
+def test_apps_catalog_removes_scispark_and_sorts_builtin_first_then_alphabetically(client):
+    resp = client.get("/api/v1/apps")
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+
+    ids = [item["id"] for item in payload["list"]]
+    assert "scispark" not in ids
+    assert ids == ["topiclab-cli", "manim-creator", "research-dream", "scientify"]
+
+
+def test_apps_catalog_exposes_research_dream_install_command(client):
+    resp = client.get("/api/v1/apps")
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+
+    research_dream = next((item for item in payload["list"] if item["id"] == "research-dream"), None)
+    assert research_dream is not None
+    assert research_dream["name"] == "Research-Dream"
+    assert research_dream["install_command"] == "topiclab skills install research-dream:research-dream"
+    assert research_dream["links"]["docs"] == "https://github.com/Yu-Yang-Li/Research-Dream"
+    assert research_dream["links"]["repo"] == "https://github.com/Yu-Yang-Li/Research-Dream"
+
+
+def test_app_like_roundtrip_and_catalog_interaction(client):
+    user = register_and_login(client, phone="13800000031", username="app-like-user")
+    headers = {"Authorization": f"Bearer {user['token']}"}
+
+    like_resp = client.post(
+        "/api/v1/apps/research-dream/like",
+        json={"enabled": True},
+        headers=headers,
+    )
+    assert like_resp.status_code == 200, like_resp.text
+    interaction = like_resp.json()
+    assert interaction["liked"] is True
+    assert interaction["likes_count"] == 1
+
+    list_resp = client.get("/api/v1/apps", headers=headers)
+    assert list_resp.status_code == 200, list_resp.text
+    item = next(entry for entry in list_resp.json()["list"] if entry["id"] == "research-dream")
+    assert item["interaction"]["liked"] is True
+    assert item["interaction"]["likes_count"] == 1
+    assert item["linked_topic_id"]
+
+    unlike_resp = client.post(
+        "/api/v1/apps/research-dream/like",
+        json={"enabled": False},
+        headers=headers,
+    )
+    assert unlike_resp.status_code == 200, unlike_resp.text
+    assert unlike_resp.json()["liked"] is False
+    assert unlike_resp.json()["likes_count"] == 0
 
 
 def test_feedback_submit_migrates_legacy_site_feedback_schema(client):
