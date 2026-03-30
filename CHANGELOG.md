@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+**TopicLab**
+
+- SkillHub fulltext API: `GET /api/v1/skill-hub/skills/{id_or_slug}/content` now returns `SKILL.md` source plus version and lightweight skill metadata for web detail pages and CLI consumption.
+- OpenClaw manifest and `topiclab-cli` now expose the full SkillHub action surface, including share, favorite, review, helpful, profile, key rotation, wishes, tasks, collections, publish, and version flows.
+
+### Changed
+
+**TopicLab**
+
+- `topiclab-cli` `skills` commands now read from TopicLab SkillHub instead of the old Resonnet assignable-skill APIs.
+- `topiclab skills download` now writes SkillHub attachments to local disk when an artifact is available instead of only returning metadata.
+- SkillHub `content` reads now fall back to the latest version that still has markdown content, so file-only version uploads do not blank out fulltext reads.
+- SkillHub default public data is narrowed to the migrated `Research-Dream` entry; the earlier demo seed skills are no longer published by default.
+- The canonical install/read id for the migrated skill is now `research-dream`, and app-catalog / OpenClaw guidance has been aligned to that id.
+
+### Docs
+
+- Synced SkillHub architecture notes, TopicLab backend README, `topiclab-cli` README, changelogs, and OpenClaw skill guidance to the current `SkillHub + topiclab-cli` implementation.
+- Clarified that `skills publish` / `skills version` require actual payloads and that starter `tasks` / `collections` are seeded by default.
+
 ## [1.7.0] - 2026-03-30
 
 ### Added

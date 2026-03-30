@@ -1,242 +1,219 @@
-import { type CSSProperties, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+
+import type { SkillHubCategoriesResponse, SkillHubLeaderboard, SkillHubSkillSummary } from '../api/client'
+import { skillHubApi } from '../api/client'
+import { FloatingActionButton } from '../components/FloatingActions'
 import ImmersiveAppShell from '../components/ImmersiveAppShell'
-import { RESEARCH_SKILL_DISCIPLINES, type ResearchSkillDiscipline } from '../data/appsSkillZone'
+import { CategoryStrip, SkillCard } from './skillHubShared'
 
-/** 与参考稿一致的主强调色（teal-600） */
-const ACCENT = '#0d9488'
-
-type SortTab = 'hot' | 'score' | 'latest'
-
-function SearchIcon({ className, style }: { className?: string; style?: CSSProperties }) {
-  return (
-    <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} aria-hidden>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 110-15 7.5 7.5 0 010 15z" />
-    </svg>
-  )
-}
-
-function BulbIcon({ className, style }: { className?: string; style?: CSSProperties }) {
-  return (
-    <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} aria-hidden>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 21h6M12 17v4M8.5 10.5a3.5 3.5 0 117 0c0 1.5-.5 2.5-1.2 3.2-.6.6-.8 1.3-.8 2.3v.5H11v-.5c0-1-.2-1.7-.8-2.3-.7-.7-1.2-1.7-1.2-3.2z" />
-    </svg>
-  )
-}
-
-function GridAllIcon({ className, style }: { className?: string; style?: CSSProperties }) {
-  return (
-    <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} aria-hidden>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4 5.5h6v6H4v-6zm10 0h6v6h-6v-6zM4 15.5h6v6H4v-6zm10 0h6v6h-6v-6z" />
-    </svg>
-  )
-}
-
-function EmptySearchIllustration({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 96 96" fill="none" aria-hidden>
-      <circle cx="40" cy="40" r="22" stroke="#7dd3fc" strokeWidth="2.5" />
-      <path d="M56 56l18 18" stroke="#7dd3fc" strokeWidth="2.5" strokeLinecap="round" />
-    </svg>
-  )
-}
-
-function sortDisciplines(items: ResearchSkillDiscipline[], mode: SortTab): ResearchSkillDiscipline[] {
-  const copy = [...items]
-  if (mode === 'hot') {
-    return copy
-  }
-  if (mode === 'score') {
-    return copy.reverse()
-  }
-  return copy.sort((a, b) => String(b.key).localeCompare(String(a.key), undefined, { numeric: true }))
-}
-
-const SORT_TABS: { id: SortTab; label: string }[] = [
-  { id: 'hot', label: '热门' },
-  { id: 'score', label: '高分' },
-  { id: 'latest', label: '最新' },
-]
+const SORT_OPTIONS = [
+  { key: 'hot', label: '热门' },
+  { key: 'top', label: '高分' },
+  { key: 'new', label: '最新' },
+] as const
 
 export default function AppsSkillLibraryPage() {
+  const navigate = useNavigate()
   const [query, setQuery] = useState('')
-  const [disciplineKey, setDisciplineKey] = useState<string>('all')
-  const [sort, setSort] = useState<SortTab>('hot')
+  const [category, setCategory] = useState('')
+  const [sort, setSort] = useState<(typeof SORT_OPTIONS)[number]['key']>('hot')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [skills, setSkills] = useState<SkillHubSkillSummary[]>([])
+  const [leaderboard, setLeaderboard] = useState<SkillHubLeaderboard | null>(null)
+  const [categories, setCategories] = useState<SkillHubCategoriesResponse | null>(null)
 
-  const normalizedQuery = query.trim().toLowerCase()
+  useEffect(() => {
+    let alive = true
 
-  const filtered = useMemo(() => {
-    let list = RESEARCH_SKILL_DISCIPLINES
-    if (disciplineKey !== 'all') {
-      list = list.filter((d) => d.key === disciplineKey)
+    const load = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        const [skillsRes, categoriesRes, leaderboardRes] = await Promise.all([
+          skillHubApi.listSkills({ category, q: query || undefined, sort, limit: 12 }),
+          skillHubApi.listCategories(),
+          skillHubApi.listLeaderboard(),
+        ])
+        if (!alive) return
+        setSkills(skillsRes.data.list)
+        setCategories(categoriesRes.data)
+        setLeaderboard(leaderboardRes.data)
+      } catch (err) {
+        if (!alive) return
+        setError(err instanceof Error ? err.message : 'SkillHub 加载失败')
+      } finally {
+        if (alive) setLoading(false)
+      }
     }
-    if (normalizedQuery) {
-      list = list.filter(
-        (d) =>
-          d.name.toLowerCase().includes(normalizedQuery)
-          || d.summary.toLowerCase().includes(normalizedQuery)
-          || d.key.toLowerCase().includes(normalizedQuery),
-      )
+
+    void load()
+    return () => {
+      alive = false
     }
-    return sortDisciplines(list, sort)
-  }, [disciplineKey, normalizedQuery, sort])
+  }, [category, sort, query])
 
-  const resetFilters = () => {
-    setQuery('')
-    setDisciplineKey('all')
-    setSort('hot')
-  }
+  const hotUsers = useMemo(() => leaderboard?.users.slice(0, 5) ?? [], [leaderboard])
 
-  const chips: { key: string; label: string }[] = useMemo(
-    () => [{ key: 'all', label: '全部' }, ...RESEARCH_SKILL_DISCIPLINES.map((d) => ({ key: d.key, label: d.name }))],
-    [],
-  )
+  const primaryFabStyle = {
+    background: 'linear-gradient(180deg, rgba(51,65,85,0.68) 0%, rgba(30,41,59,0.54) 100%)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    boxShadow: '0 10px 24px rgba(15, 23, 42, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.08)',
+    backdropFilter: 'blur(16px) saturate(1.15)',
+  } as const
 
   return (
-    <ImmersiveAppShell
-      title="科研 Skill 专区"
-      subtitle="按一级学科浏览与检索；以下为站内科研技能分类示意，后续可接入真实技能目录。"
-    >
-      <div className="mx-auto max-w-3xl space-y-3">
-          <div className="relative">
-            <SearchIcon
-              className="pointer-events-none absolute left-3.5 top-1/2 h-[1.125rem] w-[1.125rem] -translate-y-1/2"
-              style={{ color: 'var(--text-tertiary)' }}
-            />
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="搜索技能…"
-              autoComplete="off"
-              className="w-full rounded-full border py-2.5 pl-10 pr-4 text-sm outline-none transition-[box-shadow,border-color] motion-reduce:transition-none focus-visible:ring-2 focus-visible:ring-offset-1"
+    <ImmersiveAppShell title="科研 Skill 专区">
+      <section className="mt-4">
+        <h2 className="text-[2.2rem] font-serif font-semibold leading-tight sm:text-[2.8rem]" style={{ color: 'var(--text-primary)' }}>
+          科研 Skill 专区
+        </h2>
+        <p className="mt-3 max-w-3xl text-sm leading-7 sm:text-[15px]" style={{ color: 'var(--text-secondary)' }}>
+          面向科研场景的可安装技能目录：按学科筛选，支持搜索与热门 / 高分 / 最新排序；可查看详情与作者排行，并参与评测、许愿、发布与个人管理。
+        </p>
+      </section>
+
+      <section className="mt-6">
+        <CategoryStrip disciplines={categories?.disciplines ?? []} activeKey={category} onChange={setCategory} />
+      </section>
+
+      <section className="mt-6 flex flex-col gap-4 border-b pb-4 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: 'var(--border-default)' }}>
+        <div className="flex flex-wrap gap-2">
+          {SORT_OPTIONS.map((option) => (
+            <button
+              key={option.key}
+              type="button"
+              onClick={() => setSort(option.key)}
+              className="rounded-full border px-4 py-2 text-sm font-medium"
               style={{
-                borderColor: 'var(--border-default)',
-                backgroundColor: 'var(--bg-container)',
-                color: 'var(--text-primary)',
-                boxShadow: 'var(--shadow-sm)',
+                borderColor: sort === option.key ? 'var(--text-primary)' : 'var(--border-default)',
+                backgroundColor: sort === option.key ? 'var(--text-primary)' : 'var(--bg-container)',
+                color: sort === option.key ? '#fff' : 'var(--text-primary)',
               }}
-              aria-label="搜索技能"
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-1.5 sm:gap-2" role="toolbar" aria-label="一级学科">
-            {chips.map((c) => {
-              const active = disciplineKey === c.key
-              return (
-                <button
-                  key={c.key}
-                  type="button"
-                  onClick={() => setDisciplineKey(c.key)}
-                  aria-pressed={active}
-                  className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors motion-reduce:transition-none sm:px-3 sm:py-1.5 sm:text-[13px] cursor-pointer"
-                  style={
-                    active
-                      ? {
-                          backgroundColor: ACCENT,
-                          borderColor: ACCENT,
-                          color: '#fff',
-                        }
-                      : {
-                          backgroundColor: 'var(--bg-container)',
-                          borderColor: 'var(--border-default)',
-                          color: 'var(--text-primary)',
-                        }
-                  }
-                >
-                  {c.key === 'all' ? (
-                    <GridAllIcon className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" style={{ color: active ? '#fff' : 'var(--text-tertiary)' }} />
-                  ) : (
-                    <BulbIcon className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" style={{ color: active ? '#fff' : 'var(--text-tertiary)' }} />
-                  )}
-                  {c.label}
-                </button>
-              )
-            })}
-          </div>
-
-          <div
-            role="tablist"
-            aria-label="排序"
-            className="inline-flex max-w-full flex-wrap gap-0 rounded-full p-1"
-            style={{ backgroundColor: 'var(--bg-secondary)' }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            navigate(`/apps/skills/search?q=${encodeURIComponent(query)}`)
+          }}
+          className="flex w-full max-w-md flex-col gap-2 sm:flex-row sm:items-center"
+        >
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="搜索技能或关键词"
+            className="h-10 min-w-0 w-full flex-1 rounded-full border px-4 text-sm leading-10 outline-none"
+            style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', color: 'var(--text-primary)' }}
+          />
+          <button
+            type="submit"
+            className="h-10 shrink-0 rounded-full border px-5 text-sm font-medium leading-none whitespace-nowrap sm:w-auto sm:self-center"
+            style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
           >
-            {SORT_TABS.map((t) => {
-              const active = sort === t.id
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setSort(t.id)}
-                  className="rounded-full px-3 py-1.5 text-xs font-medium transition-colors motion-reduce:transition-none sm:text-[13px] cursor-pointer"
-                  style={
-                    active
-                      ? {
-                          backgroundColor: 'var(--bg-container)',
-                          color: 'var(--text-primary)',
-                          boxShadow: 'var(--shadow-sm)',
-                          fontWeight: 600,
-                        }
-                      : {
-                          backgroundColor: 'transparent',
-                          color: 'var(--text-secondary)',
-                        }
-                  }
-                >
-                  {t.label}
-                </button>
-              )
-            })}
-          </div>
+            搜索
+          </button>
+        </form>
+      </section>
 
-          <section
-            className="min-h-[16rem] rounded-[var(--radius-lg)] border px-4 py-4 sm:px-5 sm:py-5"
-            style={{
-              borderColor: 'var(--border-default)',
-              backgroundColor: 'var(--bg-container)',
-              boxShadow: 'var(--shadow-sm)',
-            }}
-            aria-live="polite"
-          >
-            {filtered.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 sm:py-16">
-                <EmptySearchIllustration className="h-20 w-20 sm:h-24 sm:w-24" />
-                <p className="mt-4 text-sm" style={{ color: 'var(--text-secondary)' }}>
-                  未找到匹配的技能
-                </p>
-                <button
-                  type="button"
-                  onClick={resetFilters}
-                  className="mt-3 text-sm font-medium underline-offset-4 transition-opacity hover:opacity-80 motion-reduce:transition-none cursor-pointer"
-                  style={{ color: ACCENT }}
-                >
-                  查看全部
-                </button>
-              </div>
-            ) : (
-              <ul className="divide-y" style={{ borderColor: 'var(--border-default)' }}>
-                {filtered.map((d) => (
-                  <li key={d.key} className="flex gap-3 py-3 first:pt-0 last:pb-0">
-                    <span
-                      className="w-9 shrink-0 pt-0.5 font-mono text-[11px] tabular-nums sm:w-10 sm:text-xs"
-                      style={{ color: 'var(--text-tertiary)' }}
+      <section className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_18rem]">
+        <div>
+          <h3 className="text-2xl font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>
+            技能列表
+          </h3>
+          {error ? (
+            <div className="mt-4 rounded-2xl border px-4 py-3 text-sm" style={{ borderColor: 'var(--border-default)', color: 'var(--accent-error)' }}>
+              {error}
+            </div>
+          ) : null}
+          <div className="mt-4 space-y-3">
+            {skills.map((skill) => (
+              <SkillCard
+                key={skill.id}
+                skill={skill}
+                actions={(
+                  <div className="flex flex-col items-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/apps/skills/${skill.slug}`)}
+                      className="rounded-full border px-3 py-1.5 text-xs font-medium"
+                      style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
                     >
-                      {d.key}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                        {d.name}
-                      </p>
-                      <p className="mt-0.5 text-xs leading-relaxed sm:text-[13px]" style={{ color: 'var(--text-secondary)' }}>
-                        {d.summary}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
+                      打开详情
+                    </button>
+                  </div>
+                )}
+              />
+            ))}
+            {!loading && skills.length === 0 ? (
+              <div className="rounded-2xl border px-4 py-5 text-sm" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', color: 'var(--text-secondary)' }}>
+                暂无可展示的 Skill。
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <aside className="space-y-4">
+          <section className="rounded-[22px] border p-5" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', boxShadow: 'var(--shadow-sm)' }}>
+            <h3 className="text-lg font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>
+              排行榜
+            </h3>
+            <div className="mt-4 space-y-3">
+              {hotUsers.map((user, index) => (
+                <div key={user.id} className="flex items-center justify-between rounded-2xl border px-4 py-3" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-page)' }}>
+                  <div>
+                    <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>#{index + 1}</div>
+                    <div className="font-medium" style={{ color: 'var(--text-primary)' }}>{user.display_name}</div>
+                  </div>
+                  <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>{user.balance} pts</div>
+                </div>
+              ))}
+            </div>
+            <Link to="/apps/skills/leaderboard" className="mt-4 inline-block text-sm underline underline-offset-4" style={{ color: 'var(--text-secondary)' }}>
+              查看全部排名
+            </Link>
           </section>
+        </aside>
+      </section>
+
+      <div
+        className="fixed right-[max(1rem,env(safe-area-inset-right))] z-[35] flex flex-col items-center gap-3"
+        style={{ bottom: 'calc(1.25rem + env(safe-area-inset-bottom))' }}
+      >
+        <FloatingActionButton
+          ariaLabel="许愿墙"
+          to="/apps/skills/wishes"
+          iconColorClassName="text-white hover:text-white"
+          style={primaryFabStyle}
+        >
+          <svg className="relative h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.75}
+              d="M12 2.25v4M12 17.75v4M2.25 12h4M17.75 12h4M5.4 5.4l2.9 2.9M15.7 15.7l2.9 2.9M18.6 5.4l-2.9 2.9M8.3 15.7l-2.9 2.9"
+            />
+          </svg>
+        </FloatingActionButton>
+        <FloatingActionButton
+          ariaLabel="上传技能"
+          to="/apps/skills/publish"
+          iconColorClassName="text-white hover:text-white"
+          style={primaryFabStyle}
+        >
+          <svg className="relative h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.65}
+              d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v9"
+            />
+          </svg>
+        </FloatingActionButton>
       </div>
     </ImmersiveAppShell>
   )

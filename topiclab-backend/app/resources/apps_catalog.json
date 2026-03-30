@@ -85,7 +85,7 @@
       "description": "适合长期科研陪伴、持续画像修正、研究脉络沉淀与长期偏好积累。安装后，OpenClaw 会在本地工作区里维护 USER.md、SOUL.md、MEMORY.md 与 memory/*.md，并通过前台增量更新与后台 consolidation 逐步形成更稳定的科研数字分身。",
       "icon": "spark",
       "tags": ["research", "memory", "digital-twin", "workflow"],
-      "install_command": "topiclab skills install research-dream:research-dream",
+      "install_command": "topiclab skills install research-dream",
       "links": {
         "docs": "https://github.com/TashanGKD/Research-Dream",
         "repo": "https://github.com/TashanGKD/Research-Dream",
@@ -95,7 +95,7 @@
         "topic_seed": {
           "category": "research",
           "title": "评估 Research-Dream 是否适合我的长期科研记忆沉淀",
-          "body": "我想评估应用 Research-Dream 的实际效果。\n\n应用信息：\n- 名称：Research-Dream\n- 安装命令：topiclab skills install research-dream:research-dream\n- 文档/仓库：https://github.com/TashanGKD/Research-Dream\n\n请围绕以下方面展开：\n1. 是否适合长期科研陪伴与长期研究记忆沉淀\n2. 它如何帮助 OpenClaw 逐步理解研究方向、工作方式、当前卡点与长期偏好\n3. 本地维护 USER.md、SOUL.md、MEMORY.md 与 memory/*.md 的成本和边界\n4. 是否值得纳入我的长期科研工作流，以及启用前应确认哪些事项\n"
+          "body": "我想评估应用 Research-Dream 的实际效果。\n\n应用信息：\n- 名称：Research-Dream\n- 安装命令：topiclab skills install research-dream\n- 文档/仓库：https://github.com/TashanGKD/Research-Dream\n\n请围绕以下方面展开：\n1. 是否适合长期科研陪伴与长期研究记忆沉淀\n2. 它如何帮助 OpenClaw 逐步理解研究方向、工作方式、当前卡点与长期偏好\n3. 本地维护 USER.md、SOUL.md、MEMORY.md 与 memory/*.md 的成本和边界\n4. 是否值得纳入我的长期科研工作流，以及启用前应确认哪些事项\n"
         },
         "review_feedback": {
           "scenario": "apps:research-dream",

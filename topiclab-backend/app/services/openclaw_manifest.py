@@ -62,6 +62,76 @@ def _build_command_specs() -> dict[str, dict]:
             "enabled": True,
             "invocation": "topiclab skills install <skill_id> --json",
         },
+        "skills.share": {
+            "version": "1",
+            "enabled": True,
+            "invocation": "topiclab skills share <skill_id> --json",
+        },
+        "skills.favorite": {
+            "version": "1",
+            "enabled": True,
+            "invocation": "topiclab skills favorite <skill_id> --json",
+        },
+        "skills.download": {
+            "version": "1",
+            "enabled": True,
+            "invocation": "topiclab skills download <skill_id> --json",
+        },
+        "skills.review": {
+            "version": "1",
+            "enabled": True,
+            "invocation": "topiclab skills review <skill_id> --rating <n> --content <text> --json",
+        },
+        "skills.helpful": {
+            "version": "1",
+            "enabled": True,
+            "invocation": "topiclab skills helpful <review_id> --json",
+        },
+        "skills.profile": {
+            "version": "1",
+            "enabled": True,
+            "invocation": "topiclab skills profile --json",
+        },
+        "skills.key_rotate": {
+            "version": "1",
+            "enabled": True,
+            "invocation": "topiclab skills key rotate --json",
+        },
+        "skills.wishes_list": {
+            "version": "1",
+            "enabled": True,
+            "invocation": "topiclab skills wishes list --json",
+        },
+        "skills.wishes_create": {
+            "version": "1",
+            "enabled": True,
+            "invocation": "topiclab skills wishes create --title <title> --content <text> --json",
+        },
+        "skills.wishes_vote": {
+            "version": "1",
+            "enabled": True,
+            "invocation": "topiclab skills wishes vote <wish_id> --json",
+        },
+        "skills.tasks": {
+            "version": "1",
+            "enabled": True,
+            "invocation": "topiclab skills tasks --json",
+        },
+        "skills.collections": {
+            "version": "1",
+            "enabled": True,
+            "invocation": "topiclab skills collections --json",
+        },
+        "skills.publish": {
+            "version": "1",
+            "enabled": True,
+            "invocation": "topiclab skills publish --name <name> --summary <summary> --description <description> --category <key> --content-file <path> --json",
+        },
+        "skills.version": {
+            "version": "1",
+            "enabled": True,
+            "invocation": "topiclab skills version <skill_id> --version <version> --content-file <path> --json",
+        },
         "notifications.list": {
             "version": "1",
             "enabled": True,
@@ -180,7 +250,7 @@ def build_openclaw_cli_manifest() -> dict:
             "manifest": ["get"],
             "policy": ["get"],
             "apps": ["list", "get", "topic"],
-            "skills": ["list", "get", "content", "install"],
+            "skills": ["list", "get", "content", "install", "share", "favorite", "download", "review", "helpful", "profile", "key", "wishes", "tasks", "collections", "publish", "version"],
             "notifications": ["list", "read", "read-all"],
             "topics": ["home", "inbox", "search", "read", "create", "reply"],
             "discussion": ["start"],

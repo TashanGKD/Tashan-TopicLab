@@ -961,4 +961,376 @@ export const inboxApi = {
   markAllRead: () => api.post<{ ok: boolean; updated_count: number }>('/v1/me/inbox/read-all'),
 }
 
+export interface SkillHubDiscipline {
+  key: string
+  name: string
+  summary: string
+}
+
+export interface SkillHubCluster {
+  key: string
+  title: string
+  summary: string
+}
+
+export interface SkillHubSkillSummary {
+  id: number
+  slug: string
+  name: string
+  tagline?: string | null
+  summary: string
+  description: string
+  category_key: string
+  category_name: string
+  cluster_key: string
+  cluster_name: string
+  tags: string[]
+  capabilities: string[]
+  framework: string
+  compatibility_level: 'metadata' | 'install' | 'runtime_partial' | 'runtime_full' | string
+  pricing_status: 'free' | 'pro' | 'paid' | string
+  price_points: number
+  license?: string | null
+  source_url?: string | null
+  source_name?: string | null
+  docs_url?: string | null
+  install_command?: string | null
+  latest_version?: string | null
+  openclaw_ready: boolean
+  featured: boolean
+  hero_note?: string | null
+  total_reviews: number
+  avg_rating: number
+  total_favorites: number
+  total_downloads: number
+  weekly_downloads: number
+  viewer_favorited?: boolean
+  author_openclaw_agent_id?: number | null
+  created_at?: string | null
+  updated_at?: string | null
+  published_at?: string | null
+}
+
+export interface SkillHubSkillVersion {
+  id: number
+  version: string
+  changelog?: string | null
+  has_content?: boolean
+  artifact_filename?: string | null
+  artifact_size: number
+  install_command?: string | null
+  is_latest: boolean
+  created_at?: string | null
+}
+
+export interface SkillHubReview {
+  id: number
+  skill_id: number
+  rating: number
+  title?: string | null
+  content: string
+  model?: string | null
+  pros: string[]
+  cons: string[]
+  dimensions: Record<string, unknown>
+  helpful_count: number
+  author: {
+    id?: number | null
+    display_name?: string | null
+    handle?: string | null
+  }
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export interface SkillHubWish {
+  id: number
+  title: string
+  content: string
+  category_key?: string | null
+  status: string
+  votes_count: number
+  author: {
+    id?: number | null
+    display_name?: string | null
+    handle?: string | null
+  }
+  created_at?: string | null
+}
+
+export interface SkillHubCollection {
+  id: number
+  slug: string
+  title: string
+  description: string
+  accent: string
+  skills: SkillHubSkillSummary[]
+  created_at?: string | null
+}
+
+export interface SkillHubTask {
+  task_key: string
+  title: string
+  description: string
+  reason_code: string
+  points_reward: number
+  daily_limit: number
+  goal_count: number
+  progress_count: number
+  completed: boolean
+}
+
+export interface SkillHubProfile {
+  has_agent: boolean
+  openclaw_agent: {
+    id?: number
+    agent_uid?: string
+    display_name?: string
+    handle?: string
+    skill_token?: string | null
+    status?: string
+  } | null
+  wallet: {
+    balance: number
+    lifetime_earned: number
+    lifetime_spent: number
+    updated_at?: string | null
+  } | null
+  key: {
+    key_id?: number
+    masked_key?: string | null
+    created_at?: string | null
+    last_used_at?: string | null
+    agent_uid?: string | null
+    openclaw_agent?: {
+      agent_uid?: string
+      display_name?: string
+      handle?: string
+      status?: string
+    } | null
+  } | null
+  my_skills: SkillHubSkillSummary[]
+  my_reviews: Array<{
+    id: number
+    skill_id: number
+    skill_name: string
+    skill_slug: string
+    rating: number
+    title?: string | null
+    content: string
+    helpful_count: number
+    created_at?: string | null
+  }>
+  my_downloads: Array<{
+    id: number
+    skill_id: number
+    skill_name: string
+    skill_slug: string
+    version?: string | null
+    points_spent: number
+    created_at?: string | null
+  }>
+  my_favorites: SkillHubSkillSummary[]
+}
+
+export interface SkillHubLeaderboard {
+  users: Array<{
+    id: number
+    agent_uid: string
+    display_name: string
+    handle: string
+    balance: number
+    total_skills: number
+    total_reviews: number
+    total_downloads: number
+  }>
+  skills: SkillHubSkillSummary[]
+  weekly: SkillHubSkillSummary[]
+}
+
+export interface SkillHubSkillDetail extends SkillHubSkillSummary {
+  versions: SkillHubSkillVersion[]
+  reviews: SkillHubReview[]
+  related_skills: SkillHubSkillSummary[]
+}
+
+export interface SkillHubSkillContentResponse {
+  skill: {
+    id: number
+    slug: string
+    name: string
+    summary: string
+    description: string
+    category_key: string
+    category_name: string
+    latest_version?: string | null
+  }
+  version: {
+    id: number
+    version: string
+    created_at?: string | null
+  }
+  content: string
+  content_type: 'text/markdown'
+  format: 'skill_md'
+}
+
+export interface SkillHubSkillsListResponse {
+  list: SkillHubSkillSummary[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface SkillHubCategoriesResponse {
+  disciplines: SkillHubDiscipline[]
+  clusters: SkillHubCluster[]
+}
+
+function buildSkillHubPublishForm(payload: {
+  name: string
+  summary: string
+  description: string
+  category_key: string
+  cluster_key: string
+  tagline?: string
+  slug?: string
+  tags?: string[]
+  capabilities?: string[]
+  framework?: string
+  compatibility_level?: string
+  pricing_status?: string
+  price_points?: number
+  install_command?: string
+  source_url?: string
+  source_name?: string
+  docs_url?: string
+  license?: string
+  hero_note?: string
+  version?: string
+  changelog?: string
+  content_markdown?: string
+  file?: File | null
+}) {
+  const form = new FormData()
+  form.set('name', payload.name)
+  form.set('summary', payload.summary)
+  form.set('description', payload.description)
+  form.set('category_key', payload.category_key)
+  form.set('cluster_key', payload.cluster_key)
+  if (payload.tagline) form.set('tagline', payload.tagline)
+  if (payload.slug) form.set('slug', payload.slug)
+  if (payload.tags?.length) form.set('tags', payload.tags.join(','))
+  if (payload.capabilities?.length) form.set('capabilities', payload.capabilities.join(','))
+  if (payload.framework) form.set('framework', payload.framework)
+  if (payload.compatibility_level) form.set('compatibility_level', payload.compatibility_level)
+  if (payload.pricing_status) form.set('pricing_status', payload.pricing_status)
+  if (payload.price_points != null) form.set('price_points', String(payload.price_points))
+  if (payload.install_command) form.set('install_command', payload.install_command)
+  if (payload.source_url) form.set('source_url', payload.source_url)
+  if (payload.source_name) form.set('source_name', payload.source_name)
+  if (payload.docs_url) form.set('docs_url', payload.docs_url)
+  if (payload.license) form.set('license', payload.license)
+  if (payload.hero_note) form.set('hero_note', payload.hero_note)
+  if (payload.version) form.set('version', payload.version)
+  if (payload.changelog) form.set('changelog', payload.changelog)
+  if (payload.content_markdown) form.set('content_markdown', payload.content_markdown)
+  if (payload.file) form.set('file', payload.file)
+  return form
+}
+
+export const skillHubApi = {
+  listSkills: (params?: {
+    q?: string
+    category?: string
+    cluster?: string
+    sort?: string
+    featured_only?: boolean
+    openclaw_ready_only?: boolean
+    limit?: number
+    offset?: number
+  }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.q) searchParams.set('q', params.q)
+    if (params?.category) searchParams.set('category', params.category)
+    if (params?.cluster) searchParams.set('cluster', params.cluster)
+    if (params?.sort) searchParams.set('sort', params.sort)
+    if (params?.featured_only) searchParams.set('featured_only', 'true')
+    if (params?.openclaw_ready_only) searchParams.set('openclaw_ready_only', 'true')
+    if (params?.limit != null) searchParams.set('limit', String(params.limit))
+    if (params?.offset != null) searchParams.set('offset', String(params.offset))
+    const qs = searchParams.toString()
+    return api.get<SkillHubSkillsListResponse>(`/v1/skill-hub/skills${qs ? `?${qs}` : ''}`)
+  },
+  getSkill: (idOrSlug: string) => api.get<SkillHubSkillDetail>(`/v1/skill-hub/skills/${encodeURIComponent(idOrSlug)}`),
+  getSkillContent: (idOrSlug: string) =>
+    api.get<SkillHubSkillContentResponse>(`/v1/skill-hub/skills/${encodeURIComponent(idOrSlug)}/content`),
+  listCategories: () => api.get<SkillHubCategoriesResponse>('/v1/skill-hub/categories'),
+  search: (params: { q: string; category?: string; cluster?: string; sort?: string; limit?: number; offset?: number }) => {
+    const searchParams = new URLSearchParams()
+    searchParams.set('q', params.q)
+    if (params.category) searchParams.set('category', params.category)
+    if (params.cluster) searchParams.set('cluster', params.cluster)
+    if (params.sort) searchParams.set('sort', params.sort)
+    if (params.limit != null) searchParams.set('limit', String(params.limit))
+    if (params.offset != null) searchParams.set('offset', String(params.offset))
+    return api.get<SkillHubSkillsListResponse>(`/v1/skill-hub/search?${searchParams.toString()}`)
+  },
+  listReviews: (skillId: string, sort: 'helpful' | 'rating' = 'helpful') =>
+    api.get<{ reviews: SkillHubReview[]; summary: { total: number; avg_rating: number } }>(
+      `/v1/skill-hub/reviews?skill_id=${encodeURIComponent(skillId)}&sort=${encodeURIComponent(sort)}`
+    ),
+  createReview: (payload: {
+    skill_id: string
+    rating: number
+    content: string
+    model?: string
+    title?: string
+    pros?: string[]
+    cons?: string[]
+    dimensions?: Record<string, unknown>
+  }) => api.post<SkillHubReview>('/v1/skill-hub/reviews', payload),
+  voteHelpful: (reviewId: number, enabled = true) =>
+    api.post<{ review_id: number; helpful_count: number; enabled: boolean }>(`/v1/skill-hub/reviews/${reviewId}/helpful`, { enabled }),
+  listLeaderboard: () => api.get<SkillHubLeaderboard>('/v1/skill-hub/leaderboard'),
+  listWishes: (limit = 50) => api.get<{ list: SkillHubWish[] }>(`/v1/skill-hub/wishes?limit=${limit}`),
+  createWish: (payload: { title: string; content: string; category_key?: string }) =>
+    api.post<SkillHubWish>('/v1/skill-hub/wishes', payload),
+  voteWish: (wishId: number, enabled = true) =>
+    api.post<{ wish_id: number; votes_count: number; enabled: boolean }>(`/v1/skill-hub/wishes/${wishId}/vote`, { enabled }),
+  listTasks: () => api.get<{ tasks: SkillHubTask[] }>('/v1/skill-hub/tasks'),
+  listCollections: () => api.get<{ list: SkillHubCollection[] }>('/v1/skill-hub/collections'),
+  getProfile: () => api.get<SkillHubProfile>('/v1/skill-hub/profile'),
+  rotateOpenClawKey: () => api.post('/v1/skill-hub/profile/openclaw-key'),
+  toggleFavorite: (idOrSlug: string, enabled = true) =>
+    api.post<{ skill_id: number; favorited: boolean; total_favorites: number }>(`/v1/skill-hub/skills/${encodeURIComponent(idOrSlug)}/favorite?enabled=${enabled ? 'true' : 'false'}`),
+  downloadSkill: (idOrSlug: string, referrer?: string) => {
+    const qs = referrer ? `?referrer=${encodeURIComponent(referrer)}` : ''
+    return api.get<{
+      skill_id: number
+      download_id: number
+      version: string
+      points_spent: number
+      install_command?: string | null
+      download_url?: string | null
+      artifact_filename?: string | null
+    }>(`/v1/skill-hub/skills/${encodeURIComponent(idOrSlug)}/download${qs}`)
+  },
+  publishSkill: (payload: Parameters<typeof buildSkillHubPublishForm>[0]) =>
+    api.post<SkillHubSkillDetail>('/v1/skill-hub/skills', buildSkillHubPublishForm(payload), {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  publishVersion: (idOrSlug: string, payload: { version: string; changelog?: string; install_command?: string; content_markdown?: string; file?: File | null }) => {
+    const form = new FormData()
+    form.set('version', payload.version)
+    if (payload.changelog) form.set('changelog', payload.changelog)
+    if (payload.install_command) form.set('install_command', payload.install_command)
+    if (payload.content_markdown) form.set('content_markdown', payload.content_markdown)
+    if (payload.file) form.set('file', payload.file)
+    return api.post<SkillHubSkillDetail>(`/v1/skill-hub/skills/${encodeURIComponent(idOrSlug)}/versions`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+}
+
 export default api

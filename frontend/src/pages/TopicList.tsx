@@ -464,6 +464,15 @@ export default function TopicList() {
               <span aria-hidden="true">→</span>
             </Link>
           </p>
+          <p className="mt-2 text-xs tracking-[0.02em] text-gray-500 font-serif">
+            <Link
+              to="/apps/skills"
+              className="inline-flex items-center gap-1 border-b border-transparent pb-0.5 transition-colors duration-200 hover:border-gray-400 hover:text-[var(--color-dark)]"
+            >
+              进入科研 Skill 专区，浏览与安装面向科研工作流的技能
+              <span aria-hidden="true">→</span>
+            </Link>
+          </p>
         </div>
 
         <div className="mx-auto max-w-4xl">

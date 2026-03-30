@@ -836,6 +836,436 @@ def _apply_openclaw_identity_ddl(session) -> None:
         _create_openclaw_api_keys_v2(session)
 
 
+def _apply_skill_hub_ddl(session) -> None:
+    is_sqlite = _is_sqlite_session(session)
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS skill_hub_skills (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                slug VARCHAR(128) NOT NULL UNIQUE,
+                name VARCHAR(255) NOT NULL,
+                tagline VARCHAR(255),
+                summary TEXT NOT NULL,
+                description TEXT NOT NULL,
+                category_key VARCHAR(32) NOT NULL,
+                category_name VARCHAR(128) NOT NULL,
+                cluster_key VARCHAR(32) NOT NULL,
+                cluster_name VARCHAR(128) NOT NULL,
+                tags_json TEXT NOT NULL DEFAULT '[]',
+                capabilities_json TEXT NOT NULL DEFAULT '[]',
+                framework VARCHAR(64) NOT NULL DEFAULT 'openclaw',
+                compatibility_level VARCHAR(32) NOT NULL DEFAULT 'metadata',
+                pricing_status VARCHAR(32) NOT NULL DEFAULT 'free',
+                price_points INTEGER NOT NULL DEFAULT 0,
+                license VARCHAR(64),
+                source_url TEXT,
+                source_name VARCHAR(255),
+                docs_url TEXT,
+                install_command TEXT,
+                latest_version VARCHAR(64),
+                openclaw_ready BOOLEAN NOT NULL DEFAULT FALSE,
+                featured BOOLEAN NOT NULL DEFAULT FALSE,
+                hero_note TEXT,
+                status VARCHAR(32) NOT NULL DEFAULT 'published',
+                author_openclaw_agent_id INTEGER REFERENCES openclaw_agents(id) ON DELETE SET NULL,
+                total_reviews INTEGER NOT NULL DEFAULT 0,
+                avg_rating REAL NOT NULL DEFAULT 0,
+                total_favorites INTEGER NOT NULL DEFAULT 0,
+                total_downloads INTEGER NOT NULL DEFAULT 0,
+                weekly_downloads INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                published_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            if is_sqlite
+            else
+            """
+            CREATE TABLE IF NOT EXISTS skill_hub_skills (
+                id SERIAL PRIMARY KEY,
+                slug VARCHAR(128) NOT NULL UNIQUE,
+                name VARCHAR(255) NOT NULL,
+                tagline VARCHAR(255),
+                summary TEXT NOT NULL,
+                description TEXT NOT NULL,
+                category_key VARCHAR(32) NOT NULL,
+                category_name VARCHAR(128) NOT NULL,
+                cluster_key VARCHAR(32) NOT NULL,
+                cluster_name VARCHAR(128) NOT NULL,
+                tags_json TEXT NOT NULL DEFAULT '[]',
+                capabilities_json TEXT NOT NULL DEFAULT '[]',
+                framework VARCHAR(64) NOT NULL DEFAULT 'openclaw',
+                compatibility_level VARCHAR(32) NOT NULL DEFAULT 'metadata',
+                pricing_status VARCHAR(32) NOT NULL DEFAULT 'free',
+                price_points INTEGER NOT NULL DEFAULT 0,
+                license VARCHAR(64),
+                source_url TEXT,
+                source_name VARCHAR(255),
+                docs_url TEXT,
+                install_command TEXT,
+                latest_version VARCHAR(64),
+                openclaw_ready BOOLEAN NOT NULL DEFAULT FALSE,
+                featured BOOLEAN NOT NULL DEFAULT FALSE,
+                hero_note TEXT,
+                status VARCHAR(32) NOT NULL DEFAULT 'published',
+                author_openclaw_agent_id INTEGER REFERENCES openclaw_agents(id) ON DELETE SET NULL,
+                total_reviews INTEGER NOT NULL DEFAULT 0,
+                avg_rating DOUBLE PRECISION NOT NULL DEFAULT 0,
+                total_favorites INTEGER NOT NULL DEFAULT 0,
+                total_downloads INTEGER NOT NULL DEFAULT 0,
+                weekly_downloads INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                published_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+    )
+    session.execute(text("CREATE INDEX IF NOT EXISTS idx_skill_hub_skills_cluster ON skill_hub_skills(cluster_key, total_downloads DESC)"))
+    session.execute(text("CREATE INDEX IF NOT EXISTS idx_skill_hub_skills_category ON skill_hub_skills(category_key, published_at DESC)"))
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS skill_hub_skill_versions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                skill_id INTEGER NOT NULL REFERENCES skill_hub_skills(id) ON DELETE CASCADE,
+                version VARCHAR(64) NOT NULL,
+                changelog TEXT,
+                content_markdown TEXT NOT NULL DEFAULT '',
+                artifact_filename TEXT,
+                artifact_path TEXT,
+                artifact_content_type TEXT,
+                artifact_size INTEGER NOT NULL DEFAULT 0,
+                install_command TEXT,
+                manifest_json TEXT NOT NULL DEFAULT '{}',
+                is_latest BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                uploaded_by_openclaw_agent_id INTEGER REFERENCES openclaw_agents(id) ON DELETE SET NULL
+            )
+            """
+            if is_sqlite
+            else
+            """
+            CREATE TABLE IF NOT EXISTS skill_hub_skill_versions (
+                id SERIAL PRIMARY KEY,
+                skill_id INTEGER NOT NULL REFERENCES skill_hub_skills(id) ON DELETE CASCADE,
+                version VARCHAR(64) NOT NULL,
+                changelog TEXT,
+                content_markdown TEXT NOT NULL DEFAULT '',
+                artifact_filename TEXT,
+                artifact_path TEXT,
+                artifact_content_type TEXT,
+                artifact_size INTEGER NOT NULL DEFAULT 0,
+                install_command TEXT,
+                manifest_json TEXT NOT NULL DEFAULT '{}',
+                is_latest BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                uploaded_by_openclaw_agent_id INTEGER REFERENCES openclaw_agents(id) ON DELETE SET NULL
+            )
+            """
+        )
+    )
+    inspector = _get_session_inspector(session)
+    version_columns = {column["name"] for column in inspector.get_columns("skill_hub_skill_versions")}
+    if "content_markdown" not in version_columns:
+        session.execute(
+            text(
+                "ALTER TABLE skill_hub_skill_versions ADD COLUMN content_markdown TEXT NOT NULL DEFAULT ''"
+            )
+        )
+    session.execute(text("CREATE INDEX IF NOT EXISTS idx_skill_hub_versions_skill_created ON skill_hub_skill_versions(skill_id, created_at DESC)"))
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS skill_hub_reviews (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                skill_id INTEGER NOT NULL REFERENCES skill_hub_skills(id) ON DELETE CASCADE,
+                author_openclaw_agent_id INTEGER NOT NULL REFERENCES openclaw_agents(id) ON DELETE CASCADE,
+                rating INTEGER NOT NULL,
+                title VARCHAR(255),
+                content TEXT NOT NULL,
+                model VARCHAR(128),
+                dimensions_json TEXT NOT NULL DEFAULT '{}',
+                pros_json TEXT NOT NULL DEFAULT '[]',
+                cons_json TEXT NOT NULL DEFAULT '[]',
+                helpful_count INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(skill_id, author_openclaw_agent_id)
+            )
+            """
+            if is_sqlite
+            else
+            """
+            CREATE TABLE IF NOT EXISTS skill_hub_reviews (
+                id SERIAL PRIMARY KEY,
+                skill_id INTEGER NOT NULL REFERENCES skill_hub_skills(id) ON DELETE CASCADE,
+                author_openclaw_agent_id INTEGER NOT NULL REFERENCES openclaw_agents(id) ON DELETE CASCADE,
+                rating INTEGER NOT NULL,
+                title VARCHAR(255),
+                content TEXT NOT NULL,
+                model VARCHAR(128),
+                dimensions_json TEXT NOT NULL DEFAULT '{}',
+                pros_json TEXT NOT NULL DEFAULT '[]',
+                cons_json TEXT NOT NULL DEFAULT '[]',
+                helpful_count INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE(skill_id, author_openclaw_agent_id)
+            )
+            """
+        )
+    )
+    session.execute(text("CREATE INDEX IF NOT EXISTS idx_skill_hub_reviews_skill_created ON skill_hub_reviews(skill_id, created_at DESC)"))
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS skill_hub_review_votes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                review_id INTEGER NOT NULL REFERENCES skill_hub_reviews(id) ON DELETE CASCADE,
+                voter_openclaw_agent_id INTEGER NOT NULL REFERENCES openclaw_agents(id) ON DELETE CASCADE,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(review_id, voter_openclaw_agent_id)
+            )
+            """
+            if is_sqlite
+            else
+            """
+            CREATE TABLE IF NOT EXISTS skill_hub_review_votes (
+                id SERIAL PRIMARY KEY,
+                review_id INTEGER NOT NULL REFERENCES skill_hub_reviews(id) ON DELETE CASCADE,
+                voter_openclaw_agent_id INTEGER NOT NULL REFERENCES openclaw_agents(id) ON DELETE CASCADE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE(review_id, voter_openclaw_agent_id)
+            )
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS skill_hub_favorites (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                skill_id INTEGER NOT NULL REFERENCES skill_hub_skills(id) ON DELETE CASCADE,
+                openclaw_agent_id INTEGER NOT NULL REFERENCES openclaw_agents(id) ON DELETE CASCADE,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(skill_id, openclaw_agent_id)
+            )
+            """
+            if is_sqlite
+            else
+            """
+            CREATE TABLE IF NOT EXISTS skill_hub_favorites (
+                id SERIAL PRIMARY KEY,
+                skill_id INTEGER NOT NULL REFERENCES skill_hub_skills(id) ON DELETE CASCADE,
+                openclaw_agent_id INTEGER NOT NULL REFERENCES openclaw_agents(id) ON DELETE CASCADE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE(skill_id, openclaw_agent_id)
+            )
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS skill_hub_downloads (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                skill_id INTEGER NOT NULL REFERENCES skill_hub_skills(id) ON DELETE CASCADE,
+                version_id INTEGER REFERENCES skill_hub_skill_versions(id) ON DELETE SET NULL,
+                openclaw_agent_id INTEGER NOT NULL REFERENCES openclaw_agents(id) ON DELETE CASCADE,
+                referrer VARCHAR(255),
+                points_spent INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            if is_sqlite
+            else
+            """
+            CREATE TABLE IF NOT EXISTS skill_hub_downloads (
+                id SERIAL PRIMARY KEY,
+                skill_id INTEGER NOT NULL REFERENCES skill_hub_skills(id) ON DELETE CASCADE,
+                version_id INTEGER REFERENCES skill_hub_skill_versions(id) ON DELETE SET NULL,
+                openclaw_agent_id INTEGER NOT NULL REFERENCES openclaw_agents(id) ON DELETE CASCADE,
+                referrer VARCHAR(255),
+                points_spent INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+    )
+    session.execute(text("CREATE INDEX IF NOT EXISTS idx_skill_hub_downloads_skill_created ON skill_hub_downloads(skill_id, created_at DESC)"))
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS skill_hub_wishes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title VARCHAR(255) NOT NULL,
+                content TEXT NOT NULL,
+                category_key VARCHAR(32),
+                status VARCHAR(32) NOT NULL DEFAULT 'open',
+                votes_count INTEGER NOT NULL DEFAULT 0,
+                author_openclaw_agent_id INTEGER REFERENCES openclaw_agents(id) ON DELETE SET NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            if is_sqlite
+            else
+            """
+            CREATE TABLE IF NOT EXISTS skill_hub_wishes (
+                id SERIAL PRIMARY KEY,
+                title VARCHAR(255) NOT NULL,
+                content TEXT NOT NULL,
+                category_key VARCHAR(32),
+                status VARCHAR(32) NOT NULL DEFAULT 'open',
+                votes_count INTEGER NOT NULL DEFAULT 0,
+                author_openclaw_agent_id INTEGER REFERENCES openclaw_agents(id) ON DELETE SET NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS skill_hub_wish_votes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                wish_id INTEGER NOT NULL REFERENCES skill_hub_wishes(id) ON DELETE CASCADE,
+                voter_openclaw_agent_id INTEGER NOT NULL REFERENCES openclaw_agents(id) ON DELETE CASCADE,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(wish_id, voter_openclaw_agent_id)
+            )
+            """
+            if is_sqlite
+            else
+            """
+            CREATE TABLE IF NOT EXISTS skill_hub_wish_votes (
+                id SERIAL PRIMARY KEY,
+                wish_id INTEGER NOT NULL REFERENCES skill_hub_wishes(id) ON DELETE CASCADE,
+                voter_openclaw_agent_id INTEGER NOT NULL REFERENCES openclaw_agents(id) ON DELETE CASCADE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE(wish_id, voter_openclaw_agent_id)
+            )
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS skill_hub_collections (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                slug VARCHAR(128) NOT NULL UNIQUE,
+                title VARCHAR(255) NOT NULL,
+                description TEXT NOT NULL,
+                accent VARCHAR(32) NOT NULL DEFAULT 'mist',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            if is_sqlite
+            else
+            """
+            CREATE TABLE IF NOT EXISTS skill_hub_collections (
+                id SERIAL PRIMARY KEY,
+                slug VARCHAR(128) NOT NULL UNIQUE,
+                title VARCHAR(255) NOT NULL,
+                description TEXT NOT NULL,
+                accent VARCHAR(32) NOT NULL DEFAULT 'mist',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS skill_hub_collection_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                collection_id INTEGER NOT NULL REFERENCES skill_hub_collections(id) ON DELETE CASCADE,
+                skill_id INTEGER NOT NULL REFERENCES skill_hub_skills(id) ON DELETE CASCADE,
+                position INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(collection_id, skill_id)
+            )
+            """
+            if is_sqlite
+            else
+            """
+            CREATE TABLE IF NOT EXISTS skill_hub_collection_items (
+                id SERIAL PRIMARY KEY,
+                collection_id INTEGER NOT NULL REFERENCES skill_hub_collections(id) ON DELETE CASCADE,
+                skill_id INTEGER NOT NULL REFERENCES skill_hub_skills(id) ON DELETE CASCADE,
+                position INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE(collection_id, skill_id)
+            )
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS skill_hub_task_defs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_key VARCHAR(64) NOT NULL UNIQUE,
+                title VARCHAR(255) NOT NULL,
+                description TEXT NOT NULL,
+                reason_code VARCHAR(64) NOT NULL,
+                points_reward INTEGER NOT NULL DEFAULT 0,
+                daily_limit INTEGER NOT NULL DEFAULT 1,
+                goal_count INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            if is_sqlite
+            else
+            """
+            CREATE TABLE IF NOT EXISTS skill_hub_task_defs (
+                id SERIAL PRIMARY KEY,
+                task_key VARCHAR(64) NOT NULL UNIQUE,
+                title VARCHAR(255) NOT NULL,
+                description TEXT NOT NULL,
+                reason_code VARCHAR(64) NOT NULL,
+                points_reward INTEGER NOT NULL DEFAULT 0,
+                daily_limit INTEGER NOT NULL DEFAULT 1,
+                goal_count INTEGER NOT NULL DEFAULT 1,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS skill_hub_task_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_def_id INTEGER NOT NULL REFERENCES skill_hub_task_defs(id) ON DELETE CASCADE,
+                openclaw_agent_id INTEGER NOT NULL REFERENCES openclaw_agents(id) ON DELETE CASCADE,
+                target_id VARCHAR(255),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            if is_sqlite
+            else
+            """
+            CREATE TABLE IF NOT EXISTS skill_hub_task_events (
+                id SERIAL PRIMARY KEY,
+                task_def_id INTEGER NOT NULL REFERENCES skill_hub_task_defs(id) ON DELETE CASCADE,
+                openclaw_agent_id INTEGER NOT NULL REFERENCES openclaw_agents(id) ON DELETE CASCADE,
+                target_id VARCHAR(255),
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+    )
+    session.execute(text("CREATE INDEX IF NOT EXISTS idx_skill_hub_task_events_agent_created ON skill_hub_task_events(openclaw_agent_id, created_at DESC)"))
+
+
 def ensure_site_feedback_schema() -> None:
     """Ensure feedback table exists (e.g. after deploy before next full init_auth_tables)."""
     with get_db_session() as session:
@@ -996,7 +1426,10 @@ def _init_auth_tables_once() -> None:
         """))
         _apply_twin_runtime_ddl(session)
         _apply_openclaw_identity_ddl(session)
+        _apply_skill_hub_ddl(session)
         _apply_site_feedback_ddl(session)
+        from app.services.skill_hub import ensure_skill_hub_seed_data
+        ensure_skill_hub_seed_data(session)
 
 
 def init_auth_tables():

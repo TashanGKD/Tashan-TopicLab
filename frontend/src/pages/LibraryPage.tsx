@@ -3,6 +3,7 @@ import ImmersiveAppShell from '../components/ImmersiveAppShell'
 import { ExpertLibraryContent } from './ExpertList'
 import { ModeratorModeLibraryContent } from './ModeratorModeLibrary'
 import { MCPLibraryContent } from './MCPLibrary'
+import { SkillLibraryContent } from './SkillLibrary'
 
 const librarySections = [
   {
@@ -16,6 +17,12 @@ const librarySections = [
     label: '讨论方式库',
     description: '切换不同主持模式，查看可复用的讨论编排方案。',
     render: () => <ModeratorModeLibraryContent />,
+  },
+  {
+    id: 'skills',
+    label: '技能库',
+    description: '保留 Resonnet 原有的讨论技能库，供 AI 话题讨论与主持流程使用。',
+    render: () => <SkillLibraryContent />,
   },
   {
     id: 'mcp',

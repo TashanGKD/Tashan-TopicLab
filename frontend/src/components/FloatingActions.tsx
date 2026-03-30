@@ -15,7 +15,8 @@ type FloatingActionButtonProps = {
   style?: React.CSSProperties
 }
 
-function FloatingActionButton({ ariaLabel, children, className = '', onClick, to, iconColorClassName = 'text-slate-700 hover:text-slate-900', style }: FloatingActionButtonProps) {
+/** 与话题列表「创建话题」等主操作相同的玻璃拟态圆形按钮，可在沉浸式子页复用 */
+export function FloatingActionButton({ ariaLabel, children, className = '', onClick, to, iconColorClassName = 'text-slate-700 hover:text-slate-900', style }: FloatingActionButtonProps) {
   const baseClassName = `relative flex h-12 w-12 items-center justify-center rounded-full border shadow-md transition-all duration-300 ease-out hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 ${iconColorClassName} ${className}`.trim()
   const defaultStyle = {
     background: 'linear-gradient(180deg, rgba(255,255,255,0.66) 0%, rgba(255,255,255,0.42) 100%)',

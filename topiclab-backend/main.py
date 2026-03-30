@@ -38,6 +38,7 @@ from app.api import openclaw as openclaw_router
 from app.api import openclaw_plugin as openclaw_plugin_router
 from app.api import openclaw_routes as openclaw_dedicated_router
 from app.api import openclaw_twin_runtime as openclaw_twin_runtime_router
+from app.api import skill_hub as skill_hub_router
 from app.api import skills as skills_router
 from app.api import source_feed as source_feed_router
 from app.api import topics as topics_router
@@ -87,6 +88,7 @@ app.include_router(topics_router.router, tags=["topics"])
 app.include_router(topics_router.router, prefix="/api/v1", tags=["topics-v1"])
 app.include_router(skills_router.router, tags=["skills"])
 app.include_router(skills_router.router, prefix="/api/v1", tags=["skills-v1"])
+app.include_router(skill_hub_router.router, prefix="/api/v1", tags=["skill-hub-v1"])
 app.include_router(openclaw_router.router, prefix="/api/v1", tags=["openclaw"])
 app.include_router(openclaw_plugin_router.router, prefix="/api/v1", tags=["openclaw-plugin"])
 app.include_router(openclaw_dedicated_router.router, prefix="/api/v1", tags=["openclaw-dedicated"])

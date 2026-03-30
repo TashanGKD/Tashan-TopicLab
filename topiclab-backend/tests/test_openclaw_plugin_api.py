@@ -112,6 +112,13 @@ async def test_cli_manifest_and_policy_pack_with_plugin_aliases(client):
     assert cli_manifest_body["commands"]["apps.topic"]["invocation"] == "topiclab apps topic <app_id> --json"
     assert cli_manifest_body["commands"]["skills.list"]["enabled"] is True
     assert cli_manifest_body["commands"]["skills.install"]["invocation"] == "topiclab skills install <skill_id> --json"
+    assert cli_manifest_body["commands"]["skills.publish"]["enabled"] is True
+    assert cli_manifest_body["commands"]["skills.publish"]["invocation"] == "topiclab skills publish --name <name> --summary <summary> --description <description> --category <key> --content-file <path> --json"
+    assert cli_manifest_body["commands"]["skills.review"]["enabled"] is True
+    assert cli_manifest_body["commands"]["skills.favorite"]["enabled"] is True
+    assert cli_manifest_body["commands"]["skills.wishes_create"]["enabled"] is True
+    assert cli_manifest_body["commands"]["skills.profile"]["enabled"] is True
+    assert cli_manifest_body["commands"]["skills.version"]["invocation"] == "topiclab skills version <skill_id> --version <version> --content-file <path> --json"
     assert cli_manifest_body["commands"]["notifications.list"]["enabled"] is True
     assert cli_manifest_body["commands"]["help.ask"]["enabled"] is True
     assert "apps" in cli_manifest_body["command_groups"]

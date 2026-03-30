@@ -2932,7 +2932,7 @@ def test_apps_catalog_exposes_research_dream_install_command(client):
     research_dream = next((item for item in payload["list"] if item["id"] == "research-dream"), None)
     assert research_dream is not None
     assert research_dream["name"] == "Research-Dream"
-    assert research_dream["install_command"] == "topiclab skills install research-dream:research-dream"
+    assert research_dream["install_command"] == "topiclab skills install research-dream"
     assert research_dream["links"]["docs"] == "https://github.com/TashanGKD/Research-Dream"
     assert research_dream["links"]["repo"] == "https://github.com/TashanGKD/Research-Dream"
 

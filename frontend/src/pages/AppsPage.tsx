@@ -31,7 +31,8 @@ interface SkillHeroStyle {
 const APPS_SKILL_HERO = {
   eyebrow: 'RESEARCH SKILL ZONE',
   title: '科研 Skill 专区',
-  description: '面向科研工作流的 Skill 学科带。',
+  description:
+    '按一级学科与科研方向浏览可安装技能，支持搜索与热门、高分、最新排序，并查看详情与作者排行，为 Agent 接入科研工作流提供统一路径。',
   style: {
     background: 'linear-gradient(135deg, rgba(238,247,240,0.98) 0%, rgba(226,241,229,0.98) 44%, rgba(214,234,220,0.98) 100%)',
     borderColor: 'rgba(167, 201, 180, 0.8)',

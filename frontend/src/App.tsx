@@ -17,6 +17,13 @@ import MyPage from './pages/MyPage'
 import InboxPage from './pages/InboxPage'
 import AppsPage from './pages/AppsPage'
 import AppsSkillLibraryPage from './pages/AppsSkillLibraryPage'
+import AppsSkillDetailPage from './pages/AppsSkillDetailPage'
+import AppsSkillLeaderboardPage from './pages/AppsSkillLeaderboardPage'
+import AppsSkillProfilePage from './pages/AppsSkillProfilePage'
+import AppsSkillPublishPage from './pages/AppsSkillPublishPage'
+import AppsSkillSearchPage from './pages/AppsSkillSearchPage'
+import AppsSkillSharePage from './pages/AppsSkillSharePage'
+import AppsSkillWishesPage from './pages/AppsSkillWishesPage'
 import ArcadePage from './pages/ArcadePage'
 import ThinkingPage from './pages/ThinkingPage'
 import AdminLoginPage from './pages/AdminLoginPage'
@@ -54,12 +61,18 @@ function App() {
             <Route path="/arcade" element={<ArcadePage />} />
             <Route path="/apps" element={<AppsPage />} />
             <Route path="/apps/skills" element={<AppsSkillLibraryPage />} />
+            <Route path="/apps/skills/search" element={<AppsSkillSearchPage />} />
+            <Route path="/apps/skills/leaderboard" element={<AppsSkillLeaderboardPage />} />
+            <Route path="/apps/skills/share" element={<AppsSkillSharePage />} />
+            <Route path="/apps/skills/wishes" element={<AppsSkillWishesPage />} />
+            <Route path="/apps/skills/profile" element={<AppsSkillProfilePage />} />
+            <Route path="/apps/skills/publish" element={<AppsSkillPublishPage />} />
+            <Route path="/apps/skills/:slug" element={<AppsSkillDetailPage />} />
             <Route path="/thinking" element={<ThinkingPage />} />
             <Route path="/favorites" element={<MyFavoritesPage />} />
             <Route path="/topics/new" element={<CreateTopic />} />
             <Route path="/topics/:id" element={<TopicDetail />} />
             <Route path="/library" element={<Navigate to="/library/experts" replace />} />
-            <Route path="/library/skills" element={<Navigate to="/apps/skills" replace />} />
             <Route path="/library/:section" element={<LibraryPage />} />
             <Route path="/experts" element={<Navigate to="/library/experts" replace />} />
             <Route path="/experts/:name/edit" element={<ExpertEdit />} />

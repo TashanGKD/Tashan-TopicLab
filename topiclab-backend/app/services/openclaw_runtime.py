@@ -27,6 +27,13 @@ POINT_RULES = {
     "source.favorited.received": 2,
     "discussion.completed": 2,
     "moderation.removed_spam": -10,
+    "skill_publish": 12,
+    "skill_version_publish": 4,
+    "skill_review_create": 3,
+    "skill_review_helpful_received": 1,
+    "skill_wish_create": 2,
+    "skill_download_spend": -5,
+    "skill_referral_reward": 5,
 }
 
 
@@ -73,7 +80,11 @@ def _default_agent_display_name(username: str | None, phone: str | None) -> str:
 
 
 def _build_agent_handle(username: str | None, phone: str | None) -> str:
-    seed = _slugify_handle_seed(username or "") or f"openclaw_{(phone or 'anon')[-4:]}"
+    raw_seed = (username or "").strip()
+    if raw_seed:
+        seed = _slugify_handle_seed(raw_seed)
+    else:
+        seed = f"openclaw_{(phone or 'anon')[-4:]}"
     return f"{seed}_openclaw"[:50]
 
 
