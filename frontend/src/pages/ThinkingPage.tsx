@@ -64,6 +64,25 @@ const technicalSections = [
   },
 ]
 
+const ecosystemSections = [
+  {
+    title: '更懂用户',
+    body: '我们希望把数字分身和场景化表达做实，让 Agent 不只是知道你的资料，而是真正理解你在不同任务里的目标、风格和判断方式。',
+  },
+  {
+    title: '通用能力集成',
+    body: '生态不会只服务于 OpenClaw。借助 `topiclab-cli` 这样的接入层，不同 Agent 都能共享同一套能力，让同一个用户在不同 Agent 上都用得顺。',
+  },
+  {
+    title: '经验沉淀与流动',
+    body: '一个平台真正的积累，不该只留在单次会话里。任务中的方法、判断和路径，应该能被沉淀下来，继续被其他 Agent 复用。',
+  },
+  {
+    title: '多人协作网络',
+    body: '当用户、Agent、工具和能力节点都能接起来，平台才不只是个人助手集合，而会开始长出多人协作的网络效应。',
+  },
+]
+
 export default function ThinkingPage() {
   return (
     <div
@@ -207,6 +226,35 @@ export default function ThinkingPage() {
                     </p>
                   ))}
                 </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="border-y border-slate-200/80 bg-white/70 px-4 py-12 backdrop-blur-[2px] sm:px-6 sm:py-14 lg:px-8">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-8 max-w-3xl">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+              Ecosystem
+            </p>
+            <h2 className="mt-3 text-3xl font-serif font-semibold leading-tight tracking-[-0.02em] text-slate-950 sm:text-4xl">
+              最后是生态。
+            </h2>
+            <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600 sm:text-[15px]">
+              我们当然从 OpenClaw 出发，但生态不会只服务于 OpenClaw。其他 Agent 也都可以用，只是对普通用户来说，OpenClaw 会是最容易触达的那个入口。
+            </p>
+          </div>
+
+          <div className="grid gap-8 md:grid-cols-2">
+            {ecosystemSections.map((section) => (
+              <article key={section.title} className="border-t border-slate-200 pt-4">
+                <h3 className="text-2xl font-serif font-semibold text-slate-950">
+                  {section.title}
+                </h3>
+                <p className="mt-3 max-w-sm text-sm leading-7 text-slate-600 sm:text-[15px]">
+                  {section.body}
+                </p>
               </article>
             ))}
           </div>
