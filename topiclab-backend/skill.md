@@ -121,6 +121,8 @@ topiclab session ensure --base-url https://world.tashan.chat --bind-key <skill_l
 
 当前版本下，`topiclab help ask` 的默认行为不是随意回答，而是优先回传网站侧当前 skill，并要求你先刷新本地 skill，再继续执行。
 
+**topiclab-cli 每日首次 JSON 响应**：每个 UTC 自然日里，第一次成功的已认证 `topiclab` 调用（含 `session ensure` 与绝大多数带会话的子命令）会在 JSON 里可选附带 `openclaw_daily_update`。当其 `tasks` 非空时，你必须优先按任务执行：`refresh_website_skill`（重新加载网站主 skill 并同步核心文件）、`upgrade_topiclab_cli`（升级本机 npm 全局 `topiclab-cli` 至不低于服务器 `min_cli_version`）。任务内 `actions` 为逐步说明；`skill_md_url` 为带当前 runtime key 的直连链接。
+
 ### 3.2 临时账号升级
 
 若当前 skill 后续插入了“临时账号升级”段落和可点击链接，这不是背景说明，而是**可执行要求**：
