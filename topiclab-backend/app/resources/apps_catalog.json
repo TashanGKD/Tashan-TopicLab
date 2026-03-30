@@ -3,11 +3,14 @@
     {
       "id": "topiclab-cli",
       "name": "TopicLab CLI",
-      "summary": "TopicLab 与 OpenClaw 集成链路里的内置执行层，用于发现应用、安装 skill、读取 twin runtime 并向 TopicLab 回传信号。",
-      "description": "这是 TopicLab / OpenClaw 集成里的内置 CLI，不是额外插件。适合把它理解为 OpenClaw 的辅助执行层：负责应用发现、skill 安装、TopicLab twin 读写、话题与通知访问，以及长期科研能力的桥接。",
+      "summary": "TopicLab 与 OpenClaw 集成链路里的必需执行层；缺少它时，应先安装再继续任何 TopicLab 任务。",
+      "description": "这是 TopicLab / OpenClaw 集成里的必需 CLI 运行时，不是可选插件。默认应把它理解为 OpenClaw 访问 TopicLab 的第一执行面：负责会话初始化、应用发现、skill 安装、TopicLab twin 读写、话题与通知访问，以及长期科研能力的桥接。除非 CLI 缺失、CLI 明确失败且 help ask 仍无法给出 CLI 路线，否则不要直接手写 TopicLab API。",
       "icon": "spark",
       "tags": ["builtin", "cli", "openclaw", "workflow"],
       "builtin": true,
+      "required_runtime": true,
+      "install_command": "npm install -g topiclab-cli --registry=https://registry.npmmirror.com",
+      "upgrade_command": "npm update -g topiclab-cli --registry=https://registry.npmmirror.com",
       "links": {
         "docs": "https://github.com/TashanGKD/TopicLab-CLI",
         "repo": "https://github.com/TashanGKD/TopicLab-CLI",
@@ -84,15 +87,15 @@
       "tags": ["research", "memory", "digital-twin", "workflow"],
       "install_command": "topiclab skills install research-dream:research-dream",
       "links": {
-        "docs": "https://github.com/Yu-Yang-Li/Research-Dream",
-        "repo": "https://github.com/Yu-Yang-Li/Research-Dream",
-        "catalog_source": "https://github.com/Yu-Yang-Li/Research-Dream"
+        "docs": "https://github.com/TashanGKD/Research-Dream",
+        "repo": "https://github.com/TashanGKD/Research-Dream",
+        "catalog_source": "https://github.com/TashanGKD/Research-Dream"
       },
       "openclaw": {
         "topic_seed": {
           "category": "research",
           "title": "评估 Research-Dream 是否适合我的长期科研记忆沉淀",
-          "body": "我想评估应用 Research-Dream 的实际效果。\n\n应用信息：\n- 名称：Research-Dream\n- 安装命令：topiclab skills install research-dream:research-dream\n- 文档/仓库：https://github.com/Yu-Yang-Li/Research-Dream\n\n请围绕以下方面展开：\n1. 是否适合长期科研陪伴与长期研究记忆沉淀\n2. 它如何帮助 OpenClaw 逐步理解研究方向、工作方式、当前卡点与长期偏好\n3. 本地维护 USER.md、SOUL.md、MEMORY.md 与 memory/*.md 的成本和边界\n4. 是否值得纳入我的长期科研工作流，以及启用前应确认哪些事项\n"
+          "body": "我想评估应用 Research-Dream 的实际效果。\n\n应用信息：\n- 名称：Research-Dream\n- 安装命令：topiclab skills install research-dream:research-dream\n- 文档/仓库：https://github.com/TashanGKD/Research-Dream\n\n请围绕以下方面展开：\n1. 是否适合长期科研陪伴与长期研究记忆沉淀\n2. 它如何帮助 OpenClaw 逐步理解研究方向、工作方式、当前卡点与长期偏好\n3. 本地维护 USER.md、SOUL.md、MEMORY.md 与 memory/*.md 的成本和边界\n4. 是否值得纳入我的长期科研工作流，以及启用前应确认哪些事项\n"
         },
         "review_feedback": {
           "scenario": "apps:research-dream",
