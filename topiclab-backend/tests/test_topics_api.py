@@ -1490,9 +1490,10 @@ def test_openclaw_key_can_bind_user_identity_and_render_personal_skill(client):
 
     skill_resp = client.get(key_payload["skill_path"])
     assert skill_resp.status_code == 200, skill_resp.text
-    assert "当前 Runtime Key（业务请求 Bearer）" in skill_resp.text
-    assert raw_key in skill_resp.text
-    assert "不要把 skill 链接里的 `?key=` 参数直接当成业务接口 Bearer Token 使用" in skill_resp.text
+    assert "除了读取当前 skill，本 skill 不提供任何 API 访问方式" in skill_resp.text
+    assert "#### 写入 `AGENTS.md`" in skill_resp.text
+    assert "#### 写入 `TOOLS.md`" in skill_resp.text
+    assert raw_key not in skill_resp.text
     assert "完整 API 清单" not in skill_resp.text
 
     home_resp = client.get("/api/v1/home?include_source_preview=false", headers={"Authorization": f"Bearer {raw_key}"})
@@ -2279,6 +2280,22 @@ def test_openclaw_skill_link_is_stable_and_reusable(client):
     assert auth["openclaw_key"] in second.text
 
 
+def test_openclaw_personalized_skill_enforces_cli_first(client):
+    auth = register_login_and_openclaw_key(client, phone="13800009992", username="cli-first-skill")
+    resp = client.get(auth["skill_path"])
+    assert resp.status_code == 200, resp.text
+    body = resp.text
+    assert "topiclab-cli` 是当前实例访问 TopicLab 的必装运行时" in body
+    assert "除了读取当前 skill，本 skill 不提供任何 API 访问方式" in body
+    assert "按文件定位落地" in body
+    assert "`AGENTS.md`" in body
+    assert "`TOOLS.md`" in body
+    assert "topiclab notifications list --json" in body
+    assert "topiclab help ask" in body
+    assert "之后所有 API 请求都使用 `Authorization: Bearer YOUR_OPENCLAW_KEY`。" not in body
+    assert "先查看 `/api/v1/me/inbox`" not in body
+
+
 def test_openclaw_home_includes_skill_version_in_quick_links(client):
     """home 的 quick_links 包含 skill_version。"""
     resp = client.get("/api/v1/home")
@@ -2881,8 +2898,20 @@ def test_apps_catalog_exposes_builtin_topiclab_cli(client):
     assert topiclab_cli is not None
     assert topiclab_cli["name"] == "TopicLab CLI"
     assert topiclab_cli["builtin"] is True
+    assert topiclab_cli["required_runtime"] is True
+    assert topiclab_cli["install_command"] == "npm install -g topiclab-cli --registry=https://registry.npmmirror.com"
+    assert topiclab_cli["upgrade_command"] == "npm update -g topiclab-cli --registry=https://registry.npmmirror.com"
     assert topiclab_cli["links"]["docs"] == "https://github.com/TashanGKD/TopicLab-CLI"
     assert topiclab_cli["links"]["repo"] == "https://github.com/TashanGKD/TopicLab-CLI"
+
+
+def test_apps_catalog_marks_topiclab_cli_as_required_runtime(client):
+    resp = client.get("/api/v1/apps/topiclab-cli")
+    assert resp.status_code == 200, resp.text
+    app = resp.json()["app"]
+    assert app["required_runtime"] is True
+    assert "必需 CLI 运行时" in app["description"]
+    assert "不要直接手写 TopicLab API" in app["description"]
 
 
 def test_apps_catalog_removes_scispark_and_sorts_builtin_first_then_alphabetically(client):
@@ -2904,8 +2933,8 @@ def test_apps_catalog_exposes_research_dream_install_command(client):
     assert research_dream is not None
     assert research_dream["name"] == "Research-Dream"
     assert research_dream["install_command"] == "topiclab skills install research-dream:research-dream"
-    assert research_dream["links"]["docs"] == "https://github.com/Yu-Yang-Li/Research-Dream"
-    assert research_dream["links"]["repo"] == "https://github.com/Yu-Yang-Li/Research-Dream"
+    assert research_dream["links"]["docs"] == "https://github.com/TashanGKD/Research-Dream"
+    assert research_dream["links"]["repo"] == "https://github.com/TashanGKD/Research-Dream"
 
 
 def test_app_like_roundtrip_and_catalog_interaction(client):

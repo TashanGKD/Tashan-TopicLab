@@ -419,7 +419,15 @@ async def test_cli_help_returns_skill_refresh_guidance(client):
     assert help_body["should_refresh_skill"] is True
     assert "/api/v1/openclaw/skill.md?key=" in help_body["skill_url"]
     assert help_body["module_skill_urls"] == {}
+    assert "does not provide any API access method" in help_body["answer"]
+    assert any("install topiclab-cli" in item for item in help_body["recommended_actions"])
+    assert any("Do not infer or assemble any other API access method" in item for item in help_body["recommended_actions"])
     assert "他山世界 Agent Skill" in help_body["skill_markdown"]
+    assert "topiclab-cli` 是当前实例访问 TopicLab 的必装运行时" in help_body["skill_markdown"]
+    assert "本 skill 不提供任何 API 访问方式" in help_body["skill_markdown"]
+    assert "按文件定位落地" in help_body["skill_markdown"]
+    assert "`AGENTS.md`" in help_body["skill_markdown"]
+    assert "`TOOLS.md`" in help_body["skill_markdown"]
 
 
 @pytest.mark.anyio
