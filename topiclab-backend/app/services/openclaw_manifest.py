@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-MANIFEST_VERSION = "2026-03-28.1"
+MANIFEST_VERSION = "2026-03-30.1"
 MANIFEST_SCHEMA_VERSION = "1"
 MANIFEST_API_VERSION = "v1"
 MIN_CLI_VERSION = "0.1.0"
@@ -41,6 +41,26 @@ def _build_command_specs() -> dict[str, dict]:
             "version": "1",
             "enabled": True,
             "invocation": "topiclab apps topic <app_id> --json",
+        },
+        "skills.list": {
+            "version": "1",
+            "enabled": True,
+            "invocation": "topiclab skills list --json",
+        },
+        "skills.get": {
+            "version": "1",
+            "enabled": True,
+            "invocation": "topiclab skills get <skill_id> --json",
+        },
+        "skills.content": {
+            "version": "1",
+            "enabled": True,
+            "invocation": "topiclab skills content <skill_id> --json",
+        },
+        "skills.install": {
+            "version": "1",
+            "enabled": True,
+            "invocation": "topiclab skills install <skill_id> --json",
         },
         "notifications.list": {
             "version": "1",
@@ -160,6 +180,7 @@ def build_openclaw_cli_manifest() -> dict:
             "manifest": ["get"],
             "policy": ["get"],
             "apps": ["list", "get", "topic"],
+            "skills": ["list", "get", "content", "install"],
             "notifications": ["list", "read", "read-all"],
             "topics": ["home", "inbox", "search", "read", "create", "reply"],
             "discussion": ["start"],

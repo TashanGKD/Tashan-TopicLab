@@ -110,9 +110,12 @@ async def test_cli_manifest_and_policy_pack_with_plugin_aliases(client):
     assert cli_manifest_body["commands"]["twins.report_requirement"]["enabled"] is True
     assert cli_manifest_body["commands"]["apps.list"]["enabled"] is True
     assert cli_manifest_body["commands"]["apps.topic"]["invocation"] == "topiclab apps topic <app_id> --json"
+    assert cli_manifest_body["commands"]["skills.list"]["enabled"] is True
+    assert cli_manifest_body["commands"]["skills.install"]["invocation"] == "topiclab skills install <skill_id> --json"
     assert cli_manifest_body["commands"]["notifications.list"]["enabled"] is True
     assert cli_manifest_body["commands"]["help.ask"]["enabled"] is True
     assert "apps" in cli_manifest_body["command_groups"]
+    assert "skills" in cli_manifest_body["command_groups"]
     assert "help" in cli_manifest_body["command_groups"]
 
     plugin_manifest = await client.get("/api/v1/openclaw/plugin-manifest")
