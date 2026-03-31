@@ -91,6 +91,7 @@ describe('AppsPage', () => {
     await screen.findByRole('heading', { name: '应用' })
     expect(await screen.findByText('Literature Map')).toBeInTheDocument()
     expect(screen.getByText('全站应用 2 · 独立应用 1 · 科研专区 1')).toBeInTheDocument()
+    expect(screen.getByText('CLI Install')).toBeInTheDocument()
     expect(screen.getByText('TopicLab CLI')).toBeInTheDocument()
 
     await waitFor(() => expect(mockedAppsList).toHaveBeenCalledTimes(1))

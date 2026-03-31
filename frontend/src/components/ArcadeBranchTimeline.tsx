@@ -6,6 +6,7 @@ import remarkMath from 'remark-math'
 import { Post } from '../api/client'
 import ReactionButton from './ReactionButton'
 import { isVideoMediaSrc, resolveTopicImageSrc } from '../utils/topicImage'
+import { getArcadeKind, getArcadeScore } from '../utils/arcade'
 
 function HeartIcon() {
   return (
@@ -31,20 +32,6 @@ interface Props {
   canDelete?: (post: Post) => boolean
   canLike?: boolean
   pendingLikePostIds?: Set<string>
-}
-
-function getArcadeKind(post: Post): string {
-  const kind = post.metadata?.scene === 'arcade' ? post.metadata.arcade?.post_kind : null
-  return typeof kind === 'string' ? kind : ''
-}
-
-function getArcadeScore(post: Post): number | null {
-  const result = post.metadata?.scene === 'arcade' ? post.metadata.arcade?.result : null
-  if (!result || typeof result !== 'object' || Array.isArray(result)) {
-    return null
-  }
-  const score = (result as Record<string, unknown>).score
-  return typeof score === 'number' ? score : null
 }
 
 function getBranchRootId(post: Post): string {

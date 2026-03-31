@@ -6,6 +6,7 @@ import remarkMath from 'remark-math'
 import { Post } from '../api/client'
 import ReactionButton from './ReactionButton'
 import { isVideoMediaSrc, resolveTopicImageSrc } from '../utils/topicImage'
+import { getArcadeKind } from '../utils/arcade'
 
 function HeartIcon() {
   return (
@@ -236,8 +237,7 @@ function PostCard({
   const isSystem = post.author_type === 'system'
   const isPending = post.status === 'pending'
   const isFailed = post.status === 'failed'
-  const arcadeMeta = post.metadata?.scene === 'arcade' ? post.metadata.arcade : undefined
-  const arcadeKind = arcadeMeta?.post_kind
+  const arcadeKind = getArcadeKind(post)
   const displayName = isSystem ? '评测员' : (isAgent ? (post.expert_label ?? post.author) : post.author)
   const parentDisplayName = parent
     ? (parent.author_type === 'system'

@@ -4,10 +4,23 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 
 import { tokenManager } from '../api/auth'
 import { skillHubApi, type SkillHubSkillContentResponse, type SkillHubSkillDetail } from '../api/client'
+import {
+  AppsInput,
+  AppsInsetCard,
+  AppsMetricCard,
+  AppsPanel,
+  AppsPillButton,
+  AppsSkillCard,
+  AppsTextarea,
+  buildAppUrl,
+  compatibilityLabel,
+  copyText,
+  formatCompactNumber,
+  formatSkillHubShareClipboard,
+} from '../components/apps/appsShared'
 import ImmersiveAppShell from '../components/ImmersiveAppShell'
 import { handleApiError } from '../utils/errorHandler'
 import { toast } from '../utils/toast'
-import { buildAppUrl, compatibilityLabel, copyText, formatCompactNumber, formatSkillHubShareClipboard, SkillCard } from './skillHubShared'
 
 export default function AppsSkillDetailPage() {
   const { slug = '' } = useParams<{ slug: string }>()
@@ -149,7 +162,7 @@ export default function AppsSkillDetailPage() {
         <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>正在加载应用 / Skill 详情…</div>
       ) : (
         <>
-          <section className="rounded-[28px] border p-6" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', boxShadow: 'var(--shadow-sm)' }}>
+          <AppsPanel className="p-6">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full px-3 py-1 text-xs font-medium" style={{ backgroundColor: 'rgba(13,148,136,0.12)', color: '#0f766e' }}>
@@ -167,34 +180,34 @@ export default function AppsSkillDetailPage() {
               </p>
 
               <div className="mt-5 flex flex-wrap items-center gap-2">
-                <button type="button" onClick={handleDownload} className="rounded-full border px-4 py-2 text-sm font-medium" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
+                <AppsPillButton onClick={handleDownload}>
                   下载 / 安装应用
-                </button>
-                <button type="button" onClick={() => void loadContent()} className="rounded-full border px-4 py-2 text-sm font-medium" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', color: 'var(--text-secondary)' }}>
+                </AppsPillButton>
+                <AppsPillButton variant="secondary" onClick={() => void loadContent()}>
                   {contentPayload ? '已加载 Skill 全文说明' : contentLoading ? '加载 Skill 全文说明…' : '查看 Skill 全文说明'}
-                </button>
-                <button type="button" onClick={toggleFavorite} className="rounded-full border px-4 py-2 text-sm font-medium" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', color: 'var(--text-secondary)' }}>
+                </AppsPillButton>
+                <AppsPillButton variant="secondary" onClick={toggleFavorite}>
                   {skill.viewer_favorited ? '取消收藏' : '收藏'}
-                </button>
-                <button type="button" onClick={() => void handleShareCopy()} className="rounded-full border px-4 py-2 text-sm font-medium" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', color: 'var(--text-secondary)' }}>
+                </AppsPillButton>
+                <AppsPillButton variant="secondary" onClick={() => void handleShareCopy()}>
                   复制分享文案
-                </button>
+                </AppsPillButton>
               </div>
 
-              <div className="mt-4 w-full rounded-xl border px-3 py-2.5 sm:px-4" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-page)' }}>
+              <AppsInsetCard className="mt-4 w-full px-3 py-2.5 sm:px-4">
                 <div className="text-[11px] font-medium leading-tight" style={{ color: 'var(--text-tertiary)' }}>分享预览</div>
                 <pre className="mt-2 max-h-28 cursor-text select-all overflow-y-auto whitespace-pre-wrap break-words text-left font-sans text-[11px] leading-relaxed sm:max-h-32 sm:text-xs sm:leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
                   {shareClipboardText}
                 </pre>
-              </div>
+              </AppsInsetCard>
             </div>
 
             <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-              <Stat label="评分" value={skill.avg_rating.toFixed(1)} />
-              <Stat label="评测" value={formatCompactNumber(skill.total_reviews)} />
-              <Stat label="下载" value={formatCompactNumber(skill.total_downloads)} />
-              <Stat label="收藏" value={formatCompactNumber(skill.total_favorites)} />
-              <Stat label="价格" value={skill.price_points > 0 ? `${skill.price_points} pts` : 'Free'} />
+              <AppsMetricCard label="评分" value={skill.avg_rating.toFixed(1)} valueSize="xl" />
+              <AppsMetricCard label="评测" value={formatCompactNumber(skill.total_reviews)} valueSize="xl" />
+              <AppsMetricCard label="下载" value={formatCompactNumber(skill.total_downloads)} valueSize="xl" />
+              <AppsMetricCard label="收藏" value={formatCompactNumber(skill.total_favorites)} valueSize="xl" />
+              <AppsMetricCard label="价格" value={skill.price_points > 0 ? `${skill.price_points} pts` : 'Free'} valueSize="xl" />
             </div>
 
             <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(18rem,0.9fr)]">
@@ -209,26 +222,24 @@ export default function AppsSkillDetailPage() {
                 </div>
                 <div className="mt-4 space-y-3">
                   {skill.versions.map((version) => (
-                    <article key={version.id} className="rounded-2xl border p-4" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-page)' }}>
+                    <AppsInsetCard key={version.id} className="p-4">
                       <div className="flex items-center justify-between gap-3">
                         <div className="font-medium" style={{ color: 'var(--text-primary)' }}>{version.version}</div>
                         {version.is_latest ? <span className="text-xs" style={{ color: '#0f766e' }}>Latest</span> : null}
                       </div>
                       <div className="mt-2 text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>{version.changelog || '暂无版本说明'}</div>
                       {version.install_command ? (
-                        <button
-                          type="button"
+                        <AppsPillButton
                           onClick={() => { void copyText(version.install_command || ''); toast.success('已复制安装命令') }}
-                          className="mt-3 rounded-full border px-3 py-1.5 text-xs"
-                          style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', color: 'var(--text-primary)' }}
+                          className="mt-3 px-3 py-1.5 text-xs"
                         >
                           复制命令
-                        </button>
+                        </AppsPillButton>
                       ) : null}
-                    </article>
+                    </AppsInsetCard>
                   ))}
                 </div>
-                <div className="mt-6 rounded-2xl border p-4" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-page)' }}>
+                <AppsInsetCard className="mt-6 p-4">
                   <h4 className="font-medium" style={{ color: 'var(--text-primary)' }}>标签与能力</h4>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {skill.tags.map((tag) => (
@@ -238,10 +249,10 @@ export default function AppsSkillDetailPage() {
                       <span key={capability} className="rounded-full px-2.5 py-1 text-xs" style={{ backgroundColor: 'rgba(13,148,136,0.08)', color: '#0f766e' }}>{capability}</span>
                     ))}
                   </div>
-                </div>
+                </AppsInsetCard>
 
                 {contentPayload ? (
-                  <div className="mt-6 rounded-2xl border p-4" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-page)' }}>
+                  <AppsInsetCard className="mt-6 p-4">
                     <div className="flex items-center justify-between gap-3">
                     <h4 className="font-medium" style={{ color: 'var(--text-primary)' }}>Skill 全文说明</h4>
                       <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
@@ -251,70 +262,61 @@ export default function AppsSkillDetailPage() {
                     <div className="markdown-content mt-4 text-sm leading-7" style={{ color: 'var(--text-secondary)' }}>
                       <ReactMarkdown>{contentPayload.content}</ReactMarkdown>
                     </div>
-                  </div>
+                  </AppsInsetCard>
                 ) : null}
               </div>
 
               <div>
                 <h3 className="text-xl font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>结构化评测</h3>
                 {!isLoggedIn ? (
-                  <div className="mt-4 rounded-2xl border px-4 py-3 text-sm" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-page)', color: 'var(--text-secondary)' }}>
+                  <AppsInsetCard className="mt-4 text-sm" >
                     登录后可以提交评测、标记 Helpful、收藏并记录下载积分。
-                  </div>
+                  </AppsInsetCard>
                 ) : null}
-                <div className="mt-4 rounded-2xl border p-4" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-page)' }}>
+                <AppsInsetCard className="mt-4 p-4">
                   <label className="block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>评分</label>
                   <select value={rating} onChange={(e) => setRating(Number(e.target.value))} className="mt-2 w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', color: 'var(--text-primary)' }}>
                     {[5, 4, 3, 2, 1].map((value) => <option key={value} value={value}>{value} 分</option>)}
                   </select>
                   <label className="mt-4 block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>使用模型</label>
-                  <input value={reviewModel} onChange={(e) => setReviewModel(e.target.value)} className="mt-2 w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', color: 'var(--text-primary)' }} placeholder="例如 gpt-5.4" />
+                  <AppsInput value={reviewModel} onChange={(e) => setReviewModel(e.target.value)} className="mt-2 rounded-xl px-3 py-2" placeholder="例如 gpt-5.4" />
                   <label className="mt-4 block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>评测内容</label>
-                  <textarea value={reviewContent} onChange={(e) => setReviewContent(e.target.value)} rows={5} className="mt-2 w-full rounded-2xl border px-3 py-3 text-sm leading-6" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', color: 'var(--text-primary)' }} placeholder="写下适用场景、优缺点、运行反馈…" />
-                  <button type="button" disabled={submitting} onClick={handleReviewSubmit} className="mt-4 rounded-full border px-4 py-2 text-sm font-medium disabled:opacity-50" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
+                  <AppsTextarea value={reviewContent} onChange={(e) => setReviewContent(e.target.value)} rows={5} className="mt-2 px-3 py-3" placeholder="写下适用场景、优缺点、运行反馈…" />
+                  <AppsPillButton type="button" disabled={submitting} onClick={handleReviewSubmit} className="mt-4 disabled:opacity-50">
                     提交评测
-                  </button>
-                </div>
+                  </AppsPillButton>
+                </AppsInsetCard>
 
                 <div className="mt-4 space-y-3">
                   {skill.reviews.map((review) => (
-                    <article key={review.id} className="rounded-2xl border p-4" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)' }}>
+                    <AppsInsetCard key={review.id} className="p-4" >
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <div className="font-medium" style={{ color: 'var(--text-primary)' }}>{review.author.display_name || '匿名评测者'}</div>
                           <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>{review.model || '未标注模型'} · {review.rating} 分</div>
                         </div>
-                        <button type="button" onClick={() => voteHelpful(review.id)} className="rounded-full border px-3 py-1.5 text-xs" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-page)', color: 'var(--text-secondary)' }}>
+                        <AppsPillButton type="button" variant="secondary" onClick={() => voteHelpful(review.id)} className="px-3 py-1.5 text-xs">
                           Helpful {review.helpful_count}
-                        </button>
+                        </AppsPillButton>
                       </div>
                       <p className="mt-3 text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>{review.content}</p>
-                    </article>
+                    </AppsInsetCard>
                   ))}
                 </div>
               </div>
             </div>
-          </section>
+          </AppsPanel>
 
           {skill.related_skills.length > 0 ? (
             <section className="mt-8">
               <h3 className="text-2xl font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>相关应用 / Skill</h3>
               <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                {skill.related_skills.map((item) => <SkillCard key={item.id} skill={item} />)}
+                {skill.related_skills.map((item) => <AppsSkillCard key={item.id} skill={item} />)}
               </div>
             </section>
           ) : null}
         </>
       )}
     </ImmersiveAppShell>
-  )
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border px-4 py-3" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-page)' }}>
-      <div className="text-[11px] tracking-[0.2em] uppercase" style={{ color: 'var(--text-tertiary)' }}>{label}</div>
-      <div className="mt-2 text-xl font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>{value}</div>
-    </div>
   )
 }

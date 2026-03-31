@@ -5,7 +5,16 @@ import type { SkillHubCategoriesResponse, SkillHubLeaderboard, SkillHubSkillSumm
 import { skillHubApi } from '../api/client'
 import { FloatingActionButton } from '../components/FloatingActions'
 import ImmersiveAppShell from '../components/ImmersiveAppShell'
-import { CategoryStrip, ClusterStrip, SkillCard } from './skillHubShared'
+import {
+  AppsInput,
+  AppsPillButton,
+  AppsPanel,
+  AppsInsetCard,
+  AppsSkillCard,
+  AppsStatusCard,
+  CategoryStrip,
+  ClusterStrip,
+} from '../components/apps/appsShared'
 
 const SORT_OPTIONS = [
   { key: 'hot', label: '热门' },
@@ -98,19 +107,16 @@ export default function AppsSkillLibraryPage() {
       <section className="mt-6 flex flex-col gap-4 border-b pb-4 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: 'var(--border-default)' }}>
         <div className="flex flex-wrap gap-2">
           {SORT_OPTIONS.map((option) => (
-            <button
+            <AppsPillButton
               key={option.key}
-              type="button"
               onClick={() => setSort(option.key)}
-              className="rounded-full border px-4 py-2 text-sm font-medium"
-              style={{
-                borderColor: sort === option.key ? 'var(--text-primary)' : 'var(--border-default)',
-                backgroundColor: sort === option.key ? 'var(--text-primary)' : 'var(--bg-container)',
-                color: sort === option.key ? '#fff' : 'var(--text-primary)',
-              }}
+              variant={sort === option.key ? 'primary' : 'secondary'}
+              style={sort === option.key
+                ? { borderColor: 'var(--text-primary)', backgroundColor: 'var(--text-primary)', color: '#fff' }
+                : undefined}
             >
               {option.label}
-            </button>
+            </AppsPillButton>
           ))}
         </div>
         <form
@@ -120,77 +126,70 @@ export default function AppsSkillLibraryPage() {
           }}
           className="flex w-full max-w-md flex-col gap-2 sm:flex-row sm:items-center"
         >
-          <input
+          <AppsInput
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="搜索技能或关键词"
-            className="h-10 min-w-0 w-full flex-1 rounded-full border px-4 text-sm leading-10 outline-none"
-            style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', color: 'var(--text-primary)' }}
+            className="h-10 min-w-0 flex-1 rounded-full py-0 leading-10 outline-none"
           />
-          <button
-            type="submit"
-            className="h-10 shrink-0 rounded-full border px-5 text-sm font-medium leading-none whitespace-nowrap sm:w-auto sm:self-center"
-            style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
-          >
+          <AppsPillButton type="submit" className="h-10 shrink-0 px-5 leading-none whitespace-nowrap sm:w-auto sm:self-center">
             搜索
-          </button>
+          </AppsPillButton>
         </form>
       </section>
 
       <section className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_18rem]">
         <div>
           {error ? (
-            <div className="rounded-2xl border px-4 py-3 text-sm" style={{ borderColor: 'var(--border-default)', color: 'var(--accent-error)' }}>
+            <AppsStatusCard tone="error">
               {error}
-            </div>
+            </AppsStatusCard>
           ) : null}
           <div className={`space-y-3${error ? ' mt-4' : ''}`}>
             {skills.map((skill) => (
-              <SkillCard
+              <AppsSkillCard
                 key={skill.id}
                 skill={skill}
                 actions={(
                   <div className="flex flex-col items-end gap-2">
-                    <button
-                      type="button"
+                    <AppsPillButton
                       onClick={() => navigate(`/apps/skills/${skill.slug}`)}
-                      className="rounded-full border px-3 py-1.5 text-xs font-medium"
-                      style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
+                      className="px-3 py-1.5 text-xs"
                     >
                       打开详情
-                    </button>
+                    </AppsPillButton>
                   </div>
                 )}
               />
             ))}
             {!loading && skills.length === 0 ? (
-              <div className="rounded-2xl border px-4 py-5 text-sm" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', color: 'var(--text-secondary)' }}>
+              <AppsStatusCard className="py-5">
                 暂无可展示的科研应用。
-              </div>
+              </AppsStatusCard>
             ) : null}
           </div>
         </div>
 
         <aside className="space-y-4">
-          <section className="rounded-[22px] border p-5" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', boxShadow: 'var(--shadow-sm)' }}>
+          <AppsPanel className="rounded-[22px]">
             <h3 className="text-lg font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>
               排行榜
             </h3>
             <div className="mt-4 space-y-3">
               {hotUsers.map((user, index) => (
-                <div key={user.id} className="flex items-center justify-between rounded-2xl border px-4 py-3" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-page)' }}>
+                <AppsInsetCard key={user.id} className="flex items-center justify-between">
                   <div>
                     <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>#{index + 1}</div>
                     <div className="font-medium" style={{ color: 'var(--text-primary)' }}>{user.display_name}</div>
                   </div>
                   <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>{user.balance} pts</div>
-                </div>
+                </AppsInsetCard>
               ))}
             </div>
             <Link to="/apps/skills/leaderboard" className="mt-4 inline-block text-sm underline underline-offset-4" style={{ color: 'var(--text-secondary)' }}>
               查看全部排名
             </Link>
-          </section>
+          </AppsPanel>
         </aside>
       </section>
 

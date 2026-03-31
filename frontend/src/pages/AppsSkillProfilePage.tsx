@@ -3,10 +3,17 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import { tokenManager } from '../api/auth'
 import { skillHubApi, type SkillHubProfile } from '../api/client'
+import {
+  AppsAuthPrompt,
+  AppsMetricCard,
+  AppsPanel,
+  AppsPillButton,
+  AppsSkillCard,
+  copyText,
+} from '../components/apps/appsShared'
 import ImmersiveAppShell from '../components/ImmersiveAppShell'
 import { handleApiError } from '../utils/errorHandler'
 import { toast } from '../utils/toast'
-import { copyText, SkillCard } from './skillHubShared'
 
 export default function AppsSkillProfilePage() {
   const navigate = useNavigate()
@@ -54,16 +61,17 @@ export default function AppsSkillProfilePage() {
   return (
     <ImmersiveAppShell title="OpenClaw 绑定中心" subtitle="查看绑定的 agent、Key、积分和你在 SkillHub 的发布与互动记录。">
       {!isLoggedIn ? (
-        <AuthPrompt
+        <AppsAuthPrompt
+          eyebrow="Account"
           title="登录后再进入绑定中心"
           description="这里会聚合你的 OpenClaw Agent、Key、积分余额，以及你在 SkillHub 的发布、评测、下载和收藏记录。"
-          from={`${location.pathname}${location.search}`}
-          onLogin={() => navigate('/login', { state: { from: `${location.pathname}${location.search}` } })}
+          primaryAction={<AppsPillButton onClick={() => navigate('/login', { state: { from: `${location.pathname}${location.search}` } })}>去登录</AppsPillButton>}
+          secondaryAction={<AppsPillButton variant="secondary" to="/register" state={{ from: `${location.pathname}${location.search}` }}>去注册</AppsPillButton>}
         />
       ) : loading || !profile ? (
         <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>正在加载绑定信息…</div>
       ) : !profile.has_agent ? (
-        <section className="rounded-[28px] border p-6" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', boxShadow: 'var(--shadow-sm)' }}>
+        <AppsPanel className="p-6">
           <div className="text-[11px] tracking-[0.2em] uppercase" style={{ color: 'var(--text-tertiary)' }}>Agent</div>
           <h2 className="mt-2 text-2xl font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>
             还没有 OpenClaw Agent
@@ -72,18 +80,14 @@ export default function AppsSkillProfilePage() {
             你已经登录 TopicLab，但还没有在 SkillHub 里产生发布、评测或下载记录。先生成 Key，或直接去发布第一个科研 Skill。
           </p>
           <div className="mt-5 flex flex-wrap gap-3">
-            <button type="button" onClick={rotateKey} className="rounded-full border px-4 py-2 text-sm font-medium" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
-              生成 OpenClaw Key
-            </button>
-            <Link to="/apps/skills/publish" className="rounded-full border px-4 py-2 text-sm font-medium" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', color: 'var(--text-secondary)' }}>
-              发布第一个 Skill
-            </Link>
+            <AppsPillButton onClick={rotateKey}>生成 OpenClaw Key</AppsPillButton>
+            <AppsPillButton variant="secondary" to="/apps/skills/publish">发布第一个 Skill</AppsPillButton>
           </div>
-        </section>
+        </AppsPanel>
       ) : (
         <>
           <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(20rem,0.9fr)]">
-            <div className="rounded-[28px] border p-5" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', boxShadow: 'var(--shadow-sm)' }}>
+            <AppsPanel>
               <div className="text-[11px] tracking-[0.2em] uppercase" style={{ color: 'var(--text-tertiary)' }}>Agent</div>
               <h2 className="mt-2 text-2xl font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>
                 {profile.openclaw_agent?.display_name ?? '未绑定 OpenClaw Agent'}
@@ -92,13 +96,13 @@ export default function AppsSkillProfilePage() {
                 handle: {profile.openclaw_agent?.handle ?? '—'}
               </div>
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <Metric label="余额" value={profile.wallet ? `${profile.wallet.balance} pts` : '—'} />
-                <Metric label="累计获得" value={profile.wallet ? `${profile.wallet.lifetime_earned}` : '—'} />
-                <Metric label="累计花费" value={profile.wallet ? `${profile.wallet.lifetime_spent}` : '—'} />
+                <AppsMetricCard label="余额" value={profile.wallet ? `${profile.wallet.balance} pts` : '—'} />
+                <AppsMetricCard label="累计获得" value={profile.wallet ? `${profile.wallet.lifetime_earned}` : '—'} />
+                <AppsMetricCard label="累计花费" value={profile.wallet ? `${profile.wallet.lifetime_spent}` : '—'} />
               </div>
-            </div>
+            </AppsPanel>
 
-            <div className="rounded-[28px] border p-5" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', boxShadow: 'var(--shadow-sm)' }}>
+            <AppsPanel>
               <div className="text-[11px] tracking-[0.2em] uppercase" style={{ color: 'var(--text-tertiary)' }}>Key</div>
               <h2 className="mt-2 text-2xl font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>
                 API Key / CLI 接入
@@ -106,10 +110,8 @@ export default function AppsSkillProfilePage() {
               <div className="mt-3 text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
                 当前 Key：{profile.key?.masked_key ?? '尚未生成'}
               </div>
-              <button type="button" onClick={rotateKey} className="mt-4 rounded-full border px-4 py-2 text-sm font-medium" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
-                生成 / 轮换 Key
-              </button>
-            </div>
+              <AppsPillButton onClick={rotateKey} className="mt-4">生成 / 轮换 Key</AppsPillButton>
+            </AppsPanel>
           </section>
 
           <section className="mt-8">
@@ -120,7 +122,7 @@ export default function AppsSkillProfilePage() {
               </Link>
             </div>
             <div className="mt-4 grid gap-4 xl:grid-cols-2">
-              {profile.my_skills.map((skill) => <SkillCard key={skill.id} skill={skill} />)}
+              {profile.my_skills.map((skill) => <AppsSkillCard key={skill.id} skill={skill} />)}
             </div>
           </section>
 
@@ -135,18 +137,9 @@ export default function AppsSkillProfilePage() {
   )
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border px-4 py-3" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-page)' }}>
-      <div className="text-[11px] tracking-[0.2em] uppercase" style={{ color: 'var(--text-tertiary)' }}>{label}</div>
-      <div className="mt-2 text-lg font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>{value}</div>
-    </div>
-  )
-}
-
 function SimpleList({ title, items }: { title: string; items: string[] }) {
   return (
-    <section className="rounded-[28px] border p-5" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', boxShadow: 'var(--shadow-sm)' }}>
+    <AppsPanel>
       <h3 className="text-xl font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>{title}</h3>
       <div className="mt-4 space-y-2">
         {items.length === 0 ? (
@@ -157,34 +150,6 @@ function SimpleList({ title, items }: { title: string; items: string[] }) {
           </div>
         ))}
       </div>
-    </section>
-  )
-}
-
-function AuthPrompt({
-  title,
-  description,
-  from,
-  onLogin,
-}: {
-  title: string
-  description: string
-  from: string
-  onLogin: () => void
-}) {
-  return (
-    <section className="rounded-[28px] border p-6" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', boxShadow: 'var(--shadow-sm)' }}>
-      <div className="text-[11px] tracking-[0.2em] uppercase" style={{ color: 'var(--text-tertiary)' }}>Account</div>
-      <h2 className="mt-2 text-2xl font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>{title}</h2>
-      <p className="mt-3 max-w-2xl text-sm leading-7" style={{ color: 'var(--text-secondary)' }}>{description}</p>
-      <div className="mt-5 flex flex-wrap gap-3">
-        <button type="button" onClick={onLogin} className="rounded-full border px-4 py-2 text-sm font-medium" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
-          去登录
-        </button>
-        <Link to="/register" state={{ from }} className="rounded-full border px-4 py-2 text-sm font-medium" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', color: 'var(--text-secondary)' }}>
-          去注册
-        </Link>
-      </div>
-    </section>
+    </AppsPanel>
   )
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { skillHubApi, type SkillHubLeaderboard } from '../api/client'
+import { AppsInsetCard, AppsPanel } from '../components/apps/appsShared'
 import ImmersiveAppShell from '../components/ImmersiveAppShell'
 import { handleApiError } from '../utils/errorHandler'
 
@@ -68,19 +69,19 @@ function LeaderboardSection({
   items: Array<{ key: number; title: string; subtitle: string; meta: string; rank: number; href?: string }>
 }) {
   return (
-    <section className="rounded-[28px] border p-4 sm:p-5" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', boxShadow: 'var(--shadow-sm)' }}>
+    <AppsPanel className="p-4 sm:p-5">
       <h2 className="text-xl font-serif font-semibold sm:text-2xl" style={{ color: 'var(--text-primary)' }}>{title}</h2>
       <div className="mt-3 space-y-2">
         {items.map((item) => {
           const content = (
-            <div className="flex items-start justify-between gap-2 rounded-xl border px-3 py-2 sm:gap-2.5 sm:px-3.5 sm:py-2.5" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-page)' }}>
+            <AppsInsetCard className="flex items-start justify-between gap-2 rounded-xl px-3 py-2 sm:gap-2.5 sm:px-3.5 sm:py-2.5">
               <div className="min-w-0">
                 <div className="text-[11px] leading-tight" style={{ color: 'var(--text-tertiary)' }}>#{item.rank}</div>
                 <div className="mt-0.5 font-medium leading-snug" style={{ color: 'var(--text-primary)' }}>{item.title}</div>
                 <div className="mt-0.5 line-clamp-2 text-[13px] leading-snug sm:text-sm" style={{ color: 'var(--text-secondary)' }}>{item.subtitle}</div>
               </div>
               <div className="shrink-0 self-start text-xs tabular-nums sm:text-sm" style={{ color: 'var(--text-secondary)' }}>{item.meta}</div>
-            </div>
+            </AppsInsetCard>
           )
           return item.href ? (
             <Link key={item.key} to={item.href} className="block rounded-xl transition-opacity hover:opacity-90">
@@ -91,6 +92,6 @@ function LeaderboardSection({
           )
         })}
       </div>
-    </section>
+    </AppsPanel>
   )
 }

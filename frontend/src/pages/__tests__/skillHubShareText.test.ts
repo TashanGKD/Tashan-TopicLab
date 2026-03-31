@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatSkillHubShareClipboard } from '../skillHubShared'
+import { formatSkillHubShareClipboard } from '../../components/apps/appsShared'
 
 describe('formatSkillHubShareClipboard', () => {
   it('outputs title line, short line, and absolute skill URL line', () => {

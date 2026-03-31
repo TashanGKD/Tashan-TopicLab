@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import LibraryPageLayout from '../components/LibraryPageLayout'
-import ReactionButton from '../components/ReactionButton'
+import PromoHeroCarousel, { type PromoHeroTrack } from '../components/PromoHeroCarousel'
+import AppCatalogCard from '../components/apps/AppCatalogCard'
+import { AppsSkillCard } from '../components/apps/appsShared'
 import { AppCatalogItem, appsApi, skillHubApi, type SkillHubSkillSummary } from '../api/client'
 import { handleApiError } from '../utils/errorHandler'
 import { toast } from '../utils/toast'
@@ -12,20 +14,6 @@ const QUICK_LINKS = [
 
 type AppDisplayItem = AppCatalogItem & {
   install_command?: string
-}
-
-interface SkillHeroStyle {
-  background: string
-  borderColor: string
-  glowLeft: string
-  glowRight: string
-  shimmer: string
-  chipBackground: string
-  chipBorder: string
-  chipColor: string
-  actionBackground: string
-  actionBorder: string
-  actionColor: string
 }
 
 const APPS_SKILL_HERO = {
@@ -45,7 +33,7 @@ const APPS_SKILL_HERO = {
     actionBackground: 'rgba(255,255,255,0.52)',
     actionBorder: 'rgba(92,140,116,0.24)',
     actionColor: '#325445',
-  } satisfies SkillHeroStyle,
+  },
 }
 
 const APPS_AI_TOPIC_HERO = {
@@ -64,28 +52,19 @@ const APPS_AI_TOPIC_HERO = {
     actionBackground: 'rgba(255,255,255,0.52)',
     actionBorder: 'rgba(99,102,241,0.28)',
     actionColor: '#3730a3',
-  } satisfies SkillHeroStyle,
+  },
 }
 
 const APPS_PROMO_AUTOPLAY_MS = 5000
 
-type AppsPromoTrack = {
-  id: string
-  eyebrow: string
-  title: string
-  description: string
-  style: SkillHeroStyle
-  cta: { to: string; label: string }
-}
-
-const appsPromoTracks: AppsPromoTrack[] = [
+const appsPromoTracks: PromoHeroTrack[] = [
   {
     id: 'research-skill',
     eyebrow: APPS_SKILL_HERO.eyebrow,
     title: APPS_SKILL_HERO.title,
     description: APPS_SKILL_HERO.description,
     style: APPS_SKILL_HERO.style,
-    cta: { to: '/apps/skills', label: '进入科研技能专区' },
+    action: { to: '/apps/skills', label: '进入科研技能专区' },
   },
   {
     id: 'ai-topic-library',
@@ -93,7 +72,8 @@ const appsPromoTracks: AppsPromoTrack[] = [
     title: APPS_AI_TOPIC_HERO.title,
     description: APPS_AI_TOPIC_HERO.description,
     style: APPS_AI_TOPIC_HERO.style,
-    cta: { to: '/library', label: '进入资源库' },
+    titleTo: '/library',
+    action: { to: '/library', label: '进入资源库' },
   },
 ]
 
@@ -133,27 +113,6 @@ function AppIcon({ kind }: { kind?: string }) {
   )
 }
 
-function HeartIcon() {
-  return (
-    <svg className="h-4 w-4" viewBox="0 0 20 20" fill="none" aria-hidden>
-      <path
-        d="M10 16.25l-5.02-4.86a3.58 3.58 0 010-5.18 3.66 3.66 0 015.11 0L10 6.3l-.09-.09a3.66 3.66 0 015.11 0 3.58 3.58 0 010 5.18L10 16.25z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
-function formatCompatibilityTag(level: SkillHubSkillSummary['compatibility_level']) {
-  if (level === 'runtime_full') return 'OpenClaw Ready'
-  if (level === 'runtime_partial') return 'Runtime Partial'
-  if (level === 'install') return 'CLI Install'
-  return 'Metadata'
-}
-
 function openFeedbackDraft(app: AppDisplayItem) {
   window.dispatchEvent(new CustomEvent('open-feedback-draft', {
     detail: {
@@ -171,25 +130,8 @@ export default function AppsPage() {
   const [error, setError] = useState<string | null>(null)
   const [pendingTopicIds, setPendingTopicIds] = useState<Set<string>>(new Set())
   const [pendingLikeIds, setPendingLikeIds] = useState<Set<string>>(new Set())
-  const [promoIndex, setPromoIndex] = useState(0)
-  const activePromo = appsPromoTracks[promoIndex]
   const totalAppCount = apps.length + researchSkills.length
   const skillCardStatsText = `全站应用 ${totalAppCount} · 独立应用 ${apps.length} · 科研专区 ${researchSkills.length}`
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setPromoIndex((prev) => (prev === appsPromoTracks.length - 1 ? 0 : prev + 1))
-    }, APPS_PROMO_AUTOPLAY_MS)
-    return () => window.clearInterval(timer)
-  }, [])
-
-  const goPrevPromo = () => {
-    setPromoIndex((prev) => (prev === 0 ? appsPromoTracks.length - 1 : prev - 1))
-  }
-
-  const goNextPromo = () => {
-    setPromoIndex((prev) => (prev === appsPromoTracks.length - 1 ? 0 : prev + 1))
-  }
 
   useEffect(() => {
     let alive = true
@@ -344,145 +286,7 @@ export default function AppsPage() {
         </div>
       </div>
 
-      <section
-        className="relative mt-6 min-h-[14rem] overflow-hidden rounded-[28px] border px-5 py-6 sm:min-h-[16rem] sm:rounded-[32px] sm:px-8 sm:py-10 lg:min-h-[17rem] lg:px-12 lg:py-12"
-        style={{
-          background: activePromo.style.background,
-          borderColor: activePromo.style.borderColor,
-          boxShadow: '0 24px 60px rgba(148, 163, 184, 0.14)',
-        }}
-      >
-        <div
-          className="animate-float-drift pointer-events-none absolute -left-20 top-[-4.5rem] h-64 w-64 rounded-full blur-3xl"
-          style={{ background: activePromo.style.glowLeft }}
-        />
-        <div
-          className="animate-float-drift-reverse pointer-events-none absolute right-[-4rem] top-10 h-72 w-72 rounded-full blur-3xl"
-          style={{ background: activePromo.style.glowRight }}
-        />
-        <div
-          className="animate-soft-shimmer pointer-events-none absolute inset-y-0 left-[-12%] w-[28%]"
-          style={{ background: activePromo.style.shimmer }}
-        />
-        <div
-          className="pointer-events-none absolute inset-x-10 top-0 h-px"
-          style={{ background: 'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.78) 50%, rgba(255,255,255,0) 100%)' }}
-        />
-
-        <div className="grid min-h-[inherit] gap-6 sm:gap-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:gap-10">
-          <div key={activePromo.id} className="animate-stage-enter-left flex min-h-[inherit] max-w-3xl flex-col justify-between">
-            <div>
-              <span
-                className="inline-flex items-center rounded-full px-3.5 py-1.5 text-[10px] tracking-[0.24em] sm:px-4 sm:text-[11px] sm:tracking-[0.28em]"
-                style={{
-                  color: activePromo.style.chipColor,
-                  backgroundColor: activePromo.style.chipBackground,
-                  backdropFilter: 'blur(12px)',
-                  border: `1px solid ${activePromo.style.chipBorder}`,
-                }}
-              >
-                {activePromo.eyebrow}
-              </span>
-
-              {activePromo.id === 'ai-topic-library' ? (
-                <Link
-                  to="/library"
-                  className="mt-5 block max-w-2xl rounded-2xl outline-none ring-offset-2 transition-opacity hover:opacity-95 focus-visible:ring-2 focus-visible:ring-indigo-300 motion-reduce:transition-none sm:mt-7"
-                >
-                  <h2 className="whitespace-pre-line text-[2.35rem] font-serif font-semibold leading-[0.94] sm:text-5xl sm:leading-[0.98] lg:text-[4.4rem]">
-                    <span style={{ color: '#1f2937', textShadow: '0 1px 0 rgba(255,255,255,0.65)' }}>
-                      {activePromo.title}
-                    </span>
-                  </h2>
-                  <p
-                    className="mt-4 max-w-md text-[13px] leading-6 sm:mt-6 sm:max-w-lg sm:text-[15px] sm:leading-7"
-                    style={{ color: '#64748b' }}
-                  >
-                    {activePromo.description}
-                  </p>
-                </Link>
-              ) : (
-                <>
-                  <h2 className="mt-5 max-w-2xl whitespace-pre-line text-[2.35rem] font-serif font-semibold leading-[0.94] sm:mt-7 sm:text-5xl sm:leading-[0.98] lg:text-[4.4rem]">
-                    <span style={{ color: '#1f2937', textShadow: '0 1px 0 rgba(255,255,255,0.65)' }}>
-                      {activePromo.title}
-                    </span>
-                  </h2>
-                  <p
-                    className="mt-4 max-w-md text-[13px] leading-6 sm:mt-6 sm:max-w-lg sm:text-[15px] sm:leading-7"
-                    style={{ color: '#64748b' }}
-                  >
-                    {activePromo.description}
-                  </p>
-                </>
-              )}
-            </div>
-
-            <div className="mt-8 flex flex-wrap items-center gap-3 sm:mt-10">
-              <Link
-                to={activePromo.cta.to}
-                className="group relative z-10 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-[13px] transition-all duration-300 hover:-translate-y-0.5 motion-reduce:transition-none sm:px-5 sm:py-2.5 sm:text-sm"
-                style={{
-                  borderColor: activePromo.style.actionBorder,
-                  color: activePromo.style.actionColor,
-                  backgroundColor: activePromo.style.actionBackground,
-                  backdropFilter: 'blur(12px)',
-                }}
-              >
-                {activePromo.cta.label}
-                <span className="transition-transform duration-300 group-hover:translate-x-1 motion-reduce:transition-none">↗</span>
-              </Link>
-
-              <div className="relative z-10 ml-1 flex items-center gap-2">
-                {appsPromoTracks.map((track, index) => (
-                  <button
-                    key={track.id}
-                    type="button"
-                    onClick={() => setPromoIndex(index)}
-                    className="h-2.5 rounded-full transition-all duration-300"
-                    style={{
-                      width: index === promoIndex ? '2rem' : '0.625rem',
-                      backgroundColor: index === promoIndex ? activePromo.style.actionColor : 'rgba(148,163,184,0.42)',
-                    }}
-                    aria-label={`切换到 ${track.title.replace('\n', '')}`}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="relative z-10 flex items-center justify-end gap-3 lg:pt-1">
-            <button
-              type="button"
-              onClick={goPrevPromo}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border text-sm transition-all duration-300 hover:-translate-y-0.5 motion-reduce:transition-none sm:h-12 sm:w-12 sm:text-base"
-              style={{
-                borderColor: activePromo.style.actionBorder,
-                backgroundColor: activePromo.style.actionBackground,
-                color: activePromo.style.actionColor,
-                backdropFilter: 'blur(10px)',
-              }}
-              aria-label="上一个板块"
-            >
-              ←
-            </button>
-            <button
-              type="button"
-              onClick={goNextPromo}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border text-sm transition-all duration-300 hover:-translate-y-0.5 motion-reduce:transition-none sm:h-12 sm:w-12 sm:text-base"
-              style={{
-                borderColor: activePromo.style.actionBorder,
-                backgroundColor: activePromo.style.actionBackground,
-                color: activePromo.style.actionColor,
-                backdropFilter: 'blur(10px)',
-              }}
-              aria-label="下一个板块"
-            >
-              →
-            </button>
-          </div>
-        </div>
-      </section>
+      <PromoHeroCarousel tracks={appsPromoTracks} autoplayMs={APPS_PROMO_AUTOPLAY_MS} className="mt-6" />
 
       {loading ? (
         <div className="mt-6 rounded-[var(--radius-xl)] border p-5 text-sm" style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}>
@@ -506,147 +310,17 @@ export default function AppsPage() {
             </div>
             <div className="mt-5 columns-1 gap-4 lg:columns-2">
               {apps.map((app) => (
-                <article
+                <AppCatalogCard
                   key={app.id}
-                  className="mb-4 break-inside-avoid rounded-[var(--radius-xl)] border p-5 sm:p-6"
-                  style={{
-                    borderColor: 'var(--border-default)',
-                    backgroundColor: 'var(--bg-container)',
-                    boxShadow: 'var(--shadow-sm)',
-                  }}
-                >
-                  <div className="flex items-start gap-4">
-                    <div
-                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl"
-                      style={{
-                        background: 'linear-gradient(180deg, rgba(241,245,249,0.95) 0%, rgba(226,232,240,0.92) 100%)',
-                        color: 'var(--text-primary)',
-                      }}
-                    >
-                      <AppIcon kind={app.icon} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-lg font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>
-                          {app.name}
-                        </h2>
-                        {app.builtin ? (
-                          <span
-                            className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium"
-                            style={{
-                              backgroundColor: 'var(--bg-secondary)',
-                              color: 'var(--text-secondary)',
-                            }}
-                          >
-                            已内置
-                          </span>
-                        ) : null}
-                        {app.command ? (
-                          <span
-                            className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium"
-                            style={{
-                              backgroundColor: 'var(--bg-secondary)',
-                              color: 'var(--text-secondary)',
-                            }}
-                          >
-                            {app.command}
-                          </span>
-                        ) : null}
-                      </div>
-                      {app.install_command ? (
-                        <div className="mt-3 rounded-[var(--radius-md)] border px-3 py-2" style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--bg-secondary)' }}>
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-tertiary)' }}>
-                            安装
-                          </p>
-                          <p className="mt-1 font-mono text-xs sm:text-sm" style={{ color: 'var(--text-primary)' }}>
-                            {app.install_command}
-                          </p>
-                        </div>
-                      ) : null}
-                      {app.summary ? (
-                        <p className="mt-3 text-sm leading-6" style={{ color: 'var(--text-primary)' }}>
-                          {app.summary}
-                        </p>
-                      ) : null}
-                      {app.description ? (
-                        <p className="mt-2 text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
-                          {app.description}
-                        </p>
-                      ) : null}
-                      {app.tags?.length ? (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {app.tags.map((tag) => (
-                            <span
-                              key={tag}
-                              className="inline-flex items-center rounded-full px-2.5 py-1 text-xs"
-                              style={{
-                                backgroundColor: 'var(--bg-secondary)',
-                                color: 'var(--text-tertiary)',
-                              }}
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className="mt-5 flex flex-wrap gap-3">
-                    <ReactionButton
-                      label="点赞"
-                      count={app.interaction?.likes_count ?? 0}
-                      active={app.interaction?.liked ?? false}
-                      pending={pendingLikeIds.has(app.id)}
-                      icon={<HeartIcon />}
-                      subtle
-                      onClick={() => void toggleLike(app)}
-                    />
-                    {getAppLinks(app).map((link) => (
-                      <a
-                        key={`${app.id}:${link.label}:${link.href}`}
-                        href={link.href}
-                        target="_blank"
-                        rel="noreferrer"
-                        className={`inline-flex items-center rounded-[var(--radius-md)] px-3 py-2 text-sm font-medium transition-opacity hover:opacity-90 ${link.primary ? '' : 'border transition-colors'}`}
-                        style={link.primary
-                          ? {
-                            backgroundColor: 'var(--text-primary)',
-                            color: 'var(--bg-container)',
-                          }
-                          : {
-                            borderColor: 'var(--border-default)',
-                            color: 'var(--text-primary)',
-                          }}
-                      >
-                        {link.label}
-                      </a>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => void openTopic(app)}
-                      disabled={pendingTopicIds.has(app.id)}
-                      className="inline-flex items-center rounded-[var(--radius-md)] border px-3 py-2 text-sm font-medium transition-colors"
-                      style={{
-                        borderColor: 'var(--border-default)',
-                        color: 'var(--text-primary)',
-                      }}
-                    >
-                      {pendingTopicIds.has(app.id) ? '打开中…' : '进入话题'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openFeedbackDraft(app)}
-                      className="inline-flex items-center rounded-[var(--radius-md)] border px-3 py-2 text-sm font-medium transition-colors"
-                      style={{
-                        borderColor: 'var(--border-default)',
-                        color: 'var(--text-primary)',
-                      }}
-                    >
-                      评价应用
-                    </button>
-                  </div>
-                </article>
+                  app={app}
+                  icon={<AppIcon kind={app.icon} />}
+                  pendingLike={pendingLikeIds.has(app.id)}
+                  pendingTopic={pendingTopicIds.has(app.id)}
+                  onToggleLike={() => void toggleLike(app)}
+                  onOpenTopic={() => void openTopic(app)}
+                  onOpenFeedback={() => openFeedbackDraft(app)}
+                  links={getAppLinks(app)}
+                />
               ))}
             </div>
           </section>
@@ -659,96 +333,28 @@ export default function AppsPage() {
             </div>
             <div className="mt-5 columns-1 gap-4 lg:columns-2">
               {researchSkills.map((skill) => (
-                <article
+                <AppsSkillCard
                   key={skill.id}
-                  className="mb-4 break-inside-avoid rounded-[var(--radius-xl)] border p-5 sm:p-6"
-                  style={{
-                    borderColor: 'var(--border-default)',
-                    backgroundColor: 'var(--bg-container)',
-                    boxShadow: 'var(--shadow-sm)',
-                  }}
-                >
-                  <div className="flex items-start gap-4">
-                    <div
-                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl"
-                      style={{
-                        background: 'linear-gradient(180deg, rgba(241,245,249,0.95) 0%, rgba(226,232,240,0.92) 100%)',
-                        color: 'var(--text-primary)',
-                      }}
-                    >
-                      <AppIcon kind="spark" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-lg font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>
-                          {skill.name}
-                        </h2>
-                        <span
-                          className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium"
-                          style={{
-                            backgroundColor: skill.openclaw_ready ? 'rgba(16, 185, 129, 0.12)' : 'var(--bg-secondary)',
-                            color: skill.openclaw_ready ? '#047857' : 'var(--text-secondary)',
-                          }}
-                        >
-                          {formatCompatibilityTag(skill.compatibility_level)}
-                        </span>
-                        <span
-                          className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium"
-                          style={{
-                            backgroundColor: 'var(--bg-secondary)',
-                            color: 'var(--text-secondary)',
-                          }}
-                        >
-                          {skill.category_name}
-                        </span>
+                  skill={skill}
+                  variant="catalog"
+                  icon={<AppIcon kind="spark" />}
+                  statsText={skillCardStatsText}
+                  actions={(
+                    <>
+                      <button
+                        type="button"
+                        className="inline-flex items-center rounded-[var(--radius-md)] border px-3 py-2 text-sm font-medium transition-colors"
+                        style={{ borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}
+                        onClick={() => navigate(`/apps/skills/${skill.slug}`)}
+                      >
+                        打开详情
+                      </button>
+                      <div className="inline-flex items-center rounded-[var(--radius-md)] px-3 py-2 text-sm font-medium" style={{ color: 'var(--text-tertiary)' }}>
+                        {skill.cluster_name}
                       </div>
-                      {skill.tagline ? (
-                        <p className="mt-3 text-sm leading-6" style={{ color: 'var(--text-primary)' }}>
-                          {skill.tagline}
-                        </p>
-                      ) : null}
-                      <p className="mt-2 text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
-                        {skill.summary}
-                      </p>
-                      <p className="mt-3 text-sm leading-6" style={{ color: 'var(--text-tertiary)' }}>
-                        {skillCardStatsText}
-                      </p>
-                      {skill.tags?.length ? (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {skill.tags.slice(0, 6).map((tag) => (
-                            <span
-                              key={tag}
-                              className="inline-flex items-center rounded-full px-2.5 py-1 text-xs"
-                              style={{
-                                backgroundColor: 'var(--bg-secondary)',
-                                color: 'var(--text-tertiary)',
-                              }}
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className="mt-5 flex flex-wrap gap-3">
-                    <button
-                      type="button"
-                      className="inline-flex items-center rounded-[var(--radius-md)] border px-3 py-2 text-sm font-medium transition-colors"
-                      style={{
-                        borderColor: 'var(--border-default)',
-                        color: 'var(--text-primary)',
-                      }}
-                      onClick={() => navigate(`/apps/skills/${skill.slug}`)}
-                    >
-                      打开详情
-                    </button>
-                    <div className="inline-flex items-center rounded-[var(--radius-md)] px-3 py-2 text-sm font-medium" style={{ color: 'var(--text-tertiary)' }}>
-                      {skill.cluster_name}
-                    </div>
-                  </div>
-                </article>
+                    </>
+                  )}
+                />
               ))}
               {researchSkills.length === 0 ? (
                 <div className="rounded-[var(--radius-xl)] border p-5 text-sm" style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}>

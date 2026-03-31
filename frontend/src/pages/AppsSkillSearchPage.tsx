@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 import { skillHubApi, type SkillHubSkillSummary } from '../api/client'
+import { AppsInput, AppsPillButton, AppsSkillCard } from '../components/apps/appsShared'
 import ImmersiveAppShell from '../components/ImmersiveAppShell'
 import { handleApiError } from '../utils/errorHandler'
-import { SkillCard } from './skillHubShared'
 
 export default function AppsSkillSearchPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -36,15 +36,15 @@ export default function AppsSkillSearchPage() {
         }}
         className="mb-6 flex max-w-xl items-center gap-2"
       >
-        <input value={input} onChange={(e) => setInput(e.target.value)} className="w-full rounded-full border px-4 py-2.5 text-sm" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', color: 'var(--text-primary)' }} placeholder="搜索 Skill、cluster 或关键词" />
-        <button type="submit" className="rounded-full border px-4 py-2.5 text-sm font-medium" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
+        <AppsInput value={input} onChange={(e) => setInput(e.target.value)} className="rounded-full py-2.5" placeholder="搜索 Skill、cluster 或关键词" />
+        <AppsPillButton type="submit" className="py-2.5">
           搜索
-        </button>
+        </AppsPillButton>
       </form>
       {loading ? <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>搜索中…</div> : null}
       {!loading && skills.length === 0 ? <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>{q ? '没有匹配结果' : '输入关键词开始搜索'}</div> : null}
       <div className="grid gap-4 xl:grid-cols-2">
-        {skills.map((skill) => <SkillCard key={skill.id} skill={skill} />)}
+        {skills.map((skill) => <AppsSkillCard key={skill.id} skill={skill} />)}
       </div>
     </ImmersiveAppShell>
   )
