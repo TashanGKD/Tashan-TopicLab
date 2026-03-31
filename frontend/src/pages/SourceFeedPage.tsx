@@ -89,6 +89,19 @@ function splitIntoColumns<T>(items: T[], columnCount: number): T[][] {
   return columns
 }
 
+function buildArticleSnapshot(article: SourceFeedArticle) {
+  return {
+    title: article.title,
+    source_feed_name: article.source_feed_name,
+    source_type: article.source_type,
+    url: article.url,
+    pic_url: article.pic_url ?? null,
+    description: article.description,
+    publish_time: article.publish_time,
+    created_at: article.created_at,
+  }
+}
+
 type SourceFeedSectionId = (typeof SOURCE_FEED_SECTIONS)[number]['id']
 
 function isSourceFeedSectionId(
@@ -503,7 +516,10 @@ export default function SourceFeedPage() {
     async (article: SourceFeedArticle) => {
       setPendingReplyIds((prev) => new Set(prev).add(article.id))
       try {
-        const res = await sourceFeedApi.ensureTopic(article.id)
+        const res = await sourceFeedApi.ensureTopic(
+          article.id,
+          buildArticleSnapshot(article),
+        )
         navigate(`/topics/${res.data.topic.id}`)
         toast.success('已打开对应话题')
       } catch (err) {

@@ -21,6 +21,19 @@ function updateCategoryList(categories: FavoriteCategory[], updated: FavoriteCat
   return categories.map((item) => (item.id === updated.id ? { ...item, ...updated } : item))
 }
 
+function buildArticleSnapshot(article: SourceFeedArticle) {
+  return {
+    title: article.title,
+    source_feed_name: article.source_feed_name,
+    source_type: article.source_type,
+    url: article.url,
+    pic_url: article.pic_url ?? null,
+    description: article.description,
+    publish_time: article.publish_time,
+    created_at: article.created_at,
+  }
+}
+
 export default function MyFavoritesPage() {
   const navigate = useNavigate()
   const [tab, setTab] = useState<FavoriteTab>('topics')
@@ -402,7 +415,7 @@ export default function MyFavoritesPage() {
   const handleReplySourceArticle = async (article: SourceFeedArticle) => {
     setPendingSourceReplyIds(prev => new Set(prev).add(article.id))
     try {
-      const res = await sourceFeedApi.ensureTopic(article.id)
+      const res = await sourceFeedApi.ensureTopic(article.id, buildArticleSnapshot(article))
       navigate(`/topics/${res.data.topic.id}`)
       toast.success('已打开对应话题')
     } catch (err) {

@@ -16,8 +16,10 @@ from pydantic import BaseModel, Field
 from app.api.auth import security, verify_access_token
 from app.services.resonnet_client import request_json
 from app.services.source_feed_pipeline import (
+    build_source_article_from_snapshot,
     fetch_source_feed_article_detail,
     hydrate_topic_workspace,
+    hydrate_topic_workspace_with_snapshots,
 )
 import asyncio
 
@@ -57,6 +59,17 @@ class SourceFeedWorkspaceHydrateRequest(BaseModel):
 
 class SourceArticleActionRequest(BaseModel):
     enabled: bool = True
+    title: str = ""
+    source_feed_name: str = ""
+    source_type: str = ""
+    url: str = ""
+    pic_url: str | None = None
+    description: str = ""
+    publish_time: str = ""
+    created_at: str = ""
+
+
+class SourceArticleSnapshotRequest(BaseModel):
     title: str = ""
     source_feed_name: str = ""
     source_type: str = ""
@@ -333,23 +346,36 @@ async def _fill_topic_roles_in_background(topic_id: str) -> None:
 
 
 @router.post("/articles/{article_id}/topic", response_model=EnsureSourceArticleTopicResponse)
-async def ensure_source_article_topic(article_id: int, user: dict | None = Depends(_get_optional_user)):
+async def ensure_source_article_topic(
+    article_id: int,
+    snapshot: SourceArticleSnapshotRequest | None = None,
+    user: dict | None = Depends(_get_optional_user),
+):
     user_id, auth_type = _resolve_owner_identity(user)
+    snapshot_payload = {"id": article_id, **snapshot.model_dump()} if snapshot is not None else None
     existing_topic_id = get_topic_id_by_source_article(article_id)
     if existing_topic_id:
         await _ensure_executor_workspace_for_topic(existing_topic_id)
         topic = get_topic(existing_topic_id, user_id=user_id, auth_type=auth_type)
         if topic is None:
             raise HTTPException(status_code=404, detail="Topic not found")
-        await hydrate_topic_workspace(existing_topic_id, [article_id])
+        await hydrate_topic_workspace_with_snapshots(
+            existing_topic_id,
+            [article_id],
+            snapshots={article_id: snapshot_payload} if snapshot_payload else None,
+        )
         return {"topic": topic, "created": False}
 
     try:
         article = await fetch_source_feed_article_detail(article_id)
     except httpx.HTTPStatusError as exc:
-        raise HTTPException(status_code=exc.response.status_code, detail="上游信源服务请求失败") from exc
+        if snapshot_payload is None:
+            raise HTTPException(status_code=exc.response.status_code, detail="上游信源服务请求失败") from exc
+        article = build_source_article_from_snapshot(snapshot_payload)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"获取信源全文失败: {exc}") from exc
+        if snapshot_payload is None:
+            raise HTTPException(status_code=502, detail=f"获取信源全文失败: {exc}") from exc
+        article = build_source_article_from_snapshot(snapshot_payload)
 
     # Create topic immediately with fallback body; LLM generation runs in background.
     # Use empty expert_names; AI-generated roles will be filled in background.
@@ -378,7 +404,11 @@ async def ensure_source_article_topic(article_id: int, user: dict | None = Depen
     await _ensure_executor_workspace_for_topic(
         linked_topic_id, use_ai_generated_roles=True
     )
-    await hydrate_topic_workspace(linked_topic_id, [article.id])
+    await hydrate_topic_workspace_with_snapshots(
+        linked_topic_id,
+        [article.id],
+        snapshots={article.id: snapshot_payload} if snapshot_payload else None,
+    )
     resolved_topic = get_topic(linked_topic_id, user_id=user_id, auth_type=auth_type)
     if resolved_topic is None:
         raise HTTPException(status_code=404, detail="Topic not found")

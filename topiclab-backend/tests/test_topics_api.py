@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import bcrypt
+import httpx
 import pytest
 from PIL import Image
 from sqlalchemy import text
@@ -754,7 +755,7 @@ def test_source_article_reply_creates_topic_once(client, monkeypatch):
             created_at="2026-03-14T10:00:00+00:00",
         )
 
-    async def fake_hydrate_topic_workspace(topic_id: str, article_ids: list[int]):
+    async def fake_hydrate_topic_workspace(topic_id: str, article_ids: list[int], snapshots=None):
         return {"topic_id": topic_id, "article_ids": article_ids, "written_files": []}
 
     async def fake_request_json(method, path, *, json_body=None, headers=None, params=None, timeout=600.0):
@@ -763,7 +764,7 @@ def test_source_article_reply_creates_topic_once(client, monkeypatch):
         return {}
 
     monkeypatch.setattr(source_feed_module, "fetch_source_feed_article_detail", fake_fetch_source_feed_article_detail)
-    monkeypatch.setattr(source_feed_module, "hydrate_topic_workspace", fake_hydrate_topic_workspace)
+    monkeypatch.setattr(source_feed_module, "hydrate_topic_workspace_with_snapshots", fake_hydrate_topic_workspace)
     monkeypatch.setattr(source_feed_module, "request_json", fake_request_json)
 
     first = client.post("/source-feed/articles/9001/topic")
@@ -779,6 +780,46 @@ def test_source_article_reply_creates_topic_once(client, monkeypatch):
     assert second.status_code == 200, second.text
     second_payload = second.json()
     assert second_payload["topic"]["id"] == first_payload["topic"]["id"]
+
+
+def test_source_article_reply_falls_back_to_snapshot_when_detail_unavailable(client, monkeypatch):
+    import app.api.source_feed as source_feed_module
+
+    async def fake_fetch_source_feed_article_detail(article_id: int):
+        request = httpx.Request("GET", f"https://ic.example.test/api/v1/articles/{article_id}")
+        response = httpx.Response(404, request=request)
+        raise httpx.HTTPStatusError("not found", request=request, response=response)
+
+    async def fake_hydrate_topic_workspace(topic_id: str, article_ids: list[int], snapshots=None):
+        return {"topic_id": topic_id, "article_ids": article_ids, "written_files": []}
+
+    async def fake_request_json(method, path, *, json_body=None, headers=None, params=None, timeout=600.0):
+        if path == "/executor/topics/bootstrap":
+            return {"ok": True, "topic_id": json_body["topic_id"]}
+        return {}
+
+    monkeypatch.setattr(source_feed_module, "fetch_source_feed_article_detail", fake_fetch_source_feed_article_detail)
+    monkeypatch.setattr(source_feed_module, "hydrate_topic_workspace_with_snapshots", fake_hydrate_topic_workspace)
+    monkeypatch.setattr(source_feed_module, "request_json", fake_request_json)
+
+    payload = {
+        "title": "学术论文条目",
+        "source_feed_name": "arXiv cs.AI",
+        "source_type": "gqy",
+        "url": "https://arxiv.org/abs/2603.18916",
+        "pic_url": None,
+        "description": "用于验证学术条目可在无上游全文时开题。",
+        "publish_time": "2026-03-18",
+        "created_at": "2026-03-18T00:00:00+00:00",
+    }
+
+    resp = client.post("/source-feed/articles/9901/topic", json=payload)
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["topic"]["title"] == "学术论文条目"
+    assert data["topic"]["category"] == "research"
+    assert "- article_id: 9901" in data["topic"]["body"]
+    assert "- 原文链接：https://arxiv.org/abs/2603.18916" in data["topic"]["body"]
 
 
 def test_source_article_topic_endpoint_uses_generated_body(client, monkeypatch):

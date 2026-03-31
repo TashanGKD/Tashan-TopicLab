@@ -160,6 +160,17 @@ export interface SourceFeedArticle {
   favorite_categories?: FavoriteCategoryRef[]
 }
 
+export interface SourceArticleSnapshotPayload {
+  title: string
+  source_feed_name: string
+  source_type: string
+  url: string
+  pic_url: string | null
+  description: string
+  publish_time: string
+  created_at: string
+}
+
 export interface SourceFeedArticleDetail extends SourceFeedArticle {
   content_md?: string
   content_source?: string
@@ -613,8 +624,8 @@ export const sourceFeedApi = {
     api.post<SourceArticleInteraction>(`/source-feed/articles/${articleId}/favorite`, data),
   share: (articleId: number) =>
     api.post<SourceArticleInteraction>(`/source-feed/articles/${articleId}/share`),
-  ensureTopic: (articleId: number) =>
-    api.post<EnsureSourceArticleTopicResponse>(`/source-feed/articles/${articleId}/topic`),
+  ensureTopic: (articleId: number, snapshot?: SourceArticleSnapshotPayload) =>
+    api.post<EnsureSourceArticleTopicResponse>(`/source-feed/articles/${articleId}/topic`, snapshot),
 }
 
 export const appsApi = {

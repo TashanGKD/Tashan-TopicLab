@@ -76,6 +76,11 @@ def _normalize_article(article: dict[str, Any]) -> SourceArticle:
     )
 
 
+def build_source_article_from_snapshot(article: dict[str, Any]) -> SourceArticle:
+    """Build a normalized SourceArticle from already-available list snapshot fields."""
+    return _normalize_article(article)
+
+
 def _slugify(value: str) -> str:
     slug = re.sub(r"[^a-zA-Z0-9]+", "-", value).strip("-").lower()
     return slug[:48] or "article"
@@ -119,14 +124,29 @@ async def fetch_source_feed_article_detail(article_id: int) -> SourceArticle:
 
 
 async def hydrate_topic_workspace(topic_id: str, article_ids: list[int]) -> dict[str, Any]:
+    return await hydrate_topic_workspace_with_snapshots(topic_id, article_ids)
+
+
+async def hydrate_topic_workspace_with_snapshots(
+    topic_id: str,
+    article_ids: list[int],
+    snapshots: dict[int, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     _validate_topic_workspace(topic_id)
     materials_dir = get_materials_dir(topic_id)
     materials_dir.mkdir(parents=True, exist_ok=True)
 
     articles: list[SourceArticle] = []
     written_files: list[str] = []
+    snapshot_map = snapshots or {}
     for article_id in article_ids:
-        article = await fetch_source_feed_article_detail(article_id)
+        try:
+            article = await fetch_source_feed_article_detail(article_id)
+        except Exception:
+            snapshot = snapshot_map.get(article_id)
+            if snapshot is None:
+                raise
+            article = build_source_article_from_snapshot(snapshot)
         articles.append(article)
         filename = f"article_{article.id}_{_slugify(article.title)}.md"
         file_path = materials_dir / filename
