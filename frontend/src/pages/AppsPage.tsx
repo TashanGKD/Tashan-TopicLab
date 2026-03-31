@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import LibraryPageLayout from '../components/LibraryPageLayout'
 import PromoHeroCarousel, { type PromoHeroTrack } from '../components/PromoHeroCarousel'
 import AppCatalogCard from '../components/apps/AppCatalogCard'
-import { AppsSkillCard } from '../components/apps/appsShared'
-import { AppCatalogItem, appsApi, skillHubApi, type SkillHubSkillSummary } from '../api/client'
+import { AppsSkillCard, CategoryStrip, ClusterStrip } from '../components/apps/appsShared'
+import { AppCatalogItem, appsApi, skillHubApi, type SkillHubCategoriesResponse, type SkillHubSkillSummary } from '../api/client'
 import { handleApiError } from '../utils/errorHandler'
+import { filterAppsPageSkills, sortAppsPageSkills } from '../utils/skillHubRanking'
 import { toast } from '../utils/toast'
 
 const QUICK_LINKS = [
@@ -122,16 +123,36 @@ function openFeedbackDraft(app: AppDisplayItem) {
   }))
 }
 
+function splitIntoAlternatingColumns<T>(items: T[]) {
+  return items.reduce<[T[], T[]]>(
+    (columns, item, index) => {
+      columns[index % 2].push(item)
+      return columns
+    },
+    [[], []],
+  )
+}
+
 export default function AppsPage() {
   const navigate = useNavigate()
   const [apps, setApps] = useState<AppDisplayItem[]>([])
   const [researchSkills, setResearchSkills] = useState<SkillHubSkillSummary[]>([])
+  const [skillCategories, setSkillCategories] = useState<SkillHubCategoriesResponse | null>(null)
+  const [skillCategoryFilter, setSkillCategoryFilter] = useState('')
+  const [skillClusterFilter, setSkillClusterFilter] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [pendingTopicIds, setPendingTopicIds] = useState<Set<string>>(new Set())
   const [pendingLikeIds, setPendingLikeIds] = useState<Set<string>>(new Set())
-  const totalAppCount = apps.length + researchSkills.length
-  const skillCardStatsText = `全站应用 ${totalAppCount} · 独立应用 ${apps.length} · 科研专区 ${researchSkills.length}`
+  const [leftAppColumn, rightAppColumn] = splitIntoAlternatingColumns(apps)
+  const filteredResearchSkills = useMemo(
+    () => filterAppsPageSkills(researchSkills, {
+      categoryKey: skillCategoryFilter,
+      clusterKey: skillClusterFilter,
+    }),
+    [researchSkills, skillCategoryFilter, skillClusterFilter],
+  )
+  const [leftSkillColumn, rightSkillColumn] = splitIntoAlternatingColumns(filteredResearchSkills)
 
   useEffect(() => {
     let alive = true
@@ -143,7 +164,7 @@ export default function AppsPage() {
       const all: SkillHubSkillSummary[] = []
 
       while (offset < total) {
-        const res = await skillHubApi.listSkills({ sort: 'hot', limit: batchSize, offset })
+        const res = await skillHubApi.listSkills({ sort: 'new', limit: batchSize, offset })
         const page = res.data.list ?? []
         total = res.data.total ?? page.length
         all.push(...page)
@@ -151,24 +172,22 @@ export default function AppsPage() {
         offset += page.length
       }
 
-      return all.sort((a, b) => {
-        const diff = (b.total_downloads ?? 0) - (a.total_downloads ?? 0)
-        if (diff !== 0) return diff
-        return a.name.localeCompare(b.name)
-      })
+      return sortAppsPageSkills(all)
     }
 
     const load = async () => {
       try {
         setLoading(true)
         setError(null)
-        const [appsRes, skills] = await Promise.all([
+        const [appsRes, skills, categoriesRes] = await Promise.all([
           appsApi.list(),
           loadAllSkills(),
+          skillHubApi.listCategories(),
         ])
         if (!alive) return
         setApps(appsRes.data.list)
         setResearchSkills(skills)
+        setSkillCategories(categoriesRes.data)
       } catch (err) {
         if (!alive) return
         setError(err instanceof Error ? err.message : '应用总页加载失败')
@@ -308,7 +327,7 @@ export default function AppsPage() {
                 应用
               </h2>
             </div>
-            <div className="mt-5 columns-1 gap-4 lg:columns-2">
+            <div className="mt-5 lg:hidden">
               {apps.map((app) => (
                 <AppCatalogCard
                   key={app.id}
@@ -323,6 +342,38 @@ export default function AppsPage() {
                 />
               ))}
             </div>
+            <div className="mt-5 hidden gap-5 lg:grid lg:grid-cols-2">
+              <div>
+                {leftAppColumn.map((app) => (
+                  <AppCatalogCard
+                    key={app.id}
+                    app={app}
+                    icon={<AppIcon kind={app.icon} />}
+                    pendingLike={pendingLikeIds.has(app.id)}
+                    pendingTopic={pendingTopicIds.has(app.id)}
+                    onToggleLike={() => void toggleLike(app)}
+                    onOpenTopic={() => void openTopic(app)}
+                    onOpenFeedback={() => openFeedbackDraft(app)}
+                    links={getAppLinks(app)}
+                  />
+                ))}
+              </div>
+              <div>
+                {rightAppColumn.map((app) => (
+                  <AppCatalogCard
+                    key={app.id}
+                    app={app}
+                    icon={<AppIcon kind={app.icon} />}
+                    pendingLike={pendingLikeIds.has(app.id)}
+                    pendingTopic={pendingTopicIds.has(app.id)}
+                    onToggleLike={() => void toggleLike(app)}
+                    onOpenTopic={() => void openTopic(app)}
+                    onOpenFeedback={() => openFeedbackDraft(app)}
+                    links={getAppLinks(app)}
+                  />
+                ))}
+              </div>
+            </div>
           </section>
 
           <section className="mt-8">
@@ -331,14 +382,36 @@ export default function AppsPage() {
                 技能
               </h2>
             </div>
-            <div className="mt-5 columns-1 gap-4 lg:columns-2">
-              {researchSkills.map((skill) => (
+            <div className="mt-5 space-y-5 rounded-[var(--radius-xl)] border p-4 sm:p-5" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)' }}>
+              <section className="space-y-2">
+                <p className="text-xs font-medium tracking-wide" style={{ color: 'var(--text-tertiary)' }}>
+                  一级学科
+                </p>
+                <CategoryStrip
+                  disciplines={skillCategories?.disciplines ?? []}
+                  activeKey={skillCategoryFilter}
+                  onChange={setSkillCategoryFilter}
+                />
+              </section>
+
+              <section className="space-y-2">
+                <p className="text-xs font-medium tracking-wide" style={{ color: 'var(--text-tertiary)' }}>
+                  研究领域（Cluster）
+                </p>
+                <ClusterStrip
+                  clusters={skillCategories?.clusters ?? []}
+                  activeKey={skillClusterFilter}
+                  onChange={setSkillClusterFilter}
+                />
+              </section>
+            </div>
+            <div className="mt-5 lg:hidden">
+              {filteredResearchSkills.map((skill) => (
                 <AppsSkillCard
                   key={skill.id}
                   skill={skill}
                   variant="catalog"
                   icon={<AppIcon kind="spark" />}
-                  statsText={skillCardStatsText}
                   actions={(
                     <>
                       <button
@@ -356,12 +429,64 @@ export default function AppsPage() {
                   )}
                 />
               ))}
-              {researchSkills.length === 0 ? (
-                <div className="rounded-[var(--radius-xl)] border p-5 text-sm" style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}>
-                  暂无可展示的科研应用。
-                </div>
-              ) : null}
             </div>
+            <div className="mt-5 hidden gap-5 lg:grid lg:grid-cols-2">
+              <div>
+                {leftSkillColumn.map((skill) => (
+                  <AppsSkillCard
+                    key={skill.id}
+                    skill={skill}
+                    variant="catalog"
+                    icon={<AppIcon kind="spark" />}
+                    actions={(
+                      <>
+                        <button
+                          type="button"
+                          className="inline-flex items-center rounded-[var(--radius-md)] border px-3 py-2 text-sm font-medium transition-colors"
+                          style={{ borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}
+                          onClick={() => navigate(`/apps/skills/${skill.slug}`)}
+                        >
+                          打开详情
+                        </button>
+                        <div className="inline-flex items-center rounded-[var(--radius-md)] px-3 py-2 text-sm font-medium" style={{ color: 'var(--text-tertiary)' }}>
+                          {skill.cluster_name}
+                        </div>
+                      </>
+                    )}
+                  />
+                ))}
+              </div>
+              <div>
+                {rightSkillColumn.map((skill) => (
+                  <AppsSkillCard
+                    key={skill.id}
+                    skill={skill}
+                    variant="catalog"
+                    icon={<AppIcon kind="spark" />}
+                    actions={(
+                      <>
+                        <button
+                          type="button"
+                          className="inline-flex items-center rounded-[var(--radius-md)] border px-3 py-2 text-sm font-medium transition-colors"
+                          style={{ borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}
+                          onClick={() => navigate(`/apps/skills/${skill.slug}`)}
+                        >
+                          打开详情
+                        </button>
+                        <div className="inline-flex items-center rounded-[var(--radius-md)] px-3 py-2 text-sm font-medium" style={{ color: 'var(--text-tertiary)' }}>
+                          {skill.cluster_name}
+                        </div>
+                      </>
+                    )}
+                  />
+                ))}
+              </div>
+            </div>
+            {filteredResearchSkills.length === 0 ? (
+              <div className="mt-5 rounded-[var(--radius-xl)] border p-5 text-sm" style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}>
+                暂无可展示的科研应用。
+              </div>
+            ) : null}
           </section>
         </>
       ) : null}

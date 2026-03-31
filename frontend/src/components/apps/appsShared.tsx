@@ -33,6 +33,12 @@ const INPUT_STYLE = {
   color: 'var(--text-primary)',
 } as const
 
+const METRIC_BADGE_STYLE = {
+  borderColor: 'var(--border-default)',
+  backgroundColor: 'var(--bg-secondary)',
+  color: 'var(--text-secondary)',
+} as const
+
 export function formatCompactNumber(value: number) {
   if (value >= 10000) return `${(value / 10000).toFixed(1)}w`
   if (value >= 1000) return `${(value / 1000).toFixed(1)}k`
@@ -133,6 +139,33 @@ export function AppsMetricCard({
         {value}
       </div>
     </AppsInsetCard>
+  )
+}
+
+export function AppsStatBadge({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode
+  label: string
+  value: string
+}) {
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs"
+      style={METRIC_BADGE_STYLE}
+      aria-label={`${label} ${value}`}
+      title={`${label} ${value}`}
+    >
+      <span className="flex h-3.5 w-3.5 items-center justify-center" aria-hidden>
+        {icon}
+      </span>
+      <span>{label}</span>
+      <span className="font-medium tabular-nums" style={{ color: 'var(--text-primary)' }}>
+        {value}
+      </span>
+    </span>
   )
 }
 
@@ -268,8 +301,42 @@ export function AppsSkillCard({
   tagLimit?: number
 }) {
   const priceLabel = skill.price_points > 0 ? `${skill.price_points} pts` : 'Free'
-  const statsLine = statsText ?? `应用评分 ${skill.avg_rating.toFixed(1)} · 评测 ${formatCompactNumber(skill.total_reviews)} · 下载 ${formatCompactNumber(skill.total_downloads)} · 点数 ${priceLabel}`
+  const statsLine = statsText ?? `评测 ${formatCompactNumber(skill.total_reviews)} · 点数 ${priceLabel}`
   const visibleTags = skill.tags.slice(0, tagLimit ?? (variant === 'catalog' ? 6 : 4))
+  const ratingText = skill.total_reviews > 0 ? skill.avg_rating.toFixed(1) : '-'
+  const catalogMetricsPlain = `下载 ${formatCompactNumber(skill.total_downloads)} · 收藏 ${formatCompactNumber(skill.total_favorites)} · 评分 ${ratingText}`
+  const catalogFooterPlain = `${catalogMetricsPlain} · ${statsLine}`
+  const metricBadges = (
+    <div className="flex flex-wrap gap-2">
+      <AppsStatBadge
+        icon={(
+          <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none">
+            <path d="M10 4.5v7m0 0l-2.5-2.5M10 11.5l2.5-2.5M4.5 13.5v1a1 1 0 001 1h9a1 1 0 001-1v-1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+        label="下载"
+        value={formatCompactNumber(skill.total_downloads)}
+      />
+      <AppsStatBadge
+        icon={(
+          <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none">
+            <path d="M10 16.25l-5.02-4.86a3.58 3.58 0 010-5.18 3.66 3.66 0 015.11 0L10 6.3l-.09-.09a3.66 3.66 0 015.11 0 3.58 3.58 0 010 5.18L10 16.25z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+        label="收藏"
+        value={formatCompactNumber(skill.total_favorites)}
+      />
+      <AppsStatBadge
+        icon={(
+          <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none">
+            <path d="M10 3.75l1.86 3.77 4.16.6-3.01 2.93.71 4.14L10 13.23l-3.72 1.96.71-4.14-3.01-2.93 4.16-.6L10 3.75z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+        label="评分"
+        value={ratingText}
+      />
+    </div>
+  )
 
   if (variant === 'catalog') {
     return (
@@ -283,17 +350,18 @@ export function AppsSkillCard({
       >
         <div className="flex items-start gap-4">
           {icon ? (
-            <div
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl"
-              style={{
-                background: 'linear-gradient(180deg, rgba(241,245,249,0.95) 0%, rgba(226,232,240,0.92) 100%)',
-                color: 'var(--text-primary)',
-              }}
-            >
-              {icon}
-            </div>
-          ) : null}
-          <div className="min-w-0 flex-1">
+          <div
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl"
+            style={{
+              background: 'linear-gradient(180deg, rgba(241,245,249,0.95) 0%, rgba(226,232,240,0.92) 100%)',
+              color: 'var(--text-primary)',
+            }}
+          >
+            {icon}
+          </div>
+        ) : null}
+        <div className="min-w-0 flex-1">
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-lg font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>
                 {skill.name}
@@ -314,38 +382,64 @@ export function AppsSkillCard({
                 {skill.category_name}
               </span>
             </div>
+          </div>
+          {skill.install_command ? (
+            <div
+              className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[var(--radius-md)] border px-3 py-2"
+              style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--bg-secondary)' }}
+            >
+              <span className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-tertiary)' }}>
+                安装
+              </span>
+              <code className="font-mono text-xs sm:text-sm" style={{ color: 'var(--text-primary)' }}>
+                {skill.install_command}
+              </code>
+            </div>
+          ) : null}
+          <div className="mt-3 min-w-0">
             {skill.tagline ? (
-              <p className="mt-3 text-sm leading-6" style={{ color: 'var(--text-primary)' }}>
+              <p className="text-sm leading-6" style={{ color: 'var(--text-primary)' }}>
                 {skill.tagline}
               </p>
             ) : null}
-            <p className="mt-2 text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
+            <p className={`${skill.tagline ? 'mt-2' : ''} text-sm leading-6`} style={{ color: 'var(--text-secondary)' }}>
               {skill.summary}
             </p>
-            <p className="mt-3 text-sm leading-6" style={{ color: 'var(--text-tertiary)' }}>
-              {statsLine}
-            </p>
-            {visibleTags.length > 0 ? (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {visibleTags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="inline-flex items-center rounded-full px-2.5 py-1 text-xs"
-                    style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-tertiary)' }}
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            ) : null}
           </div>
+          {visibleTags.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {visibleTags.map((tag) => (
+                <span
+                  key={tag}
+                  className="inline-flex items-center rounded-full px-2.5 py-1 text-xs"
+                  style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-tertiary)' }}
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
         </div>
 
-        {actions ? (
-          <div className="mt-5 flex flex-wrap gap-3">
-            {actions}
-          </div>
-        ) : null}
+        <div
+          className={joinClasses(
+            'mt-5 flex flex-col gap-3',
+            actions ? 'sm:flex-row sm:items-center sm:justify-between sm:gap-4' : 'items-end',
+          )}
+        >
+          {actions ? <div className="flex shrink-0 flex-wrap items-center gap-3">{actions}</div> : null}
+          <p
+            className={joinClasses(
+              'text-right text-xs tabular-nums leading-5',
+              actions ? 'min-w-0 flex-1 sm:text-right' : 'w-full',
+            )}
+            style={{ color: 'var(--text-tertiary)' }}
+            aria-label={catalogFooterPlain}
+          >
+            {catalogFooterPlain}
+          </p>
+        </div>
       </article>
     )
   }
@@ -393,6 +487,7 @@ export function AppsSkillCard({
           <p className="mt-2 text-[13px] leading-snug sm:text-sm sm:leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
             {skill.summary}
           </p>
+          {metricBadges}
         </div>
         {actions ? (
           <div className="shrink-0 justify-self-end self-start pt-0.5">{actions}</div>

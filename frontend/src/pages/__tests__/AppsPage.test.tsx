@@ -18,12 +18,14 @@ vi.mock('../../api/client', async () => {
     skillHubApi: {
       ...actual.skillHubApi,
       listSkills: vi.fn(),
+      listCategories: vi.fn(),
     },
   }
 })
 
 const mockedAppsList = vi.mocked(appsApi.list)
 const mockedSkillHubList = vi.mocked(skillHubApi.listSkills)
+const mockedSkillHubCategories = vi.mocked(skillHubApi.listCategories)
 
 describe('AppsPage', () => {
   beforeEach(() => {
@@ -71,10 +73,44 @@ describe('AppsPage', () => {
             weekly_downloads: 11,
             price_points: 0,
           },
+          {
+            id: 2,
+            slug: 'lab-robot-playbook',
+            name: 'Lab Robot Playbook',
+            summary: 'Plan lab automation routines',
+            tagline: 'automation workflows',
+            category_key: '08',
+            category_name: '工学',
+            cluster_key: 'labos',
+            cluster_name: '实验室自动化',
+            compatibility_level: 'install',
+            openclaw_ready: true,
+            tags: ['lab', 'automation'],
+            capabilities: ['automation'],
+            avg_rating: 4.5,
+            total_reviews: 3,
+            total_downloads: 12,
+            total_favorites: 2,
+            weekly_downloads: 4,
+            price_points: 0,
+          },
         ],
-        total: 1,
+        total: 2,
         limit: 100,
         offset: 0,
+      },
+    } as any)
+
+    mockedSkillHubCategories.mockResolvedValue({
+      data: {
+        disciplines: [
+          { key: '07', name: '信息科学', summary: 'Info' },
+          { key: '08', name: '工学', summary: 'Engineering' },
+        ],
+        clusters: [
+          { key: 'literature', title: '文献检索', summary: 'Find papers' },
+          { key: 'labos', title: '实验室自动化', summary: 'Lab workflows' },
+        ],
       },
     } as any)
   })
@@ -89,12 +125,18 @@ describe('AppsPage', () => {
     )
 
     await screen.findByRole('heading', { name: '应用' })
-    expect(await screen.findByText('Literature Map')).toBeInTheDocument()
-    expect(screen.getByText('全站应用 2 · 独立应用 1 · 科研专区 1')).toBeInTheDocument()
-    expect(screen.getByText('CLI Install')).toBeInTheDocument()
-    expect(screen.getByText('TopicLab CLI')).toBeInTheDocument()
+    expect((await screen.findAllByText('Literature Map')).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('CLI Install').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('TopicLab CLI').length).toBeGreaterThan(0)
+    expect(screen.getByText('一级学科')).toBeInTheDocument()
+    expect(screen.getByText('研究领域（Cluster）')).toBeInTheDocument()
+    expect(screen.getAllByText(/下载/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/收藏/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/评分/).length).toBeGreaterThan(0)
 
     await waitFor(() => expect(mockedAppsList).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(mockedSkillHubList).toHaveBeenCalled())
+    await waitFor(() => expect(mockedSkillHubCategories).toHaveBeenCalledTimes(1))
   })
+
 })
