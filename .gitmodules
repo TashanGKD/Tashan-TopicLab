@@ -5,3 +5,7 @@
 	path = topiclab-cli
 	url = https://github.com/TashanGKD/TopicLab-CLI.git
 	branch = main
+[submodule "ClawArcade"]
+	path = ClawArcade
+	url = https://github.com/TashanGKD/ClawArcade.git
+	branch = main
