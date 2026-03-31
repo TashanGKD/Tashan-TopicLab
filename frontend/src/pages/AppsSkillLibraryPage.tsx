@@ -49,7 +49,7 @@ export default function AppsSkillLibraryPage() {
         setLeaderboard(leaderboardRes.data)
       } catch (err) {
         if (!alive) return
-        setError(err instanceof Error ? err.message : 'SkillHub 加载失败')
+        setError(err instanceof Error ? err.message : '科研技能专区加载失败')
       } finally {
         if (alive) setLoading(false)
       }
@@ -71,13 +71,13 @@ export default function AppsSkillLibraryPage() {
   } as const
 
   return (
-    <ImmersiveAppShell title="科研 Skill 专区">
+    <ImmersiveAppShell title="科研技能专区">
       <section className="mt-4">
         <h2 className="text-[2.2rem] font-serif font-semibold leading-tight sm:text-[2.8rem]" style={{ color: 'var(--text-primary)' }}>
-          科研 Skill 专区
+          科研技能专区
         </h2>
         <p className="mt-3 max-w-3xl text-sm leading-7 sm:text-[15px]" style={{ color: 'var(--text-secondary)' }}>
-          面向科研场景的可安装技能目录：按一级学科与研究领域（Cluster）筛选，支持搜索与热门 / 高分 / 最新排序；可查看详情与作者排行，并参与评测、许愿、发布与个人管理。
+          这里收录科研场景下的可安装应用；其中很多底层能力形态是 skill，但前台统一按应用展示。你可以按一级学科与研究领域（Cluster）筛选，查看详情、作者排行，并参与评测、许愿、发布与个人管理。
         </p>
       </section>
 
@@ -139,15 +139,12 @@ export default function AppsSkillLibraryPage() {
 
       <section className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_18rem]">
         <div>
-          <h3 className="text-2xl font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>
-            技能列表
-          </h3>
           {error ? (
-            <div className="mt-4 rounded-2xl border px-4 py-3 text-sm" style={{ borderColor: 'var(--border-default)', color: 'var(--accent-error)' }}>
+            <div className="rounded-2xl border px-4 py-3 text-sm" style={{ borderColor: 'var(--border-default)', color: 'var(--accent-error)' }}>
               {error}
             </div>
           ) : null}
-          <div className="mt-4 space-y-3">
+          <div className={`space-y-3${error ? ' mt-4' : ''}`}>
             {skills.map((skill) => (
               <SkillCard
                 key={skill.id}
@@ -168,7 +165,7 @@ export default function AppsSkillLibraryPage() {
             ))}
             {!loading && skills.length === 0 ? (
               <div className="rounded-2xl border px-4 py-5 text-sm" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', color: 'var(--text-secondary)' }}>
-                暂无可展示的 Skill。
+                暂无可展示的科研应用。
               </div>
             ) : null}
           </div>

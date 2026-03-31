@@ -8,7 +8,7 @@ describe('formatSkillHubShareClipboard', () => {
       { name: 'Literature Map', summary: '整合 arXiv 与 PubMed。', tagline: null },
       'literature-map',
     )
-    expect(text.startsWith('【他山世界 skill 分享】Literature Map，\n')).toBe(true)
+    expect(text.startsWith('【他山世界应用 / skill 分享】Literature Map，\n')).toBe(true)
     expect(text).toContain('整合 arXiv 与 PubMed。')
     expect(text).toMatch(/\/apps\/skills\/literature-map\s*$/m)
   })

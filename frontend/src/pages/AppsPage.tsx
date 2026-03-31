@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import LibraryPageLayout from '../components/LibraryPageLayout'
 import ReactionButton from '../components/ReactionButton'
-import { AppCatalogItem, appsApi } from '../api/client'
+import { AppCatalogItem, appsApi, skillHubApi, type SkillHubSkillSummary } from '../api/client'
 import { handleApiError } from '../utils/errorHandler'
 import { toast } from '../utils/toast'
 
@@ -30,9 +30,9 @@ interface SkillHeroStyle {
 
 const APPS_SKILL_HERO = {
   eyebrow: 'RESEARCH SKILL ZONE',
-  title: '科研 Skill 专区',
+  title: '科研技能专区',
   description:
-    '按一级学科与科研方向浏览可安装技能，支持搜索与热门、高分、最新排序，并查看详情与作者排行，为 Agent 接入科研工作流提供统一路径。',
+    '集中收录可安装的科研 Skill：按一级学科与研究领域（Cluster）筛选，查看说明与 CLI 安装命令，并参与评测、许愿与发布。',
   style: {
     background: 'linear-gradient(135deg, rgba(238,247,240,0.98) 0%, rgba(226,241,229,0.98) 44%, rgba(214,234,220,0.98) 100%)',
     borderColor: 'rgba(167, 201, 180, 0.8)',
@@ -85,7 +85,7 @@ const appsPromoTracks: AppsPromoTrack[] = [
     title: APPS_SKILL_HERO.title,
     description: APPS_SKILL_HERO.description,
     style: APPS_SKILL_HERO.style,
-    cta: { to: '/apps/skills', label: '进入 Skill 专区' },
+    cta: { to: '/apps/skills', label: '进入科研技能专区' },
   },
   {
     id: 'ai-topic-library',
@@ -147,6 +147,13 @@ function HeartIcon() {
   )
 }
 
+function formatCompatibilityTag(level: SkillHubSkillSummary['compatibility_level']) {
+  if (level === 'runtime_full') return 'OpenClaw Ready'
+  if (level === 'runtime_partial') return 'Runtime Partial'
+  if (level === 'install') return 'CLI Install'
+  return 'Metadata'
+}
+
 function openFeedbackDraft(app: AppDisplayItem) {
   window.dispatchEvent(new CustomEvent('open-feedback-draft', {
     detail: {
@@ -159,12 +166,15 @@ function openFeedbackDraft(app: AppDisplayItem) {
 export default function AppsPage() {
   const navigate = useNavigate()
   const [apps, setApps] = useState<AppDisplayItem[]>([])
+  const [researchSkills, setResearchSkills] = useState<SkillHubSkillSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [pendingTopicIds, setPendingTopicIds] = useState<Set<string>>(new Set())
   const [pendingLikeIds, setPendingLikeIds] = useState<Set<string>>(new Set())
   const [promoIndex, setPromoIndex] = useState(0)
   const activePromo = appsPromoTracks[promoIndex]
+  const totalAppCount = apps.length + researchSkills.length
+  const skillCardStatsText = `全站应用 ${totalAppCount} · 独立应用 ${apps.length} · 科研专区 ${researchSkills.length}`
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -184,16 +194,42 @@ export default function AppsPage() {
   useEffect(() => {
     let alive = true
 
+    const loadAllSkills = async () => {
+      const batchSize = 100
+      let offset = 0
+      let total = Number.POSITIVE_INFINITY
+      const all: SkillHubSkillSummary[] = []
+
+      while (offset < total) {
+        const res = await skillHubApi.listSkills({ sort: 'hot', limit: batchSize, offset })
+        const page = res.data.list ?? []
+        total = res.data.total ?? page.length
+        all.push(...page)
+        if (page.length < batchSize) break
+        offset += page.length
+      }
+
+      return all.sort((a, b) => {
+        const diff = (b.total_downloads ?? 0) - (a.total_downloads ?? 0)
+        if (diff !== 0) return diff
+        return a.name.localeCompare(b.name)
+      })
+    }
+
     const load = async () => {
       try {
         setLoading(true)
         setError(null)
-        const res = await appsApi.list()
+        const [appsRes, skills] = await Promise.all([
+          appsApi.list(),
+          loadAllSkills(),
+        ])
         if (!alive) return
-        setApps(res.data.list)
+        setApps(appsRes.data.list)
+        setResearchSkills(skills)
       } catch (err) {
         if (!alive) return
-        setError(err instanceof Error ? err.message : '应用目录加载失败')
+        setError(err instanceof Error ? err.message : '应用总页加载失败')
       } finally {
         if (alive) {
           setLoading(false)
@@ -281,18 +317,6 @@ export default function AppsPage() {
       <div className="max-w-5xl">
         <p className="text-sm leading-6 sm:text-[15px]" style={{ color: 'var(--text-secondary)' }}>
           我们准备了一系列 Claw Ready 应用，您的 OpenClaw 可以直接调用这些应用，帮助您完成更具体、更复杂的场景化任务。
-        </p>
-        <p className="mt-2 text-sm leading-6 sm:text-[15px]" style={{ color: 'var(--text-secondary)' }}>
-          除了应用之外，您的 OpenClaw 也可以自主发现并使用我们准备的
-          {' '}
-          <Link
-            to="/apps/skills"
-            className="font-medium underline underline-offset-4 transition-opacity hover:opacity-80"
-            style={{ color: 'var(--text-primary)' }}
-          >
-            Skill
-          </Link>
-          ，把这些能力按需组合进自己的工作流。
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2.5">
           <div className="mr-1 flex items-center gap-2 rounded-full border px-3 py-2" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-secondary)' }}>
@@ -462,7 +486,7 @@ export default function AppsPage() {
 
       {loading ? (
         <div className="mt-6 rounded-[var(--radius-xl)] border p-5 text-sm" style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}>
-          正在加载应用目录…
+          正在加载…
         </div>
       ) : null}
 
@@ -473,151 +497,267 @@ export default function AppsPage() {
       ) : null}
 
       {!loading && !error ? (
-        <div className="mt-6 columns-1 gap-4 lg:columns-2">
-          {apps.map((app) => (
-            <article
-              key={app.id}
-              className="mb-4 break-inside-avoid rounded-[var(--radius-xl)] border p-5 sm:p-6"
-              style={{
-                borderColor: 'var(--border-default)',
-                backgroundColor: 'var(--bg-container)',
-                boxShadow: 'var(--shadow-sm)',
-              }}
-            >
-              <div className="flex items-start gap-4">
-                <div
-                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl"
+        <>
+          <section className="mt-8">
+            <div>
+              <h2 className="text-2xl font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>
+                应用
+              </h2>
+            </div>
+            <div className="mt-5 columns-1 gap-4 lg:columns-2">
+              {apps.map((app) => (
+                <article
+                  key={app.id}
+                  className="mb-4 break-inside-avoid rounded-[var(--radius-xl)] border p-5 sm:p-6"
                   style={{
-                    background: 'linear-gradient(180deg, rgba(241,245,249,0.95) 0%, rgba(226,232,240,0.92) 100%)',
-                    color: 'var(--text-primary)',
+                    borderColor: 'var(--border-default)',
+                    backgroundColor: 'var(--bg-container)',
+                    boxShadow: 'var(--shadow-sm)',
                   }}
                 >
-                  <AppIcon kind={app.icon} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-lg font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>
-                      {app.name}
-                    </h2>
-                    {app.builtin ? (
-                      <span
-                        className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium"
-                        style={{
-                          backgroundColor: 'var(--bg-secondary)',
-                          color: 'var(--text-secondary)',
-                        }}
-                      >
-                        已内置
-                      </span>
-                    ) : null}
-                    {app.command ? (
-                      <span
-                        className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium"
-                        style={{
-                          backgroundColor: 'var(--bg-secondary)',
-                          color: 'var(--text-secondary)',
-                        }}
-                      >
-                        {app.command}
-                      </span>
-                    ) : null}
+                  <div className="flex items-start gap-4">
+                    <div
+                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl"
+                      style={{
+                        background: 'linear-gradient(180deg, rgba(241,245,249,0.95) 0%, rgba(226,232,240,0.92) 100%)',
+                        color: 'var(--text-primary)',
+                      }}
+                    >
+                      <AppIcon kind={app.icon} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-lg font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>
+                          {app.name}
+                        </h2>
+                        {app.builtin ? (
+                          <span
+                            className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium"
+                            style={{
+                              backgroundColor: 'var(--bg-secondary)',
+                              color: 'var(--text-secondary)',
+                            }}
+                          >
+                            已内置
+                          </span>
+                        ) : null}
+                        {app.command ? (
+                          <span
+                            className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium"
+                            style={{
+                              backgroundColor: 'var(--bg-secondary)',
+                              color: 'var(--text-secondary)',
+                            }}
+                          >
+                            {app.command}
+                          </span>
+                        ) : null}
+                      </div>
+                      {app.install_command ? (
+                        <div className="mt-3 rounded-[var(--radius-md)] border px-3 py-2" style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--bg-secondary)' }}>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-tertiary)' }}>
+                            安装
+                          </p>
+                          <p className="mt-1 font-mono text-xs sm:text-sm" style={{ color: 'var(--text-primary)' }}>
+                            {app.install_command}
+                          </p>
+                        </div>
+                      ) : null}
+                      {app.summary ? (
+                        <p className="mt-3 text-sm leading-6" style={{ color: 'var(--text-primary)' }}>
+                          {app.summary}
+                        </p>
+                      ) : null}
+                      {app.description ? (
+                        <p className="mt-2 text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
+                          {app.description}
+                        </p>
+                      ) : null}
+                      {app.tags?.length ? (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {app.tags.map((tag) => (
+                            <span
+                              key={tag}
+                              className="inline-flex items-center rounded-full px-2.5 py-1 text-xs"
+                              style={{
+                                backgroundColor: 'var(--bg-secondary)',
+                                color: 'var(--text-tertiary)',
+                              }}
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
-                  {app.install_command ? (
-                    <div className="mt-3 rounded-[var(--radius-md)] border px-3 py-2" style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--bg-secondary)' }}>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-tertiary)' }}>
-                        安装
-                      </p>
-                      <p className="mt-1 font-mono text-xs sm:text-sm" style={{ color: 'var(--text-primary)' }}>
-                        {app.install_command}
-                      </p>
-                    </div>
-                  ) : null}
-                  {app.summary ? (
-                    <p className="mt-3 text-sm leading-6" style={{ color: 'var(--text-primary)' }}>
-                      {app.summary}
-                    </p>
-                  ) : null}
-                  {app.description ? (
-                    <p className="mt-2 text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
-                      {app.description}
-                    </p>
-                  ) : null}
-                  {app.tags?.length ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {app.tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="inline-flex items-center rounded-full px-2.5 py-1 text-xs"
-                          style={{
-                            backgroundColor: 'var(--bg-secondary)',
-                            color: 'var(--text-tertiary)',
-                          }}
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
 
-              <div className="mt-5 flex flex-wrap gap-3">
-                <ReactionButton
-                  label="点赞"
-                  count={app.interaction?.likes_count ?? 0}
-                  active={app.interaction?.liked ?? false}
-                  pending={pendingLikeIds.has(app.id)}
-                  icon={<HeartIcon />}
-                  subtle
-                  onClick={() => void toggleLike(app)}
-                />
-                {getAppLinks(app).map((link) => (
-                  <a
-                    key={`${app.id}:${link.label}:${link.href}`}
-                    href={link.href}
-                    target="_blank"
-                    rel="noreferrer"
-                    className={`inline-flex items-center rounded-[var(--radius-md)] px-3 py-2 text-sm font-medium transition-opacity hover:opacity-90 ${link.primary ? '' : 'border transition-colors'}`}
-                    style={link.primary
-                      ? {
-                        backgroundColor: 'var(--text-primary)',
-                        color: 'var(--bg-container)',
-                      }
-                      : {
+                  <div className="mt-5 flex flex-wrap gap-3">
+                    <ReactionButton
+                      label="点赞"
+                      count={app.interaction?.likes_count ?? 0}
+                      active={app.interaction?.liked ?? false}
+                      pending={pendingLikeIds.has(app.id)}
+                      icon={<HeartIcon />}
+                      subtle
+                      onClick={() => void toggleLike(app)}
+                    />
+                    {getAppLinks(app).map((link) => (
+                      <a
+                        key={`${app.id}:${link.label}:${link.href}`}
+                        href={link.href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={`inline-flex items-center rounded-[var(--radius-md)] px-3 py-2 text-sm font-medium transition-opacity hover:opacity-90 ${link.primary ? '' : 'border transition-colors'}`}
+                        style={link.primary
+                          ? {
+                            backgroundColor: 'var(--text-primary)',
+                            color: 'var(--bg-container)',
+                          }
+                          : {
+                            borderColor: 'var(--border-default)',
+                            color: 'var(--text-primary)',
+                          }}
+                      >
+                        {link.label}
+                      </a>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => void openTopic(app)}
+                      disabled={pendingTopicIds.has(app.id)}
+                      className="inline-flex items-center rounded-[var(--radius-md)] border px-3 py-2 text-sm font-medium transition-colors"
+                      style={{
                         borderColor: 'var(--border-default)',
                         color: 'var(--text-primary)',
                       }}
-                  >
-                    {link.label}
-                  </a>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => void openTopic(app)}
-                  disabled={pendingTopicIds.has(app.id)}
-                  className="inline-flex items-center rounded-[var(--radius-md)] border px-3 py-2 text-sm font-medium transition-colors"
+                    >
+                      {pendingTopicIds.has(app.id) ? '打开中…' : '进入话题'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openFeedbackDraft(app)}
+                      className="inline-flex items-center rounded-[var(--radius-md)] border px-3 py-2 text-sm font-medium transition-colors"
+                      style={{
+                        borderColor: 'var(--border-default)',
+                        color: 'var(--text-primary)',
+                      }}
+                    >
+                      评价应用
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="mt-8">
+            <div>
+              <h2 className="text-2xl font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>
+                技能
+              </h2>
+            </div>
+            <div className="mt-5 columns-1 gap-4 lg:columns-2">
+              {researchSkills.map((skill) => (
+                <article
+                  key={skill.id}
+                  className="mb-4 break-inside-avoid rounded-[var(--radius-xl)] border p-5 sm:p-6"
                   style={{
                     borderColor: 'var(--border-default)',
-                    color: 'var(--text-primary)',
+                    backgroundColor: 'var(--bg-container)',
+                    boxShadow: 'var(--shadow-sm)',
                   }}
                 >
-                  {pendingTopicIds.has(app.id) ? '打开中…' : '进入话题'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openFeedbackDraft(app)}
-                  className="inline-flex items-center rounded-[var(--radius-md)] border px-3 py-2 text-sm font-medium transition-colors"
-                  style={{
-                    borderColor: 'var(--border-default)',
-                    color: 'var(--text-primary)',
-                  }}
-                >
-                  评价应用
-                </button>
-              </div>
-            </article>
-          ))}
-        </div>
+                  <div className="flex items-start gap-4">
+                    <div
+                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl"
+                      style={{
+                        background: 'linear-gradient(180deg, rgba(241,245,249,0.95) 0%, rgba(226,232,240,0.92) 100%)',
+                        color: 'var(--text-primary)',
+                      }}
+                    >
+                      <AppIcon kind="spark" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-lg font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>
+                          {skill.name}
+                        </h2>
+                        <span
+                          className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium"
+                          style={{
+                            backgroundColor: skill.openclaw_ready ? 'rgba(16, 185, 129, 0.12)' : 'var(--bg-secondary)',
+                            color: skill.openclaw_ready ? '#047857' : 'var(--text-secondary)',
+                          }}
+                        >
+                          {formatCompatibilityTag(skill.compatibility_level)}
+                        </span>
+                        <span
+                          className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium"
+                          style={{
+                            backgroundColor: 'var(--bg-secondary)',
+                            color: 'var(--text-secondary)',
+                          }}
+                        >
+                          {skill.category_name}
+                        </span>
+                      </div>
+                      {skill.tagline ? (
+                        <p className="mt-3 text-sm leading-6" style={{ color: 'var(--text-primary)' }}>
+                          {skill.tagline}
+                        </p>
+                      ) : null}
+                      <p className="mt-2 text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
+                        {skill.summary}
+                      </p>
+                      <p className="mt-3 text-sm leading-6" style={{ color: 'var(--text-tertiary)' }}>
+                        {skillCardStatsText}
+                      </p>
+                      {skill.tags?.length ? (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {skill.tags.slice(0, 6).map((tag) => (
+                            <span
+                              key={tag}
+                              className="inline-flex items-center rounded-full px-2.5 py-1 text-xs"
+                              style={{
+                                backgroundColor: 'var(--bg-secondary)',
+                                color: 'var(--text-tertiary)',
+                              }}
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="mt-5 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      className="inline-flex items-center rounded-[var(--radius-md)] border px-3 py-2 text-sm font-medium transition-colors"
+                      style={{
+                        borderColor: 'var(--border-default)',
+                        color: 'var(--text-primary)',
+                      }}
+                      onClick={() => navigate(`/apps/skills/${skill.slug}`)}
+                    >
+                      打开详情
+                    </button>
+                    <div className="inline-flex items-center rounded-[var(--radius-md)] px-3 py-2 text-sm font-medium" style={{ color: 'var(--text-tertiary)' }}>
+                      {skill.cluster_name}
+                    </div>
+                  </div>
+                </article>
+              ))}
+              {researchSkills.length === 0 ? (
+                <div className="rounded-[var(--radius-xl)] border p-5 text-sm" style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}>
+                  暂无可展示的科研应用。
+                </div>
+              ) : null}
+            </div>
+          </section>
+        </>
       ) : null}
     </LibraryPageLayout>
   )

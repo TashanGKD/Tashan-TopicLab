@@ -37,7 +37,7 @@ export default function AppsSkillDetailPage() {
       const res = await skillHubApi.getSkill(slug)
       setSkill(res.data)
     } catch (err) {
-      handleApiError(err, '加载 Skill 详情失败')
+      handleApiError(err, '加载应用 / Skill 详情失败')
     } finally {
       setLoading(false)
     }
@@ -49,7 +49,7 @@ export default function AppsSkillDetailPage() {
 
   const toggleFavorite = async () => {
     if (!skill) return
-    if (!requireLogin('请先登录后再收藏 Skill')) return
+    if (!requireLogin('请先登录后再收藏该应用 / Skill')) return
     try {
       const res = await skillHubApi.toggleFavorite(skill.slug, !skill.viewer_favorited)
       setSkill({
@@ -64,7 +64,7 @@ export default function AppsSkillDetailPage() {
 
   const handleDownload = async () => {
     if (!skill) return
-    if (!requireLogin('请先登录后再下载或安装 Skill')) return
+    if (!requireLogin('请先登录后再下载或安装该应用 / Skill')) return
     try {
       const res = await skillHubApi.downloadSkill(skill.slug, 'detail-page')
       if (res.data.download_url) {
@@ -75,7 +75,7 @@ export default function AppsSkillDetailPage() {
       }
       await load()
     } catch (err) {
-      handleApiError(err, '下载 Skill 失败')
+      handleApiError(err, '下载或安装应用 / Skill 失败')
     }
   }
 
@@ -86,7 +86,7 @@ export default function AppsSkillDetailPage() {
       const res = await skillHubApi.getSkillContent(skill.slug)
       setContentPayload(res.data)
     } catch (err) {
-      handleApiError(err, '加载 Skill 全文失败')
+      handleApiError(err, '加载 Skill 全文说明失败')
     } finally {
       setContentLoading(false)
     }
@@ -144,9 +144,9 @@ export default function AppsSkillDetailPage() {
   }
 
   return (
-    <ImmersiveAppShell title={skill?.name ?? 'Skill 详情'} subtitle={skill?.summary ?? '加载中…'}>
+    <ImmersiveAppShell title={skill?.name ?? '应用详情 / Skill 详情'} subtitle={skill?.summary ?? '加载中…'}>
       {loading || !skill ? (
-        <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>正在加载 Skill 详情…</div>
+        <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>正在加载应用 / Skill 详情…</div>
       ) : (
         <>
           <section className="rounded-[28px] border p-6" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', boxShadow: 'var(--shadow-sm)' }}>
@@ -162,13 +162,16 @@ export default function AppsSkillDetailPage() {
               <h2 className="mt-4 text-[2rem] font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>{skill.name}</h2>
               {skill.tagline ? <p className="mt-2 text-sm" style={{ color: 'var(--text-secondary)' }}>{skill.tagline}</p> : null}
               <p className="mt-4 max-w-3xl text-sm leading-7" style={{ color: 'var(--text-secondary)' }}>{skill.description}</p>
+              <p className="mt-3 max-w-3xl text-sm leading-7" style={{ color: 'var(--text-tertiary)' }}>
+                该对象在前台按应用展示；其底层能力形态仍然是 Skill，因此会保留版本、安装命令与全文说明等 Skill 信息。
+              </p>
 
               <div className="mt-5 flex flex-wrap items-center gap-2">
                 <button type="button" onClick={handleDownload} className="rounded-full border px-4 py-2 text-sm font-medium" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
-                  下载 / 安装
+                  下载 / 安装应用
                 </button>
                 <button type="button" onClick={() => void loadContent()} className="rounded-full border px-4 py-2 text-sm font-medium" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', color: 'var(--text-secondary)' }}>
-                  {contentPayload ? '已加载全文' : contentLoading ? '加载全文…' : '查看全文'}
+                  {contentPayload ? '已加载 Skill 全文说明' : contentLoading ? '加载 Skill 全文说明…' : '查看 Skill 全文说明'}
                 </button>
                 <button type="button" onClick={toggleFavorite} className="rounded-full border px-4 py-2 text-sm font-medium" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', color: 'var(--text-secondary)' }}>
                   {skill.viewer_favorited ? '取消收藏' : '收藏'}
@@ -240,7 +243,7 @@ export default function AppsSkillDetailPage() {
                 {contentPayload ? (
                   <div className="mt-6 rounded-2xl border p-4" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-page)' }}>
                     <div className="flex items-center justify-between gap-3">
-                      <h4 className="font-medium" style={{ color: 'var(--text-primary)' }}>Skill 全文</h4>
+                    <h4 className="font-medium" style={{ color: 'var(--text-primary)' }}>Skill 全文说明</h4>
                       <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
                         {contentPayload.version.version}
                       </div>
@@ -295,7 +298,7 @@ export default function AppsSkillDetailPage() {
 
           {skill.related_skills.length > 0 ? (
             <section className="mt-8">
-              <h3 className="text-2xl font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>相关 Skill</h3>
+              <h3 className="text-2xl font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>相关应用 / Skill</h3>
               <div className="mt-4 grid gap-4 xl:grid-cols-2">
                 {skill.related_skills.map((item) => <SkillCard key={item.id} skill={item} />)}
               </div>

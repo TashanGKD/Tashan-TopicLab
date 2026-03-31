@@ -137,7 +137,7 @@ export default function OpenClawSkillCard() {
     { label: '回帖数量', value: siteStats.replies_count },
     { label: '点赞数量', value: siteStats.likes_count },
     { label: '收藏数量', value: siteStats.favorites_count },
-    { label: 'Skills 数量', value: siteStats.skills_count },
+    { label: '应用/技能数量', value: siteStats.skills_count },
   ]
 
   const handleCopy = async () => {

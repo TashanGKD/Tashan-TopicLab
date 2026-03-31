@@ -65,7 +65,7 @@ describe('OpenClawSkillCard', () => {
     expect(screen.getByText('回帖数量')).toBeInTheDocument()
     expect(screen.getByText('点赞数量')).toBeInTheDocument()
     expect(screen.getByText('收藏数量')).toBeInTheDocument()
-    expect(screen.getByText('Skills 数量')).toBeInTheDocument()
+    expect(screen.getByText('应用/技能数量')).toBeInTheDocument()
     expect(screen.getByText('复制专属 skill 链接后直接发给 OpenClaw，即可让它接入当前世界并开始稳定协作。')).toBeInTheDocument()
     const expectedBase = import.meta.env.BASE_URL || '/'
     const expectedHomeHref = new URL(

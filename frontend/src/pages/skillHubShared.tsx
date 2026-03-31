@@ -64,7 +64,7 @@ export function buildAppUrl(path: string) {
   return new URL(path, window.location.origin).toString()
 }
 
-/** 当前部署下 Skill 详情页的绝对 URL（含 Vite `BASE_URL`）。 */
+/** 当前部署下科研技能专区详情页的绝对 URL（含 Vite `BASE_URL`）。 */
 export function skillHubSkillPublicPageUrl(slug: string): string {
   const enc = encodeURIComponent(slug)
   const raw = (import.meta.env.BASE_URL ?? '/').replace(/\/+$/, '')
@@ -75,23 +75,25 @@ export function skillHubSkillPublicPageUrl(slug: string): string {
 
 const SKILL_SHARE_SHORT_MAX = 200
 
-/** 他山世界 Skill 分享用剪贴板正文：标题行 + 简短描述 + 链接。 */
+/** 他山世界科研应用 / skill 分享用剪贴板正文：标题行 + 简短描述 + 链接。 */
 export function formatSkillHubShareClipboard(skill: Pick<SkillHubSkillSummary, 'name' | 'summary' | 'tagline'>, slug: string): string {
   const url = skillHubSkillPublicPageUrl(slug)
   const raw = (skill.tagline?.trim() || skill.summary.trim() || '（暂无简介）').replace(/\s+/g, ' ')
   const short = raw.length > SKILL_SHARE_SHORT_MAX ? `${raw.slice(0, SKILL_SHARE_SHORT_MAX - 1)}…` : raw
-  return `【他山世界 skill 分享】${skill.name}，\n${short}\n${url}`
+  return `【他山世界应用 / skill 分享】${skill.name}，\n${short}\n${url}`
 }
 
 export function SkillCard({
   skill,
   actions,
+  statsText,
 }: {
   skill: SkillHubSkillSummary
   actions?: ReactNode
+  statsText?: string
 }) {
   const priceLabel = skill.price_points > 0 ? `${skill.price_points} pts` : 'Free'
-  const statsLine = `评分 ${skill.avg_rating.toFixed(1)} · 评测 ${formatCompactNumber(skill.total_reviews)} · 下载 ${formatCompactNumber(skill.total_downloads)} · 点数 ${priceLabel}`
+  const statsLine = statsText ?? `应用评分 ${skill.avg_rating.toFixed(1)} · 评测 ${formatCompactNumber(skill.total_reviews)} · 下载 ${formatCompactNumber(skill.total_downloads)} · 点数 ${priceLabel}`
 
   return (
     <article
@@ -316,9 +318,9 @@ export function CollectionRail({ collections }: { collections: SkillHubCollectio
                   className="block rounded-2xl border px-4 py-3 transition-colors hover:bg-white/70"
                   style={{ borderColor: 'rgba(255,255,255,0.62)', backgroundColor: 'rgba(255,255,255,0.5)', color: 'var(--text-primary)' }}
                 >
-                  <div className="font-medium">{skill.name}</div>
-                  <div className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                    {skill.summary}
+                    <div className="font-medium">{skill.name}</div>
+                    <div className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                    科研应用展示，底层能力形态为 skill
                   </div>
                 </Link>
               ))}
