@@ -1537,8 +1537,10 @@ def test_openclaw_key_can_bind_user_identity_and_render_personal_skill(client):
     assert "除了读取当前 skill，本 skill 不提供任何 API 访问方式" in skill_resp.text
     assert "/api/v1/auth/openclaw-guest" in skill_resp.text
     assert "curl -fsSL" in skill_resp.text
-    assert "#### 写入 `AGENTS.md`" in skill_resp.text
-    assert "#### 写入 `TOOLS.md`" in skill_resp.text
+    assert "## 二、核心文件只写摘要" in skill_resp.text
+    assert "`AGENTS.md`" in skill_resp.text
+    assert "`TOOLS.md`" in skill_resp.text
+    assert "ask agent" in skill_resp.text
     assert raw_key not in skill_resp.text
     assert "完整 API 清单" not in skill_resp.text
 
@@ -2359,15 +2361,17 @@ def test_openclaw_personalized_skill_enforces_cli_first(client):
     resp = client.get(auth["skill_path"])
     assert resp.status_code == 200, resp.text
     body = resp.text
-    assert "topiclab-cli` 是当前实例访问 TopicLab 的必装运行时" in body
+    assert "先遵守这 4 条" in body
+    assert "`topiclab-cli` 是必装运行时" in body
     assert "除了读取当前 skill，本 skill 不提供任何 API 访问方式" in body
     assert "/api/v1/auth/openclaw-guest" in body
     assert "curl -fsSL" in body
-    assert "按文件定位落地" in body
+    assert "只写长期规则摘要" in body
     assert "`AGENTS.md`" in body
     assert "`TOOLS.md`" in body
     assert "topiclab notifications list --json" in body
     assert "topiclab help ask" in body
+    assert "ask agent" in body
     assert "之后所有 API 请求都使用 `Authorization: Bearer YOUR_OPENCLAW_KEY`。" not in body
     assert "先查看 `/api/v1/me/inbox`" not in body
 
@@ -2931,6 +2935,59 @@ def test_short_ttl_read_cache_hits_and_invalidates_on_write(client, monkeypatch)
     refreshed_posts = topic_store.list_posts(topic_id, preview_replies=2)
     assert calls["count"] >= 1
     assert len(refreshed_posts["items"]) == 2
+
+
+def test_topic_search_with_q_bypasses_stale_read_cache(client, monkeypatch):
+    from app.storage.database import topic_store
+
+    auth = register_login_and_openclaw_key(client, phone="13800000031", username="openclaw-search-cache")
+
+    original_get_db_session = topic_store.get_db_session
+    calls = {"count": 0}
+
+    class CountingSessionContext:
+        def __init__(self, wrapped):
+            self._wrapped = wrapped
+
+        def __enter__(self):
+            calls["count"] += 1
+            return self._wrapped.__enter__()
+
+        def __exit__(self, exc_type, exc, tb):
+            return self._wrapped.__exit__(exc_type, exc, tb)
+
+    def counting_get_db_session():
+        return CountingSessionContext(original_get_db_session())
+
+    monkeypatch.setattr(topic_store, "get_db_session", counting_get_db_session)
+
+    calls["count"] = 0
+    first_search = topic_store.list_topics(q="openclaw live smoke")
+    first_read_calls = calls["count"]
+    assert first_read_calls >= 1
+    assert first_search["items"] == []
+
+    calls["count"] = 0
+    second_search = topic_store.list_topics(q="openclaw live smoke")
+    assert calls["count"] >= 1
+    assert second_search["items"] == []
+
+    topic = client.post(
+        "/api/v1/openclaw/topics",
+        headers={"Authorization": f"Bearer {auth['openclaw_key']}"},
+        json={
+            "title": "OpenClaw live smoke regression topic",
+            "body": "Created after an empty search result to verify multi-worker cache behavior.",
+            "category": "request",
+        },
+    )
+    assert topic.status_code == 201, topic.text
+    topic_id = topic.json()["id"]
+
+    calls["count"] = 0
+    refreshed_search = topic_store.list_topics(q="openclaw live smoke")
+    assert calls["count"] >= 1
+    assert topic_id in [item["id"] for item in refreshed_search["items"]]
 
 
 def test_feedback_requires_auth(client):

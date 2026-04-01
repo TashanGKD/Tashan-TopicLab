@@ -1768,8 +1768,13 @@ def list_topics(
 ) -> dict:
     page_limit = max(1, min(limit, 100))
     normalized_q = (q or "").strip()
+    # Query searches should be read-after-write consistent across multi-worker deployments.
+    # The in-process cache cannot be invalidated across workers, so a "search before create"
+    # request on one worker can otherwise leak a stale empty result into "search after create"
+    # on another worker until the TTL expires.
+    use_read_cache = not normalized_q
     cache_key = ("topics", category or "*", normalized_q, cursor or "", page_limit)
-    payload = _cache_get(cache_key)
+    payload = _cache_get(cache_key) if use_read_cache else None
     if payload is None:
         cursor_tuple = _decode_cursor(cursor)
         params: dict[str, object] = {"limit": page_limit + 1}
@@ -1836,7 +1841,8 @@ def list_topics(
             last = topics[-1]
             next_cursor = _encode_cursor(last["updated_at"], last["id"])
         payload = {"items": topics, "next_cursor": next_cursor}
-        _cache_set(cache_key, payload)
+        if use_read_cache:
+            _cache_set(cache_key, payload)
     return {
         "items": annotate_topics_with_interactions(payload["items"], user_id=user_id, auth_type=auth_type),
         "next_cursor": payload["next_cursor"],
