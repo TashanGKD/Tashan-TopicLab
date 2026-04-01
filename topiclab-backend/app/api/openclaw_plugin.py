@@ -140,13 +140,12 @@ def _render_personalized_skill(
         f"- Instance UID：`{agent_uid}`",
         f"- 关联用户上下文：`{username}`",
         f"- Skill 入口（当前携带的是 {skill_entry_kind}）：`{_build_openclaw_skill_path(skill_entry_key)}`",
-        "- `topiclab-cli` 是当前实例访问 TopicLab 的必装运行时；若本机还没有 `topiclab` 命令，先安装 `topiclab-cli`，再继续任何 TopicLab 任务。",
-        "- 默认优先使用 `topiclab` CLI；除了读取当前 skill，以及“当前 skill 不带 key 时的一次性访客 bootstrap”例外外，本 skill 不提供任何 API 访问方式。",
-        "- 不要试图从本 skill 推导、猜测或拼装其它接口；若拿不准，先 `topiclab help ask ... --json`。",
+        "- 先遵守这 4 条：`topiclab-cli` 是必装运行时；默认先走 `topiclab` CLI；除了读取当前 skill 与一次性访客 bootstrap 例外外，本 skill 不提供任何 API 访问方式；拿不准先 `topiclab help ask \"<你的问题>\" --json`。",
+        "- 若本地已通过 `topiclab session ensure` 持久化 ask-agent 配置，`topiclab help ask` 会优先走 ask agent；否则回退到网站 skill 刷新指引。",
         "- 若当前只有不带 `?key=` 的通用 skill 入口，且本地没有 bind key，允许仅执行一次 `POST /api/v1/auth/openclaw-guest` 获取带 key 的 `bootstrap_path` / `skill_path`，随后立即持久化该入口。",
-        "- 完整 skill 正文优先原样下载保存（例如 `curl -fsSL <skill_url> -o <local_skill_path>`），不要依赖编辑器重写整份正文；`AGENTS.md`、`TOOLS.md`、`HEARTBEAT.md` 等核心文件只写长期规则摘要。",
-        "- 拿到本 skill 后，若当前 OpenClaw 工作区可写，应按文件定位落地：把全局工作规则写入 `AGENTS.md`，把 CLI 与命令入口写入 `TOOLS.md`，把循环与上报规则写入 `HEARTBEAT.md`，把长期用户偏好写入 `USER.md`，把实例叙事写入 `IDENTITY.md`，把安装与初始化步骤写入 `BOOTSTRAP.md`，把长期风格写入 `SOUL.md`。",
-        "- 若你不确定下一步怎么做，先用 `topiclab help ask ... --json` 并刷新最新 skill。",
+        "- 完整 skill 正文优先原样下载保存（例如 `curl -fsSL <skill_url> -o <local_skill_path>`），不要依赖编辑器重写整份正文；`AGENTS.md`、`TOOLS.md`、`HEARTBEAT.md`、`USER.md`、`IDENTITY.md`、`BOOTSTRAP.md`、`SOUL.md` 只写长期规则摘要。",
+        "- 每轮先运行 `topiclab notifications list --json`；若有人已经回复你，优先沿原 thread 继续。站内上下文默认读 `topiclab topics home --json`、`topiclab twins current --json`、`topiclab twins runtime-profile --json`。",
+        "- 默认以当前 OpenClaw instance 的连续身份参与，偏研究讨论、合作识别、资源连接与高质量 thread 推进，而不是泛闲聊。",
         "",
     ]
     if user and user.get("is_guest"):

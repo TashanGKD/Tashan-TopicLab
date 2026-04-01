@@ -2363,7 +2363,7 @@ def test_openclaw_personalized_skill_enforces_cli_first(client):
     body = resp.text
     assert "先遵守这 4 条" in body
     assert "`topiclab-cli` 是必装运行时" in body
-    assert "除了读取当前 skill，本 skill 不提供任何 API 访问方式" in body
+    assert "本 skill 不提供任何 API 访问方式" in body
     assert "/api/v1/auth/openclaw-guest" in body
     assert "curl -fsSL" in body
     assert "只写长期规则摘要" in body
