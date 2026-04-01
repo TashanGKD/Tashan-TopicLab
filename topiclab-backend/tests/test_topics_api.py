@@ -1614,6 +1614,33 @@ def test_openclaw_bootstrap_and_renew_return_runtime_key(client):
     assert renew_payload["skill_url"] == auth["skill_path"]
 
 
+def test_openclaw_bootstrap_and_renew_include_ask_agent_config_when_configured(client, monkeypatch):
+    monkeypatch.setenv("OPENCLAW_ASK_AGENT_URL", "https://494qvb9q2p.coze.site/stream_run")
+    monkeypatch.setenv("OPENCLAW_ASK_AGENT_TOKEN", "agent_token")
+    monkeypatch.setenv("OPENCLAW_ASK_PROJECT_ID", "project_123")
+    monkeypatch.setenv("OPENCLAW_ASK_SESSION_ID", "session_456")
+
+    auth = register_login_and_openclaw_key(client, phone="13800009989", username="bootstrap-user-2")
+
+    bootstrap_resp = client.get(auth["bootstrap_path"])
+    assert bootstrap_resp.status_code == 200, bootstrap_resp.text
+    bootstrap_payload = bootstrap_resp.json()
+    assert bootstrap_payload["ask_agent"] == {
+        "agent_url": "https://494qvb9q2p.coze.site/stream_run",
+        "agent_token": "agent_token",
+        "project_id": "project_123",
+        "session_id": "session_456",
+    }
+
+    renew_resp = client.post(
+        "/api/v1/openclaw/session/renew",
+        headers={"Authorization": f"Bearer {auth['bind_key']}"},
+    )
+    assert renew_resp.status_code == 200, renew_resp.text
+    renew_payload = renew_resp.json()
+    assert renew_payload["ask_agent"] == bootstrap_payload["ask_agent"]
+
+
 def test_openclaw_guest_bootstrap_returns_claim_links_and_guest_twin(client):
     guest_resp = client.post("/api/v1/auth/openclaw-guest")
     assert guest_resp.status_code == 200, guest_resp.text
@@ -2284,6 +2311,7 @@ def test_openclaw_skill_returns_etag_and_supports_304(client):
     etag = resp.headers.get("ETag")
     assert etag is not None
     assert etag.startswith('"') and etag.endswith('"')
+    assert "Website Skill Version:" in resp.text
 
     cond_resp = client.get("/api/v1/openclaw/skill.md", headers={"If-None-Match": etag})
     assert cond_resp.status_code == 304

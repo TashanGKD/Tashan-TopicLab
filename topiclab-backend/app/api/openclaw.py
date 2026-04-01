@@ -53,11 +53,14 @@ class OpenClawBootstrapResponse(BaseModel):
     bind_key: str
     skill_url: str
     access_token: str
+    skill_version: str | None = None
+    skill_updated_at: str | None = None
     token_type: str = "Bearer"
     auth_recovery: str = OPENCLAW_AUTH_RECOVERY_ACTION
     refresh_strategy: str = "renew_with_bind_key"
     agent_uid: str | None = None
     openclaw_agent: dict | None = None
+    ask_agent: dict | None = None
 
 
 async def _get_optional_user(
@@ -564,6 +567,51 @@ def _build_openclaw_skill_path(raw_key: str) -> str:
     return f"/api/v1/openclaw/skill.md?key={raw_key}"
 
 
+def _annotate_skill_with_version(content: str) -> str:
+    version = _compute_skill_version()
+    updated_at = _get_skill_updated_at()
+    lines = content.splitlines()
+    version_lines = [
+        f"> Website Skill Version: `{version}`",
+        *([f"> Website Skill Updated At: `{updated_at}`"] if updated_at else []),
+    ]
+    if not lines:
+        return "\n".join(version_lines) + "\n"
+
+    placeholder_index = next((index for index, line in enumerate(lines) if line.startswith("> Website Skill Version:")), None)
+    if placeholder_index is not None:
+        end_index = placeholder_index + 1
+        while end_index < len(lines) and (
+            lines[end_index].startswith("> Website Skill Updated At:") or lines[end_index].strip() == ""
+        ):
+            end_index += 1
+        return "\n".join([*lines[:placeholder_index], *version_lines, *lines[end_index:]]) + ("\n" if content.endswith("\n") else "")
+
+    version_block = ["", *version_lines, ""]
+    return "\n".join([lines[0], *version_block, *lines[1:]]) + ("\n" if content.endswith("\n") else "")
+
+
+def _build_openclaw_ask_agent_config() -> dict | None:
+    agent_url = (os.getenv("OPENCLAW_ASK_AGENT_URL") or os.getenv("TOPICLAB_ASK_URL") or "").strip()
+    agent_token = (os.getenv("OPENCLAW_ASK_AGENT_TOKEN") or os.getenv("TOPICLAB_ASK_TOKEN") or "").strip()
+    project_id = (os.getenv("OPENCLAW_ASK_PROJECT_ID") or os.getenv("TOPICLAB_ASK_PROJECT_ID") or "").strip()
+    session_id = (os.getenv("OPENCLAW_ASK_SESSION_ID") or os.getenv("TOPICLAB_ASK_SESSION_ID") or "").strip()
+
+    values = {
+        "agent_url": agent_url or None,
+        "agent_token": agent_token or None,
+        "project_id": project_id or None,
+        "session_id": session_id or None,
+    }
+    present = sum(1 for value in values.values() if value)
+    if present == 0:
+        return None
+    if present != 4:
+        logger.warning("OpenClaw ask agent config is incomplete; ignoring backend-provided ask agent config")
+        return None
+    return values
+
+
 def _resolve_openclaw_bind_key(bind_key: str) -> tuple[dict, dict]:
     skill_agent = get_openclaw_agent_by_skill_token(bind_key)
     if not skill_agent:
@@ -592,6 +640,8 @@ def _build_openclaw_bootstrap_payload(bind_key: str) -> OpenClawBootstrapRespons
         bind_key=bind_key,
         skill_url=_build_openclaw_skill_path(bind_key),
         access_token=record["key"],
+        skill_version=_compute_skill_version(),
+        skill_updated_at=_get_skill_updated_at(),
         agent_uid=record.get("agent_uid") or skill_agent.get("agent_uid"),
         openclaw_agent=record.get("openclaw_agent")
         or {
@@ -600,6 +650,7 @@ def _build_openclaw_bootstrap_payload(bind_key: str) -> OpenClawBootstrapRespons
             "handle": skill_agent.get("handle"),
             "status": skill_agent.get("status"),
         },
+        ask_agent=_build_openclaw_ask_agent_config(),
     )
 
 
@@ -718,6 +769,7 @@ async def get_openclaw_skill_markdown(
         claim_register_url=claim_register_url,
         claim_login_url=claim_login_url,
     )
+    content = _annotate_skill_with_version(content)
     etag = hashlib.sha256(content.encode("utf-8")).hexdigest()[:24]
     if if_none_match and if_none_match.strip('"') == etag:
         return Response(status_code=304)

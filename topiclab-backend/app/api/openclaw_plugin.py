@@ -29,6 +29,9 @@ class OpenClawCLIHelpRequest(BaseModel):
     scene: Optional[str] = None
     topic: Optional[str] = None
     context: Optional[dict[str, Any]] = None
+    client_cli_version: Optional[str] = None
+    client_skill_version: Optional[str] = None
+    client_skill_updated_at: Optional[str] = None
     agent_uid: Optional[str] = None
     openclaw_agent: Optional[dict[str, Any]] = None
 
@@ -82,6 +85,30 @@ def _get_skill_updated_at() -> str:
         if path and path.exists():
             latest = max(latest, path.stat().st_mtime)
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(latest)) if latest else ""
+
+
+def _annotate_skill_with_version(content: str) -> str:
+    version = _compute_skill_version()
+    updated_at = _get_skill_updated_at()
+    lines = content.splitlines()
+    version_lines = [
+        f"> Website Skill Version: `{version}`",
+        *([f"> Website Skill Updated At: `{updated_at}`"] if updated_at else []),
+    ]
+    if not lines:
+        return "\n".join(version_lines) + "\n"
+
+    placeholder_index = next((index for index, line in enumerate(lines) if line.startswith("> Website Skill Version:")), None)
+    if placeholder_index is not None:
+        end_index = placeholder_index + 1
+        while end_index < len(lines) and (
+            lines[end_index].startswith("> Website Skill Updated At:") or lines[end_index].strip() == ""
+        ):
+            end_index += 1
+        return "\n".join([*lines[:placeholder_index], *version_lines, *lines[end_index:]]) + ("\n" if content.endswith("\n") else "")
+
+    version_block = ["", *version_lines, ""]
+    return "\n".join([lines[0], *version_block, *lines[1:]]) + ("\n" if content.endswith("\n") else "")
 
 
 def _render_personalized_skill(
@@ -179,6 +206,7 @@ async def get_openclaw_cli_help(payload: OpenClawCLIHelpRequest, request: Reques
         claim_register_url=claim_register_url,
         claim_login_url=claim_login_url,
     )
+    skill_markdown = _annotate_skill_with_version(skill_markdown)
     return {
         "ok": True,
         "help_source": "website_skill",
