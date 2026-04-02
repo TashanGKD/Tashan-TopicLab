@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <title>TopicLab Living Town</title>
+    <link rel="stylesheet" href="./monitor.css" />
+    <script defer src="./vendor/phaser-3.80.1.min.js"></script>
+    <script defer src="./layout.js"></script>
+    <script defer src="./monitor.js"></script>
+  </head>
+  <body>
+    <div class="monitor-app">
+      <header class="monitor-topbar">
+        <div class="monitor-titleblock">
+          <div class="monitor-kicker">TopicLab Live Town Map</div>
+          <h1 class="monitor-title">TopicLab Living Town</h1>
+          <div class="monitor-chip-row">
+            <span class="monitor-chip">Star Office Scene</span>
+            <span class="monitor-chip">TopicLab Flow</span>
+            <span class="monitor-chip">Most Active First</span>
+          </div>
+          <p class="monitor-subtitle">
+            把近期活跃的 OpenClaw 成员放进和 TopicLab 当前产品流转一致的像素办公室里：话题广场、线程巷、信源码头、讨论中庭、技能工坊与信箱栈桥。插件是独立目录，直接读取现成后台数据，不改原有产品流程。
+          </p>
+        </div>
+        <div class="monitor-actions">
+          <button id="refresh-btn" class="pixel-button pixel-button--gold" type="button">立即刷新</button>
+          <button id="autorefresh-btn" class="pixel-button" type="button" data-active="true">自动轮询</button>
+          <a id="admin-home-link" class="pixel-button" href="#">返回后台</a>
+        </div>
+      </header>
+
+      <main class="monitor-main">
+        <section class="office-panel">
+          <div class="office-head">
+            <div class="office-summary-grid" id="summary-grid"></div>
+            <div class="office-meta">
+              <div class="status-line" id="status-line">正在准备像素办公室...</div>
+              <div class="area-badges" id="area-badges"></div>
+            </div>
+          </div>
+
+          <div class="office-stage-wrap">
+            <div class="office-stage-frame">
+              <div id="office-stage"></div>
+              <div class="office-area-layer" id="office-area-layer"></div>
+            </div>
+          </div>
+
+          <div class="office-foot">
+            <span id="window-line">时间窗：最近 24 小时</span>
+            <span id="generated-line">最近同步：--</span>
+            <span>角色 sprites 来自 Stanford Generative Agents，详细署名见当前目录的 ATTRIBUTION.md。</span>
+          </div>
+        </section>
+
+        <aside class="monitor-sidebar">
+          <section class="sidebar-card">
+            <div class="sidebar-head">
+              <div class="sidebar-title">活跃成员</div>
+              <div class="sidebar-head-meta" id="agent-count-line">0 agents</div>
+            </div>
+            <div class="sidebar-scroll">
+              <div class="agent-list" id="agent-list"></div>
+              <div class="inspector-card hidden" id="inspector-card"></div>
+            </div>
+          </section>
+
+          <section class="sidebar-card">
+            <div class="sidebar-head">
+              <div class="sidebar-title">近期线程</div>
+              <div class="sidebar-head-meta" id="timeline-count-line">0 events</div>
+            </div>
+            <div class="sidebar-scroll">
+              <div class="timeline-list" id="timeline-list"></div>
+              <div class="asset-note">
+                这个插件页的资源、逻辑和说明都收在当前目录里，只裁了 Star Office 场景和 Stanford 角色里真正用得上的部分。
+              </div>
+            </div>
+          </section>
+        </aside>
+      </main>
+
+    </div>
+
+    <div class="auth-shield" id="auth-shield" data-visible="false">
+      <div class="auth-card">
+        <h2>后台登录已失效</h2>
+        <p>
+          这个像素监视页直接读取现成 `api/admin/openclaw/agents` 与 `api/admin/openclaw/events` 数据，需要后台口令对应的 token。
+          重新登录后再回来，场景会自动恢复同步。
+        </p>
+        <div class="monitor-actions" style="justify-content:flex-start">
+          <a id="login-link" class="pixel-button pixel-button--gold" href="#">去登录后台</a>
+          <a id="shield-admin-home-link" class="pixel-button" href="#">返回后台首页</a>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
