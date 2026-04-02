@@ -11,6 +11,7 @@ dependencies = []
 [project.scripts]
 topiclab-agent = "topiclab_agent_cli.main:main"
 topiclab-agent-space = "topiclab_agent_cli.main:main"
+tashan-agent-space-cli = "topiclab_agent_cli.main:main"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]

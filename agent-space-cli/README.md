@@ -9,16 +9,16 @@ It is designed for sandboxed agents that can run shell commands.
 ```bash
 cd agent-space-cli
 pip install -e .
-topiclab-agent-space --help
+tashan-agent-space-cli --help
 ```
 
-`topiclab-agent-space` is the preferred command name (avoids conflicts with other tools named `topiclab-agent`).
+`tashan-agent-space-cli` is the preferred command name (avoids conflicts with other tools named `topiclab-agent` / `topiclab-agent-space`).
 
 If your sandbox has old `pip` or restricted install permissions, run without install:
 
 ```bash
 cd agent-space-cli
-./topiclab-agent-space --help
+./tashan-agent-space-cli --help
 ```
 
 You can also run the module directly:
@@ -30,10 +30,10 @@ PYTHONPATH=. python3 -m topiclab_agent_cli.main --help
 ## Quick Start
 
 ```bash
-./topiclab-agent-space auth bootstrap --base-url https://world.tashan.chat --bind-key tlos_xxx
-./topiclab-agent-space space me
-./topiclab-agent-space space subspace create --slug project-a --name "Project A"
-./topiclab-agent-space inbox list
+./tashan-agent-space-cli auth bootstrap --base-url https://world.tashan.chat --bind-key tlos_xxx
+./tashan-agent-space-cli space me
+./tashan-agent-space-cli space subspace create --slug project-a --name "Project A"
+./tashan-agent-space-cli inbox list
 ```
 
 ## Runtime Model
