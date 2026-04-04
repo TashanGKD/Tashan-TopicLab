@@ -59,12 +59,12 @@ export default function AppsSkillProfilePage() {
   }
 
   return (
-    <ImmersiveAppShell title="OpenClaw 绑定中心" subtitle="查看绑定的 agent、Key、积分和你在 SkillHub 的发布与互动记录。">
+    <ImmersiveAppShell title="OpenClaw 绑定中心" subtitle="查看绑定的 agent、Key、他山石和你在 SkillHub 的发布与互动记录。">
       {!isLoggedIn ? (
         <AppsAuthPrompt
           eyebrow="Account"
           title="登录后再进入绑定中心"
-          description="这里会聚合你的 OpenClaw Agent、Key、积分余额，以及你在 SkillHub 的发布、评测、下载和收藏记录。"
+          description="这里会聚合你的 OpenClaw Agent、Key、他山石余额，以及你在 SkillHub 的发布、评测、下载和收藏记录。"
           primaryAction={<AppsPillButton onClick={() => navigate('/login', { state: { from: `${location.pathname}${location.search}` } })}>去登录</AppsPillButton>}
           secondaryAction={<AppsPillButton variant="secondary" to="/register" state={{ from: `${location.pathname}${location.search}` }}>去注册</AppsPillButton>}
         />
@@ -96,7 +96,7 @@ export default function AppsSkillProfilePage() {
                 handle: {profile.openclaw_agent?.handle ?? '—'}
               </div>
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <AppsMetricCard label="余额" value={profile.wallet ? `${profile.wallet.balance} pts` : '—'} />
+                <AppsMetricCard label="余额" value={profile.wallet ? `${profile.wallet.balance} 他山石` : '—'} />
                 <AppsMetricCard label="累计获得" value={profile.wallet ? `${profile.wallet.lifetime_earned}` : '—'} />
                 <AppsMetricCard label="累计花费" value={profile.wallet ? `${profile.wallet.lifetime_spent}` : '—'} />
               </div>
@@ -128,7 +128,7 @@ export default function AppsSkillProfilePage() {
 
           <section className="mt-8 grid gap-4 xl:grid-cols-3">
             <SimpleList title="我的评测" items={profile.my_reviews.map((item) => `${item.skill_name} · ${item.rating} 分`)} />
-            <SimpleList title="我的下载" items={profile.my_downloads.map((item) => `${item.skill_name} · ${item.version || 'latest'} · ${item.points_spent} pts`)} />
+            <SimpleList title="我的下载" items={profile.my_downloads.map((item) => `${item.skill_name} · ${item.version || 'latest'} · ${item.points_spent} 他山石`)} />
             <SimpleList title="我的收藏" items={profile.my_favorites.map((item) => item.name)} />
           </section>
         </>
@@ -145,7 +145,7 @@ function SimpleList({ title, items }: { title: string; items: string[] }) {
         {items.length === 0 ? (
           <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>暂无记录</div>
         ) : items.map((item) => (
-          <div key={item} className="rounded-2xl border px-4 py-3 text-sm" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-page)', color: 'var(--text-secondary)' }}>
+          <div key={item} className="rounded-2xl border px-4 py-3 text-sm leading-6 break-words" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-page)', color: 'var(--text-secondary)' }}>
             {item}
           </div>
         ))}

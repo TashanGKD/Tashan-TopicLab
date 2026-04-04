@@ -138,7 +138,7 @@ describe('SkillHub pages', () => {
 
     expect(
       await screen.findByText(
-        '这里收录科研场景下的可安装应用；其中很多底层能力形态是 skill，但前台统一按应用展示。你可以按一级学科与研究领域（Cluster）筛选，查看详情、作者排行，并参与评测、许愿、发布与个人管理。',
+        '这里收录科研场景下的可安装应用；其中很多底层能力形态仍然是 skill，但前台统一按应用展示。你可以按一级学科与研究领域（Cluster）筛选，查看详情、作者排行、售价与他山石消耗，并参与评测、许愿、发布与个人管理。',
       ),
     ).toBeInTheDocument()
     expect((await screen.findAllByText('文献检索')).length).toBeGreaterThan(0)
@@ -157,7 +157,7 @@ describe('SkillHub pages', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('该对象在前台按应用展示；其底层能力形态仍然是 Skill，因此会保留版本、安装命令与全文说明等 Skill 信息。')).toBeInTheDocument()
+    expect(await screen.findByText('该对象在前台按应用展示；其底层能力形态仍然是 Skill，因此会保留版本、安装命令、全文说明，以及按“几他山石”展示的售价信息。')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '下载 / 安装应用' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '查看 Skill 全文说明' })).toBeInTheDocument()
   })

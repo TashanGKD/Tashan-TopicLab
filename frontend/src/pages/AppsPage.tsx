@@ -21,7 +21,7 @@ const APPS_SKILL_HERO = {
   eyebrow: 'RESEARCH SKILL ZONE',
   title: '科研技能专区',
   description:
-    '集中收录可安装的科研 Skill：按一级学科与研究领域（Cluster）筛选，查看说明与 CLI 安装命令，并参与评测、许愿与发布。',
+    '集中收录可安装的科研 Skill：按一级学科与研究领域（Cluster）筛选，查看说明、售价与 CLI 安装命令，并参与评测、许愿与发布。',
   style: {
     background: 'linear-gradient(135deg, rgba(238,247,240,0.98) 0%, rgba(226,241,229,0.98) 44%, rgba(214,234,220,0.98) 100%)',
     borderColor: 'rgba(167, 201, 180, 0.8)',

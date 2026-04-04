@@ -46,7 +46,9 @@ docs/
 | Document | Description |
 |----------|-------------|
 | [arcade-arena.md](features/arcade-arena.md) | Arcade task model, metadata contract, OpenClaw flow, evaluator APIs |
+| [community-operations-observability.md](features/community-operations-observability.md) | Community operations metrics, dashboard design, telemetry gaps, and implementation roadmap |
 | [digital-twin-lifecycle.md](features/digital-twin-lifecycle.md) | Digital twin lifecycle: create, publish, share, history |
+| [points-system.md](features/points-system.md) | Points system: wallet, ledger, settlement rules, surfaces, and current mismatches |
 | [share-flow-sequence.md](features/share-flow-sequence.md) | Share flow sequence diagrams (expert / moderator mode library) |
 | [request-category.md](features/request-category.md) | Request category for publishing requests and resource matching |
 
@@ -79,7 +81,9 @@ docs/
 - **API schema draft**: [openclaw-topiclab-api-schema.md](architecture/openclaw-topiclab-api-schema.md)
 - **Performance**: [topiclab-performance-optimization.md](architecture/topiclab-performance-optimization.md)
 - **Arcade**: [arcade-arena.md](features/arcade-arena.md)
+- **Community ops and observability**: [community-operations-observability.md](features/community-operations-observability.md)
 - **Digital twin**: [digital-twin-lifecycle.md](features/digital-twin-lifecycle.md)
+- **Points system**: [points-system.md](features/points-system.md)
 - **Deploy**: [deploy.md](getting-started/deploy.md)
 - **Backend API**: [backend/docs/api-reference.md](../backend/docs/api-reference.md) | [Resonnet](https://github.com/TashanGKD/Resonnet)
 - **TopicLab backend**: [topiclab-backend/README.md](../topiclab-backend/README.md)

@@ -78,7 +78,7 @@ export default function AppsSkillPublishPage() {
   }
 
   return (
-    <ImmersiveAppShell title={skillSlug ? '发布新版本' : '发布 Skill'} subtitle={skillSlug ? '为已有 Skill 上传新版本、更新 changelog 或附件。' : '把科研工作流整理成可分发、可评测、可复用的 Skill。'}>
+    <ImmersiveAppShell title={skillSlug ? '发布新版本' : '发布 Skill'} subtitle={skillSlug ? '为已有 Skill 上传新版本、更新 changelog 或附件。' : '把科研工作流整理成可分发、可评测、可复用的 Skill，并按需设置几他山石的售价。'}>
       {!isLoggedIn ? (
         <AppsAuthPrompt
           eyebrow="Publish"
@@ -120,7 +120,7 @@ export default function AppsSkillPublishPage() {
                   <option value="paid">paid</option>
                 </AppsSelect>
               </AppsField>
-              <AppsField label="点数价格"><AppsInput type="number" value={pricePoints} onChange={(e) => setPricePoints(Number(e.target.value) || 0)} /></AppsField>
+              <AppsField label="售价"><AppsInput type="number" value={pricePoints} onChange={(e) => setPricePoints(Number(e.target.value) || 0)} /></AppsField>
               <AppsField label="标签（逗号分隔）"><AppsInput value={tags} onChange={(e) => setTags(e.target.value)} /></AppsField>
               <AppsField label="能力（逗号分隔）"><AppsInput value={capabilities} onChange={(e) => setCapabilities(e.target.value)} /></AppsField>
             </>

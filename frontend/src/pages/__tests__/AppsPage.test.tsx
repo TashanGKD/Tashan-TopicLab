@@ -130,6 +130,7 @@ describe('AppsPage', () => {
     expect(screen.getAllByText('TopicLab CLI').length).toBeGreaterThan(0)
     expect(screen.getByText('一级学科')).toBeInTheDocument()
     expect(screen.getByText('研究领域（Cluster）')).toBeInTheDocument()
+    expect(screen.getByText('集中收录可安装的科研 Skill：按一级学科与研究领域（Cluster）筛选，查看说明、售价与 CLI 安装命令，并参与评测、许愿与发布。')).toBeInTheDocument()
     expect(screen.getAllByText(/下载/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/收藏/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/评分/).length).toBeGreaterThan(0)

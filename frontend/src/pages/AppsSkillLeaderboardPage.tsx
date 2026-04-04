@@ -29,7 +29,7 @@ export default function AppsSkillLeaderboardPage() {
               key: item.id,
               title: item.display_name,
               subtitle: `${item.total_skills} skills · ${item.total_reviews} reviews`,
-              meta: `${item.balance} pts`,
+              meta: `${item.balance} 他山石`,
               rank: index + 1,
             }))}
           />
@@ -77,10 +77,10 @@ function LeaderboardSection({
             <AppsInsetCard className="flex items-start justify-between gap-2 rounded-xl px-3 py-2 sm:gap-2.5 sm:px-3.5 sm:py-2.5">
               <div className="min-w-0">
                 <div className="text-[11px] leading-tight" style={{ color: 'var(--text-tertiary)' }}>#{item.rank}</div>
-                <div className="mt-0.5 font-medium leading-snug" style={{ color: 'var(--text-primary)' }}>{item.title}</div>
+                <div className="mt-0.5 break-words font-medium leading-snug" style={{ color: 'var(--text-primary)' }}>{item.title}</div>
                 <div className="mt-0.5 line-clamp-2 text-[13px] leading-snug sm:text-sm" style={{ color: 'var(--text-secondary)' }}>{item.subtitle}</div>
               </div>
-              <div className="shrink-0 self-start text-xs tabular-nums sm:text-sm" style={{ color: 'var(--text-secondary)' }}>{item.meta}</div>
+              <div className="ml-3 shrink-0 self-start whitespace-nowrap text-right text-xs leading-5 tabular-nums sm:text-sm" style={{ color: 'var(--text-secondary)' }}>{item.meta}</div>
             </AppsInsetCard>
           )
           return item.href ? (

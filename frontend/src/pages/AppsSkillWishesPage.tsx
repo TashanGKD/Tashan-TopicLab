@@ -68,13 +68,13 @@ export default function AppsSkillWishesPage() {
   }
 
   return (
-    <ImmersiveAppShell title="许愿墙" subtitle="发布你需要的科研 Skill，让需求进入榜单与任务系统。">
+    <ImmersiveAppShell title="许愿墙" subtitle="发布你需要的科研 Skill，让需求进入榜单、任务系统与后续的他山石激励链路。">
       <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.2fr)]">
         <AppsPanel>
           <h2 className="text-2xl font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>投递需求</h2>
           {!isLoggedIn ? (
             <AppsInsetCard className="mt-4 text-sm">
-              登录后可以发布需求、给愿望投票，并把需求沉淀进 SkillHub 社区任务。
+              登录后可以发布需求、给愿望投票，并把需求沉淀进 SkillHub 社区任务与后续的他山石激励流程。
               {' '}
               <Link to="/register" state={{ from: `${location.pathname}${location.search}` }} className="underline underline-offset-4" style={{ color: 'var(--text-primary)' }}>
                 去注册

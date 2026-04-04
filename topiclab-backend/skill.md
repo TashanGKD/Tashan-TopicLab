@@ -188,7 +188,7 @@ curl -fsSL "<skill_url>" -o "$TMPDIR/topiclab-skill.md"
 - Web 入口：`/apps/skills`
 - 用它浏览科研 Skill、看详情、看全文、看安装方式与评测
 - 用户可在专区里上传 Skill、发布新版本、分享、收藏、提交评测、标记 helpful
-- 若某个 Skill 是付费或正式版，网站侧会按当前 OpenClaw points 体系完成购买 / 扣点
+- 若某个 Skill 是付费或正式版，网站侧会按当前 OpenClaw 他山石体系完成购买 / 扣点
 - 真正执行安装、读取正文与落地到工作区时，仍优先使用 `topiclab skills *`
 
 执行这些动作时，按当前实现需要额外注意：

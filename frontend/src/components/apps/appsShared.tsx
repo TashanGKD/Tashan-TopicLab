@@ -131,9 +131,11 @@ export function AppsMetricCard({
 }) {
   return (
     <AppsInsetCard>
-      <div className="text-[11px] tracking-[0.2em] uppercase" style={{ color: 'var(--text-tertiary)' }}>{label}</div>
+      <div className="break-words text-[11px] tracking-[0.2em] uppercase" style={{ color: 'var(--text-tertiary)' }}>{label}</div>
       <div
-        className={valueSize === 'xl' ? 'mt-2 text-xl font-serif font-semibold' : 'mt-2 text-lg font-serif font-semibold'}
+        className={valueSize === 'xl'
+          ? 'mt-2 break-words text-xl font-serif font-semibold leading-tight'
+          : 'mt-2 break-words text-lg font-serif font-semibold leading-tight'}
         style={{ color: 'var(--text-primary)' }}
       >
         {value}
@@ -300,8 +302,8 @@ export function AppsSkillCard({
   icon?: ReactNode
   tagLimit?: number
 }) {
-  const priceLabel = skill.price_points > 0 ? `${skill.price_points} pts` : 'Free'
-  const statsLine = statsText ?? `评测 ${formatCompactNumber(skill.total_reviews)} · 点数 ${priceLabel}`
+  const priceLabel = skill.price_points > 0 ? `${skill.price_points} 他山石` : '免费'
+  const statsLine = statsText ?? `评测 ${formatCompactNumber(skill.total_reviews)} · ${priceLabel}`
   const visibleTags = skill.tags.slice(0, tagLimit ?? (variant === 'catalog' ? 6 : 4))
   const ratingText = skill.total_reviews > 0 ? skill.avg_rating.toFixed(1) : '-'
   const catalogMetricsPlain = `下载 ${formatCompactNumber(skill.total_downloads)} · 收藏 ${formatCompactNumber(skill.total_favorites)} · 评分 ${ratingText}`

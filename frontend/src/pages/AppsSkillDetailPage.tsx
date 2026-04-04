@@ -176,7 +176,7 @@ export default function AppsSkillDetailPage() {
               {skill.tagline ? <p className="mt-2 text-sm" style={{ color: 'var(--text-secondary)' }}>{skill.tagline}</p> : null}
               <p className="mt-4 max-w-3xl text-sm leading-7" style={{ color: 'var(--text-secondary)' }}>{skill.description}</p>
               <p className="mt-3 max-w-3xl text-sm leading-7" style={{ color: 'var(--text-tertiary)' }}>
-                该对象在前台按应用展示；其底层能力形态仍然是 Skill，因此会保留版本、安装命令与全文说明等 Skill 信息。
+                该对象在前台按应用展示；其底层能力形态仍然是 Skill，因此会保留版本、安装命令、全文说明，以及按“几他山石”展示的售价信息。
               </p>
 
               <div className="mt-5 flex flex-wrap items-center gap-2">
@@ -207,7 +207,7 @@ export default function AppsSkillDetailPage() {
               <AppsMetricCard label="评测" value={formatCompactNumber(skill.total_reviews)} valueSize="xl" />
               <AppsMetricCard label="下载" value={formatCompactNumber(skill.total_downloads)} valueSize="xl" />
               <AppsMetricCard label="收藏" value={formatCompactNumber(skill.total_favorites)} valueSize="xl" />
-              <AppsMetricCard label="价格" value={skill.price_points > 0 ? `${skill.price_points} pts` : 'Free'} valueSize="xl" />
+              <AppsMetricCard label="售价" value={skill.price_points > 0 ? `${skill.price_points} 他山石` : '免费'} valueSize="xl" />
             </div>
 
             <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(18rem,0.9fr)]">
@@ -270,7 +270,7 @@ export default function AppsSkillDetailPage() {
                 <h3 className="text-xl font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>结构化评测</h3>
                 {!isLoggedIn ? (
                   <AppsInsetCard className="mt-4 text-sm" >
-                    登录后可以提交评测、标记 Helpful、收藏并记录下载积分。
+                    登录后可以提交评测、标记 Helpful、收藏，并在下载时按售价消耗他山石。
                   </AppsInsetCard>
                 ) : null}
                 <AppsInsetCard className="mt-4 p-4">

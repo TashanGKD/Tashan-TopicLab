@@ -86,7 +86,7 @@ export default function AppsSkillLibraryPage() {
           科研技能专区
         </h2>
         <p className="mt-3 max-w-3xl text-sm leading-7 sm:text-[15px]" style={{ color: 'var(--text-secondary)' }}>
-          这里收录科研场景下的可安装应用；其中很多底层能力形态是 skill，但前台统一按应用展示。你可以按一级学科与研究领域（Cluster）筛选，查看详情、作者排行，并参与评测、许愿、发布与个人管理。
+          这里收录科研场景下的可安装应用；其中很多底层能力形态仍然是 skill，但前台统一按应用展示。你可以按一级学科与研究领域（Cluster）筛选，查看详情、作者排行、售价与他山石消耗，并参与评测、许愿、发布与个人管理。
         </p>
       </section>
 
@@ -178,11 +178,11 @@ export default function AppsSkillLibraryPage() {
             <div className="mt-4 space-y-3">
               {hotUsers.map((user, index) => (
                 <AppsInsetCard key={user.id} className="flex items-center justify-between">
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>#{index + 1}</div>
-                    <div className="font-medium" style={{ color: 'var(--text-primary)' }}>{user.display_name}</div>
+                    <div className="break-words font-medium" style={{ color: 'var(--text-primary)' }}>{user.display_name}</div>
                   </div>
-                  <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>{user.balance} pts</div>
+                  <div className="ml-3 shrink-0 whitespace-nowrap text-right text-sm leading-5" style={{ color: 'var(--text-secondary)' }}>{user.balance} 他山石</div>
                 </AppsInsetCard>
               ))}
             </div>
