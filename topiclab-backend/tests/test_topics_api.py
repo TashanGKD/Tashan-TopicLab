@@ -428,6 +428,120 @@ def test_admin_panel_can_list_twin_observations(client):
     assert item["payload"]["normalized"]["reply_shape"] == "conclusion_first"
 
 
+def test_admin_panel_can_build_community_observability_rollup(client):
+    admin_panel = admin_panel_login(client)
+    auth = register_login_and_openclaw_key(client, phone="13800009102", username="ops-user")
+
+    upsert = client.post(
+        "/api/v1/auth/digital-twins/upsert",
+        headers={"Authorization": f"Bearer {auth['token']}"},
+        json={
+            "agent_name": "profile_twin",
+            "display_name": "Ops User Twin",
+            "expert_name": "operator",
+            "visibility": "private",
+            "exposure": "brief",
+            "source": "profile_twin",
+            "role_content": "# Ops User Twin\n\n## Identity\n\nOperator",
+        },
+    )
+    assert upsert.status_code == 200, upsert.text
+    twin_id = upsert.json()["twin_id"]
+
+    topic_resp = client.post(
+        "/api/v1/openclaw/topics",
+        headers={"Authorization": f"Bearer {auth['openclaw_key']}"},
+        json={"title": "运维观测开题", "body": "建立社区运维观测", "category": "request"},
+    )
+    assert topic_resp.status_code == 201, topic_resp.text
+    topic_id = topic_resp.json()["id"]
+
+    post_resp = client.post(
+        f"/api/v1/openclaw/topics/{topic_id}/posts",
+        headers={"Authorization": f"Bearer {auth['openclaw_key']}"},
+        json={"body": "补充一条动作记录"},
+    )
+    assert post_resp.status_code == 201, post_resp.text
+
+    failed_post_resp = client.post(
+        "/api/v1/openclaw/topics/topic_missing/posts",
+        headers={"Authorization": f"Bearer {auth['openclaw_key']}"},
+        json={"body": "制造一条失败事件"},
+    )
+    assert failed_post_resp.status_code == 404, failed_post_resp.text
+
+    observation_resp = client.post(
+        f"/api/v1/openclaw/twins/{twin_id}/observations",
+        headers={"Authorization": f"Bearer {auth['openclaw_key']}"},
+        json={
+            "instance_id": auth["agent_uid"],
+            "observation_type": "explicit_requirement",
+            "confidence": 0.82,
+            "payload": {
+                "topic": "onboarding",
+                "statement": "prefer conclusion-first ops summaries",
+                "normalized": {"verbosity": "low", "format": "ops_brief"},
+                "explicitness": "explicit",
+                "scope": "global",
+                "scene": "forum.request",
+                "evidence": [{"message_id": "msg_ops_1", "excerpt": "先告诉我风险，再说细节。"}],
+            },
+        },
+    )
+    assert observation_resp.status_code == 200, observation_resp.text
+
+    observability_resp = client.get(
+        "/admin/community/observability",
+        headers={"Authorization": f"Bearer {admin_panel['token']}"},
+        params={"window_days": 14},
+    )
+    assert observability_resp.status_code == 200, observability_resp.text
+    payload = observability_resp.json()
+
+    assert payload["today_date"]
+    assert payload["timezone"] == "Asia/Shanghai"
+    assert "OpenClaw" in payload["activity_rules"]["openclaw"]
+    assert payload["today_summary"]["active_agents"] >= 1
+    assert payload["today_summary"]["active_users"] >= 1
+    assert payload["overview"]["active_agents_today"] >= 1
+    assert payload["overview"]["active_users_today"] >= 1
+    assert payload["overview"]["total_agents"] >= 1
+    assert payload["overview"]["active_agents_7d"] >= 1
+    assert payload["overview"]["active_users_7d"] >= 1
+    assert payload["overview"]["events_window"] >= 3
+    assert payload["overview"]["failed_events_window"] >= 1
+    assert payload["overview"]["observations_window"] >= 1
+    assert payload["overview"]["pending_observations_total"] >= 1
+
+    scene_map = {item["scene"]: item for item in payload["scenes"]}
+    assert scene_map["forum.request"]["event_count"] >= 2
+    assert scene_map["forum.request"]["observation_count"] >= 1
+
+    event_types = {item["event_type"] for item in payload["top_event_types"]}
+    assert "topic.created" in event_types
+    assert "post.created" in event_types
+
+    risk_agents = {item["agent_uid"]: item for item in payload["risk_agents"]}
+    assert auth["agent_uid"] in risk_agents
+    assert risk_agents[auth["agent_uid"]]["recent_failure_count"] >= 1
+
+    active_users = {item["user_id"]: item for item in payload["active_users"]}
+    assert auth["user"]["id"] in active_users
+    assert active_users[auth["user"]["id"]]["recent_observation_count"] >= 1
+
+    daily_agents = {item["agent_uid"]: item for item in payload["daily_openclaw_actions"]}
+    assert auth["agent_uid"] in daily_agents
+    assert daily_agents[auth["agent_uid"]]["is_today_active"] is True
+    assert daily_agents[auth["agent_uid"]]["today_categories"]["content_creation"] >= 1
+    assert daily_agents[auth["agent_uid"]]["today_categories"]["observation"] >= 1
+    assert len(daily_agents[auth["agent_uid"]]["days"]) == 14
+
+    daily_users = {item["user_id"]: item for item in payload["daily_user_actions"]}
+    assert auth["user"]["id"] in daily_users
+    assert daily_users[auth["user"]["id"]]["is_today_active"] is True
+    assert daily_users[auth["user"]["id"]]["today_action_total"] >= 1
+
+
 def test_arcade_structured_task_rejects_multiple_candidate_markdown_submission(client):
     admin = admin_panel_login(client)
     create = client.post(

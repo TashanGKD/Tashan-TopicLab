@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import secrets
 import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
@@ -34,6 +36,36 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
 _ADMIN_PANEL_SCHEMA_READY = False
 _ADMIN_PANEL_SCHEMA_LOCK = threading.Lock()
+_SCENE_CATEGORY_MAP = {
+    "research": "forum.research",
+    "request": "forum.request",
+    "product": "forum.product",
+    "app": "forum.app",
+    "arcade": "forum.arcade",
+}
+_OBSERVABILITY_TIMEZONE = ZoneInfo(os.getenv("ADMIN_OBSERVABILITY_TIMEZONE", "Asia/Shanghai"))
+_ACTION_CATEGORY_ORDER = [
+    "auth_identity",
+    "content_creation",
+    "interaction",
+    "discussion",
+    "skill_hub",
+    "feedback",
+    "observation",
+    "admin_ops",
+    "other",
+]
+_ACTION_CATEGORY_LABELS = {
+    "auth_identity": "认证与身份",
+    "content_creation": "内容生产",
+    "interaction": "互动反馈",
+    "discussion": "讨论推进",
+    "skill_hub": "Skill Hub",
+    "feedback": "反馈上报",
+    "observation": "画像观察",
+    "admin_ops": "后台运维",
+    "other": "其他",
+}
 
 
 def _get_admin_panel_password() -> str:
@@ -79,6 +111,209 @@ def _to_iso(value: Any) -> str:
     if isinstance(value, str):
         return value
     return value.isoformat()
+
+
+def _json_loads(value: Any, default: Any):
+    if value in (None, ""):
+        return default
+    if isinstance(value, (dict, list)):
+        return value
+    try:
+        return json.loads(value)
+    except Exception:
+        return default
+
+
+def _parse_datetime(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return None
+        normalized = normalized.replace("Z", "+00:00")
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError:
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+                try:
+                    parsed = datetime.strptime(normalized, fmt)
+                    break
+                except ValueError:
+                    parsed = None
+            if parsed is None:
+                return None
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    return None
+
+
+def _format_day_bucket(value: datetime | None, *, tz: timezone | ZoneInfo = timezone.utc) -> str | None:
+    if value is None:
+        return None
+    return value.astimezone(tz).strftime("%Y-%m-%d")
+
+
+def _build_day_start(day: datetime.date, *, tz: timezone | ZoneInfo) -> datetime:
+    return datetime.combine(day, datetime.min.time(), tzinfo=tz)
+
+
+def _empty_action_categories() -> dict[str, int]:
+    return {category: 0 for category in _ACTION_CATEGORY_ORDER}
+
+
+def _serialize_action_categories(value: dict[str, int]) -> dict[str, int]:
+    return {category: int(value.get(category, 0) or 0) for category in _ACTION_CATEGORY_ORDER}
+
+
+def _build_category_cards(categories: dict[str, int]) -> list[dict[str, Any]]:
+    return [
+        {
+            "category": category,
+            "label": _ACTION_CATEGORY_LABELS[category],
+            "count": int(categories.get(category, 0) or 0),
+        }
+        for category in _ACTION_CATEGORY_ORDER
+    ]
+
+
+def _classify_event_category(event_type: str | None) -> str:
+    normalized = (event_type or "").strip().lower()
+    if not normalized:
+        return "other"
+    if normalized.startswith("admin."):
+        return "admin_ops"
+    if normalized.startswith("auth.") or normalized.startswith("binding."):
+        return "auth_identity"
+    if normalized.startswith("discussion."):
+        return "discussion"
+    if normalized.startswith("skill."):
+        return "skill_hub"
+    if normalized.startswith("interaction."):
+        return "interaction"
+    if normalized.startswith("feedback."):
+        return "feedback"
+    if normalized.startswith("topic.") or normalized.startswith("post.") or normalized.startswith("media."):
+        return "content_creation"
+    return "other"
+
+
+def _ensure_daily_bucket(container: dict[str, dict[str, Any]], day_key: str) -> dict[str, Any]:
+    bucket = container.get(day_key)
+    if bucket is None:
+        bucket = {
+            "date": day_key,
+            "event_count": 0,
+            "failed_event_count": 0,
+            "successful_event_count": 0,
+            "observation_count": 0,
+            "action_total": 0,
+            "categories": _empty_action_categories(),
+        }
+        container[day_key] = bucket
+    return bucket
+
+
+def _touch_daily_category(bucket: dict[str, Any], category: str, *, success: bool | None = None, is_observation: bool = False) -> None:
+    bucket["action_total"] += 1
+    bucket["categories"][category] = int(bucket["categories"].get(category, 0) or 0) + 1
+    if is_observation:
+        bucket["observation_count"] += 1
+        return
+    bucket["event_count"] += 1
+    if success is True:
+        bucket["successful_event_count"] += 1
+    elif success is False:
+        bucket["failed_event_count"] += 1
+
+
+def _finalize_daily_series(daily_map: dict[str, dict[str, Any]], ordered_days: list[str]) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for day_key in ordered_days:
+        current = daily_map.get(day_key)
+        if current is None:
+            current = _ensure_daily_bucket(daily_map, day_key)
+        items.append(
+            {
+                "date": current["date"],
+                "event_count": int(current["event_count"]),
+                "failed_event_count": int(current["failed_event_count"]),
+                "successful_event_count": int(current["successful_event_count"]),
+                "observation_count": int(current["observation_count"]),
+                "action_total": int(current["action_total"]),
+                "is_active": bool(int(current["action_total"]) > 0),
+                "categories": _serialize_action_categories(current["categories"]),
+            }
+        )
+    return items
+
+
+def _scene_from_category(category: str | None) -> str | None:
+    normalized = (category or "").strip().lower()
+    return _SCENE_CATEGORY_MAP.get(normalized)
+
+
+def _infer_event_scene(
+    *,
+    event_type: str,
+    route: str | None,
+    payload: dict[str, Any],
+    target_type: str | None,
+    target_id: str | None,
+    topic_categories: dict[str, str | None],
+    post_topic_categories: dict[str, str | None],
+) -> str:
+    payload_scene = str(payload.get("scene") or "").strip()
+    if payload_scene:
+        return payload_scene
+
+    payload_category = _scene_from_category(str(payload.get("category") or ""))
+    if payload_category:
+        return payload_category
+
+    resolved_topic_category: str | None = None
+    if target_type == "topic" and target_id:
+        resolved_topic_category = topic_categories.get(str(target_id))
+    elif target_type == "post" and target_id:
+        resolved_topic_category = post_topic_categories.get(str(target_id))
+    elif payload.get("topic_id") is not None:
+        resolved_topic_category = topic_categories.get(str(payload.get("topic_id")))
+    elif payload.get("post_id") is not None:
+        resolved_topic_category = post_topic_categories.get(str(payload.get("post_id")))
+
+    resolved_scene = _scene_from_category(resolved_topic_category)
+    if resolved_scene:
+        return resolved_scene
+
+    normalized_event_type = (event_type or "").lower()
+    normalized_route = (route or "").lower()
+
+    if normalized_event_type.startswith("skill.") or "/skill-hub" in normalized_route or "/skills" in normalized_route:
+        return "forum.app"
+    if normalized_event_type.startswith("interaction.source_") or "/source-feed" in normalized_route:
+        return "forum.research"
+    if normalized_event_type.startswith("feedback."):
+        return "ops.feedback"
+    if normalized_event_type.startswith("auth.") or normalized_event_type.startswith("binding.") or normalized_event_type.startswith("admin."):
+        return "ops.identity"
+    return "unclassified"
+
+
+def _build_empty_scene_bucket(scene: str) -> dict[str, Any]:
+    return {
+        "scene": scene,
+        "event_count": 0,
+        "failed_event_count": 0,
+        "observation_count": 0,
+        "pending_observation_count": 0,
+        "active_agents": set(),
+        "active_users": set(),
+    }
+
+
+def _finalize_count_set(value: set[int | str | None]) -> int:
+    return len({item for item in value if item not in (None, "")})
 
 
 def _normalized_like(query: str | None) -> tuple[str, str]:
@@ -590,6 +825,702 @@ async def delete_admin_topic(
             client_ip=x_forwarded_for,
         )
     return {"ok": True, "topic_id": topic_id}
+
+
+@router.get("/community/observability")
+async def get_admin_community_observability(
+    window_days: int = 14,
+    _: dict[str, Any] = Depends(require_admin_panel),
+):
+    _ensure_admin_schema_once()
+    safe_window_days = max(3, min(window_days, 30))
+    now = datetime.now(timezone.utc)
+    now_local = now.astimezone(_OBSERVABILITY_TIMEZONE)
+    today_local = now_local.date()
+    today_key = today_local.isoformat()
+    today_start_local = _build_day_start(today_local, tz=_OBSERVABILITY_TIMEZONE)
+    window_start_local = today_start_local - timedelta(days=safe_window_days - 1)
+    recent_7d_start_local = today_start_local - timedelta(days=6)
+    window_start = window_start_local.astimezone(timezone.utc)
+    recent_7d_start = recent_7d_start_local.astimezone(timezone.utc)
+    recent_24h_start = now - timedelta(hours=24)
+    ordered_day_keys = [
+        (today_local - timedelta(days=index)).isoformat()
+        for index in range(safe_window_days - 1, -1, -1)
+    ]
+
+    with get_db_session() as session:
+        agent_rows = session.execute(
+            text(
+                """
+                SELECT
+                    a.id,
+                    a.agent_uid,
+                    a.display_name,
+                    a.handle,
+                    a.status,
+                    a.bound_user_id,
+                    a.is_primary,
+                    a.created_at,
+                    a.updated_at,
+                    a.last_seen_at,
+                    COALESCE(w.balance, 0) AS balance,
+                    u.username,
+                    u.phone,
+                    (
+                        SELECT COUNT(*)
+                        FROM openclaw_activity_events e
+                        WHERE e.openclaw_agent_id = a.id
+                    ) AS lifetime_event_count
+                FROM openclaw_agents a
+                LEFT JOIN openclaw_wallets w ON w.openclaw_agent_id = a.id
+                LEFT JOIN users u ON u.id = a.bound_user_id
+                ORDER BY a.updated_at DESC, a.id DESC
+                """
+            )
+        ).fetchall()
+        event_rows = session.execute(
+            text(
+                """
+                SELECT
+                    e.id,
+                    e.event_uid,
+                    e.openclaw_agent_id,
+                    e.bound_user_id,
+                    e.session_id,
+                    e.request_id,
+                    e.event_type,
+                    e.action_name,
+                    e.target_type,
+                    e.target_id,
+                    e.route,
+                    e.success,
+                    e.status_code,
+                    e.error_code,
+                    e.payload_json,
+                    e.result_json,
+                    e.created_at,
+                    a.agent_uid,
+                    a.display_name,
+                    COALESCE(e.bound_user_id, a.bound_user_id) AS resolved_user_id,
+                    u.username,
+                    u.phone
+                FROM openclaw_activity_events e
+                LEFT JOIN openclaw_agents a ON a.id = e.openclaw_agent_id
+                LEFT JOIN users u ON u.id = COALESCE(e.bound_user_id, a.bound_user_id)
+                ORDER BY e.created_at DESC, e.id DESC
+                """
+            )
+        ).fetchall()
+        observation_rows = session.execute(
+            text(
+                """
+                SELECT
+                    o.id,
+                    o.observation_id,
+                    o.twin_id,
+                    o.instance_id,
+                    o.source,
+                    o.observation_type,
+                    o.confidence,
+                    o.payload_json,
+                    o.merge_status,
+                    o.created_at,
+                    t.owner_user_id,
+                    t.display_name AS twin_display_name,
+                    u.username,
+                    u.phone
+                FROM twin_observations o
+                JOIN twin_core t ON t.twin_id = o.twin_id
+                LEFT JOIN users u ON u.id = t.owner_user_id
+                ORDER BY o.created_at DESC, o.id DESC
+                """
+            )
+        ).fetchall()
+        topic_rows = session.execute(text("SELECT id, category FROM topics")).fetchall()
+        post_rows = session.execute(
+            text(
+                """
+                SELECT p.id, t.category
+                FROM posts p
+                LEFT JOIN topics t ON t.id = p.topic_id
+                """
+            )
+        ).fetchall()
+
+    topic_categories = {str(row.id): row.category for row in topic_rows}
+    post_topic_categories = {str(row.id): row.category for row in post_rows}
+
+    trend_map: dict[str, dict[str, Any]] = {
+        day_key: {
+            "date": day_key,
+            "event_count": 0,
+            "failed_event_count": 0,
+            "observation_count": 0,
+            "discussion_started_count": 0,
+            "discussion_completed_count": 0,
+            "active_agents": set(),
+            "active_users": set(),
+        }
+        for day_key in ordered_day_keys
+    }
+
+    scene_map: dict[str, dict[str, Any]] = {}
+    top_event_types: dict[str, dict[str, int | str]] = {}
+    top_routes: dict[str, dict[str, int | str]] = {}
+    failed_events: list[dict[str, Any]] = []
+    today_active_agents: set[int] = set()
+    today_active_users: set[int] = set()
+    today_action_categories = _empty_action_categories()
+
+    agent_rollups: dict[int, dict[str, Any]] = {}
+    for row in agent_rows:
+        last_seen_dt = _parse_datetime(row.last_seen_at)
+        updated_dt = _parse_datetime(row.updated_at)
+        created_dt = _parse_datetime(row.created_at)
+        latest_activity_dt = last_seen_dt or updated_dt or created_dt
+        agent_rollups[int(row.id)] = {
+            "agent_id": int(row.id),
+            "agent_uid": row.agent_uid,
+            "display_name": row.display_name,
+            "handle": row.handle,
+            "status": row.status,
+            "bound_user_id": int(row.bound_user_id) if row.bound_user_id is not None else None,
+            "username": row.username,
+            "phone": row.phone,
+            "is_primary": bool(row.is_primary),
+            "points_balance": int(row.balance or 0),
+            "created_at": _to_iso(row.created_at),
+            "updated_at": _to_iso(row.updated_at),
+            "last_seen_at": _to_iso(row.last_seen_at),
+            "latest_activity_at": _to_iso(latest_activity_dt),
+            "lifetime_event_count": int(row.lifetime_event_count or 0),
+            "recent_event_count": 0,
+            "recent_failure_count": 0,
+            "recent_observation_count": 0,
+            "pending_observation_count": 0,
+            "risk_score": 0,
+            "risk_reasons": [],
+            "inactivity_days": None,
+            "is_today_active": False,
+            "today_action_total": 0,
+            "today_categories": _empty_action_categories(),
+            "daily_actions": {},
+        }
+    agent_uid_to_id = {rollup["agent_uid"]: agent_id for agent_id, rollup in agent_rollups.items()}
+
+    user_rollups: dict[int, dict[str, Any]] = {}
+
+    def ensure_user_rollup(user_id: int, *, username: str | None, phone: str | None) -> dict[str, Any]:
+        current = user_rollups.get(user_id)
+        if current is None:
+            current = {
+                "user_id": user_id,
+                "username": username,
+                "phone": phone,
+                "agent_uids": set(),
+                "agent_count": 0,
+                "recent_event_count": 0,
+                "recent_failure_count": 0,
+                "recent_observation_count": 0,
+                "pending_observation_count": 0,
+                "latest_activity_at": "",
+                "primary_agent_uid": None,
+                "is_today_active": False,
+                "today_action_total": 0,
+                "today_categories": _empty_action_categories(),
+                "daily_actions": {},
+            }
+            user_rollups[user_id] = current
+        else:
+            if not current["username"] and username:
+                current["username"] = username
+            if not current["phone"] and phone:
+                current["phone"] = phone
+        return current
+
+    for rollup in agent_rollups.values():
+        if rollup["bound_user_id"] is None:
+            continue
+        current = ensure_user_rollup(
+            int(rollup["bound_user_id"]),
+            username=rollup["username"],
+            phone=rollup["phone"],
+        )
+        current["agent_uids"].add(rollup["agent_uid"])
+        current["agent_count"] = len(current["agent_uids"])
+        if rollup["is_primary"] and not current["primary_agent_uid"]:
+            current["primary_agent_uid"] = rollup["agent_uid"]
+        if rollup["latest_activity_at"] and (
+            not current["latest_activity_at"] or str(rollup["latest_activity_at"]) > str(current["latest_activity_at"])
+        ):
+            current["latest_activity_at"] = rollup["latest_activity_at"]
+
+    active_agents_7d: set[int] = set()
+    active_users_7d: set[int] = set()
+    events_24h = 0
+    events_24h_success = 0
+    discussions_started_window = 0
+    discussions_completed_window = 0
+    observations_window = 0
+    merged_observations_window = 0
+
+    for row in event_rows:
+        created_at = _parse_datetime(row.created_at)
+        if created_at is None:
+            continue
+
+        payload = _json_loads(row.payload_json, {})
+        scene = _infer_event_scene(
+            event_type=row.event_type,
+            route=row.route,
+            payload=payload if isinstance(payload, dict) else {},
+            target_type=row.target_type,
+            target_id=row.target_id,
+            topic_categories=topic_categories,
+            post_topic_categories=post_topic_categories,
+        )
+        agent_id = int(row.openclaw_agent_id) if row.openclaw_agent_id is not None else None
+        user_id = int(row.resolved_user_id) if row.resolved_user_id is not None else None
+        success = bool(row.success)
+        day_bucket = _format_day_bucket(created_at, tz=_OBSERVABILITY_TIMEZONE)
+        category = _classify_event_category(row.event_type)
+
+        if created_at >= recent_7d_start:
+            if agent_id is not None:
+                active_agents_7d.add(agent_id)
+            if user_id is not None:
+                active_users_7d.add(user_id)
+
+        if created_at >= recent_24h_start:
+            events_24h += 1
+            if success:
+                events_24h_success += 1
+
+        if created_at >= window_start:
+            if day_bucket and day_bucket in trend_map:
+                trend_map[day_bucket]["event_count"] += 1
+                if not success:
+                    trend_map[day_bucket]["failed_event_count"] += 1
+                if agent_id is not None:
+                    trend_map[day_bucket]["active_agents"].add(agent_id)
+                if user_id is not None:
+                    trend_map[day_bucket]["active_users"].add(user_id)
+                if row.event_type == "discussion.started":
+                    trend_map[day_bucket]["discussion_started_count"] += 1
+                if row.event_type == "discussion.completed":
+                    trend_map[day_bucket]["discussion_completed_count"] += 1
+
+            if row.event_type == "discussion.started":
+                discussions_started_window += 1
+            if row.event_type == "discussion.completed":
+                discussions_completed_window += 1
+
+            scene_bucket = scene_map.setdefault(scene, _build_empty_scene_bucket(scene))
+            scene_bucket["event_count"] += 1
+            if not success:
+                scene_bucket["failed_event_count"] += 1
+            if agent_id is not None:
+                scene_bucket["active_agents"].add(agent_id)
+            if user_id is not None:
+                scene_bucket["active_users"].add(user_id)
+
+            event_type_bucket = top_event_types.setdefault(
+                row.event_type,
+                {"event_type": row.event_type, "count": 0, "success_count": 0, "failure_count": 0},
+            )
+            event_type_bucket["count"] += 1
+            if success:
+                event_type_bucket["success_count"] += 1
+            else:
+                event_type_bucket["failure_count"] += 1
+
+            route_key = row.route or "[no-route]"
+            route_bucket = top_routes.setdefault(
+                route_key,
+                {"route": route_key, "count": 0, "failure_count": 0},
+            )
+            route_bucket["count"] += 1
+            if not success:
+                route_bucket["failure_count"] += 1
+
+            if agent_id is not None and agent_id in agent_rollups:
+                agent_rollup = agent_rollups[agent_id]
+                agent_rollup["recent_event_count"] += 1
+                if not success:
+                    agent_rollup["recent_failure_count"] += 1
+                agent_day = _ensure_daily_bucket(agent_rollup["daily_actions"], day_bucket)
+                _touch_daily_category(agent_day, category, success=success)
+                if day_bucket == today_key:
+                    today_active_agents.add(agent_id)
+                    agent_rollup["is_today_active"] = True
+                    agent_rollup["today_action_total"] += 1
+                    agent_rollup["today_categories"][category] += 1
+                    today_action_categories[category] += 1
+
+            if user_id is not None:
+                user_rollup = ensure_user_rollup(user_id, username=row.username, phone=row.phone)
+                user_rollup["recent_event_count"] += 1
+                if not success:
+                    user_rollup["recent_failure_count"] += 1
+                if _to_iso(created_at) > str(user_rollup["latest_activity_at"]):
+                    user_rollup["latest_activity_at"] = _to_iso(created_at)
+                user_day = _ensure_daily_bucket(user_rollup["daily_actions"], day_bucket)
+                _touch_daily_category(user_day, category, success=success)
+                if day_bucket == today_key:
+                    today_active_users.add(user_id)
+                    user_rollup["is_today_active"] = True
+                    user_rollup["today_action_total"] += 1
+                    user_rollup["today_categories"][category] += 1
+                if agent_id is not None and agent_id in agent_rollups:
+                    user_rollup["agent_uids"].add(agent_rollups[agent_id]["agent_uid"])
+                    user_rollup["agent_count"] = len(user_rollup["agent_uids"])
+                    if agent_rollups[agent_id]["is_primary"] and not user_rollup["primary_agent_uid"]:
+                        user_rollup["primary_agent_uid"] = agent_rollups[agent_id]["agent_uid"]
+
+            if not success and len(failed_events) < 12:
+                failed_events.append(
+                    {
+                        "id": int(row.id),
+                        "event_type": row.event_type,
+                        "route": row.route,
+                        "status_code": row.status_code,
+                        "error_code": row.error_code,
+                        "agent_uid": row.agent_uid,
+                        "display_name": row.display_name,
+                        "bound_user_id": user_id,
+                        "username": row.username,
+                        "created_at": _to_iso(created_at),
+                    }
+                )
+
+    observations_pending_total = 0
+    for row in observation_rows:
+        created_at = _parse_datetime(row.created_at)
+        if created_at is None:
+            continue
+        payload = _json_loads(row.payload_json, {})
+        scene = str(payload.get("scene") or "").strip() or "unclassified"
+        owner_user_id = int(row.owner_user_id)
+        merge_status = str(row.merge_status or "")
+        agent_rollup = agent_rollups.get(agent_uid_to_id[row.instance_id]) if row.instance_id in agent_uid_to_id else None
+        day_bucket = _format_day_bucket(created_at, tz=_OBSERVABILITY_TIMEZONE)
+
+        if merge_status == "pending_review":
+            observations_pending_total += 1
+
+        if created_at >= recent_7d_start:
+            active_users_7d.add(owner_user_id)
+            if agent_rollup is not None:
+                active_agents_7d.add(agent_rollup["agent_id"])
+
+        if created_at >= window_start:
+            observations_window += 1
+            if merge_status == "merged":
+                merged_observations_window += 1
+
+            if day_bucket and day_bucket in trend_map:
+                trend_map[day_bucket]["observation_count"] += 1
+                trend_map[day_bucket]["active_users"].add(owner_user_id)
+                if agent_rollup is not None:
+                    trend_map[day_bucket]["active_agents"].add(agent_rollup["agent_id"])
+
+            scene_bucket = scene_map.setdefault(scene, _build_empty_scene_bucket(scene))
+            scene_bucket["observation_count"] += 1
+            if merge_status == "pending_review":
+                scene_bucket["pending_observation_count"] += 1
+            scene_bucket["active_users"].add(owner_user_id)
+            if agent_rollup is not None:
+                scene_bucket["active_agents"].add(agent_rollup["agent_id"])
+                agent_rollup["recent_observation_count"] += 1
+                if merge_status == "pending_review":
+                    agent_rollup["pending_observation_count"] += 1
+                agent_day = _ensure_daily_bucket(agent_rollup["daily_actions"], day_bucket)
+                _touch_daily_category(agent_day, "observation", is_observation=True)
+                if day_bucket == today_key:
+                    today_active_agents.add(agent_rollup["agent_id"])
+                    agent_rollup["is_today_active"] = True
+                    agent_rollup["today_action_total"] += 1
+                    agent_rollup["today_categories"]["observation"] += 1
+                    today_action_categories["observation"] += 1
+
+            user_rollup = ensure_user_rollup(owner_user_id, username=row.username, phone=row.phone)
+            user_rollup["recent_observation_count"] += 1
+            if merge_status == "pending_review":
+                user_rollup["pending_observation_count"] += 1
+            created_iso = _to_iso(created_at)
+            if created_iso > str(user_rollup["latest_activity_at"]):
+                user_rollup["latest_activity_at"] = created_iso
+            user_day = _ensure_daily_bucket(user_rollup["daily_actions"], day_bucket)
+            _touch_daily_category(user_day, "observation", is_observation=True)
+            if day_bucket == today_key:
+                today_active_users.add(owner_user_id)
+                user_rollup["is_today_active"] = True
+                user_rollup["today_action_total"] += 1
+                user_rollup["today_categories"]["observation"] += 1
+
+    for rollup in agent_rollups.values():
+        latest_activity_dt = _parse_datetime(rollup["latest_activity_at"])
+        inactivity_days = (now - latest_activity_dt).days if latest_activity_dt else None
+        rollup["inactivity_days"] = inactivity_days
+
+        if rollup["status"] != "active":
+            rollup["risk_score"] += 1
+            rollup["risk_reasons"].append(f"status={rollup['status']}")
+        if rollup["recent_failure_count"] >= 3:
+            rollup["risk_score"] += 3
+            rollup["risk_reasons"].append(f"{rollup['recent_failure_count']} recent failures")
+        elif rollup["recent_failure_count"] >= 1:
+            rollup["risk_score"] += 1
+            rollup["risk_reasons"].append(f"{rollup['recent_failure_count']} recent failure")
+        if rollup["pending_observation_count"] >= 3:
+            rollup["risk_score"] += 2
+            rollup["risk_reasons"].append(f"{rollup['pending_observation_count']} pending observations")
+        elif rollup["pending_observation_count"] >= 1:
+            rollup["risk_score"] += 1
+            rollup["risk_reasons"].append("has pending observations")
+        if inactivity_days is not None and rollup["lifetime_event_count"] >= 3 and inactivity_days >= 14:
+            rollup["risk_score"] += 2
+            rollup["risk_reasons"].append(f"inactive for {inactivity_days} days")
+        elif inactivity_days is not None and rollup["lifetime_event_count"] >= 3 and inactivity_days >= 7:
+            rollup["risk_score"] += 1
+            rollup["risk_reasons"].append(f"cooling down for {inactivity_days} days")
+        if rollup["bound_user_id"] is None and rollup["recent_event_count"] >= 2:
+            rollup["risk_score"] += 1
+            rollup["risk_reasons"].append("active but unbound to a user")
+
+        if rollup["risk_score"] >= 4:
+            rollup["risk_level"] = "high"
+        elif rollup["risk_score"] >= 2:
+            rollup["risk_level"] = "medium"
+        elif rollup["risk_score"] >= 1:
+            rollup["risk_level"] = "low"
+        else:
+            rollup["risk_level"] = "stable"
+
+    trends = []
+    for point in trend_map.values():
+        trends.append(
+            {
+                "date": point["date"],
+                "event_count": point["event_count"],
+                "failed_event_count": point["failed_event_count"],
+                "observation_count": point["observation_count"],
+                "discussion_started_count": point["discussion_started_count"],
+                "discussion_completed_count": point["discussion_completed_count"],
+                "active_agents": _finalize_count_set(point["active_agents"]),
+                "active_users": _finalize_count_set(point["active_users"]),
+            }
+        )
+
+    scenes = [
+        {
+            "scene": scene,
+            "event_count": bucket["event_count"],
+            "failed_event_count": bucket["failed_event_count"],
+            "observation_count": bucket["observation_count"],
+            "pending_observation_count": bucket["pending_observation_count"],
+            "active_agents": _finalize_count_set(bucket["active_agents"]),
+            "active_users": _finalize_count_set(bucket["active_users"]),
+        }
+        for scene, bucket in sorted(
+            scene_map.items(),
+            key=lambda item: (
+                item[1]["event_count"] + item[1]["observation_count"],
+                item[1]["failed_event_count"] + item[1]["pending_observation_count"],
+            ),
+            reverse=True,
+        )
+    ]
+
+    daily_openclaw_actions = [
+        {
+            "agent_uid": rollup["agent_uid"],
+            "display_name": rollup["display_name"],
+            "handle": rollup["handle"],
+            "status": rollup["status"],
+            "bound_user_id": rollup["bound_user_id"],
+            "username": rollup["username"],
+            "phone": rollup["phone"],
+            "is_today_active": bool(rollup["is_today_active"]),
+            "today_action_total": int(rollup["today_action_total"]),
+            "today_categories": _serialize_action_categories(rollup["today_categories"]),
+            "recent_event_count": int(rollup["recent_event_count"]),
+            "recent_failure_count": int(rollup["recent_failure_count"]),
+            "recent_observation_count": int(rollup["recent_observation_count"]),
+            "latest_activity_at": rollup["latest_activity_at"],
+            "days": _finalize_daily_series(rollup["daily_actions"], ordered_day_keys),
+        }
+        for rollup in sorted(
+            agent_rollups.values(),
+            key=lambda item: (
+                item["today_action_total"],
+                item["recent_event_count"] + item["recent_observation_count"],
+                item["recent_failure_count"],
+                item["latest_activity_at"] or "",
+            ),
+            reverse=True,
+        )
+        if rollup["today_action_total"] > 0 or rollup["recent_event_count"] > 0 or rollup["recent_observation_count"] > 0
+    ]
+
+    daily_user_actions = [
+        {
+            "user_id": rollup["user_id"],
+            "username": rollup["username"],
+            "phone": rollup["phone"],
+            "agent_count": len(rollup["agent_uids"]),
+            "primary_agent_uid": rollup["primary_agent_uid"],
+            "is_today_active": bool(rollup["is_today_active"]),
+            "today_action_total": int(rollup["today_action_total"]),
+            "today_categories": _serialize_action_categories(rollup["today_categories"]),
+            "recent_event_count": int(rollup["recent_event_count"]),
+            "recent_failure_count": int(rollup["recent_failure_count"]),
+            "recent_observation_count": int(rollup["recent_observation_count"]),
+            "latest_activity_at": rollup["latest_activity_at"],
+            "days": _finalize_daily_series(rollup["daily_actions"], ordered_day_keys),
+        }
+        for rollup in sorted(
+            user_rollups.values(),
+            key=lambda item: (
+                item["today_action_total"],
+                item["recent_event_count"] + item["recent_observation_count"],
+                item["recent_failure_count"],
+                item["latest_activity_at"] or "",
+            ),
+            reverse=True,
+        )
+        if rollup["today_action_total"] > 0 or rollup["recent_event_count"] > 0 or rollup["recent_observation_count"] > 0
+    ]
+
+    risk_agents = [
+        {
+            "agent_uid": rollup["agent_uid"],
+            "display_name": rollup["display_name"],
+            "handle": rollup["handle"],
+            "status": rollup["status"],
+            "bound_user_id": rollup["bound_user_id"],
+            "username": rollup["username"],
+            "phone": rollup["phone"],
+            "points_balance": rollup["points_balance"],
+            "recent_event_count": rollup["recent_event_count"],
+            "recent_failure_count": rollup["recent_failure_count"],
+            "recent_observation_count": rollup["recent_observation_count"],
+            "pending_observation_count": rollup["pending_observation_count"],
+            "lifetime_event_count": rollup["lifetime_event_count"],
+            "last_seen_at": rollup["last_seen_at"],
+            "latest_activity_at": rollup["latest_activity_at"],
+            "inactivity_days": rollup["inactivity_days"],
+            "risk_level": rollup["risk_level"],
+            "risk_reasons": rollup["risk_reasons"],
+        }
+        for rollup in sorted(
+            agent_rollups.values(),
+            key=lambda item: (item["risk_score"], item["recent_failure_count"], item["recent_event_count"], item["lifetime_event_count"]),
+            reverse=True,
+        )
+        if rollup["risk_score"] > 0
+    ][:10]
+
+    active_users = [
+        {
+            "user_id": rollup["user_id"],
+            "username": rollup["username"],
+            "phone": rollup["phone"],
+            "agent_count": len(rollup["agent_uids"]),
+            "primary_agent_uid": rollup["primary_agent_uid"],
+            "recent_event_count": rollup["recent_event_count"],
+            "recent_failure_count": rollup["recent_failure_count"],
+            "recent_observation_count": rollup["recent_observation_count"],
+            "pending_observation_count": rollup["pending_observation_count"],
+            "latest_activity_at": rollup["latest_activity_at"],
+        }
+        for rollup in sorted(
+            user_rollups.values(),
+            key=lambda item: (
+                item["recent_event_count"] + item["recent_observation_count"],
+                item["recent_failure_count"],
+                item["pending_observation_count"],
+            ),
+            reverse=True,
+        )
+        if rollup["recent_event_count"] > 0 or rollup["recent_observation_count"] > 0
+    ][:12]
+
+    overview = {
+        "total_agents": len(agent_rollups),
+        "bound_agents": len([item for item in agent_rollups.values() if item["bound_user_id"] is not None]),
+        "bound_ratio": round(
+            len([item for item in agent_rollups.values() if item["bound_user_id"] is not None]) / max(len(agent_rollups), 1),
+            4,
+        ),
+        "total_users_with_openclaw": len({item["bound_user_id"] for item in agent_rollups.values() if item["bound_user_id"] is not None}),
+        "active_agents_7d": len(active_agents_7d),
+        "active_users_7d": len(active_users_7d),
+        "active_agents_today": len(today_active_agents),
+        "active_users_today": len(today_active_users),
+        "new_agents_window": len(
+            [
+                item
+                for item in agent_rollups.values()
+                if (created_at := _parse_datetime(item["created_at"])) is not None and created_at >= window_start
+            ]
+        ),
+        "events_24h": events_24h,
+        "success_rate_24h": round(events_24h_success / max(events_24h, 1), 4),
+        "events_window": sum(point["event_count"] for point in trends),
+        "failed_events_window": sum(point["failed_event_count"] for point in trends),
+        "discussions_started_window": discussions_started_window,
+        "discussions_completed_window": discussions_completed_window,
+        "discussion_completion_rate": round(discussions_completed_window / max(discussions_started_window, 1), 4),
+        "observations_window": observations_window,
+        "merged_observations_window": merged_observations_window,
+        "pending_observations_total": observations_pending_total,
+        "risk_agents": len([item for item in agent_rollups.values() if item["risk_level"] in {"high", "medium"}]),
+    }
+
+    return {
+        "generated_at": _to_iso(now),
+        "window_days": safe_window_days,
+        "timezone": str(_OBSERVABILITY_TIMEZONE),
+        "today_date": today_key,
+        "activity_rules": {
+            "openclaw": f"OpenClaw 在 {today_key}（{_OBSERVABILITY_TIMEZONE}）自然日内，至少产生 1 条动作事件或 1 条画像 observation。",
+            "user": f"用户在 {today_key}（{_OBSERVABILITY_TIMEZONE}）自然日内，任一绑定 OpenClaw 产生动作事件，或该用户拥有的 Twin 收到 1 条 observation。",
+        },
+        "today_summary": {
+            "date": today_key,
+            "active_agents": len(today_active_agents),
+            "active_users": len(today_active_users),
+            "action_total": int(sum(today_action_categories.values())),
+            "categories": _build_category_cards(today_action_categories),
+        },
+        "overview": overview,
+        "trends": trends,
+        "scenes": scenes,
+        "action_category_labels": _ACTION_CATEGORY_LABELS,
+        "top_event_types": [
+            item
+            for item in sorted(
+                top_event_types.values(),
+                key=lambda value: (int(value["count"]), int(value["failure_count"])),
+                reverse=True,
+            )[:10]
+        ],
+        "top_routes": [
+            item
+            for item in sorted(
+                top_routes.values(),
+                key=lambda value: (int(value["count"]), int(value["failure_count"])),
+                reverse=True,
+            )[:10]
+        ],
+        "risk_agents": risk_agents,
+        "active_users": active_users,
+        "daily_openclaw_actions": daily_openclaw_actions,
+        "daily_user_actions": daily_user_actions,
+        "failed_events": failed_events,
+    }
 
 
 @router.get("/openclaw/agents", response_model=PagedResponse)

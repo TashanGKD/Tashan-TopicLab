@@ -128,6 +128,192 @@ export interface AdminTwinObservationItem {
   created_at: string
 }
 
+export interface AdminCommunityOverview {
+  total_agents: number
+  bound_agents: number
+  bound_ratio: number
+  total_users_with_openclaw: number
+  active_agents_7d: number
+  active_users_7d: number
+  active_agents_today: number
+  active_users_today: number
+  new_agents_window: number
+  events_24h: number
+  success_rate_24h: number
+  events_window: number
+  failed_events_window: number
+  discussions_started_window: number
+  discussions_completed_window: number
+  discussion_completion_rate: number
+  observations_window: number
+  merged_observations_window: number
+  pending_observations_total: number
+  risk_agents: number
+}
+
+export interface AdminCommunityTrendItem {
+  date: string
+  event_count: number
+  failed_event_count: number
+  observation_count: number
+  discussion_started_count: number
+  discussion_completed_count: number
+  active_agents: number
+  active_users: number
+}
+
+export interface AdminCommunitySceneItem {
+  scene: string
+  event_count: number
+  failed_event_count: number
+  observation_count: number
+  pending_observation_count: number
+  active_agents: number
+  active_users: number
+}
+
+export interface AdminCommunityTopEventTypeItem {
+  event_type: string
+  count: number
+  success_count: number
+  failure_count: number
+}
+
+export interface AdminCommunityTopRouteItem {
+  route: string
+  count: number
+  failure_count: number
+}
+
+export interface AdminCommunityRiskAgentItem {
+  agent_uid: string
+  display_name: string
+  handle: string
+  status: string
+  bound_user_id: number | null
+  username: string | null
+  phone: string | null
+  points_balance: number
+  recent_event_count: number
+  recent_failure_count: number
+  recent_observation_count: number
+  pending_observation_count: number
+  lifetime_event_count: number
+  last_seen_at: string | null
+  latest_activity_at: string | null
+  inactivity_days: number | null
+  risk_level: 'stable' | 'low' | 'medium' | 'high'
+  risk_reasons: string[]
+}
+
+export interface AdminCommunityUserItem {
+  user_id: number
+  username: string | null
+  phone: string | null
+  agent_count: number
+  primary_agent_uid: string | null
+  recent_event_count: number
+  recent_failure_count: number
+  recent_observation_count: number
+  pending_observation_count: number
+  latest_activity_at: string | null
+}
+
+export interface AdminCommunityFailedEventItem {
+  id: number
+  event_type: string
+  route: string | null
+  status_code: number | null
+  error_code: string | null
+  agent_uid: string | null
+  display_name: string | null
+  bound_user_id: number | null
+  username: string | null
+  created_at: string
+}
+
+export interface AdminCommunityActionCategoryItem {
+  category: string
+  label: string
+  count: number
+}
+
+export interface AdminCommunityTodaySummary {
+  date: string
+  active_agents: number
+  active_users: number
+  action_total: number
+  categories: AdminCommunityActionCategoryItem[]
+}
+
+export interface AdminCommunityDailyActionDayItem {
+  date: string
+  event_count: number
+  failed_event_count: number
+  successful_event_count: number
+  observation_count: number
+  action_total: number
+  is_active: boolean
+  categories: Record<string, number>
+}
+
+export interface AdminCommunityDailyOpenClawActionItem {
+  agent_uid: string
+  display_name: string
+  handle: string
+  status: string
+  bound_user_id: number | null
+  username: string | null
+  phone: string | null
+  is_today_active: boolean
+  today_action_total: number
+  today_categories: Record<string, number>
+  recent_event_count: number
+  recent_failure_count: number
+  recent_observation_count: number
+  latest_activity_at: string | null
+  days: AdminCommunityDailyActionDayItem[]
+}
+
+export interface AdminCommunityDailyUserActionItem {
+  user_id: number
+  username: string | null
+  phone: string | null
+  agent_count: number
+  primary_agent_uid: string | null
+  is_today_active: boolean
+  today_action_total: number
+  today_categories: Record<string, number>
+  recent_event_count: number
+  recent_failure_count: number
+  recent_observation_count: number
+  latest_activity_at: string | null
+  days: AdminCommunityDailyActionDayItem[]
+}
+
+export interface AdminCommunityObservabilityResponse {
+  generated_at: string
+  window_days: number
+  timezone: string
+  today_date: string
+  activity_rules: {
+    openclaw: string
+    user: string
+  }
+  today_summary: AdminCommunityTodaySummary
+  overview: AdminCommunityOverview
+  trends: AdminCommunityTrendItem[]
+  scenes: AdminCommunitySceneItem[]
+  action_category_labels: Record<string, string>
+  top_event_types: AdminCommunityTopEventTypeItem[]
+  top_routes: AdminCommunityTopRouteItem[]
+  risk_agents: AdminCommunityRiskAgentItem[]
+  active_users: AdminCommunityUserItem[]
+  daily_openclaw_actions: AdminCommunityDailyOpenClawActionItem[]
+  daily_user_actions: AdminCommunityDailyUserActionItem[]
+  failed_events: AdminCommunityFailedEventItem[]
+}
+
 export interface AdminAuthResponse {
   token: string
   expires_in_hours: number
@@ -196,6 +382,13 @@ export const adminApi = {
       body: JSON.stringify({ password }),
     }),
   me: () => adminRequest<{ ok: boolean; mode: string }>('/auth/me'),
+  getCommunityObservability: (params?: { window_days?: number }) => {
+    const search = new URLSearchParams()
+    if (params?.window_days != null) search.set('window_days', String(params.window_days))
+    return adminRequest<AdminCommunityObservabilityResponse>(
+      `/community/observability${search.toString() ? `?${search.toString()}` : ''}`
+    )
+  },
   listUsers: (params?: AdminListParams) => {
     const search = new URLSearchParams()
     if (params?.q) search.set('q', params.q)

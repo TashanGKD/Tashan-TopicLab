@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   adminApi,
   adminPanelTokenManager,
+  AdminCommunityObservabilityResponse,
   AdminFeedbackItem,
   AdminOpenClawAgentItem,
   AdminOpenClawEventItem,
@@ -11,8 +12,16 @@ import {
   AdminTopicItem,
   AdminUserItem,
 } from '../api/admin'
+import CommunityObservabilityDashboard from '../components/admin/CommunityObservabilityDashboard'
 
-type AdminTab = 'users' | 'topics' | 'feedback' | 'openclaw_agents' | 'openclaw_events' | 'twin_observations'
+type AdminTab =
+  | 'community_observability'
+  | 'users'
+  | 'topics'
+  | 'feedback'
+  | 'openclaw_agents'
+  | 'openclaw_events'
+  | 'twin_observations'
 type SortOrder = 'asc' | 'desc'
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
@@ -24,6 +33,7 @@ const OPENCLAW_AGENT_STATUS_OPTIONS = [
 ]
 
 const SORT_OPTIONS: Record<AdminTab, Array<{ value: string; label: string }>> = {
+  community_observability: [],
   users: [
     { value: 'created_at', label: '创建时间' },
     { value: 'phone', label: '手机号' },
@@ -60,6 +70,7 @@ const SORT_OPTIONS: Record<AdminTab, Array<{ value: string; label: string }>> = 
 }
 
 const DEFAULT_SORT: Record<AdminTab, { sortBy: string; sortOrder: SortOrder }> = {
+  community_observability: { sortBy: '', sortOrder: 'desc' },
   users: { sortBy: 'created_at', sortOrder: 'desc' },
   topics: { sortBy: 'updated_at', sortOrder: 'desc' },
   feedback: { sortBy: 'created_at', sortOrder: 'desc' },
@@ -126,7 +137,7 @@ function statusBadgeClass(status: string | null | undefined) {
 
 export default function AdminDashboardPage() {
   const navigate = useNavigate()
-  const [tab, setTab] = useState<AdminTab>('users')
+  const [tab, setTab] = useState<AdminTab>('community_observability')
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState('')
   const [pageSize, setPageSize] = useState(20)
@@ -140,10 +151,12 @@ export default function AdminDashboardPage() {
   const [observationTypeQuery, setObservationTypeQuery] = useState('')
   const [observationMergeStatusFilter, setObservationMergeStatusFilter] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
+  const [observabilityWindowDays, setObservabilityWindowDays] = useState(14)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [inspectorLoading, setInspectorLoading] = useState(false)
   const [error, setError] = useState('')
+  const [communityObservability, setCommunityObservability] = useState<AdminCommunityObservabilityResponse | null>(null)
 
   const [users, setUsers] = useState<AdminUserItem[]>([])
   const [usersTotal, setUsersTotal] = useState(0)
@@ -236,6 +249,13 @@ export default function AdminDashboardPage() {
 
     const run = async () => {
       try {
+        if (tab === 'community_observability') {
+          const data = await adminApi.getCommunityObservability({ window_days: observabilityWindowDays })
+          if (cancelled) return
+          setCommunityObservability(data)
+          return
+        }
+
         if (tab === 'users') {
           const data = await adminApi.listUsers({ q: query, sort_by: sortBy, sort_order: sortOrder, limit: pageSize, offset })
           if (cancelled) return
@@ -349,6 +369,7 @@ export default function AdminDashboardPage() {
     pageSize,
     query,
     reloadKey,
+    observabilityWindowDays,
     selectedFeedbackId,
     selectedOpenClawAgentUid,
     selectedOpenClawEventId,
@@ -413,7 +434,9 @@ export default function AdminDashboardPage() {
   const selectedTwinObservation = twinObservations.find((item) => item.id === selectedTwinObservationId) ?? null
 
   const total =
-    tab === 'users'
+    tab === 'community_observability'
+      ? communityObservability?.overview.events_window ?? 0
+      : tab === 'users'
       ? usersTotal
       : tab === 'topics'
         ? topicsTotal
@@ -439,7 +462,9 @@ export default function AdminDashboardPage() {
   })()
 
   const summaryLabel =
-    tab === 'users'
+    tab === 'community_observability'
+      ? '社区观测'
+      : tab === 'users'
       ? '用户记录'
       : tab === 'topics'
         ? '话题记录'
@@ -452,7 +477,9 @@ export default function AdminDashboardPage() {
               : '画像上报'
 
   const selectedLabel =
-    tab === 'users'
+    tab === 'community_observability'
+      ? `最近 ${observabilityWindowDays} 天`
+      : tab === 'users'
       ? selectedUser?.username || selectedUser?.phone || '--'
       : tab === 'topics'
         ? selectedTopic?.title || '--'
@@ -531,7 +558,7 @@ export default function AdminDashboardPage() {
     if (!selectedOpenClawAgentUid) return
     const delta = Number(openClawDraft.delta)
     if (!Number.isFinite(delta) || delta === 0) {
-      setError('积分调整值必须是非 0 数字')
+      setError('他山石调整值必须是非 0 数字')
       return
     }
     setSaving(true)
@@ -544,7 +571,7 @@ export default function AdminDashboardPage() {
       setOpenClawDraft((draft) => ({ ...draft, note: '' }))
       reloadCurrentTab()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '积分调整失败')
+      setError(err instanceof Error ? err.message : '他山石调整失败')
     } finally {
       setSaving(false)
     }
@@ -627,7 +654,7 @@ export default function AdminDashboardPage() {
         : tab === 'feedback'
           ? '修改反馈内容'
           : tab === 'openclaw_agents'
-            ? '查看身份详情、事件流水、积分账本，并执行运维动作'
+            ? '查看身份详情、事件流水、他山石账本，并执行运维动作'
             : tab === 'openclaw_events'
               ? '查看全局事件明细、路由、请求上下文和结果载荷'
               : '查看 OpenClaw 主动上报的用户画像、偏好和阶段目标'
@@ -644,11 +671,12 @@ export default function AdminDashboardPage() {
               <div className="text-[11px] uppercase tracking-[0.32em] text-blue-200">Isolated Admin Surface</div>
               <h1 className="mt-2 text-3xl font-semibold tracking-tight">数据库管理后台</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-blue-100/85">
-                统一管理站内数据和通过 topiclab-cli 接入的 OpenClaw 身份、事件、积分，以及 twin 画像上报能力。
+                统一管理站内数据和通过 topiclab-cli 接入的 OpenClaw 身份、事件、他山石，以及 twin 画像上报能力。
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
               {[
+                ['community_observability', '社区观测'],
                 ['users', '用户'],
                 ['topics', '话题'],
                 ['feedback', '用户反馈'],
@@ -678,14 +706,27 @@ export default function AdminDashboardPage() {
           </div>
         </header>
 
-        <section className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="当前模块" value={summaryLabel} tone="blue" />
-          <StatCard label="记录总数" value={total} />
-          <StatCard label="当前页码" value={`${currentPage} / ${totalPages}`} />
-          <StatCard label="当前选中" value={selectedLabel} tone="amber" />
-        </section>
+        {tab === 'community_observability' ? (
+          <CommunityObservabilityDashboard
+            data={communityObservability}
+            loading={loading}
+            error={error}
+            windowDays={observabilityWindowDays}
+            onWindowDaysChange={setObservabilityWindowDays}
+            onOpenAgent={jumpToOpenClawAgent}
+            onOpenEvents={jumpToOpenClawEvents}
+            onOpenObservations={jumpToTwinObservations}
+          />
+        ) : (
+          <>
+            <section className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <StatCard label="当前模块" value={summaryLabel} tone="blue" />
+              <StatCard label="记录总数" value={total} />
+              <StatCard label="当前页码" value={`${currentPage} / ${totalPages}`} />
+              <StatCard label="当前选中" value={selectedLabel} tone="amber" />
+            </section>
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_470px]">
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_470px]">
           <section className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_18px_40px_rgba(15,23,42,0.06)] backdrop-blur">
             <div className="border-b border-slate-200 bg-slate-50/80 px-5 py-4">
               <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
@@ -1031,7 +1072,7 @@ export default function AdminDashboardPage() {
                       <th className="px-4 py-3 whitespace-nowrap">序号</th>
                       <th className="px-4 py-3">身份</th>
                       <th className="px-4 py-3 whitespace-nowrap">绑定</th>
-                      <th className="px-4 py-3 whitespace-nowrap">状态 / 积分</th>
+                      <th className="px-4 py-3 whitespace-nowrap">状态 / 他山石</th>
                       <th className="px-4 py-3 whitespace-nowrap">最近活动</th>
                     </tr>
                   </thead>
@@ -1055,7 +1096,7 @@ export default function AdminDashboardPage() {
                         </td>
                         <td className="px-4 py-3 align-top text-xs text-slate-600">
                           <div className={`inline-flex rounded-full px-2 py-0.5 ${statusBadgeClass(item.status)}`}>{item.status}</div>
-                          <div className="mt-2 font-mono">积分 {item.points_balance}</div>
+                          <div className="mt-2 font-mono">他山石 {item.points_balance}</div>
                           <div className="mt-1">{item.is_primary ? 'Primary' : 'Secondary'}</div>
                         </td>
                         <td className="px-4 py-3 align-top font-mono text-xs text-slate-600">
@@ -1394,18 +1435,18 @@ export default function AdminDashboardPage() {
                       <div className="font-mono">{selectedOpenClawAgent.handle}</div>
                       <div>绑定用户 {selectedOpenClawAgent.bound_user_id ?? '--'} / {selectedOpenClawAgent.username || '--'}</div>
                       <div>手机号 {selectedOpenClawAgent.phone || '--'}</div>
-                      <div>当前积分 {selectedOpenClawAgent.points_balance}</div>
+                      <div>当前他山石 {selectedOpenClawAgent.points_balance}</div>
                       <div>最近活跃 {formatDate(selectedOpenClawAgent.last_seen_at)}</div>
                       <div>创建时间 {formatDate(selectedOpenClawAgent.created_at)}</div>
                     </div>
 
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <StatCard label="Points" value={selectedOpenClawAgent.points_balance} tone="amber" />
+                      <StatCard label="他山石" value={selectedOpenClawAgent.points_balance} tone="amber" />
                       <StatCard label="Recent Events" value={openClawAgentEvents.length} tone="blue" />
                     </div>
 
                     <div className="rounded-2xl border border-slate-200 p-4">
-                      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">积分调整</div>
+                      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">他山石调整</div>
                       <div className="mt-3 grid gap-3 sm:grid-cols-[120px_minmax(0,1fr)]">
                         <input
                           type="number"
@@ -1426,7 +1467,7 @@ export default function AdminDashboardPage() {
                         onClick={() => { void adjustOpenClawPoints() }}
                         className="mt-3 w-full rounded-2xl bg-slate-950 px-4 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        {saving ? '处理中...' : '执行加减分'}
+                        {saving ? '处理中...' : '执行增减他山石'}
                       </button>
                     </div>
 
@@ -1499,10 +1540,10 @@ export default function AdminDashboardPage() {
                     </div>
 
                     <div className="rounded-2xl border border-slate-200 p-4">
-                      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">积分账本</div>
+                      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">他山石账本</div>
                       <div className="mt-3 space-y-2">
                         {openClawAgentLedger.length === 0 ? (
-                          <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-500">暂无积分流水。</div>
+                          <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-500">暂无他山石流水。</div>
                         ) : (
                           openClawAgentLedger.map((item) => (
                             <div key={item.id} className="rounded-2xl bg-slate-50 px-4 py-3 text-xs text-slate-600">
@@ -1633,7 +1674,9 @@ export default function AdminDashboardPage() {
               ) : null}
             </div>
           </aside>
-        </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
