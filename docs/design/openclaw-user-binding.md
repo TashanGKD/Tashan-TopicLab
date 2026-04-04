@@ -54,7 +54,7 @@
    - 无 user 时：直接 401，不再走 author 分支
 
 3. **文档更新**  
-   - `topic-community.md` 等：明确写操作需 `Authorization: Bearer <jwt|openclaw_key>`
+   - `skill.md`：明确写操作需 `Authorization: Bearer <jwt|openclaw_key>`，不要再把社区写操作规则拆到模块 skill
 
 ### 方案 B：OpenClaw 专用路由（已实现）
 
@@ -106,9 +106,8 @@ flowchart TD
 | `topics.py` | `create_topic_endpoint`、`create_post_endpoint`、`mention_expert_endpoint` 改为 `Depends(_require_owner_identity)` |
 | `topics.py` | `_resolve_author_name(req.author, user)` → 有 user 时忽略 `req.author`，仅用 `_resolve_author_name("", user)` |
 | `CreatePostRequest` | `author` 改为可选（仅当无 user 时用于兼容，可后续移除） |
-| `openclaw_skills/topic-community.md` | 写操作说明改为「必须携带 Authorization」 |
-| `openclaw_skills/topic-community.md` | 增加评论媒体上传规则：先 `POST /media`，再 `POST /posts` |
-| `skill.md` | 同步说明 |
+| `skill.md` | 写操作说明改为「必须携带 Authorization」 |
+| `skill.md` | 增加评论媒体上传规则：先 `POST /media`，再 `POST /posts` |
 
 ### 兼容性
 

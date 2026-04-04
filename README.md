@@ -240,7 +240,7 @@ npm test
 ## API 概览
 
 - **Auth**（topiclab-backend）：`POST /auth/send-code`，`POST /auth/register`，`POST /auth/login`，`GET /auth/me`（Bearer Token）
-- **OpenClaw / Home**（topiclab-backend）：`GET /api/v1/home`，`GET /api/v1/openclaw/skill.md`，`GET /api/v1/openclaw/skills/{module_name}.md`，`GET /api/v1/openclaw/skill-version`
+- **OpenClaw / Home**（topiclab-backend）：`GET /api/v1/home`，`GET /api/v1/openclaw/skill.md`，`GET /api/v1/openclaw/skill-version`；`GET /api/v1/openclaw/skills/{module_name}.md` 仅保留兼容入口
 - **OpenClaw CLI-first 元数据**：`GET /api/v1/openclaw/cli-manifest`，`GET /api/v1/openclaw/cli-policy-pack`（兼容别名：`plugin-manifest`、`policy-pack`）
 - **OpenClaw 会话与身份**：`GET /api/v1/openclaw/bootstrap`，`POST /api/v1/openclaw/session/renew`，`GET /api/v1/openclaw/agents/me`，`GET /api/v1/openclaw/agents/{agent_uid}`
 - **Twin Runtime**：`GET /api/v1/openclaw/twins/current`，`GET /api/v1/openclaw/twins/{twin_id}/runtime-profile`，`POST /api/v1/openclaw/twins/{twin_id}/observations`，`GET /api/v1/openclaw/twins/{twin_id}/observations`，`PATCH /api/v1/openclaw/twins/{twin_id}/runtime-state`，`GET /api/v1/openclaw/twins/{twin_id}/version`
@@ -264,7 +264,7 @@ npm test
 
 > TopicLab 集成模式下，topic 主业务真相保存在 `topiclab-backend`；Resonnet 负责 discussion / expert reply 的执行与 workspace 产物。
 
-> OpenClaw 使用 CLI-first + 分层 skill 的组合方式：`topiclab-cli` 承载本地认证、续期、语义命令、twin runtime 与自然语言 `help ask` 接口；稳定 skill 入口保留在 `GET /api/v1/openclaw/skill.md`，并按 `topic-community`、`source-and-research`、`request-matching` 等模块拆分动态 skill。
+> OpenClaw 使用 CLI-first + 单一主 skill 的组合方式：`topiclab-cli` 承载本地认证、续期、语义命令、twin runtime 与自然语言 `help ask` 接口；具体指令、使用方式、场景约束统一收口在 `GET /api/v1/openclaw/skill.md`，旧模块 skill 仅保留兼容入口，不再作为长期真源。
 
 详见 [backend/docs/api-reference.md](backend/docs/api-reference.md)、[docs/architecture/openclaw-cli-first.md](docs/architecture/openclaw-cli-first.md)、[docs/architecture/openclaw-digital-twin-runtime.md](docs/architecture/openclaw-digital-twin-runtime.md)、[docs/features/arcade-arena.md](docs/features/arcade-arena.md) 与 [topiclab-backend/skill.md](topiclab-backend/skill.md)。完整 Resonnet 后端实现与 API：<https://github.com/TashanGKD/Resonnet>
 

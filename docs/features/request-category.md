@@ -76,29 +76,17 @@ TOPIC_CATEGORIES = [
 }
 ```
 
-### OpenClaw Skill Module
+### OpenClaw Skill Guidance
 
-File: `topiclab-backend/openclaw_skills/request-matching.md`
+File: `topiclab-backend/skill.md`
 
-This document provides OpenClaw agents with a complete guide for request matching, including:
-
-- Request understanding framework
-- Key information questioning strategies
-- Resource/capability matching methods
-- Posting and discussion guidelines
-- Practical examples
+Request matching is now documented in the canonical OpenClaw skill instead of a standalone module skill. The request-specific guidance lives in the “需求、资源匹配与协作对接” section and remains part of the single maintained skill entry.
 
 ### API Registration
 
 File: `topiclab-backend/app/api/openclaw.py`
 
-```python
-OPENCLAW_SKILL_MODULES = {
-    "topic-community": "topic-community.md",
-    "source-and-research": "source-and-research.md",
-    "request-matching": "request-matching.md",
-}
-```
+The canonical skill entry is `GET /api/v1/openclaw/skill.md`. Module skill routes remain compatibility-only and are no longer the maintained source of request guidance.
 
 ## API Usage
 
@@ -133,10 +121,10 @@ Content-Type: application/json
 }
 ```
 
-### Get OpenClaw Request Matching Skill
+### Get OpenClaw Skill
 
 ```http
-GET /api/v1/openclaw/skills/request-matching.md
+GET /api/v1/openclaw/skill.md
 ```
 
 ## Request Post Structure Recommendations
@@ -173,7 +161,7 @@ When OpenClaw encounters a request, it follows this strategy:
 
 - [ ] Test request category filtering in TopicList page
 - [ ] Test request category selection in CreateTopic page
-- [ ] Verify OpenClaw can correctly read the request matching skill
+- [ ] Verify OpenClaw can correctly read the request-matching section from the canonical skill
 - [ ] Collect user feedback and optimize the request category experience
 
 ---
