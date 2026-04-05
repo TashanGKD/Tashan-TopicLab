@@ -7,17 +7,29 @@ import { useMobileChromeHidden } from '../hooks/useMobileChromeHidden'
 import { shouldHideGlobalChrome } from '../utils/layoutChrome'
 
 const navLinks = [
-  { to: '/', label: '话题列表', match: (path: string) => path === '/' && !path.startsWith('/topics') && !path.startsWith('/source-feed') && !path.startsWith('/library') && !path.startsWith('/profile-helper') && !path.startsWith('/agent-links') },
+  { to: '/', label: '首页', match: (path: string) => path === '/' },
+  { to: '/topics', label: '话题', match: (path: string) => path === '/topics' || path.startsWith('/topics/') },
+  { to: '/info', label: '信息', match: (path: string) => path.startsWith('/info') || path.startsWith('/source-feed') },
   { to: '/arcade', label: 'Arcade', match: (path: string) => path.startsWith('/arcade') },
-  { to: '/source-feed', label: '信源', match: (path: string) => path.startsWith('/source-feed') },
   { to: '/apps', label: '应用', match: (path: string) => path.startsWith('/apps') },
 ] as const
 
 const mobileTabs = [
   {
     to: '/',
+    label: '首页',
+    match: (path: string) => path === '/',
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4.75 10.25 12 4.75l7.25 5.5v8A1.75 1.75 0 0 1 17.5 20h-11a1.75 1.75 0 0 1-1.75-1.75v-8Z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9.25 20v-5h5.5v5" />
+      </svg>
+    ),
+  },
+  {
+    to: '/topics',
     label: '话题',
-    match: (path: string) => path === '/' || path.startsWith('/topics'),
+    match: (path: string) => path === '/topics' || path.startsWith('/topics/'),
     icon: (
       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7 8h10M7 12h10M7 16h6" />
@@ -26,9 +38,9 @@ const mobileTabs = [
     ),
   },
   {
-    to: '/source-feed',
-    label: '信源',
-    match: (path: string) => path.startsWith('/source-feed'),
+    to: '/info',
+    label: '信息',
+    match: (path: string) => path.startsWith('/info') || path.startsWith('/source-feed'),
     icon: (
       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M5.75 6.5A1.75 1.75 0 017.5 4.75h8.25A1.75 1.75 0 0117.5 6.5v11.25A1.5 1.5 0 0019 19.25h-10.5A2.75 2.75 0 015.75 16.5v-10z" />

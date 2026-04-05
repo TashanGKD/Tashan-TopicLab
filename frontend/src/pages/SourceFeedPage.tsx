@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { sourceFeedApi, SourceFeedArticle } from '../api/client'
 import { tokenManager, User } from '../api/auth'
 import LibraryPageLayout from '../components/LibraryPageLayout'
@@ -147,10 +147,11 @@ async function pullArxivRowsFromGqy(startRawOffset: number): Promise<{
 
 export default function SourceFeedPage() {
   const { section } = useParams<{ section: string }>()
+  const location = useLocation()
   const navigate = useNavigate()
 
   if (!isSourceFeedSectionId(section)) {
-    return <Navigate to="/source-feed/source" replace />
+    return <Navigate to="/info/source" replace />
   }
 
   const [articles, setArticles] = useState<SourceFeedArticle[]>([])
@@ -185,6 +186,7 @@ export default function SourceFeedPage() {
   const activeSection =
     SOURCE_FEED_SECTIONS.find((s) => s.id === section) ??
     SOURCE_FEED_SECTIONS[0]
+  const sectionBasePath = location.pathname.startsWith('/info') ? '/info' : '/info'
 
   useEffect(() => {
     academicLoadingRef.current = academicLoading
@@ -545,8 +547,8 @@ export default function SourceFeedPage() {
 
   return (
     <LibraryPageLayout
-      title="信源"
-      description="集中查看平台沉淀的媒体与学术信源，支持搜索、收藏、点赞，并从信源直接进入对应话题。"
+      title="信息"
+      description="集中查看平台沉淀的媒体与学术信源，支持搜索、收藏、点赞，并从信源直接进入对应话题。你的 OpenClaw 可让直接帮你做筛选归纳，并发起讨论。"
       actions={
         <form
           className="w-full sm:w-[320px]"
@@ -559,7 +561,7 @@ export default function SourceFeedPage() {
             <input
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
-              placeholder="搜索标题或来源"
+              placeholder="搜索标题、来源或信息类型"
               aria-label="搜索"
               className="w-full rounded-full border py-2 pl-4 pr-16 text-sm font-serif outline-none transition-colors"
               style={{
@@ -643,14 +645,14 @@ export default function SourceFeedPage() {
         </div>
       </div>
 
-      <div className="-mx-1 mb-4 mt-6 px-1">
+      <div className="-mx-1 mb-4 mt-8 px-1">
         <div className="flex gap-1 border-b border-gray-200">
           {SOURCE_FEED_SECTIONS.map((item) => {
             const active = item.id === activeSection.id
             return (
               <Link
                 key={item.id}
-                to={`/source-feed/${item.id}`}
+                to={`${sectionBasePath}/${item.id}`}
                 className={`-mb-px flex-shrink-0 px-3 py-2.5 text-sm font-serif transition-colors border-b-2 ${
                   active
                     ? 'border-[var(--color-dark)] text-[var(--color-dark)] font-medium'
@@ -725,13 +727,13 @@ export default function SourceFeedPage() {
               <li>
                 <span className="min-w-0">
                   <strong>论文流</strong>：浏览与 arXiv
-                  相关的最新预印本条目，支持搜索、点赞、收藏和从信源开题；滑到底可加载更多。
+                  相关的最新预印本条目，支持搜索、点赞、收藏和从信息条目开题；滑到底可加载更多。
                 </span>
               </li>
               <li>
                 <span className="min-w-0">
                   <strong>开题讨论</strong>
-                  ：从条目一键开话题，和多专家讨论流程与「媒体」信源一致。
+                  ：从条目一键开话题，和多专家讨论流程与「媒体」信息流一致。
                 </span>
               </li>
               <li>

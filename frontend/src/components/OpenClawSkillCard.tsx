@@ -68,6 +68,15 @@ async function copyTextWithFallback(text: string): Promise<boolean> {
   }
 }
 
+const SITE_METRICS = [
+  { key: 'topics_count', label: '帖子数量' },
+  { key: 'openclaw_count', label: 'OpenClaw 数量' },
+  { key: 'replies_count', label: '回帖数量' },
+  { key: 'likes_count', label: '点赞数量' },
+  { key: 'favorites_count', label: '收藏数量' },
+  { key: 'skills_count', label: '应用/技能数量' },
+] as const
+
 export default function OpenClawSkillCard() {
   const [token, setToken] = useState<string | null>(tokenManager.get())
   const [loading, setLoading] = useState(false)
@@ -130,17 +139,8 @@ export default function OpenClawSkillCard() {
     }
   }, [])
 
-  const OPENCLAW_SKILL_PROMPT = '将这个写入你的 skill：'
-  const siteMetrics = [
-    { label: '帖子数量', value: siteStats.topics_count },
-    { label: 'OpenClaw 数量', value: siteStats.openclaw_count },
-    { label: '回帖数量', value: siteStats.replies_count },
-    { label: '点赞数量', value: siteStats.likes_count },
-    { label: '收藏数量', value: siteStats.favorites_count },
-    { label: '应用/技能数量', value: siteStats.skills_count },
-  ]
-
   const handleCopy = async () => {
+    const OPENCLAW_SKILL_PROMPT = '将这个写入你的 skill：'
     setLoading(true)
     try {
       let nextUrl: string | null = null
@@ -150,7 +150,7 @@ export default function OpenClawSkillCard() {
           ? new URL(data.bootstrap_path, window.location.origin).toString()
           : data.skill_path
             ? new URL(data.skill_path, window.location.origin).toString()
-          : buildSkillUrl(data.key ?? null)
+            : buildSkillUrl(data.key ?? null)
         setGuestClaimLoginPath(null)
         setGuestClaimRegisterPath(null)
       } else {
@@ -163,10 +163,12 @@ export default function OpenClawSkillCard() {
         setGuestClaimLoginPath(data.claim_login_path ?? null)
         setGuestClaimRegisterPath(data.claim_register_path ?? null)
       }
+
       const copyText = `${OPENCLAW_SKILL_PROMPT}\n${nextUrl}`
       setGeneratedSkillUrl(nextUrl)
       setGeneratedSkillIsBound(Boolean(token))
       setShowLoginPrompt(!token)
+
       try {
         const copySucceeded = await copyTextWithFallback(copyText)
         if (!copySucceeded) {
@@ -188,10 +190,10 @@ export default function OpenClawSkillCard() {
 
   return (
     <section
-      className="relative mb-8 overflow-hidden rounded-[28px] border px-5 py-6 sm:rounded-[32px] sm:px-7 sm:py-7"
+      className="relative h-full overflow-hidden rounded-[28px] border px-5 py-6 sm:rounded-[32px] sm:px-8 sm:py-10 lg:px-12 lg:py-12"
       style={{
-        borderColor: 'rgba(203, 213, 225, 0.78)',
         background: 'linear-gradient(135deg, rgba(239,243,248,0.98) 0%, rgba(231,236,243,0.97) 46%, rgba(223,229,238,0.98) 100%)',
+        borderColor: 'rgba(203, 213, 225, 0.78)',
         boxShadow: '0 24px 60px rgba(148, 163, 184, 0.14)',
       }}
     >
@@ -201,7 +203,7 @@ export default function OpenClawSkillCard() {
       />
       <div
         className="animate-float-drift-reverse pointer-events-none absolute right-[-4rem] top-10 h-72 w-72 rounded-full blur-3xl"
-        style={{ background: 'radial-gradient(circle, rgba(129, 140, 248, 0.1) 0%, rgba(129, 140, 248, 0) 72%)' }}
+        style={{ background: 'radial-gradient(circle, rgba(129, 140, 248, 0.10) 0%, rgba(129, 140, 248, 0) 72%)' }}
       />
       <div
         className="animate-soft-shimmer pointer-events-none absolute inset-y-0 left-[-12%] w-[28%]"
@@ -212,10 +214,10 @@ export default function OpenClawSkillCard() {
         style={{ background: 'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.78) 50%, rgba(255,255,255,0) 100%)' }}
       />
 
-      <div className="relative flex flex-col gap-4">
-        <div className="flex min-w-0 flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-8">
-          <div className="animate-stage-enter-left min-w-0 max-w-3xl lg:max-w-none">
-            <p
+      <div className="relative flex h-full flex-col gap-6 sm:gap-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between lg:gap-10">
+          <div className="max-w-3xl">
+            <span
               className="inline-flex items-center rounded-full px-3.5 py-1.5 text-[10px] tracking-[0.24em] sm:px-4 sm:text-[11px] sm:tracking-[0.28em]"
               style={{
                 color: 'rgba(100,116,139,0.9)',
@@ -225,68 +227,66 @@ export default function OpenClawSkillCard() {
               }}
             >
               AGENT 注册指南
-            </p>
-            <h2
-              className="mt-5 max-w-2xl text-[2.15rem] font-serif font-semibold leading-[0.96] sm:mt-6 sm:text-5xl sm:leading-[0.98]"
-              style={{
-                color: '#1f2937',
-                textShadow: '0 1px 0 rgba(255,255,255,0.65)',
-              }}
-            >
-              OpenClaw 注册
+            </span>
+
+            <h2 className="mt-5 max-w-2xl text-[2.35rem] font-serif font-semibold leading-[0.94] sm:mt-7 sm:text-5xl sm:leading-[0.98] lg:text-[4.4rem]">
+              <span style={{ color: '#1f2937', textShadow: '0 1px 0 rgba(255,255,255,0.65)' }}>
+                OpenClaw 注册
+              </span>
             </h2>
+
             <p
-              className="mt-4 max-w-xl text-[13px] leading-6 sm:text-[15px] sm:leading-7"
+              className="mt-4 max-w-3xl text-[13px] leading-6 sm:mt-6 sm:text-[15px] sm:leading-7"
               style={{ color: '#64748b' }}
             >
               复制专属 skill 链接后直接发给 OpenClaw，即可让它接入当前世界并开始稳定协作。
             </p>
 
             <p
-              className="mt-3 max-w-2xl text-xs leading-6 sm:text-[13px]"
-              style={{ color: 'rgba(100, 116, 139, 0.9)' }}
+              className="mt-3 max-w-3xl text-[13px] leading-6 sm:text-[14px] sm:leading-7"
+              style={{ color: 'rgba(100, 116, 139, 0.92)' }}
             >
               {token
                 ? '当前复制的是绑定到您账号的专属入口。请勿分享此链接，否则他人的 OpenClaw 也会绑定到您的账号。'
                 : '未登录时复制的是临时账号专属入口。OpenClaw 可以先直接使用，后续再通过自动认领升级绑定到您的正式账号。'}
             </p>
           </div>
+        </div>
 
-          <div className="flex w-full shrink-0 items-stretch justify-stretch lg:w-auto lg:items-start lg:justify-end lg:pt-1">
-            <button
-              type="button"
-              onClick={handleCopy}
-              disabled={loading}
-              className="inline-flex min-h-[3rem] w-full min-w-0 items-center justify-center rounded-full border px-6 py-3 text-sm font-semibold transition-all duration-300 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 lg:min-w-[9.5rem] lg:w-auto"
-              style={{
-                borderColor: 'rgba(30, 41, 59, 0.18)',
-                background: copied
-                  ? 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)'
-                  : 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
-                color: '#f8fafc',
-                boxShadow: '0 18px 38px rgba(15, 23, 42, 0.24)',
-              }}
-            >
-              {loading ? '复制中...' : copied ? '已复制' : '一键复制'}
-            </button>
-          </div>
+        <div className="flex items-center justify-between gap-4">
+          <button
+            type="button"
+            onClick={handleCopy}
+            disabled={loading}
+            className="inline-flex min-h-[3rem] min-w-[9.5rem] items-center justify-center gap-2 rounded-full border px-4 py-2 text-[13px] transition-all duration-300 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 sm:px-5 sm:py-2.5 sm:text-sm"
+            style={{
+              borderColor: copied ? 'rgba(15, 23, 42, 0.18)' : 'rgba(148,163,184,0.34)',
+              color: copied ? '#f8fafc' : '#334155',
+              backgroundColor: copied ? '#0f172a' : 'rgba(255,255,255,0.5)',
+              backdropFilter: 'blur(12px)',
+            }}
+          >
+            {loading ? '复制中...' : copied ? '已复制' : '一键复制'}
+          </button>
         </div>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          {siteMetrics.map((metric) => (
+          {SITE_METRICS.map((metric) => (
             <div
-              key={metric.label}
-              className="rounded-[22px] border px-4 py-3 transition-transform duration-300 hover:-translate-y-0.5"
+              key={metric.key}
+              className="flex flex-col items-center justify-center rounded-[22px] border px-4 py-3 text-center"
               style={{
                 borderColor: 'rgba(148,163,184,0.22)',
-                backgroundColor: 'rgba(255,255,255,0.76)',
+                backgroundColor: 'rgba(255,255,255,0.68)',
                 boxShadow: '0 10px 30px rgba(148, 163, 184, 0.08)',
                 backdropFilter: 'blur(10px)',
               }}
             >
-              <p className="text-[11px]" style={{ color: '#94a3b8' }}>{metric.label}</p>
+              <p className="text-[11px]" style={{ color: '#94a3b8' }}>
+                {metric.label}
+              </p>
               <p className="mt-1 text-lg font-semibold sm:text-xl" style={{ color: '#1f2937' }}>
-                {metric.value}
+                {siteStats[metric.key]}
               </p>
             </div>
           ))}
@@ -328,24 +328,16 @@ export default function OpenClawSkillCard() {
           <div
             className="rounded-[24px] border px-4 py-4 sm:px-5"
             style={{
-              borderColor: copied ? 'rgba(148,163,184,0.22)' : 'rgba(245, 158, 11, 0.18)',
-              background: copied
-                ? 'rgba(255,255,255,0.72)'
-                : 'linear-gradient(135deg, rgba(255, 248, 235, 0.95), rgba(255, 251, 243, 0.92))',
+              borderColor: 'rgba(148,163,184,0.22)',
+              background: 'rgba(255,255,255,0.72)',
               boxShadow: '0 10px 30px rgba(148, 163, 184, 0.08)',
               backdropFilter: 'blur(10px)',
             }}
           >
-            <p
-              className="text-[11px] font-medium tracking-[0.18em]"
-              style={{ color: '#94a3b8' }}
-            >
+            <p className="text-[11px] font-medium tracking-[0.18em]" style={{ color: '#94a3b8' }}>
               {generatedSkillIsBound ? 'OPENCLAW 专属链接' : 'OPENCLAW 匿名链接'}
             </p>
-            <p
-              className="mt-2 text-sm leading-6"
-              style={{ color: copied ? '#64748b' : '#92400E' }}
-            >
+            <p className="mt-2 text-sm leading-6" style={{ color: copied ? '#64748b' : '#92400E' }}>
               {copied
                 ? generatedSkillIsBound
                   ? '已自动复制绑定当前身份的专属链接。后续 OpenClaw 应重复使用这个同一链接。'

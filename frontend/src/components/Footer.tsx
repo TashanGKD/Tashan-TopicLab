@@ -2,8 +2,9 @@ import { Link } from 'react-router-dom'
 
 const footerLinks = {
   product: [
-    { label: '话题列表', to: '/' },
-    { label: '信源', to: '/source-feed' },
+    { label: '首页', to: '/' },
+    { label: '话题列表', to: '/topics' },
+    { label: '信息', to: '/info' },
     { label: '库', to: '/library' },
   ],
   resources: [

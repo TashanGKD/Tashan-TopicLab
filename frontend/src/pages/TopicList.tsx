@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { TOPIC_CATEGORIES, topicsApi, TopicListItem } from '../api/client'
 import { refreshCurrentUserProfile, tokenManager, User } from '../api/auth'
 import { handleApiError } from '../utils/errorHandler'
-import OpenClawSkillCard from '../components/OpenClawSkillCard'
 import TopicCard from '../components/TopicCard'
 import { toast } from '../utils/toast'
 import { useThrottledCallbackByKey } from '../hooks/useThrottledCallback'
@@ -444,43 +442,9 @@ export default function TopicList() {
 
   return (
     <div className="min-h-screen">
-      <div className="mx-auto w-full px-4 py-6 sm:px-6 sm:py-8 lg:px-8 xl:px-10">
-        {/* 首页标语 */}
-        <div className="mb-10 sm:mb-12 text-center">
-          <h2 className="text-2xl sm:text-3xl md:text-4xl font-serif font-bold text-[var(--color-dark)] mb-3 sm:mb-4">
-            致力于让智能体和研究者
-            <br />
-            在协作与讨论中推进科学发现
-          </h2>
-          <p className="text-sm sm:text-base text-gray-600 font-serif">
-            在这里与您的<span className="font-bold text-[var(--color-dark)]">数字分身</span>一起，对齐需求、寻找协作、形成共识、展开讨论，把想法变成合作，把讨论推向发现。
-          </p>
-          <p className="mt-3 text-xs tracking-[0.02em] text-gray-500 font-serif">
-            <Link
-              to="/thinking"
-              className="inline-flex items-center gap-1 border-b border-transparent pb-0.5 transition-colors duration-200 hover:border-gray-400 hover:text-[var(--color-dark)]"
-            >
-              查看我们关于数字分身、Agent 协作与讨论机制的思考
-              <span aria-hidden="true">→</span>
-            </Link>
-          </p>
-          <p className="mt-2 text-xs tracking-[0.02em] text-gray-500 font-serif">
-            <Link
-              to="/apps/skills"
-              className="inline-flex items-center gap-1 border-b border-transparent pb-0.5 transition-colors duration-200 hover:border-gray-400 hover:text-[var(--color-dark)]"
-            >
-              进入科研技能专区，浏览与安装面向科研工作流的应用 / skill
-              <span aria-hidden="true">→</span>
-            </Link>
-          </p>
-        </div>
-
-        <div className="mx-auto max-w-4xl">
-          <OpenClawSkillCard />
-        </div>
-
-        <div className="mx-auto mb-5 max-w-4xl">
-          <div className="mb-8 sm:mb-12">
+      <div className="mx-auto w-full px-4 py-12 sm:px-6 sm:py-14 lg:px-8">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-8">
             <h1 className="text-xl sm:text-2xl font-serif font-bold text-black">话题列表</h1>
           </div>
 
@@ -570,7 +534,7 @@ export default function TopicList() {
         )}
 
         {!loading && activeColumn ? (
-          <div className="mx-auto w-full max-w-[1600px] pb-4">
+          <div className="mx-auto w-full pb-4">
             <div
               ref={contentStageRef}
               data-testid="topic-category-rail"
@@ -622,7 +586,7 @@ export default function TopicList() {
         ) : null}
 
         {!loading && activeCategory && ((categoryPages[activeCategory]?.nextCursor ?? null) || loadingMoreCategory === activeCategory) ? (
-          <div ref={loadMoreRef} className="py-8 text-center text-sm text-gray-500">
+          <div ref={loadMoreRef} className="py-6 text-center text-sm text-gray-500">
             {loadingMoreCategory === activeCategory ? '加载更多话题中...' : '继续下滑加载更多'}
           </div>
         ) : null}

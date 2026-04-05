@@ -589,8 +589,8 @@ export default function MyFavoritesPage() {
           <div className="md:hidden absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-white to-transparent pointer-events-none" aria-hidden />
         </div>
 
-        <div className="flex-1 min-w-0 pt-5 pb-20 md:pt-0 md:pb-28">
-          <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex-1 min-w-0 pt-5 pb-16 md:pt-0 md:pb-20">
+          <div className="mb-8 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-gray-600">{activeSection.description}</p>
             <div className="flex flex-wrap gap-2 md:hidden">
               <button
@@ -622,7 +622,7 @@ export default function MyFavoritesPage() {
           </div>
 
           {activeCategory ? (
-            <div className="mb-6 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+            <div className="mb-8 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
               <div className="text-sm font-semibold text-gray-900">{activeCategory.name}</div>
               <div className="mt-1 text-sm text-gray-500">{activeCategory.description || '这个分类还没有补充说明。'}</div>
             </div>
@@ -640,7 +640,7 @@ export default function MyFavoritesPage() {
                   ? '现在去话题列表或话题详情页点一下收藏，内容就会出现在这里。'
                   : '先在某个已收藏话题卡片里把它加入这个分类。'}
               </p>
-              <Link to="/" className="mt-4 inline-flex rounded-full border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 hover:border-gray-300 hover:text-black">
+              <Link to="/topics" className="mt-4 inline-flex rounded-full border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 hover:border-gray-300 hover:text-black">
                 去看话题
               </Link>
             </div>
@@ -656,8 +656,8 @@ export default function MyFavoritesPage() {
                   ? '现在去信源页点一下收藏，内容就会出现在这里。'
                   : '先在某条已收藏信源卡片里把它加入这个分类。'}
               </p>
-              <Link to="/source-feed" className="mt-4 inline-flex rounded-full border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 hover:border-gray-300 hover:text-black">
-                去看信源
+              <Link to="/info" className="mt-4 inline-flex rounded-full border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 hover:border-gray-300 hover:text-black">
+                去看信息
               </Link>
             </div>
           ) : null}
@@ -707,7 +707,7 @@ export default function MyFavoritesPage() {
           ) : null}
 
           {!loading && hasMore ? (
-            <div className="mt-5">
+            <div className="mt-8">
               <button
                 type="button"
                 onClick={handleLoadMore}
