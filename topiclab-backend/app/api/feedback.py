@@ -5,29 +5,23 @@ from __future__ import annotations
 import threading
 
 from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.api.auth import get_current_user
+from app.api.auth import security, verify_access_token
 from app.services.openclaw_runtime import record_activity_event
 from app.storage.database.postgres_client import ensure_site_feedback_schema, get_db_session
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
 
 _feedback_schema_lock = threading.Lock()
-_feedback_schema_ready = False
 
 
 def _ensure_feedback_schema_once() -> None:
-    global _feedback_schema_ready
-    if _feedback_schema_ready:
-        return
     with _feedback_schema_lock:
-        if _feedback_schema_ready:
-            return
         ensure_site_feedback_schema()
-        _feedback_schema_ready = True
 
 
 class FeedbackCreateRequest(BaseModel):
@@ -35,6 +29,12 @@ class FeedbackCreateRequest(BaseModel):
     scenario: str = Field(default="", max_length=2000)
     steps_to_reproduce: str = Field(default="", max_length=4000)
     page_url: str | None = Field(default=None, max_length=2048)
+
+
+async def _get_optional_user(credentials: HTTPAuthorizationCredentials | None = Depends(security)) -> dict | None:
+    if not credentials:
+        return None
+    return verify_access_token(credentials.credentials)
 
 
 def _to_iso(value) -> str:
@@ -48,19 +48,20 @@ def _to_iso(value) -> str:
 @router.post("", status_code=201)
 async def create_feedback(
     req: FeedbackCreateRequest,
-    user: dict = Depends(get_current_user),
+    user: dict | None = Depends(_get_optional_user),
     user_agent: str | None = Header(default=None, alias="User-Agent"),
 ):
-    """Record feedback; accepts JWT or OpenClaw key (tloc_) via Authorization."""
-    raw_sub = user.get("sub")
-    if raw_sub is None:
-        raise HTTPException(status_code=401, detail="未登录")
-    try:
-        user_id = int(raw_sub)
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=401, detail="登录状态无效") from exc
-
-    auth_channel = (user.get("auth_type") or "jwt").strip() or "jwt"
+    """Record feedback; logged-in users keep identity, guests are stored anonymously."""
+    user_id: int | None = None
+    username = "匿名用户"
+    auth_channel = "anonymous"
+    raw_sub = user.get("sub") if user else None
+    if raw_sub is not None:
+        try:
+            user_id = int(raw_sub)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=401, detail="登录状态无效") from exc
+        auth_channel = (user.get("auth_type") or "jwt").strip() or "jwt"
     ua = (user_agent or "")[:512] or None
     page_url = (req.page_url or "").strip()[:2048] or None
 
@@ -74,13 +75,14 @@ async def create_feedback(
 
     try:
         with get_db_session() as session:
-            row = session.execute(
-                text("SELECT username, phone FROM users WHERE id = :id"),
-                {"id": user_id},
-            ).fetchone()
-            if not row:
-                raise HTTPException(status_code=404, detail="用户不存在")
-            username = (row[0] or row[1] or "").strip() or f"user-{user_id}"
+            if user_id is not None:
+                row = session.execute(
+                    text("SELECT username, phone FROM users WHERE id = :id"),
+                    {"id": user_id},
+                ).fetchone()
+                if not row:
+                    raise HTTPException(status_code=404, detail="用户不存在")
+                username = (row[0] or row[1] or "").strip() or f"user-{user_id}"
             inserted = session.execute(
                 text(
                     """
@@ -115,7 +117,7 @@ async def create_feedback(
     if inserted is None:
         raise HTTPException(status_code=503, detail="反馈写入未返回结果，请稍后重试。")
 
-    if user.get("auth_type") == "openclaw_key" and user.get("openclaw_agent_id") is not None:
+    if user and user.get("auth_type") == "openclaw_key" and user.get("openclaw_agent_id") is not None and user_id is not None:
         record_activity_event(
             openclaw_agent_id=int(user["openclaw_agent_id"]),
             bound_user_id=user_id,

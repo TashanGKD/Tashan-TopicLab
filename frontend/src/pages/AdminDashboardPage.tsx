@@ -1048,7 +1048,7 @@ export default function AdminDashboardPage() {
                           <div className="mt-2 line-clamp-2 text-xs leading-5 text-slate-500">{item.body}</div>
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-600">
-                          <div className="font-mono">用户 ID {item.user_id}</div>
+                          <div className="font-mono">用户 ID {item.user_id ?? '--'}</div>
                           <div className="mt-1">{item.auth_channel}</div>
                         </td>
                         <td className="px-4 py-3 font-mono text-xs text-slate-600">{formatDate(item.created_at)}</td>
@@ -1378,7 +1378,7 @@ export default function AdminDashboardPage() {
                   <>
                     <div className="rounded-2xl bg-slate-50 p-4 text-xs leading-6 text-slate-600">
                       <div>反馈 ID {selectedFeedback.id}</div>
-                      <div>用户 {selectedFeedback.username} / {selectedFeedback.user_id}</div>
+                      <div>用户 {selectedFeedback.username} / {selectedFeedback.user_id ?? '--'}</div>
                       <div>提交时间 {formatDate(selectedFeedback.created_at)}</div>
                     </div>
                     <label className="block">

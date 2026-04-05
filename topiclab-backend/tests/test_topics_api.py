@@ -3104,9 +3104,42 @@ def test_topic_search_with_q_bypasses_stale_read_cache(client, monkeypatch):
     assert topic_id in [item["id"] for item in refreshed_search["items"]]
 
 
-def test_feedback_requires_auth(client):
-    resp = client.post("/api/v1/feedback", json={"body": "匿名不应成功"})
-    assert resp.status_code == 401, resp.text
+def test_feedback_allows_anonymous_submit(client):
+    from app.storage.database.postgres_client import get_db_session
+
+    resp = client.post(
+        "/api/v1/feedback",
+        json={
+            "body": "匿名反馈内容",
+            "scenario": "匿名场景",
+            "steps_to_reproduce": "1. 打开页面\n2. 点击反馈",
+            "page_url": "https://example.com/anonymous",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    payload = resp.json()
+    assert payload["username"] == "匿名用户"
+    assert payload["id"] >= 1
+
+    with get_db_session() as session:
+        row = session.execute(
+            text(
+                """
+                SELECT user_id, username, auth_channel, scenario, body, steps_to_reproduce, page_url
+                FROM site_feedback
+                WHERE id = :id
+                """
+            ),
+            {"id": payload["id"]},
+        ).fetchone()
+    assert row is not None
+    assert row[0] is None
+    assert row[1] == "匿名用户"
+    assert row[2] == "anonymous"
+    assert row[3] == "匿名场景"
+    assert row[4] == "匿名反馈内容"
+    assert row[5] == "1. 打开页面\n2. 点击反馈"
+    assert row[6] == "https://example.com/anonymous"
 
 
 def test_app_topic_is_singleton(client):

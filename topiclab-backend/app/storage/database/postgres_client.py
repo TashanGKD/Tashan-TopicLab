@@ -123,9 +123,9 @@ def _apply_site_feedback_ddl(session) -> None:
             """
             CREATE TABLE IF NOT EXISTS site_feedback (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
                 username VARCHAR(255) NOT NULL,
-                auth_channel VARCHAR(32) NOT NULL DEFAULT 'jwt',
+                auth_channel VARCHAR(32) NOT NULL DEFAULT 'anonymous',
                 scenario TEXT NOT NULL DEFAULT '',
                 body TEXT NOT NULL,
                 steps_to_reproduce TEXT NOT NULL DEFAULT '',
@@ -139,9 +139,9 @@ def _apply_site_feedback_ddl(session) -> None:
             """
             CREATE TABLE IF NOT EXISTS site_feedback (
                 id SERIAL PRIMARY KEY,
-                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
                 username VARCHAR(255) NOT NULL,
-                auth_channel VARCHAR(32) NOT NULL DEFAULT 'jwt',
+                auth_channel VARCHAR(32) NOT NULL DEFAULT 'anonymous',
                 scenario TEXT NOT NULL DEFAULT '',
                 body TEXT NOT NULL,
                 steps_to_reproduce TEXT NOT NULL DEFAULT '',
@@ -153,6 +153,118 @@ def _apply_site_feedback_ddl(session) -> None:
         )
     )
     if is_sqlite:
+        pragma_rows = session.execute(text("PRAGMA table_info(site_feedback)")).fetchall()
+        pragma_by_name = {str(row[1]): row for row in pragma_rows}
+        has_message = "message" in pragma_by_name
+        has_user_agent = "user_agent" in pragma_by_name
+        sqlite_column_migrations = {
+            "username": "ALTER TABLE site_feedback ADD COLUMN username VARCHAR(255) NOT NULL DEFAULT ''",
+            "auth_channel": "ALTER TABLE site_feedback ADD COLUMN auth_channel VARCHAR(32) NOT NULL DEFAULT 'anonymous'",
+            "scenario": "ALTER TABLE site_feedback ADD COLUMN scenario TEXT NOT NULL DEFAULT ''",
+            "body": "ALTER TABLE site_feedback ADD COLUMN body TEXT NOT NULL DEFAULT ''",
+            "steps_to_reproduce": "ALTER TABLE site_feedback ADD COLUMN steps_to_reproduce TEXT NOT NULL DEFAULT ''",
+            "page_url": "ALTER TABLE site_feedback ADD COLUMN page_url TEXT",
+            "client_user_agent": "ALTER TABLE site_feedback ADD COLUMN client_user_agent TEXT",
+            "created_at": "ALTER TABLE site_feedback ADD COLUMN created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
+        }
+        for column_name, ddl in sqlite_column_migrations.items():
+            if column_name not in pragma_by_name:
+                session.execute(text(ddl))
+        pragma_rows = session.execute(text("PRAGMA table_info(site_feedback)")).fetchall()
+        pragma_by_name = {str(row[1]): row for row in pragma_rows}
+        user_id_info = pragma_by_name.get("user_id")
+        auth_channel_info = pragma_by_name.get("auth_channel")
+        needs_rebuild = bool(user_id_info and int(user_id_info[3] or 0) == 1)
+        if needs_rebuild:
+            session.execute(text("PRAGMA foreign_keys=OFF"))
+            session.execute(text("DROP TABLE IF EXISTS site_feedback__new"))
+            session.execute(
+                text(
+                    """
+                    CREATE TABLE site_feedback__new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                        username VARCHAR(255) NOT NULL,
+                        auth_channel VARCHAR(32) NOT NULL DEFAULT 'anonymous',
+                        scenario TEXT NOT NULL DEFAULT '',
+                        body TEXT NOT NULL,
+                        steps_to_reproduce TEXT NOT NULL DEFAULT '',
+                        page_url TEXT,
+                        client_user_agent TEXT,
+                        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+            body_expr = "COALESCE(body, COALESCE(message, ''))" if has_message else "COALESCE(body, '')"
+            user_agent_expr = "COALESCE(client_user_agent, user_agent)" if has_user_agent else "client_user_agent"
+            session.execute(
+                text(
+                    f"""
+                    INSERT INTO site_feedback__new (
+                        id, user_id, username, auth_channel, scenario, body, steps_to_reproduce, page_url, client_user_agent, created_at
+                    )
+                    SELECT
+                        id,
+                        user_id,
+                        COALESCE(NULLIF(username, ''), CASE WHEN user_id IS NULL THEN '匿名用户' ELSE '' END),
+                        COALESCE(NULLIF(auth_channel, ''), 'jwt'),
+                        COALESCE(scenario, ''),
+                        {body_expr},
+                        COALESCE(steps_to_reproduce, ''),
+                        page_url,
+                        {user_agent_expr},
+                        COALESCE(created_at, CURRENT_TIMESTAMP)
+                    FROM site_feedback
+                    """
+                )
+            )
+            session.execute(text("DROP TABLE site_feedback"))
+            session.execute(text("ALTER TABLE site_feedback__new RENAME TO site_feedback"))
+            session.execute(text("PRAGMA foreign_keys=ON"))
+            has_message = False
+            has_user_agent = False
+        session.execute(
+            text(
+                """
+                UPDATE site_feedback
+                SET username = CASE
+                        WHEN COALESCE(username, '') <> '' THEN username
+                        WHEN user_id IS NULL THEN '匿名用户'
+                        ELSE username
+                    END,
+                    auth_channel = CASE
+                        WHEN user_id IS NULL AND COALESCE(auth_channel, '') IN ('', 'jwt') THEN 'anonymous'
+                        WHEN COALESCE(auth_channel, '') = '' THEN 'jwt'
+                        ELSE auth_channel
+                    END
+                """
+            )
+        )
+        if has_message:
+            session.execute(
+                text(
+                    """
+                    UPDATE site_feedback
+                    SET body = CASE
+                        WHEN COALESCE(body, '') <> '' THEN body
+                        ELSE COALESCE(message, '')
+                    END
+                    """
+                )
+            )
+        if has_user_agent:
+            session.execute(
+                text(
+                    """
+                    UPDATE site_feedback
+                    SET client_user_agent = CASE
+                        WHEN COALESCE(client_user_agent, '') <> '' THEN client_user_agent
+                        ELSE user_agent
+                    END
+                    """
+                )
+            )
         session.execute(
             text(
                 """
@@ -171,10 +283,11 @@ def _apply_site_feedback_ddl(session) -> None:
         )
         return
     inspector = _get_session_inspector(session)
-    existing_columns = {column["name"] for column in inspector.get_columns("site_feedback")}
+    existing_columns_info = {column["name"]: column for column in inspector.get_columns("site_feedback")}
+    existing_columns = set(existing_columns_info)
     column_migrations = {
         "username": "ALTER TABLE site_feedback ADD COLUMN username VARCHAR(255) NOT NULL DEFAULT ''",
-        "auth_channel": "ALTER TABLE site_feedback ADD COLUMN auth_channel VARCHAR(32) NOT NULL DEFAULT 'jwt'",
+        "auth_channel": "ALTER TABLE site_feedback ADD COLUMN auth_channel VARCHAR(32) NOT NULL DEFAULT 'anonymous'",
         "scenario": "ALTER TABLE site_feedback ADD COLUMN scenario TEXT NOT NULL DEFAULT ''",
         "body": "ALTER TABLE site_feedback ADD COLUMN body TEXT NOT NULL DEFAULT ''",
         "steps_to_reproduce": "ALTER TABLE site_feedback ADD COLUMN steps_to_reproduce TEXT NOT NULL DEFAULT ''",
@@ -189,6 +302,44 @@ def _apply_site_feedback_ddl(session) -> None:
     for column_name, ddl in column_migrations.items():
         if column_name not in existing_columns:
             session.execute(text(ddl))
+    user_id_column = existing_columns_info.get("user_id")
+    if user_id_column and not user_id_column.get("nullable", True):
+        session.execute(text("ALTER TABLE site_feedback ALTER COLUMN user_id DROP NOT NULL"))
+    id_column = existing_columns_info.get("id")
+    id_default = str(id_column.get("default") or "") if id_column else ""
+    if id_column and "nextval" not in id_default:
+        session.execute(text("CREATE SEQUENCE IF NOT EXISTS site_feedback_id_seq"))
+        session.execute(text("ALTER SEQUENCE site_feedback_id_seq OWNED BY site_feedback.id"))
+        session.execute(
+            text(
+                """
+                SELECT setval(
+                    'site_feedback_id_seq',
+                    COALESCE((SELECT MAX(id) FROM site_feedback), 0) + 1,
+                    false
+                )
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                ALTER TABLE site_feedback
+                ALTER COLUMN id SET DEFAULT nextval('site_feedback_id_seq')
+                """
+            )
+        )
+    auth_channel_column = existing_columns_info.get("auth_channel")
+    auth_channel_default = str(auth_channel_column.get("default") or "") if auth_channel_column else ""
+    if auth_channel_column and "jwt" in auth_channel_default and "anonymous" not in auth_channel_default:
+        session.execute(
+            text(
+                """
+                ALTER TABLE site_feedback
+                ALTER COLUMN auth_channel SET DEFAULT 'anonymous'
+                """
+            )
+        )
     if "message" in existing_columns:
         session.execute(
             text(
@@ -201,6 +352,17 @@ def _apply_site_feedback_ddl(session) -> None:
                 """
             )
         )
+        message_column = existing_columns_info.get("message")
+        message_default = str(message_column.get("default") or "") if message_column else ""
+        if message_column and "''" not in message_default:
+            session.execute(
+                text(
+                    """
+                    ALTER TABLE site_feedback
+                    ALTER COLUMN message SET DEFAULT ''
+                    """
+                )
+            )
     if "user_agent" in existing_columns:
         session.execute(
             text(
@@ -213,6 +375,23 @@ def _apply_site_feedback_ddl(session) -> None:
                 """
             )
         )
+    session.execute(
+        text(
+            """
+            UPDATE site_feedback
+            SET username = CASE
+                    WHEN COALESCE(username, '') <> '' THEN username
+                    WHEN user_id IS NULL THEN '匿名用户'
+                    ELSE username
+                END,
+                auth_channel = CASE
+                    WHEN user_id IS NULL AND COALESCE(auth_channel, '') IN ('', 'jwt') THEN 'anonymous'
+                    WHEN COALESCE(auth_channel, '') = '' THEN 'jwt'
+                    ELSE auth_channel
+                END
+            """
+        )
+    )
     session.execute(
         text(
             """

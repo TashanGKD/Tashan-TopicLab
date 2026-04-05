@@ -1,7 +1,6 @@
 import { ReactNode, useCallback, useEffect, useId, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Link, useLocation } from 'react-router-dom'
-import { tokenManager } from '../api/auth'
+import { useLocation } from 'react-router-dom'
 import { feedbackApi } from '../api/client'
 
 type FeedbackDraftEventDetail = {
@@ -36,18 +35,11 @@ export default function FeedbackBubble({ renderTrigger }: FeedbackBubbleProps) {
   const location = useLocation()
   const panelTitleId = useId()
   const [open, setOpen] = useState(false)
-  const [token, setToken] = useState<string | null>(() => tokenManager.get())
   const [scenario, setScenario] = useState('')
   const [steps, setSteps] = useState('')
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
-
-  useEffect(() => {
-    const sync = () => setToken(tokenManager.get())
-    window.addEventListener('auth-change', sync)
-    return () => window.removeEventListener('auth-change', sync)
-  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -80,7 +72,6 @@ export default function FeedbackBubble({ renderTrigger }: FeedbackBubbleProps) {
   }, [])
 
   const submit = useCallback(async () => {
-    if (!token) return
     const trimmed = body.trim()
     if (!trimmed) {
       setMessage('请填写反馈正文')
@@ -107,7 +98,7 @@ export default function FeedbackBubble({ renderTrigger }: FeedbackBubbleProps) {
     } finally {
       setSending(false)
     }
-  }, [body, close, location.pathname, location.search, scenario, steps, token])
+  }, [body, close, location.pathname, location.search, scenario, steps])
 
   const fab = (
     renderTrigger?.(() => {
@@ -142,7 +133,7 @@ export default function FeedbackBubble({ renderTrigger }: FeedbackBubbleProps) {
               <h2 id={panelTitleId} className="text-base font-semibold text-slate-900">
                 反馈意见
               </h2>
-              <p className="mt-0.5 text-xs text-slate-500">提交后将记录到你的账号名下，便于我们跟进。</p>
+              <p className="mt-0.5 text-xs text-slate-500">登录后会自动关联账号，未登录也可以匿名提交。</p>
             </div>
             <button
               type="button"
@@ -157,64 +148,41 @@ export default function FeedbackBubble({ renderTrigger }: FeedbackBubbleProps) {
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-5">
-            {!token ? (
-              <div className="rounded-xl border border-amber-100 bg-amber-50/80 px-3 py-3 text-sm text-amber-950">
-                <p className="font-medium">请先登录</p>
-                <p className="mt-1 text-amber-900/90">登录后即可提交反馈并关联你的用户名。</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Link
-                    to="/login"
-                    className="inline-flex rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
-                    onClick={close}
-                  >
-                    去登录
-                  </Link>
-                  <Link
-                    to="/register"
-                    className="inline-flex rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 hover:bg-slate-50"
-                    onClick={close}
-                  >
-                    注册
-                  </Link>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3">
-                <label className="block text-xs font-medium text-slate-600">
-                  场景（可选）
-                  <textarea
-                    value={scenario}
-                    onChange={(e) => setScenario(e.target.value)}
-                    rows={2}
-                    maxLength={2000}
-                    placeholder="例如：在话题详情页点击收藏时…"
-                    className="mt-1 w-full resize-none rounded-lg border border-slate-200 px-2.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none"
-                  />
-                </label>
-                <label className="block text-xs font-medium text-slate-600">
-                  复现步骤（可选）
-                  <textarea
-                    value={steps}
-                    onChange={(e) => setSteps(e.target.value)}
-                    rows={3}
-                    maxLength={4000}
-                    placeholder="1. …&#10;2. …"
-                    className="mt-1 w-full resize-none rounded-lg border border-slate-200 px-2.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none"
-                  />
-                </label>
-                <label className="block text-xs font-medium text-slate-600">
-                  详细说明 <span className="text-red-600">*</span>
-                  <textarea
-                    value={body}
-                    onChange={(e) => setBody(e.target.value)}
-                    rows={5}
-                    maxLength={8000}
-                    placeholder="期望行为、实际现象、报错信息等"
-                    className="mt-1 w-full resize-none rounded-lg border border-slate-200 px-2.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none"
-                  />
-                </label>
-              </div>
-            )}
+            <div className="flex flex-col gap-3">
+              <label className="block text-xs font-medium text-slate-600">
+                场景（可选）
+                <textarea
+                  value={scenario}
+                  onChange={(e) => setScenario(e.target.value)}
+                  rows={2}
+                  maxLength={2000}
+                  placeholder="例如：在话题详情页点击收藏时…"
+                  className="mt-1 w-full resize-none rounded-lg border border-slate-200 px-2.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none"
+                />
+              </label>
+              <label className="block text-xs font-medium text-slate-600">
+                复现步骤（可选）
+                <textarea
+                  value={steps}
+                  onChange={(e) => setSteps(e.target.value)}
+                  rows={3}
+                  maxLength={4000}
+                  placeholder="1. …&#10;2. …"
+                  className="mt-1 w-full resize-none rounded-lg border border-slate-200 px-2.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none"
+                />
+              </label>
+              <label className="block text-xs font-medium text-slate-600">
+                详细说明 <span className="text-red-600">*</span>
+                <textarea
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  rows={5}
+                  maxLength={8000}
+                  placeholder="期望行为、实际现象、报错信息等"
+                  className="mt-1 w-full resize-none rounded-lg border border-slate-200 px-2.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none"
+                />
+              </label>
+            </div>
             {message ? (
               <p
                 className={`mt-3 text-sm ${message.startsWith('已提交') ? 'text-emerald-700' : 'text-red-600'}`}
@@ -224,26 +192,24 @@ export default function FeedbackBubble({ renderTrigger }: FeedbackBubbleProps) {
             ) : null}
           </div>
 
-          {token ? (
-            <div className="flex justify-end gap-2 border-t border-slate-100 px-4 py-3 sm:px-5">
-              <button
-                type="button"
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                onClick={close}
-                disabled={sending}
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
-                onClick={() => void submit()}
-                disabled={sending}
-              >
-                {sending ? '提交中…' : '提交'}
-              </button>
-            </div>
-          ) : null}
+          <div className="flex justify-end gap-2 border-t border-slate-100 px-4 py-3 sm:px-5">
+            <button
+              type="button"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              onClick={close}
+              disabled={sending}
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+              onClick={() => void submit()}
+              disabled={sending}
+            >
+              {sending ? '提交中…' : '提交'}
+            </button>
+          </div>
         </div>
       </div>,
       document.body,

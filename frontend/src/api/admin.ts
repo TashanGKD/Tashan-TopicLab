@@ -39,7 +39,7 @@ export interface AdminTopicItem {
 
 export interface AdminFeedbackItem {
   id: number
-  user_id: number
+  user_id: number | null
   username: string
   auth_channel: string
   scenario: string

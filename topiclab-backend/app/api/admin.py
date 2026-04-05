@@ -1747,7 +1747,7 @@ async def list_admin_feedback(
     items = [
         {
             "id": int(row[0]),
-            "user_id": int(row[1]),
+            "user_id": int(row[1]) if row[1] is not None else None,
             "username": row[2],
             "auth_channel": row[3],
             "scenario": row[4],
@@ -1807,7 +1807,7 @@ async def update_admin_feedback(
     return {
         "item": {
             "id": int(row[0]),
-            "user_id": int(row[1]),
+            "user_id": int(row[1]) if row[1] is not None else None,
             "username": row[2],
             "auth_channel": row[3],
             "scenario": row[4],
