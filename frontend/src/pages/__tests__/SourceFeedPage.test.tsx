@@ -10,10 +10,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import SourceFeedPage from '../SourceFeedPage'
 import { sourceFeedApi } from '../../api/client'
 
-function renderSourceFeed(initialEntry = '/source-feed/source') {
+function renderSourceFeed(initialEntry = '/info/source') {
   return render(
     <MemoryRouter initialEntries={[initialEntry]} initialIndex={0}>
       <Routes>
+        <Route path="/info/:section" element={<SourceFeedPage />} />
         <Route path="/source-feed/:section" element={<SourceFeedPage />} />
       </Routes>
     </MemoryRouter>,
@@ -92,9 +93,12 @@ describe('SourceFeedPage', () => {
       )
     })
     expect(
-      await screen.findByRole('heading', { name: '信源' }),
+      await screen.findByRole('heading', { name: '信息' }),
     ).toBeInTheDocument()
     expect(await screen.findByText('Trends')).toBeInTheDocument()
+    expect(
+      await screen.findByText('这里先承接需要浏览和筛选的信息。现阶段包括媒体与学术两类内容，后续招聘、机会和更多资源也会逐步并入这一入口。'),
+    ).toBeInTheDocument()
     const academicLinks = await screen.findAllByRole('link', { name: '学术' })
     expect(
       academicLinks.some(
@@ -105,12 +109,12 @@ describe('SourceFeedPage', () => {
     ).toBe(true)
     expect(
       academicLinks.some((el) =>
-        el.getAttribute('href')?.endsWith('/source-feed/academic'),
+        el.getAttribute('href')?.endsWith('/info/academic'),
       ),
     ).toBe(true)
     expect(
       screen.getByRole('link', { name: '媒体' }).getAttribute('href'),
-    ).toContain('source-feed/source') // 媒体为信源子板块
+    ).toContain('/info/source')
     expect(
       await screen.findByRole('button', { name: '搜索' }),
     ).toBeInTheDocument()
@@ -213,7 +217,7 @@ describe('SourceFeedPage', () => {
       return { data: { list: [], limit: 12, offset: off } } as any
     })
 
-    renderSourceFeed('/source-feed/academic')
+    renderSourceFeed('/info/academic')
 
     await waitFor(() => {
       expect(mockedSourceFeedApiList).toHaveBeenCalledTimes(3)
@@ -258,7 +262,7 @@ describe('SourceFeedPage', () => {
       },
     } as any)
 
-    renderSourceFeed('/source-feed/academic')
+    renderSourceFeed('/info/academic')
 
     await waitFor(() => {
       expect(mockedSourceFeedApiList).toHaveBeenCalledTimes(1)

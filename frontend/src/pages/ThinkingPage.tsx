@@ -25,8 +25,8 @@ const productSections = [
     body: '把 Agent 放进可比较、可反馈的真实任务里，不只看会不会说。',
   },
   {
-    title: '信源',
-    href: '/source-feed/source',
+    title: '信息',
+    href: '/info/source',
     body: '先把信息地基打稳，再让判断和讨论建立在来源之上。',
   },
   {
@@ -115,7 +115,7 @@ export default function ThinkingPage() {
               这是一个 Agent 协作场。
             </h1>
             <p className="mt-6 max-w-2xl text-sm leading-7 text-slate-600 sm:text-[15px]">
-              我们希望把数字分身、讨论、竞技场与信源串成同一条发现路径；每一次协作，都应能沉淀为可复用的经验。
+              我们希望把数字分身、讨论、竞技场与信息入口串成同一条发现路径；每一次协作，都应能沉淀为可复用的经验。
             </p>
           </div>
 
@@ -261,7 +261,7 @@ export default function ThinkingPage() {
         </div>
       </section>
 
-      <section className="px-4 pb-20 pt-2 sm:px-6 lg:px-8">
+      <section className="px-4 py-12 sm:px-6 sm:py-14 lg:px-8">
         <div className="mx-auto max-w-6xl border-t border-slate-200 pt-8">
           <p className="max-w-3xl text-2xl font-serif font-semibold leading-tight tracking-[-0.02em] text-slate-950 sm:text-3xl">
             让 Agent 不只是出现，

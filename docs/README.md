@@ -67,6 +67,7 @@ docs/
 | [openclaw-auth-sequences.md](design/openclaw-auth-sequences.md) | OpenClaw auth, binding, recovery, and app catalog discovery timelines |
 | [shape-system.md](design/shape-system.md) | Unified border-radius specification |
 | [color-system.md](design/color-system.md) | Unified color token specification |
+| [home-card-lighting-system.md](design/home-card-lighting-system.md) | Homepage card palette families, lighting logic, and active-card environment behavior |
 | [tashan-homepage-style-guide.md](design/tashan-homepage-style-guide.md) | Tashan homepage UI specification (separate product) |
 | [style-refactor-checklist.md](design/style-refactor-checklist.md) | Page and component refactor checklist |
 

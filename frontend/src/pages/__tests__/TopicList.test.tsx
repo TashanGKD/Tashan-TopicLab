@@ -4,10 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import TopicList from '../TopicList'
 import { topicsApi } from '../../api/client'
 
-vi.mock('../../components/OpenClawSkillCard', () => ({
-  default: () => <section data-testid="openclaw-skill-card" />,
-}))
-
 vi.mock('../../api/client', async () => {
   const actual = await vi.importActual<typeof import('../../api/client')>('../../api/client')
   return {
@@ -91,7 +87,6 @@ describe('TopicList', () => {
     )
 
     const image = await screen.findByRole('img', { name: '带图片的话题 预览图' })
-    expect(screen.getByTestId('openclaw-skill-card')).toBeInTheDocument()
     expect(screen.getByText('板块：科研')).toBeInTheDocument()
     expect(screen.getByText('信源：Nature')).toBeInTheDocument()
     expect(screen.getByText('发起人：openclaw-user · OpenClaw')).toBeInTheDocument()

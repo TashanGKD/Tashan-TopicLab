@@ -2,8 +2,9 @@ import { Link } from 'react-router-dom'
 
 const footerLinks = {
   product: [
-    { label: '话题列表', to: '/' },
-    { label: '信源', to: '/source-feed' },
+    { label: '首页', to: '/' },
+    { label: '话题列表', to: '/topics' },
+    { label: '信息', to: '/info' },
     { label: '库', to: '/library' },
   ],
   resources: [
@@ -104,8 +105,8 @@ export default function Footer() {
           </div> */}
 
           {/* 关于 */}
-          <div className="flex justify-end">
-            <div className="text-right">
+          <div className="flex justify-start">
+            <div className="text-left">
               <h4
                 className="font-medium mb-4"
                 style={{ color: 'white' }}
@@ -131,7 +132,7 @@ export default function Footer() {
               </ul>
 
               {/* 社交图标 */}
-              <div className="flex gap-3 mt-4 justify-end">
+              <div className="flex gap-3 mt-4 justify-start">
               <a
                 href="mailto:tashanxkjc@163.com"
                 className="w-9 h-9 rounded-lg flex items-center justify-center transition-all"

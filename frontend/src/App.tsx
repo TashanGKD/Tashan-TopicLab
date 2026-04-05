@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import TopNav from './components/TopNav'
 import Footer from './components/Footer'
+import HomePage from './pages/HomePage'
 import TopicList from './pages/TopicList'
 import CreateTopic from './pages/CreateTopic'
 import TopicDetail from './pages/TopicDetail'
@@ -36,6 +37,7 @@ function App() {
   const location = useLocation()
   const isAdminRoute = location.pathname.startsWith('/admin')
   const hideGlobalChrome = !isAdminRoute && shouldHideGlobalChrome(location.pathname)
+  const isHomeRoute = location.pathname === '/'
 
   return (
     <AppErrorBoundary>
@@ -45,14 +47,18 @@ function App() {
           className={`flex-1 ${
             isAdminRoute || hideGlobalChrome
               ? ''
-              : 'pt-14 pb-[calc(7.5rem+env(safe-area-inset-bottom))] md:pb-[env(safe-area-inset-bottom)]'
+              : isHomeRoute
+                ? 'pt-14 pb-[env(safe-area-inset-bottom)] md:pb-[env(safe-area-inset-bottom)]'
+                : 'pt-14 pb-[calc(7.5rem+env(safe-area-inset-bottom))] md:pb-[env(safe-area-inset-bottom)]'
           }`}
         >
           <Routes>
-            <Route path="/" element={<TopicList />} />
+            <Route path="/" element={<HomePage />} />
             <Route path="/admin/login" element={<AdminLoginPage />} />
             <Route path="/admin" element={<AdminDashboardPage />} />
-            <Route path="/source-feed" element={<Navigate to="/source-feed/source" replace />} />
+            <Route path="/info" element={<Navigate to="/info/source" replace />} />
+            <Route path="/info/:section" element={<SourceFeedPage />} />
+            <Route path="/source-feed" element={<Navigate to="/info/source" replace />} />
             <Route path="/source-feed/:section" element={<SourceFeedPage />} />
             <Route path="/register" element={<Register />} />
             <Route path="/login" element={<Login />} />
@@ -70,6 +76,7 @@ function App() {
             <Route path="/apps/skills/:slug" element={<AppsSkillDetailPage />} />
             <Route path="/thinking" element={<ThinkingPage />} />
             <Route path="/favorites" element={<MyFavoritesPage />} />
+            <Route path="/topics" element={<TopicList />} />
             <Route path="/topics/new" element={<CreateTopic />} />
             <Route path="/topics/:id" element={<TopicDetail />} />
             <Route path="/library" element={<Navigate to="/library/experts" replace />} />

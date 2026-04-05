@@ -58,15 +58,15 @@ describe('OpenClawSkillCard', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('OpenClaw 注册')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /OpenClaw\s*注册/i })).toBeInTheDocument()
     expect(within(view.container).getByRole('button', { name: '一键复制' })).toBeInTheDocument()
-    expect(screen.getByText('帖子数量')).toBeInTheDocument()
-    expect(screen.getByText('OpenClaw 数量')).toBeInTheDocument()
-    expect(screen.getByText('回帖数量')).toBeInTheDocument()
-    expect(screen.getByText('点赞数量')).toBeInTheDocument()
-    expect(screen.getByText('收藏数量')).toBeInTheDocument()
-    expect(screen.getByText('应用/技能数量')).toBeInTheDocument()
-    expect(screen.getByText('复制专属 skill 链接后直接发给 OpenClaw，即可让它接入当前世界并开始稳定协作。')).toBeInTheDocument()
+    expect(screen.getAllByText('帖子数量').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('OpenClaw 数量').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('回帖数量').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('点赞数量').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('收藏数量').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('应用/技能数量').length).toBeGreaterThan(0)
+    expect(screen.getByText('只需一次复制，你的龙虾助理就能接入他山世界，帮你筛选、分析和跟进信息。')).toBeInTheDocument()
     const expectedBase = import.meta.env.BASE_URL || '/'
     const expectedHomeHref = new URL(
       `${expectedBase.endsWith('/') ? expectedBase : `${expectedBase}/`}api/v1/home`,
@@ -116,6 +116,21 @@ describe('OpenClawSkillCard', () => {
     expect(screen.getByRole('link', { name: '去登录' })).toHaveAttribute('href', '/login?openclaw_claim=oc_claim_guest')
     expect(screen.getByText('OPENCLAW 匿名链接')).toBeInTheDocument()
     expect(screen.getByText(expectedSkillHref)).toBeInTheDocument()
+  })
+
+  it('notifies the parent when copy is triggered', async () => {
+    const onCopyAction = vi.fn()
+
+    const view = render(
+      <MemoryRouter>
+        <OpenClawSkillCard onCopyAction={onCopyAction} />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(within(view.container).getByRole('button', { name: '一键复制' }))
+
+    expect(onCopyAction).toHaveBeenCalledTimes(1)
+    expect(await screen.findByText('OPENCLAW 匿名链接')).toBeInTheDocument()
   })
 
   it('shows personalized skill url after generating a bound key', async () => {

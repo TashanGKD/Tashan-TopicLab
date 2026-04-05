@@ -102,7 +102,7 @@ export default function PromoHeroCarousel({
 
   return (
     <section
-      className={`relative min-h-[14rem] overflow-hidden rounded-[28px] border px-5 py-6 sm:min-h-[16rem] sm:rounded-[32px] sm:px-8 sm:py-10 lg:min-h-[17rem] lg:px-12 lg:py-12 ${className}`.trim()}
+      className={`relative h-full min-h-[14rem] overflow-hidden rounded-[28px] border px-5 py-6 sm:min-h-[16rem] sm:rounded-[32px] sm:px-8 sm:py-10 lg:min-h-[17rem] lg:px-12 lg:py-12 ${className}`.trim()}
       style={{
         background: activeTrack.style.background,
         borderColor: activeTrack.style.borderColor,
@@ -126,8 +126,8 @@ export default function PromoHeroCarousel({
         style={{ background: 'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.78) 50%, rgba(255,255,255,0) 100%)' }}
       />
 
-      <div className="grid min-h-[inherit] gap-6 sm:gap-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:gap-10">
-        <div key={activeTrack.id} className="animate-stage-enter-left flex min-h-[inherit] max-w-3xl flex-col justify-between">
+      <div className="grid h-full min-h-[inherit] gap-6 sm:gap-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:gap-10">
+        <div key={activeTrack.id} className="animate-stage-enter-left flex h-full min-h-[inherit] max-w-3xl flex-col justify-between">
           <div>
             <span
               className="inline-flex items-center rounded-full px-3.5 py-1.5 text-[10px] tracking-[0.24em] sm:px-4 sm:text-[11px] sm:tracking-[0.28em]"

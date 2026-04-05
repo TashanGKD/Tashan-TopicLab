@@ -7,17 +7,27 @@ import { useMobileChromeHidden } from '../hooks/useMobileChromeHidden'
 import { shouldHideGlobalChrome } from '../utils/layoutChrome'
 
 const navLinks = [
-  { to: '/', label: '话题列表', match: (path: string) => path === '/' && !path.startsWith('/topics') && !path.startsWith('/source-feed') && !path.startsWith('/library') && !path.startsWith('/profile-helper') && !path.startsWith('/agent-links') },
-  { to: '/arcade', label: 'Arcade', match: (path: string) => path.startsWith('/arcade') },
-  { to: '/source-feed', label: '信源', match: (path: string) => path.startsWith('/source-feed') },
-  { to: '/apps', label: '应用', match: (path: string) => path.startsWith('/apps') },
+  { to: '/', label: '首页', match: (path: string) => path === '/' },
+  { to: '/topics', label: '话题', match: (path: string) => path === '/topics' || path.startsWith('/topics/') },
+  { to: '/info', label: '信息', match: (path: string) => path.startsWith('/info') || path.startsWith('/source-feed') },
 ] as const
 
 const mobileTabs = [
   {
     to: '/',
+    label: '首页',
+    match: (path: string) => path === '/',
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4.75 10.25 12 4.75l7.25 5.5v8A1.75 1.75 0 0 1 17.5 20h-11a1.75 1.75 0 0 1-1.75-1.75v-8Z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9.25 20v-5h5.5v5" />
+      </svg>
+    ),
+  },
+  {
+    to: '/topics',
     label: '话题',
-    match: (path: string) => path === '/' || path.startsWith('/topics'),
+    match: (path: string) => path === '/topics' || path.startsWith('/topics/'),
     icon: (
       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7 8h10M7 12h10M7 16h6" />
@@ -26,36 +36,14 @@ const mobileTabs = [
     ),
   },
   {
-    to: '/source-feed',
-    label: '信源',
-    match: (path: string) => path.startsWith('/source-feed'),
+    to: '/info',
+    label: '信息',
+    match: (path: string) => path.startsWith('/info') || path.startsWith('/source-feed'),
     icon: (
       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M5.75 6.5A1.75 1.75 0 017.5 4.75h8.25A1.75 1.75 0 0117.5 6.5v11.25A1.5 1.5 0 0019 19.25h-10.5A2.75 2.75 0 015.75 16.5v-10z" />
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8.5 8.25h6M8.5 11.5h6M8.5 14.75h3.25" />
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 19.25a1.5 1.5 0 001.5-1.5V9.5h-3" />
-      </svg>
-    ),
-  },
-  {
-    to: '/apps',
-    label: '应用',
-    match: (path: string) => path.startsWith('/apps'),
-    icon: (
-      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4.75 17.25V6.75A1.75 1.75 0 016.5 5h11a1.75 1.75 0 011.75 1.75v10.5A1.75 1.75 0 0117.5 19h-11a1.75 1.75 0 01-1.75-1.75z" />
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7.75 15.25l2.5-3 2.25 2 3.75-4.5" />
-      </svg>
-    ),
-  },
-  {
-    to: '/arcade',
-    label: 'Arcade',
-    match: (path: string) => path.startsWith('/arcade'),
-    icon: (
-      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7.75 8.25h8.5A2.75 2.75 0 0119 11v4.25A2.75 2.75 0 0116.25 18h-8.5A2.75 2.75 0 015 15.25V11a2.75 2.75 0 012.75-2.75z" />
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8.25 5.75l-1.8 2.5m9.3-2.5l1.8 2.5M9 13.25h2.5m-1.25-1.25v2.5m4.5-.75h.01m1.75-1.75h.01" />
       </svg>
     ),
   },
@@ -284,7 +272,7 @@ export default function TopNav() {
                 color: location.pathname.startsWith('/profile-helper') ? 'var(--color-dark)' : 'var(--color-gray)',
               }}
             >
-              科研数字分身
+              数字分身
               <span
                 className={`absolute bottom-0 left-0 h-0.5 transition-all duration-300 ${
                   location.pathname.startsWith('/profile-helper') ? 'w-full' : 'w-0 group-hover:w-full'
@@ -296,11 +284,7 @@ export default function TopNav() {
             </Link>
             <Link
               to="/topics/new"
-              className="text-white px-4 py-1.5 rounded-[var(--radius-lg)] text-sm font-serif font-medium transition-all hover:-translate-y-0.5 whitespace-nowrap shrink-0"
-              style={{
-                background: 'var(--color-dark)',
-                boxShadow: 'var(--shadow-sm)',
-              }}
+              className="hidden"
             >
               + 创建话题
             </Link>

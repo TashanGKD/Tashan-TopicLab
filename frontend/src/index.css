@@ -165,6 +165,31 @@
     will-change: transform, opacity;
   }
 
+  @keyframes cardSpecularSweep {
+    0% {
+      transform: translate3d(-135%, 0, 0) skewX(-18deg);
+      opacity: 0;
+    }
+    16% {
+      opacity: 0.22;
+    }
+    50% {
+      opacity: 0.82;
+    }
+    68% {
+      opacity: 0.18;
+    }
+    100% {
+      transform: translate3d(135%, 0, 0) skewX(-18deg);
+      opacity: 0;
+    }
+  }
+
+  .animate-card-specular-sweep {
+    animation: cardSpecularSweep 1.35s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: transform, opacity;
+  }
+
   @keyframes stageEnterFromRight {
     from {
       opacity: 0.42;
