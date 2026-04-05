@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { MessageBubble } from './MessageBubble'
 import { LoadingDots, RobotAvatar } from './LoadingDots'
@@ -75,7 +75,10 @@ export function ChatWindow() {
   const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [selectedModel, setSelectedModel] = useState<string>(PROFILE_HELPER_MODELS[0]?.value ?? '')
   const [isComposing, setIsComposing] = useState(false)
-  const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const messagesViewportRef = useRef<HTMLDivElement>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const shouldAutoScrollRef = useRef(true)
+  const pendingScrollModeRef = useRef<'bottom' | null>('bottom')
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const navigate = useNavigate()
 
@@ -160,43 +163,40 @@ export function ChatWindow() {
     }
   }, [sessionId, messages])
 
-  /**
-   * 滚动策略：
-   * - 有用户消息 → 让最后一条用户消息贴近容器顶部（AI 回复在下方可见）
-   * - 无用户消息 → 滚到底部
-   *
-   * MessageBubble 已有 data-role="user"，直接查询，无需额外包裹 div。
-   * 用 requestAnimationFrame 确保 DOM 完成渲染后再计算位置。
-   */
-  useEffect(() => {
-    const container = messagesContainerRef.current
-    if (!container) return
+  const handleMessagesScroll = useCallback(() => {
+    const viewport = messagesViewportRef.current
+    if (!viewport) return
+    const distanceToBottom = viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop
+    shouldAutoScrollRef.current = distanceToBottom <= 48
+  }, [])
 
+  const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
+    const anchor = messagesEndRef.current
+    if (!anchor) return
+    anchor.scrollIntoView({ block: 'end', behavior })
+  }, [])
+
+  useLayoutEffect(() => {
+    const viewport = messagesViewportRef.current
+    if (!viewport) return
+
+    const shouldScroll = shouldAutoScrollRef.current || pendingScrollModeRef.current === 'bottom'
+    if (!shouldScroll) return
+
+    const behavior: ScrollBehavior = pendingScrollModeRef.current ? 'auto' : 'smooth'
     requestAnimationFrame(() => {
-      // MessageBubble 自带 data-role 属性（see MessageBubble.tsx）
-      const userMsgs = container.querySelectorAll('[data-role="user"]')
-      const lastUserEl = userMsgs[userMsgs.length - 1] as HTMLElement | undefined
-
-      if (lastUserEl) {
-        // 遍历 offsetParent 链计算相对容器的绝对偏移，比 getBoundingClientRect 更稳
-        let offsetTop = 0
-        let cur: HTMLElement | null = lastUserEl
-        while (cur && cur !== container) {
-          offsetTop += cur.offsetTop
-          cur = cur.offsetParent as HTMLElement | null
-        }
-        container.scrollTop = Math.max(0, offsetTop - 16)
-      } else {
-        container.scrollTop = container.scrollHeight
-      }
+      scrollMessagesToBottom(behavior)
+      pendingScrollModeRef.current = null
     })
-  }, [messages])
+  }, [messages, loading, scrollMessagesToBottom])
 
   const handleSubmit = async () => {
     if (!requireCurrentUser()) return
     const text = input.trim()
     if (!text || !sessionId || loading) return
 
+    shouldAutoScrollRef.current = true
+    pendingScrollModeRef.current = 'bottom'
     setInput('')
     const userMsg: ChatMessage = { role: 'user', content: text }
     setMessages((prev) => [...prev, userMsg])
@@ -261,6 +261,8 @@ export function ChatWindow() {
         }
         return next
       })
+      shouldAutoScrollRef.current = true
+      pendingScrollModeRef.current = 'bottom'
       setInput(responseText)
       // 自动发送
       if (!requireCurrentUser() || !sessionId || loading) return
@@ -310,6 +312,8 @@ export function ChatWindow() {
     if (!requireCurrentUser() || !sessionId) return
     try {
       await resetSession(sessionId)
+      shouldAutoScrollRef.current = true
+      pendingScrollModeRef.current = 'bottom'
       setMessages([])
       setInput(INIT_MESSAGE)   // 重置后恢复固定初始文本
       await fetchProfile(sessionId)
@@ -339,69 +343,77 @@ export function ChatWindow() {
   return (
     <div className="chat-layout">
       <div className="chat-window">
-        <div ref={messagesContainerRef} className="messages">
-          {messages.length === 0 && (
-            <div className="welcome">
-              <p>你好，我是科研数字分身采集助手。</p>
-              <p>可以说「帮我建立分身」开始。</p>
-            </div>
-          )}
-          {messages
-            .filter((m, i) => {
-              // 过滤掉最后一条空占位 assistant 消息（正在加载时）
-              if (
-                showLoadingDots &&
-                i === messages.length - 1 &&
-                m.role === 'assistant' &&
-                (m.blocks?.length ?? 0) === 0
-              ) return false
-              return true
-            })
-            .map((m, i) => {
-              if (m.role === 'user') {
-                // MessageBubble 自带 data-role="user"，供滚动逻辑查询
-                return <MessageBubble key={i} role="user" content={m.content ?? ''} />
-              }
-              // assistant: blocks 模式
-              if (m.blocks && m.blocks.length > 0) {
-                const isLatest = i === messages.length - 1
-                const isInteractive = hasInteractiveBlock(m.blocks)
-                const respondedBlocks = m._responded_blocks ?? []
-                return (
-                  <div key={i} className="message-row assistant-row">
-                    <RobotAvatar />
-                    <div className="assistant-blocks">
-                      {m.blocks.map((block, bi) => {
-                        // Block 级响应状态：每个 block 独立判断是否已被回答
-                        const blockId = 'id' in block ? (block as { id: string }).id : undefined
-                        const isBlockResponded = blockId
-                          ? respondedBlocks.includes(blockId)
-                          : !!m._responded
-                        return (
-                          <BlockRenderer
-                            key={bi}
-                            block={block}
-                            onRespond={(text) => handleBlockRespond(i, text, blockId)}
-                            disabled={loading || (isInteractive && (!isLatest || isBlockResponded))}
-                            responded={isBlockResponded}
-                          />
-                        )
-                      })}
-                    </div>
+        <div className="chat-conversation-shell">
+          <div
+            ref={messagesViewportRef}
+            className="chat-scroll-viewport"
+            onScroll={handleMessagesScroll}
+          >
+            <div className="messages">
+              {messages.length === 0 && (
+                <div className="welcome">
+                  <p>你好，我是科研数字分身采集助手。</p>
+                  <p>可以说「帮我建立分身」开始。</p>
+                </div>
+              )}
+              {messages
+                .filter((m, i) => {
+                  // 过滤掉最后一条空占位 assistant 消息（正在加载时）
+                  if (
+                    showLoadingDots &&
+                    i === messages.length - 1 &&
+                    m.role === 'assistant' &&
+                    (m.blocks?.length ?? 0) === 0
+                  ) return false
+                  return true
+                })
+                .map((m, i) => {
+                  if (m.role === 'user') {
+                    return <MessageBubble key={i} role="user" content={m.content ?? ''} />
+                  }
+                  // assistant: blocks 模式
+                  if (m.blocks && m.blocks.length > 0) {
+                    const isLatest = i === messages.length - 1
+                    const isInteractive = hasInteractiveBlock(m.blocks)
+                    const respondedBlocks = m._responded_blocks ?? []
+                    return (
+                      <div key={i} className="message-row assistant-row">
+                        <RobotAvatar />
+                        <div className="assistant-blocks">
+                          {m.blocks.map((block, bi) => {
+                            // Block 级响应状态：每个 block 独立判断是否已被回答
+                            const blockId = 'id' in block ? (block as { id: string }).id : undefined
+                            const isBlockResponded = blockId
+                              ? respondedBlocks.includes(blockId)
+                              : !!m._responded
+                            return (
+                              <BlockRenderer
+                                key={bi}
+                                block={block}
+                                onRespond={(text) => handleBlockRespond(i, text, blockId)}
+                                disabled={loading || (isInteractive && (!isLatest || isBlockResponded))}
+                                responded={isBlockResponded}
+                              />
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  }
+                  // 旧式纯文本（backward compat）
+                  return <MessageBubble key={i} role="assistant" content={m.content ?? ''} />
+                })}
+              {showLoadingDots && (
+                <div className="loading-message-row">
+                  <RobotAvatar />
+                  <div className="message-bubble assistant loading-bubble">
+                    <LoadingDots />
                   </div>
-                )
-              }
-              // 旧式纯文本（backward compat）
-              return <MessageBubble key={i} role="assistant" content={m.content ?? ''} />
-            })}
-          {showLoadingDots && (
-            <div className="loading-message-row">
-              <RobotAvatar />
-              <div className="message-bubble assistant loading-bubble">
-                <LoadingDots />
-              </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} className="chat-scroll-anchor" aria-hidden />
             </div>
-          )}
+          </div>
         </div>
 
         <form

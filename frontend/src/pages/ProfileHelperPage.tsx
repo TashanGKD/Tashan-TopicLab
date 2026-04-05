@@ -49,7 +49,7 @@ export default function ProfileHelperPage() {
   return (
     <LibraryPageLayout title="他山数字分身助手">
       <div className={`profile-helper-layout ${isChat ? 'profile-helper-layout-chat' : ''}`}>
-        <div className="flex flex-col md:flex-row md:items-start md:gap-8">
+        <div className={`flex flex-col md:flex-row md:items-start md:gap-8 ${isChat ? 'profile-helper-shell-chat' : ''}`}>
           <div className="relative md:w-[172px] md:flex-shrink-0">
             <div
               className="flex items-center gap-2 overflow-x-auto border-b px-4 py-3 md:flex-col md:items-stretch md:gap-0.5 md:border-b-0 md:px-0 md:py-0 md:sticky md:top-20 scrollbar-hide"
@@ -99,7 +99,7 @@ export default function ProfileHelperPage() {
           </div>
 
           <div className={`flex-1 min-w-0 pt-5 md:pt-0 ${isChat ? 'profile-helper-content-chat' : ''}`}>
-            <p className="text-sm mb-6" style={{ color: 'var(--text-secondary)' }}>
+            <p className={`text-sm mb-6 ${isChat ? 'profile-helper-chat-description' : ''}`} style={{ color: 'var(--text-secondary)' }}>
               {activeSection.description}
             </p>
             {isChat ? (
