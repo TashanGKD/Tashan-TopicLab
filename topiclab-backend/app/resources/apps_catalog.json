@@ -29,6 +29,30 @@
       }
     },
     {
+      "id": "giiisp-paper-search-apis",
+      "name": "集思谱 Skill",
+      "summary": "集思谱科研检索能力入口，适合做文献、专利与预印本发现与检索。",
+      "description": "覆盖约 1.15 亿篇文献、约 6200 万件专利，并结合预印本形成约 1.8 亿规模的科研检索范围，适合作为大规模学术发现与线索初筛入口。",
+      "icon": "spark",
+      "tags": ["research", "search", "literature", "patent", "preprint"],
+      "install_command": "安装集思谱 Skill：https://www.giiisp.com/SKILL.md",
+      "links": {
+        "docs": "https://www.giiisp.com/SKILL.md",
+        "catalog_source": "https://www.giiisp.com/SKILL.md"
+      },
+      "openclaw": {
+        "topic_seed": {
+          "category": "research",
+          "title": "评估集思谱 Skill 是否适合大规模科研检索与发现",
+          "body": "我想评估应用 集思谱 Skill 的实际效果。\n\n应用信息：\n- 名称：集思谱 Skill\n- 文档：https://www.giiisp.com/SKILL.md\n- 检索范围：文献约 1.15 亿篇，专利约 6200 万件，结合预印本总量约 1.8 亿\n\n请围绕以下方面展开：\n1. 是否适合做大规模文献、专利与预印本检索\n2. 对科研选题、综述调研与技术情报分析是否有实际价值\n3. 使用门槛、接口联调与结果质量风险分别是什么\n4. 是否值得放进长期科研检索工具链，以及启用前应确认哪些事项\n"
+        },
+        "review_feedback": {
+          "scenario": "apps:giiisp-paper-search-apis",
+          "body_template": "我要评价应用 集思谱 Skill。\n\n评价维度：\n- 使用场景：\n- 检索范围是否有帮助：\n- 实际体验：\n- 优点：\n- 问题/不足：\n- 改进建议：\n"
+        }
+      }
+    },
+    {
       "id": "manim-creator",
       "name": "Manim Creator",
       "command": "/manim",
@@ -60,7 +84,7 @@
       "description": "将 PaperBanana-DashScope 作为应用入口展示，方便用户从应用板块直接发现、安装并评估这个科研视觉生成 Skill。适合论文插图、流程图、方法示意图与研究展示素材生成。",
       "icon": "spark",
       "tags": ["research", "visualization", "paper", "dashscope"],
-      "install_command": "clawhub install zdywrnm/paperbanana-dashscope",
+      "install_command": "clawhub install paperbanana-dashscope",
       "links": {
         "docs": "https://github.com/TashanGKD/PaperBanana-DashScope",
         "repo": "https://github.com/TashanGKD/PaperBanana-DashScope"
@@ -69,7 +93,7 @@
         "topic_seed": {
           "category": "research",
           "title": "评估 PaperBanana-DashScope 是否适合科研配图与论文视觉表达",
-          "body": "我想评估应用 PaperBanana-DashScope 的实际效果。\n\n应用信息：\n- 名称：PaperBanana-DashScope\n- 安装命令：clawhub install zdywrnm/paperbanana-dashscope\n- 文档/仓库：https://github.com/TashanGKD/PaperBanana-DashScope\n\n请围绕以下方面展开：\n1. 是否适合论文插图、方法图、流程图与研究视觉表达\n2. 生成质量、可控性与修改成本如何\n3. 与现有科研写作和展示工作流如何配合\n4. 是否值得放进长期科研工具链，以及启用前应确认哪些事项\n"
+          "body": "我想评估应用 PaperBanana-DashScope 的实际效果。\n\n应用信息：\n- 名称：PaperBanana-DashScope\n- 安装命令：clawhub install paperbanana-dashscope\n- 文档/仓库：https://github.com/TashanGKD/PaperBanana-DashScope\n\n请围绕以下方面展开：\n1. 是否适合论文插图、方法图、流程图与研究视觉表达\n2. 生成质量、可控性与修改成本如何\n3. 与现有科研写作和展示工作流如何配合\n4. 是否值得放进长期科研工具链，以及启用前应确认哪些事项\n"
         },
         "review_feedback": {
           "scenario": "apps:paperbanana-dashscope",

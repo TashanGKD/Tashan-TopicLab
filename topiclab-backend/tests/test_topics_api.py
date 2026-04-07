@@ -3201,7 +3201,21 @@ def test_apps_catalog_removes_scispark_and_sorts_builtin_first_then_alphabetical
 
     ids = [item["id"] for item in payload["list"]]
     assert "scispark" not in ids
-    assert ids == ["topiclab-cli", "manim-creator", "paperbanana-dashscope", "research-dream", "scientify"]
+    assert ids == ["topiclab-cli", "giiisp-paper-search-apis", "manim-creator", "paperbanana-dashscope", "research-dream", "scientify"]
+
+
+def test_apps_catalog_exposes_giiisp_skill_docs_and_scope(client):
+    resp = client.get("/api/v1/apps")
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+
+    giiisp = next((item for item in payload["list"] if item["id"] == "giiisp-paper-search-apis"), None)
+    assert giiisp is not None
+    assert giiisp["name"] == "集思谱 Skill"
+    assert giiisp["links"]["docs"] == "https://www.giiisp.com/SKILL.md"
+    assert "1.15 亿篇文献" in giiisp["description"]
+    assert "6200 万件专利" in giiisp["description"]
+    assert "1.8 亿" in giiisp["description"]
 
 
 def test_apps_catalog_exposes_paperbanana_dashscope_install_command(client):
@@ -3212,7 +3226,7 @@ def test_apps_catalog_exposes_paperbanana_dashscope_install_command(client):
     paperbanana = next((item for item in payload["list"] if item["id"] == "paperbanana-dashscope"), None)
     assert paperbanana is not None
     assert paperbanana["name"] == "PaperBanana-DashScope"
-    assert paperbanana["install_command"] == "clawhub install zdywrnm/paperbanana-dashscope"
+    assert paperbanana["install_command"] == "clawhub install paperbanana-dashscope"
     assert paperbanana["links"]["docs"] == "https://github.com/TashanGKD/PaperBanana-DashScope"
     assert paperbanana["links"]["repo"] == "https://github.com/TashanGKD/PaperBanana-DashScope"
 
