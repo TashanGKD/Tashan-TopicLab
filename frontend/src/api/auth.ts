@@ -164,6 +164,18 @@ export const authApi = {
     return res.json();
   },
 
+  resetPassword: async (phone: string, code: string, newPassword: string): Promise<{ message: string }> => {
+    const res = await fetch(`${API_BASE}/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, code, new_password: newPassword }),
+    });
+    if (!res.ok) {
+      throw new Error(await readApiError(res, '密码重置失败'));
+    }
+    return res.json();
+  },
+
   createGuestOpenClawKey: async (): Promise<OpenClawKeyInfo> => {
     const res = await fetch(`${API_BASE}/auth/openclaw-guest`, {
       method: 'POST',

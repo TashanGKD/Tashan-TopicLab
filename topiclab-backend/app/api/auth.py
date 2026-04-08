@@ -352,7 +352,7 @@ async def send_sms(phone: str, code: str) -> tuple[bool, str]:
         logger.info(f"[DEV] Verification code for {phone}: {code}")
         return True, f"开发模式：验证码 {code}"
 
-    content = f"【他山世界】您的验证码是{code}"
+    content = f"【北京攻玉智研科技】您的验证码是{code}。如非本人操作，请忽略本短信"
     # SMSBao accepts either an API key directly or the MD5 of the login password.
     p_value = _resolve_smsbao_p_value(password, api_key)
     params = {
@@ -1488,6 +1488,13 @@ async def send_verification_code(req: SendCodeRequest):
                 ).fetchone()
                 if row:
                     raise HTTPException(status_code=400, detail="该手机号已注册")
+            elif req.type == "reset_password":
+                row = session.execute(
+                    text("SELECT id FROM users WHERE phone = :phone"),
+                    {"phone": req.phone}
+                ).fetchone()
+                if not row:
+                    raise HTTPException(status_code=400, detail="该手机号未注册")
 
             one_minute_ago = datetime.now(timezone.utc) - timedelta(minutes=1)
             row = session.execute(
@@ -1512,6 +1519,8 @@ async def send_verification_code(req: SendCodeRequest):
     else:
         if req.type == "register" and _get_dev_user(req.phone):
             raise HTTPException(status_code=400, detail="该手机号已注册")
+        elif req.type == "reset_password" and not _get_dev_user(req.phone):
+            raise HTTPException(status_code=400, detail="该手机号未注册")
         _save_dev_code(req.phone, code, req.type)
 
     success, message = await send_sms(req.phone, code)
@@ -1675,6 +1684,112 @@ async def login(req: LoginRequest):
         "claim_status": claim_status,
         "claim_detail": claim_detail,
     }
+
+
+class ResetPasswordRequest(BaseModel):
+    phone: str = Field(..., pattern=r"^1[3-9]\d{9}$", description="手机号")
+    code: str = Field(..., min_length=6, max_length=6, description="6位短信验证码")
+    new_password: str = Field(..., min_length=8, description="新密码（至少8位）")
+
+
+# 内存模式：记录密码重置失败次数，防暴力破解
+_dev_reset_failures: dict[str, list] = {}  # phone -> [datetime, ...]
+_RESET_FAILURE_LIMIT = 5
+_RESET_LOCKOUT_MINUTES = 10
+
+
+def _check_reset_failure_limit(phone: str) -> None:
+    """检查并清理过期失败记录，超限则拒绝。"""
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(minutes=_RESET_LOCKOUT_MINUTES)
+    failures = [t for t in _dev_reset_failures.get(phone, []) if t > cutoff]
+    _dev_reset_failures[phone] = failures
+    if len(failures) >= _RESET_FAILURE_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail=f"验证码错误次数过多，请 {_RESET_LOCKOUT_MINUTES} 分钟后再试"
+        )
+
+
+def _record_reset_failure(phone: str) -> None:
+    if phone not in _dev_reset_failures:
+        _dev_reset_failures[phone] = []
+    _dev_reset_failures[phone].append(datetime.now(timezone.utc))
+
+
+def _clear_reset_failures(phone: str) -> None:
+    _dev_reset_failures.pop(phone, None)
+
+
+@router.post("/reset-password")
+async def reset_password(req: ResetPasswordRequest):
+    """通过手机短信验证码重置密码。"""
+    if DATABASE_CONFIGURED:
+        with get_db_session() as session:
+            # 检查失败次数（DB 模式：从 verification_codes 失败记录推断；简化实现：用内存计数）
+            _check_reset_failure_limit(req.phone)
+
+            # 验证码校验
+            row = session.execute(
+                text("""
+                    SELECT id, code, expires_at FROM verification_codes
+                    WHERE phone = :phone AND type = 'reset_password'
+                    ORDER BY created_at DESC LIMIT 1
+                """),
+                {"phone": req.phone}
+            ).fetchone()
+
+            if not row or str(row[1]).strip() != str(req.code).strip():
+                _record_reset_failure(req.phone)
+                raise HTTPException(status_code=400, detail="验证码错误")
+
+            try:
+                expires_at = _normalize_expires_at(row[2])
+            except (TypeError, ValueError) as e:
+                raise HTTPException(status_code=400, detail="验证码无效，请重新获取") from e
+
+            if expires_at < datetime.now(timezone.utc):
+                raise HTTPException(status_code=400, detail="验证码已过期")
+
+            # 更新密码
+            hashed = bcrypt.hashpw(req.new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+            result = session.execute(
+                text("UPDATE users SET password = :password WHERE phone = :phone RETURNING id"),
+                {"password": hashed, "phone": req.phone}
+            )
+            if not result.fetchone():
+                raise HTTPException(status_code=400, detail="该手机号未注册")
+
+            # 删除已使用的验证码（防重放）
+            session.execute(
+                text("DELETE FROM verification_codes WHERE phone = :phone AND type = 'reset_password'"),
+                {"phone": req.phone}
+            )
+
+            _clear_reset_failures(req.phone)
+    else:
+        # 内存开发模式
+        _check_reset_failure_limit(req.phone)
+
+        user = _get_dev_user(req.phone)
+        if not user:
+            raise HTTPException(status_code=400, detail="该手机号未注册")
+
+        stored = _dev_codes.get(f"{req.phone}:reset_password")
+        if not stored or stored["code"] != req.code:
+            _record_reset_failure(req.phone)
+            raise HTTPException(status_code=400, detail="验证码错误")
+
+        if datetime.now(timezone.utc) - stored["created_at"] > timedelta(minutes=5):
+            raise HTTPException(status_code=400, detail="验证码已过期")
+
+        # 更新密码 + 删除验证码
+        hashed = bcrypt.hashpw(req.new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        user["password"] = hashed
+        _dev_codes.pop(f"{req.phone}:reset_password", None)
+        _clear_reset_failures(req.phone)
+
+    return {"message": "密码重置成功"}
 
 
 @router.get("/me")

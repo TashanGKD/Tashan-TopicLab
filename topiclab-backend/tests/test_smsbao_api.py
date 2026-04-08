@@ -50,7 +50,7 @@ async def test_send_sms_uses_api_key_and_goodsid_when_configured(monkeypatch):
     assert parsed["p"] == ["official-api-key"]
     assert parsed["m"] == ["13800138000"]
     assert parsed["g"] == ["123456"]
-    assert parsed["c"] == ["【短信宝】您的验证码是654321"]
+    assert parsed["c"] == ["【北京攻玉智研科技】您的验证码是654321。如非本人操作，请忽略本短信"]
 
 
 @pytest.mark.asyncio

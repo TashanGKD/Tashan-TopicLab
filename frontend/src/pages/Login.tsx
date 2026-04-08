@@ -111,9 +111,12 @@ export default function Login() {
             </button>
           </form>
 
-          <div className="mt-4 text-center text-sm text-gray-500 font-serif">
-            还没有账号？{' '}
-            <Link to="/register" state={{ from }} className="hover:underline" style={{ color: 'var(--text-primary)' }}>立即注册</Link>
+          <div className="mt-4 flex justify-between text-sm text-gray-500 font-serif">
+            <Link to="/forgot-password" className="hover:underline" style={{ color: 'var(--text-primary)' }}>忘记密码？</Link>
+            <span>
+              还没有账号？{' '}
+              <Link to="/register" state={{ from }} className="hover:underline" style={{ color: 'var(--text-primary)' }}>立即注册</Link>
+            </span>
           </div>
         </div>
       </div>
