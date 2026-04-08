@@ -383,7 +383,7 @@ export function ChatWindow() {
               {messages.length === 0 && (
                 <div className="welcome">
                   <p>你好，我是科研数字分身采集助手。</p>
-                  <p>可以说「帮我建立分身」开始。</p>
+                  <p>可以说「建立我的分身」开始。</p>
                 </div>
               )}
               {messages

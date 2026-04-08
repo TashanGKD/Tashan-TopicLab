@@ -48,7 +48,7 @@ export function ProfilePanel({
               {mergedContent}
             </ReactMarkdown>
           ) : (
-            <p className="profile-empty">尚未建立分身，可以说「帮我建立分身」开始。</p>
+            <p className="profile-empty">尚未建立分身，可以说「建立我的分身」开始。</p>
           )}
         </div>
         <div className="profile-forum-actions">
