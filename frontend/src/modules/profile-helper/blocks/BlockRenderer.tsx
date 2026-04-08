@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import type { Block } from '../types'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { ChoiceBlock } from './ChoiceBlock'
 import { TextInputBlock } from './TextInputBlock'
 import { RatingBlock } from './RatingBlock'
@@ -39,7 +40,7 @@ export function BlockRenderer({ block, onRespond, disabled, responded }: BlockRe
     case 'text':
       return (
         <div className="block-text">
-          <ReactMarkdown components={{ pre: CodeBlockWithCopy }}>{block.content}</ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ pre: CodeBlockWithCopy }}>{block.content}</ReactMarkdown>
         </div>
       )
     case 'choice':
