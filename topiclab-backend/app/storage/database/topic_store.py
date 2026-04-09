@@ -923,6 +923,24 @@ def _init_topic_tables_sqlite(session) -> None:
         ON post_inbox_messages(recipient_user_id, is_read, created_at DESC)
         """,
         """
+        CREATE TABLE IF NOT EXISTS post_like_inbox_messages (
+            id VARCHAR(36) PRIMARY KEY,
+            recipient_user_id INTEGER NOT NULL,
+            topic_id VARCHAR(36) NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+            post_id VARCHAR(36) NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+            actor_user_id INTEGER NOT NULL,
+            actor_openclaw_agent_id INTEGER,
+            is_read BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            read_at TEXT,
+            UNIQUE (post_id, actor_user_id)
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_post_like_inbox_messages_recipient
+        ON post_like_inbox_messages(recipient_user_id, is_read, created_at DESC)
+        """,
+        """
         CREATE TABLE IF NOT EXISTS source_article_share_events (
             id VARCHAR(36) PRIMARY KEY,
             article_id BIGINT NOT NULL,
@@ -1288,6 +1306,24 @@ def init_topic_tables() -> None:
         session.execute(text("""
             CREATE INDEX IF NOT EXISTS idx_post_inbox_messages_recipient
             ON post_inbox_messages(recipient_user_id, is_read, created_at DESC)
+        """))
+        session.execute(text("""
+            CREATE TABLE IF NOT EXISTS post_like_inbox_messages (
+                id VARCHAR(36) PRIMARY KEY,
+                recipient_user_id INTEGER NOT NULL,
+                topic_id VARCHAR(36) NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+                post_id VARCHAR(36) NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+                actor_user_id INTEGER NOT NULL,
+                actor_openclaw_agent_id INTEGER,
+                is_read BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                read_at TIMESTAMPTZ,
+                UNIQUE (post_id, actor_user_id)
+            )
+        """))
+        session.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_post_like_inbox_messages_recipient
+            ON post_like_inbox_messages(recipient_user_id, is_read, created_at DESC)
         """))
         session.execute(text("""
             CREATE TABLE IF NOT EXISTS source_article_share_events (
@@ -2677,6 +2713,57 @@ def _maybe_create_post_reply_inbox_message(session, post: dict, *, previous_stat
     )
 
 
+def create_post_like_inbox_message(
+    topic_id: str,
+    post_id: str,
+    *,
+    recipient_user_id: int,
+    actor_user_id: int,
+    actor_openclaw_agent_id: int | None,
+) -> None:
+    if recipient_user_id == actor_user_id:
+        return
+
+    with get_db_session() as session:
+        session.execute(
+            text(
+                """
+                INSERT INTO post_like_inbox_messages (
+                    id,
+                    recipient_user_id,
+                    topic_id,
+                    post_id,
+                    actor_user_id,
+                    actor_openclaw_agent_id,
+                    is_read,
+                    created_at,
+                    read_at
+                ) VALUES (
+                    :id,
+                    :recipient_user_id,
+                    :topic_id,
+                    :post_id,
+                    :actor_user_id,
+                    :actor_openclaw_agent_id,
+                    FALSE,
+                    :created_at,
+                    NULL
+                )
+                ON CONFLICT (post_id, actor_user_id) DO NOTHING
+                """
+            ),
+            {
+                "id": str(uuid.uuid4()),
+                "recipient_user_id": recipient_user_id,
+                "topic_id": topic_id,
+                "post_id": post_id,
+                "actor_user_id": actor_user_id,
+                "actor_openclaw_agent_id": actor_openclaw_agent_id,
+                "created_at": utc_now(),
+            },
+        )
+
+
 def upsert_post(post: dict) -> dict:
     created_at = post.get("created_at") or utc_now().isoformat()
     with get_db_session() as session:
@@ -3819,8 +3906,15 @@ def list_post_inbox_messages(*, user_id: int, limit: int = 50, offset: int = 0) 
             text(
                 """
                 SELECT COUNT(*) AS count
-                FROM post_inbox_messages
-                WHERE recipient_user_id = :user_id
+                FROM (
+                    SELECT id
+                    FROM post_inbox_messages
+                    WHERE recipient_user_id = :user_id
+                    UNION ALL
+                    SELECT id
+                    FROM post_like_inbox_messages
+                    WHERE recipient_user_id = :user_id
+                ) AS inbox_items
                 """
             ),
             {"user_id": user_id},
@@ -3829,9 +3923,17 @@ def list_post_inbox_messages(*, user_id: int, limit: int = 50, offset: int = 0) 
             text(
                 """
                 SELECT COUNT(*) AS count
-                FROM post_inbox_messages
-                WHERE recipient_user_id = :user_id
-                  AND is_read = FALSE
+                FROM (
+                    SELECT id
+                    FROM post_inbox_messages
+                    WHERE recipient_user_id = :user_id
+                      AND is_read = FALSE
+                    UNION ALL
+                    SELECT id
+                    FROM post_like_inbox_messages
+                    WHERE recipient_user_id = :user_id
+                      AND is_read = FALSE
+                ) AS inbox_items
                 """
             ),
             {"user_id": user_id},
@@ -3839,43 +3941,83 @@ def list_post_inbox_messages(*, user_id: int, limit: int = 50, offset: int = 0) 
         rows = session.execute(
             text(
                 """
-                SELECT
-                    m.id,
-                    m.message_type,
-                    m.is_read,
-                    m.created_at,
-                    m.read_at,
-                    m.actor_user_id,
-                    t.id AS topic_id,
-                    t.title AS topic_title,
-                    t.category AS topic_category,
-                    reply.id AS reply_post_id,
-                    reply.author AS reply_author,
-                    reply.author_type AS reply_author_type,
-                    reply.expert_label AS reply_expert_label,
-                    reply.body AS reply_body,
-                    reply.status AS reply_status,
-                    reply.created_at AS reply_created_at,
-                    parent.id AS parent_post_id,
-                    parent.author AS parent_author,
-                    parent.author_type AS parent_author_type,
-                    parent.expert_label AS parent_expert_label,
-                    parent.body AS parent_body,
-                    parent.created_at AS parent_created_at,
-                    agent.agent_uid AS actor_agent_uid,
-                    agent.display_name AS actor_openclaw_display_name,
-                    agent.handle AS actor_openclaw_handle
-                FROM post_inbox_messages AS m
-                JOIN topics AS t
-                  ON t.id = m.topic_id
-                JOIN posts AS reply
-                  ON reply.id = m.reply_post_id
-                JOIN posts AS parent
-                  ON parent.id = m.parent_post_id
-                LEFT JOIN openclaw_agents AS agent
-                  ON agent.id = m.actor_openclaw_agent_id
-                WHERE m.recipient_user_id = :user_id
-                ORDER BY m.is_read ASC, m.created_at DESC, m.id DESC
+                SELECT *
+                FROM (
+                    SELECT
+                        m.id,
+                        m.message_type,
+                        m.is_read,
+                        m.created_at,
+                        m.read_at,
+                        m.actor_user_id,
+                        t.id AS topic_id,
+                        t.title AS topic_title,
+                        t.category AS topic_category,
+                        reply.id AS reply_post_id,
+                        reply.author AS reply_author,
+                        reply.author_type AS reply_author_type,
+                        reply.expert_label AS reply_expert_label,
+                        reply.body AS reply_body,
+                        reply.status AS reply_status,
+                        reply.created_at AS reply_created_at,
+                        parent.id AS parent_post_id,
+                        parent.author AS parent_author,
+                        parent.author_type AS parent_author_type,
+                        parent.expert_label AS parent_expert_label,
+                        parent.body AS parent_body,
+                        parent.created_at AS parent_created_at,
+                        agent.agent_uid AS actor_agent_uid,
+                        agent.display_name AS actor_openclaw_display_name,
+                        agent.handle AS actor_openclaw_handle
+                    FROM post_inbox_messages AS m
+                    JOIN topics AS t
+                      ON t.id = m.topic_id
+                    JOIN posts AS reply
+                      ON reply.id = m.reply_post_id
+                    JOIN posts AS parent
+                      ON parent.id = m.parent_post_id
+                    LEFT JOIN openclaw_agents AS agent
+                      ON agent.id = m.actor_openclaw_agent_id
+                    WHERE m.recipient_user_id = :user_id
+
+                    UNION ALL
+
+                    SELECT
+                        m.id,
+                        'post_liked' AS message_type,
+                        m.is_read,
+                        m.created_at,
+                        m.read_at,
+                        m.actor_user_id,
+                        t.id AS topic_id,
+                        t.title AS topic_title,
+                        t.category AS topic_category,
+                        liked.id AS reply_post_id,
+                        liked.author AS reply_author,
+                        liked.author_type AS reply_author_type,
+                        liked.expert_label AS reply_expert_label,
+                        liked.body AS reply_body,
+                        liked.status AS reply_status,
+                        liked.created_at AS reply_created_at,
+                        liked.id AS parent_post_id,
+                        liked.author AS parent_author,
+                        liked.author_type AS parent_author_type,
+                        liked.expert_label AS parent_expert_label,
+                        liked.body AS parent_body,
+                        liked.created_at AS parent_created_at,
+                        agent.agent_uid AS actor_agent_uid,
+                        agent.display_name AS actor_openclaw_display_name,
+                        agent.handle AS actor_openclaw_handle
+                    FROM post_like_inbox_messages AS m
+                    JOIN topics AS t
+                      ON t.id = m.topic_id
+                    JOIN posts AS liked
+                      ON liked.id = m.post_id
+                    LEFT JOIN openclaw_agents AS agent
+                      ON agent.id = m.actor_openclaw_agent_id
+                    WHERE m.recipient_user_id = :user_id
+                ) AS inbox_items
+                ORDER BY is_read ASC, created_at DESC, id DESC
                 LIMIT :limit OFFSET :offset
                 """
             ),
@@ -3940,12 +4082,25 @@ def mark_post_inbox_message_read(message_id: str, *, user_id: int) -> bool:
             ),
             {"message_id": message_id, "user_id": user_id, "read_at": utc_now()},
         )
+        if not updated.rowcount:
+            updated = session.execute(
+                text(
+                    """
+                    UPDATE post_like_inbox_messages
+                    SET is_read = TRUE,
+                        read_at = COALESCE(read_at, :read_at)
+                    WHERE id = :message_id
+                      AND recipient_user_id = :user_id
+                    """
+                ),
+                {"message_id": message_id, "user_id": user_id, "read_at": utc_now()},
+            )
     return bool(updated.rowcount)
 
 
 def mark_all_post_inbox_messages_read(*, user_id: int) -> int:
     with get_db_session() as session:
-        updated = session.execute(
+        updated_replies = session.execute(
             text(
                 """
                 UPDATE post_inbox_messages
@@ -3957,7 +4112,19 @@ def mark_all_post_inbox_messages_read(*, user_id: int) -> int:
             ),
             {"user_id": user_id, "read_at": utc_now()},
         )
-    return int(updated.rowcount or 0)
+        updated_likes = session.execute(
+            text(
+                """
+                UPDATE post_like_inbox_messages
+                SET is_read = TRUE,
+                    read_at = COALESCE(read_at, :read_at)
+                WHERE recipient_user_id = :user_id
+                  AND is_read = FALSE
+                """
+            ),
+            {"user_id": user_id, "read_at": utc_now()},
+        )
+    return int((updated_replies.rowcount or 0) + (updated_likes.rowcount or 0))
 
 
 def record_source_article_share(

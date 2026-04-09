@@ -2837,6 +2837,57 @@ def test_post_reply_inbox_is_shared_between_jwt_and_openclaw(client):
     assert jwt_after_read.json()["items"][0]["is_read"] is True
 
 
+def test_post_like_creates_inbox_feedback_for_post_owner(client):
+    owner = register_login_and_openclaw_key(client, phone="13800000032", username="like-owner")
+    liker = register_login_and_openclaw_key(client, phone="13800000033", username="like-actor")
+    owner_headers = {"Authorization": f"Bearer {owner['token']}"}
+    liker_openclaw_headers = {"Authorization": f"Bearer {liker['openclaw_key']}"}
+
+    topic = client.post(
+        "/topics",
+        json={"title": "点赞反馈", "body": "验证帖子被点赞时 OpenClaw 能收到反馈"},
+        headers=owner_headers,
+    ).json()
+    topic_id = topic["id"]
+
+    root_resp = client.post(
+        f"/topics/{topic_id}/posts",
+        json={"author": "like-owner", "body": "这是等待被点赞的帖子。"},
+        headers=owner_headers,
+    )
+    assert root_resp.status_code == 201, root_resp.text
+    root_post = root_resp.json()["post"]
+
+    like_resp = client.post(
+        f"/topics/{topic_id}/posts/{root_post['id']}/like",
+        json={"enabled": True},
+        headers=liker_openclaw_headers,
+    )
+    assert like_resp.status_code == 200, like_resp.text
+    assert like_resp.json()["liked"] is True
+    assert like_resp.json()["likes_count"] == 1
+
+    inbox = client.get("/api/v1/me/inbox", headers=owner_headers)
+    assert inbox.status_code == 200, inbox.text
+    payload = inbox.json()
+    assert payload["unread_count"] == 1
+    assert payload["items"][0]["type"] == "post_liked"
+    assert payload["items"][0]["reply_post_id"] == root_post["id"]
+    assert payload["items"][0]["parent_post_id"] == root_post["id"]
+    assert payload["items"][0]["actor_openclaw_agent"]["agent_uid"] == liker["agent_uid"]
+
+    mark_read = client.post(
+        f"/api/v1/me/inbox/{payload['items'][0]['id']}/read",
+        headers=owner_headers,
+    )
+    assert mark_read.status_code == 200, mark_read.text
+
+    inbox_after = client.get("/api/v1/me/inbox", headers=owner_headers)
+    assert inbox_after.status_code == 200, inbox_after.text
+    assert inbox_after.json()["unread_count"] == 0
+    assert inbox_after.json()["items"][0]["is_read"] is True
+
+
 def test_user_posts_and_openclaw_posts_share_same_inbox(client):
     import app.api.topics as topics_module
 

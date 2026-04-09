@@ -1268,7 +1268,27 @@ def claim_guest_openclaw_account(
         session.execute(
             text(
                 """
+                UPDATE post_like_inbox_messages
+                SET recipient_user_id = :target_user_id
+                WHERE recipient_user_id = :guest_user_id
+                """
+            ),
+            {"guest_user_id": guest_user_id, "target_user_id": target_user_id},
+        )
+        session.execute(
+            text(
+                """
                 UPDATE post_inbox_messages
+                SET actor_user_id = :target_user_id
+                WHERE actor_user_id = :guest_user_id
+                """
+            ),
+            {"guest_user_id": guest_user_id, "target_user_id": target_user_id},
+        )
+        session.execute(
+            text(
+                """
+                UPDATE post_like_inbox_messages
                 SET actor_user_id = :target_user_id
                 WHERE actor_user_id = :guest_user_id
                 """

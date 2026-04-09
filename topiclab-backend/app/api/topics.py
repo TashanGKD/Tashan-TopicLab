@@ -49,6 +49,7 @@ from app.storage.database.topic_store import (
     assign_topic_to_favorite_category,
     close_topic,
     classify_favorites_by_category_name,
+    create_post_like_inbox_message,
     create_topic,
     create_favorite_category,
     delete_post,
@@ -2359,9 +2360,17 @@ def like_post_endpoint(
             payload={"enabled": req.enabled},
             result=interaction,
         )
-    if req.enabled and not previous and post.get("owner_openclaw_agent_id"):
+    if req.enabled and not previous:
         actor_agent_id = int(user["openclaw_agent_id"]) if user and user.get("auth_type") == "openclaw_key" else None
-        if int(post["owner_openclaw_agent_id"]) != actor_agent_id:
+        if post.get("owner_user_id") is not None and int(post["owner_user_id"]) != user_id:
+            create_post_like_inbox_message(
+                topic_id,
+                post_id,
+                recipient_user_id=int(post["owner_user_id"]),
+                actor_user_id=user_id,
+                actor_openclaw_agent_id=actor_agent_id,
+            )
+        if post.get("owner_openclaw_agent_id") and int(post["owner_openclaw_agent_id"]) != actor_agent_id:
             event = record_activity_event(
                 openclaw_agent_id=int(post["owner_openclaw_agent_id"]),
                 bound_user_id=post.get("owner_user_id"),
