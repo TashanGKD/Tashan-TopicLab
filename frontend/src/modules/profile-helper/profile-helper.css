@@ -2013,3 +2013,101 @@
   transition: background 0.15s;
 }
 .btn-secondary:hover { background: var(--bg-hover, #f3f4f6); }
+
+/* ── 打印 / PDF 导出：只显示画像内容 ── */
+@media print {
+  /* 隐藏网站导航、底部操作栏、TopicLab 专属区块 */
+  header, nav, footer,
+  .pv-bottom-bar,
+  .twin-record-banner,
+  .twin-publish-card,
+  .twin-history-card { display: none !important; }
+
+  /* 画像内容撑满打印页面 */
+  body { background: #fff; margin: 0; }
+  .pv-page { max-width: 100%; padding: 20px 30px; }
+  .pv-section { page-break-inside: avoid; }
+  h2, h3 { page-break-after: avoid; }
+  .sci-card { page-break-inside: avoid; }
+}
+
+/* ── InfoTooltip 科普悬浮窗 ── */
+.info-tooltip-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: help;
+}
+.info-tooltip-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border-bottom: 1px dashed #9ca3af;
+}
+.info-tooltip-icon {
+  font-size: 11px;
+  color: #9ca3af;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+.info-tooltip-wrap:hover .info-tooltip-icon,
+.info-tooltip-wrap:focus-within .info-tooltip-icon {
+  color: #374151;
+}
+.info-tooltip-popup {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  background: #1a1a1a;
+  color: #f9fafb;
+  border-radius: 8px;
+  padding: 12px 14px;
+  width: 260px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.65;
+  pointer-events: none;
+  white-space: normal;
+  /* 小三角 */
+}
+.info-tooltip-popup::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: #1a1a1a;
+}
+.info-tooltip-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 2px;
+}
+.info-tooltip-line {
+  display: block;
+  color: #d1d5db;
+}
+.info-tooltip-spacer {
+  display: block;
+  height: 4px;
+}
+/* 防止浮层超出屏幕左侧 */
+@media (max-width: 480px) {
+  .info-tooltip-popup {
+    left: 0;
+    transform: none;
+    width: 220px;
+  }
+  .info-tooltip-popup::after {
+    left: 20px;
+    transform: none;
+  }
+}

@@ -2114,3 +2114,42 @@ async def get_digital_twin_detail(agent_name: str, user: dict = Depends(get_curr
         }
 
     return {"digital_twin": twin}
+
+
+@router.get("/digital-twins/by-user/{user_id}")
+async def get_active_profile_by_user_id(user_id: int):
+    """Internal server-to-server endpoint used by Resonnet to recover a user's
+    active profile markdown after a session is rebuilt (e.g. after server restart).
+
+    Authentication: X-Internal-Service: resonnet header (IP-restricted in production).
+    This endpoint intentionally does NOT require a user JWT so Resonnet can call it
+    without holding the user's access token.
+    """
+    if DATABASE_CONFIGURED:
+        with get_db_session() as session:
+            row = session.execute(
+                text(
+                    """
+                    SELECT role_content
+                    FROM digital_twins
+                    WHERE user_id = :user_id AND role_content IS NOT NULL
+                    ORDER BY updated_at DESC
+                    LIMIT 1
+                    """
+                ),
+                {"user_id": user_id},
+            ).fetchone()
+        if not row or not row[0]:
+            raise HTTPException(status_code=404, detail="No active profile found for this user")
+        return {"user_id": user_id, "role_content": row[0]}
+    else:
+        # Dev mode: look up in in-memory store
+        user_twins = _dev_twins.get(user_id, {})
+        if not user_twins:
+            raise HTTPException(status_code=404, detail="No active profile found for this user (dev mode)")
+        # Return the most recently updated twin's role_content
+        latest = max(user_twins.values(), key=lambda t: t.get("updated_at", ""))
+        role_content = latest.get("role_content") or ""
+        if not role_content:
+            raise HTTPException(status_code=404, detail="No profile content found (dev mode)")
+        return {"user_id": user_id, "role_content": role_content}

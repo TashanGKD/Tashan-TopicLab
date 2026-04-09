@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import html2canvas from 'html2canvas'
 import { Link } from 'react-router-dom'
 import { getProfile, getStructuredProfile, publishTwin } from '../profileHelperApi'
 import type { StructuredProfile } from '../types'
@@ -39,6 +40,29 @@ function getStoredSessionId(): string | null {
 export function ProfilePage() {
   const [structured, setStructured] = useState<StructuredProfile | null>(null)
   const [forumProfile, setForumProfile] = useState('')
+  const [exportingImage, setExportingImage] = useState(false)
+  const profileRef = useRef<HTMLDivElement>(null)
+
+  const handleExportImage = useCallback(async () => {
+    if (!profileRef.current || exportingImage) return
+    setExportingImage(true)
+    try {
+      const canvas = await html2canvas(profileRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+      })
+      const link = document.createElement('a')
+      link.download = 'profile.png'
+      link.href = canvas.toDataURL('image/png')
+      link.click()
+    } catch (e) {
+      alert('长图导出失败：' + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setExportingImage(false)
+    }
+  }, [exportingImage])
   // TopicLab 独有：发布/历史记录
   const [digitalTwins, setDigitalTwins] = useState<DigitalTwinRecord[]>([])
   const [publishName, setPublishName] = useState('')
@@ -197,7 +221,7 @@ export function ProfilePage() {
   // ── 渲染 ─────────────────────────────────────────────────────
 
   return (
-    <div className="pv-page">
+    <div className="pv-page" ref={profileRef}>
 
       {/* ── 1. 结构化画像维度（对齐 digital-twin-bootstrap）── */}
       <ProfileHeader profile={structured} />
@@ -220,16 +244,31 @@ export function ProfilePage() {
       )}
 
       {/* ── 3. 底部操作栏 ── */}
-      <div className="pv-bottom-bar no-print">
-        <button type="button" className="btn-secondary" onClick={() => window.print()}>
-          导出 PDF（打印）
+      <div className="pv-bottom-bar">
+        {/* 导出 PDF：服务端渲染，直接下载（含科学家信息） */}
+        <a
+          href={`${import.meta.env.BASE_URL}api/profile-helper/export/${sessionId}/pdf`}
+          download="profile.pdf"
+          className="btn-secondary"
+        >
+          导出 PDF
+        </a>
+        {/* 导出长图：前端 html2canvas 截图 */}
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={handleExportImage}
+          disabled={exportingImage}
+        >
+          {exportingImage ? '生成中...' : '导出长图'}
         </button>
+        {/* 下载原始 MD */}
         <a
           href={`${import.meta.env.BASE_URL}api/profile-helper/download/${sessionId}`}
           download="profile.md"
           className="btn-secondary"
         >
-          下载科研分身
+          下载 Markdown
         </a>
         {forumProfile && (
           <a
