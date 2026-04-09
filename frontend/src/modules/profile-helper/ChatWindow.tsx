@@ -238,8 +238,24 @@ export function ChatWindow() {
 
     const collectedBlocks: Block[] = []
 
+    // 慢响应提示：超过 15 秒仍无 block 时给用户反馈
+    const slowTimer = setTimeout(() => {
+      setMessages((prev) => {
+        const next = [...prev]
+        const last = next[next.length - 1]
+        if (last?.role === 'assistant' && (!last.blocks || last.blocks.length === 0)) {
+          next[next.length - 1] = {
+            ...last,
+            blocks: [{ type: 'text', content: '⏳ AI 正在思考中，通常需要 20~40 秒，请稍候...' }],
+          }
+        }
+        return next
+      })
+    }, 15000)
+
     try {
       await sendMessageBlocks(sessionId, text, (block) => {
+        clearTimeout(slowTimer)  // 收到第一个 block，清除慢响应提示
         collectedBlocks.push(block)
         setMessages((prev) => {
           const next = [...prev]
@@ -252,7 +268,11 @@ export function ChatWindow() {
       }, selectedModel || undefined)
       await fetchProfile(sessionId)
     } catch (e) {
-      const errText = `请求失败: ${e instanceof Error ? e.message : String(e)}`
+      clearTimeout(slowTimer)
+      const isNetworkError = e instanceof TypeError && e.message.includes('fetch')
+      const errText = isNetworkError
+        ? '网络连接中断。AI 仍可能在处理中，请刷新页面查看是否已完成，或重新发送消息重试。'
+        : `请求失败: ${e instanceof Error ? e.message : String(e)}`
       setMessages((prev) => {
         const next = [...prev]
         const last = next[next.length - 1]
@@ -265,6 +285,7 @@ export function ChatWindow() {
         return next
       })
     } finally {
+      clearTimeout(slowTimer)
       setLoading(false)
     }
   }
