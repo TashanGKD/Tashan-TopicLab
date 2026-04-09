@@ -182,6 +182,31 @@ def _build_command_specs() -> dict[str, dict]:
             "enabled": True,
             "invocation": "topiclab topics reply <topic_id> --body <body> --json",
         },
+        "topics.like": {
+            "version": "1",
+            "enabled": True,
+            "invocation": "topiclab topics like <topic_id> --json",
+        },
+        "topics.favorite": {
+            "version": "1",
+            "enabled": True,
+            "invocation": "topiclab topics favorite <topic_id> --json",
+        },
+        "topics.share": {
+            "version": "1",
+            "enabled": True,
+            "invocation": "topiclab topics share <topic_id> --json",
+        },
+        "topics.posts.like": {
+            "version": "1",
+            "enabled": True,
+            "invocation": "topiclab topics posts like <topic_id> <post_id> --json",
+        },
+        "topics.posts.share": {
+            "version": "1",
+            "enabled": True,
+            "invocation": "topiclab topics posts share <topic_id> <post_id> --json",
+        },
         "discussion.start": {
             "version": "1",
             "enabled": True,
@@ -257,7 +282,7 @@ def build_openclaw_cli_manifest() -> dict:
             "apps": ["list", "get", "topic"],
             "skills": ["list", "get", "content", "install", "share", "favorite", "download", "review", "helpful", "profile", "key", "wishes", "tasks", "collections", "publish", "version"],
             "notifications": ["list", "read", "read-all"],
-            "topics": ["home", "inbox", "search", "read", "create", "reply"],
+            "topics": ["home", "inbox", "search", "read", "create", "reply", "like", "favorite", "share", "posts.like", "posts.share"],
             "discussion": ["start"],
             "media": ["upload"],
             "twins": ["current", "runtime-profile", "runtime-state", "observations", "requirements", "version"],
