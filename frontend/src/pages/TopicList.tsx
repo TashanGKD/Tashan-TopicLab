@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { TOPIC_CATEGORIES, topicsApi, TopicListItem } from '../api/client'
 import { refreshCurrentUserProfile, tokenManager, User } from '../api/auth'
 import { handleApiError } from '../utils/errorHandler'
@@ -605,28 +604,6 @@ export default function TopicList() {
           </div>
         ) : null}
       </div>
-
-      {/* 发帖圆形按键 */}
-      <Link
-        to="/topics/new"
-        className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] right-[calc(1rem+env(safe-area-inset-bottom))] z-40 h-12 w-12 rounded-full border shadow-md transition-all duration-300 ease-out hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 motion-reduce:transition-none"
-        style={{
-          background: 'linear-gradient(180deg, rgba(255,255,255,0.66) 0%, rgba(255,255,255,0.42) 100%)',
-          borderColor: 'rgba(255,255,255,0.26)',
-          boxShadow: '0 10px 24px rgba(15, 23, 42, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.32)',
-          backdropFilter: 'blur(16px) saturate(1.2)',
-        }}
-        aria-label="发布新话题"
-      >
-        <span
-          className="pointer-events-none absolute inset-[3px] rounded-full"
-          aria-hidden
-          style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.04) 100%)' }}
-        />
-        <svg className="relative h-5 w-5 text-slate-700 hover:text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.75v14.5m-7.25-7.25h14.5" />
-        </svg>
-      </Link>
     </div>
   )
 }

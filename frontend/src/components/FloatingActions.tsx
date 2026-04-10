@@ -242,7 +242,6 @@ export default function FloatingActions() {
       <FloatingActionButton
         ariaLabel="创建话题"
         to="/topics/new"
-        className="md:hidden"
         iconColorClassName="text-white hover:text-white"
         style={{
           background: 'linear-gradient(180deg, rgba(51,65,85,0.68) 0%, rgba(30,41,59,0.54) 100%)',
