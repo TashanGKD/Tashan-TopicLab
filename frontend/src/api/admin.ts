@@ -143,8 +143,18 @@ export interface AdminCommunityOverview {
   new_agents_window: number
   events_24h: number
   success_rate_24h: number
+  tokenized_requests_24h: number
+  input_tokens_24h: number
+  output_tokens_24h: number
+  total_tokens_24h: number
   events_window: number
   failed_events_window: number
+  tokenized_requests_window: number
+  input_tokens_window: number
+  output_tokens_window: number
+  total_tokens_window: number
+  avg_tokens_per_request_24h: number
+  avg_tokens_per_request_window: number
   discussions_started_window: number
   discussions_completed_window: number
   discussion_completion_rate: number
@@ -161,6 +171,10 @@ export interface AdminCommunityTrendItem {
   observation_count: number
   discussion_started_count: number
   discussion_completed_count: number
+  tokenized_request_count: number
+  input_tokens_estimated: number
+  output_tokens_estimated: number
+  total_tokens_estimated: number
   active_agents: number
   active_users: number
 }
@@ -201,6 +215,10 @@ export interface AdminCommunityRiskAgentItem {
   recent_failure_count: number
   recent_observation_count: number
   pending_observation_count: number
+  tokenized_request_count: number
+  input_tokens_estimated: number
+  output_tokens_estimated: number
+  total_tokens_estimated: number
   lifetime_event_count: number
   last_seen_at: string | null
   latest_activity_at: string | null
@@ -219,6 +237,25 @@ export interface AdminCommunityUserItem {
   recent_failure_count: number
   recent_observation_count: number
   pending_observation_count: number
+  tokenized_request_count: number
+  input_tokens_estimated: number
+  output_tokens_estimated: number
+  total_tokens_estimated: number
+  latest_activity_at: string | null
+}
+
+export interface AdminCommunityTopTokenAgentItem {
+  agent_uid: string
+  display_name: string
+  handle: string
+  bound_user_id: number | null
+  username: string | null
+  phone: string | null
+  tokenized_request_count: number
+  input_tokens_estimated: number
+  output_tokens_estimated: number
+  total_tokens_estimated: number
+  avg_tokens_per_request: number
   latest_activity_at: string | null
 }
 
@@ -274,6 +311,10 @@ export interface AdminCommunityDailyOpenClawActionItem {
   recent_event_count: number
   recent_failure_count: number
   recent_observation_count: number
+  tokenized_request_count: number
+  input_tokens_estimated: number
+  output_tokens_estimated: number
+  total_tokens_estimated: number
   latest_activity_at: string | null
   days: AdminCommunityDailyActionDayItem[]
 }
@@ -290,6 +331,10 @@ export interface AdminCommunityDailyUserActionItem {
   recent_event_count: number
   recent_failure_count: number
   recent_observation_count: number
+  tokenized_request_count: number
+  input_tokens_estimated: number
+  output_tokens_estimated: number
+  total_tokens_estimated: number
   latest_activity_at: string | null
   days: AdminCommunityDailyActionDayItem[]
 }
@@ -310,6 +355,7 @@ export interface AdminCommunityObservabilityResponse {
   action_category_labels: Record<string, string>
   top_event_types: AdminCommunityTopEventTypeItem[]
   top_routes: AdminCommunityTopRouteItem[]
+  top_token_agents: AdminCommunityTopTokenAgentItem[]
   risk_agents: AdminCommunityRiskAgentItem[]
   active_users: AdminCommunityUserItem[]
   daily_openclaw_actions: AdminCommunityDailyOpenClawActionItem[]

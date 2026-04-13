@@ -7,6 +7,7 @@ import {
   AdminCommunityObservabilityResponse,
   AdminCommunityRiskAgentItem,
   AdminCommunitySceneItem,
+  AdminCommunityTopTokenAgentItem,
   AdminCommunityTrendItem,
   AdminCommunityUserItem,
 } from '../../api/admin'
@@ -23,6 +24,10 @@ function formatDateTime(value: string | null | undefined) {
 
 function formatShortDate(value: string) {
   return new Date(value).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
+}
+
+function formatCompactNumber(value: number) {
+  return new Intl.NumberFormat('zh-CN').format(Math.round(value || 0))
 }
 
 function toneForRisk(level: AdminCommunityRiskAgentItem['risk_level']) {
@@ -95,6 +100,8 @@ function TrendChart({ items }: { items: AdminCommunityTrendItem[] }) {
     discussionStarted: item.discussion_started_count,
     discussionCompleted: item.discussion_completed_count,
     failedEvents: item.failed_event_count,
+    tokenRequests: item.tokenized_request_count,
+    totalTokens: item.total_tokens_estimated,
   }))
 
   return (
@@ -136,6 +143,16 @@ function TrendChart({ items }: { items: AdminCommunityTrendItem[] }) {
         data={data}
         bars={[
           { key: 'failedEvents', label: '失败事件', color: '#dc2626' },
+        ]}
+      />
+      <GroupedBarTrendChart
+        title="Token 趋势"
+        subtitle="按天看已统计请求数和估算 token 总量"
+        xKey="label"
+        data={data}
+        bars={[
+          { key: 'tokenRequests', label: '已统计请求', color: '#0891b2' },
+          { key: 'totalTokens', label: '估算总 token', color: '#7c3aed' },
         ]}
       />
     </div>
@@ -228,6 +245,73 @@ function TodayActionCharts({
   )
 }
 
+function TokenTopAgentsTable({
+  items,
+  onOpenAgent,
+  onOpenEvents,
+}: {
+  items: AdminCommunityTopTokenAgentItem[]
+  onOpenAgent: (agentUid: string) => void
+  onOpenEvents: (agentUid: string) => void
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full text-left text-sm">
+        <thead className="bg-slate-100/90 text-[11px] uppercase tracking-[0.2em] text-slate-500">
+          <tr>
+            <th className="px-4 py-3">OpenClaw</th>
+            <th className="px-4 py-3">请求覆盖</th>
+            <th className="px-4 py-3">估算 Token</th>
+            <th className="px-4 py-3">最近活跃</th>
+            <th className="px-4 py-3">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => (
+            <tr key={item.agent_uid} className="border-t border-slate-100">
+              <td className="px-4 py-3">
+                <div className="font-medium text-slate-900">{item.display_name}</div>
+                <div className="mt-1 font-mono text-xs text-slate-500">{item.agent_uid}</div>
+                <div className="mt-1 text-xs text-slate-500">
+                  {item.username || '未绑定用户'} {item.bound_user_id ? `/ ${item.bound_user_id}` : ''}
+                </div>
+              </td>
+              <td className="px-4 py-3 font-mono text-xs text-slate-600">
+                <div>请求 {formatCompactNumber(item.tokenized_request_count)}</div>
+                <div className="mt-1">均值 {formatCompactNumber(item.avg_tokens_per_request)} / req</div>
+              </td>
+              <td className="px-4 py-3 font-mono text-xs text-slate-600">
+                <div>总计 {formatCompactNumber(item.total_tokens_estimated)}</div>
+                <div className="mt-1 text-slate-500">in {formatCompactNumber(item.input_tokens_estimated)}</div>
+                <div className="mt-1 text-slate-500">out {formatCompactNumber(item.output_tokens_estimated)}</div>
+              </td>
+              <td className="px-4 py-3 font-mono text-xs text-slate-600">{formatDateTime(item.latest_activity_at)}</td>
+              <td className="px-4 py-3">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onOpenAgent(item.agent_uid)}
+                    className="rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700"
+                  >
+                    身份
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenEvents(item.agent_uid)}
+                    className="rounded-xl border border-blue-200 px-3 py-2 text-xs text-blue-700"
+                  >
+                    事件
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function RiskAgentsTable({
   items,
   onOpenAgent,
@@ -276,6 +360,7 @@ function RiskAgentsTable({
                 <div className="mt-1 text-rose-600">失败 {item.recent_failure_count}</div>
                 <div className="mt-1">画像 {item.recent_observation_count}</div>
                 <div className="mt-1 text-amber-700">待审 {item.pending_observation_count}</div>
+                <div className="mt-1 text-slate-500">token {formatCompactNumber(item.total_tokens_estimated)}</div>
               </td>
               <td className="px-4 py-3 font-mono text-xs text-slate-600">
                 <div>{formatDateTime(item.latest_activity_at)}</div>
@@ -353,6 +438,7 @@ function UsersTable({ items, onOpenAgent }: { items: AdminCommunityUserItem[]; o
                 <div className="mt-1 text-rose-600">失败 {item.recent_failure_count}</div>
                 <div className="mt-1">画像 {item.recent_observation_count}</div>
                 <div className="mt-1 text-amber-700">待审 {item.pending_observation_count}</div>
+                <div className="mt-1 text-slate-500">token {formatCompactNumber(item.total_tokens_estimated)}</div>
               </td>
               <td className="px-4 py-3 font-mono text-xs text-slate-600">{formatDateTime(item.latest_activity_at)}</td>
             </tr>
@@ -475,6 +561,7 @@ function DailyActionEntitiesTable({
                   <div>事件 {item.recent_event_count}</div>
                   <div className="mt-1 text-rose-600">失败 {item.recent_failure_count}</div>
                   <div className="mt-1">画像 {item.recent_observation_count}</div>
+                  <div className="mt-1 text-slate-500">token {formatCompactNumber(item.total_tokens_estimated)}</div>
                 </td>
                 <td className="px-4 py-3">
                   <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
@@ -573,6 +660,16 @@ export default function CommunityObservabilityDashboard({
         <MetricCard label="窗口内画像上报" value={data.overview.observations_window} hint={`已 merged ${data.overview.merged_observations_window}`} />
         <MetricCard label="待处理画像" value={data.overview.pending_observations_total} hint="全量 pending_review" />
         <MetricCard label="风险身份" value={data.overview.risk_agents} hint={`近 ${data.window_days} 天新增 ${data.overview.new_agents_window}`} />
+        <MetricCard
+          label="24h 估算 Token"
+          value={formatCompactNumber(data.overview.total_tokens_24h)}
+          hint={`${formatCompactNumber(data.overview.tokenized_requests_24h)} req / avg ${formatCompactNumber(data.overview.avg_tokens_per_request_24h)}`}
+        />
+        <MetricCard
+          label="窗口估算 Token"
+          value={formatCompactNumber(data.overview.total_tokens_window)}
+          hint={`${formatCompactNumber(data.overview.tokenized_requests_window)} req / avg ${formatCompactNumber(data.overview.avg_tokens_per_request_window)}`}
+        />
       </section>
 
       <div className="grid gap-4 xl:grid-cols-2">
@@ -662,6 +759,14 @@ export default function CommunityObservabilityDashboard({
           <div className="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500">窗口内没有活跃用户画像。</div>
         ) : (
           <UsersTable items={data.active_users} onOpenAgent={onOpenAgent} />
+        )}
+      </SectionCard>
+
+      <SectionCard title="Token 热点身份" subtitle="优先看谁在窗口内消耗了最多估算 token，适合排查高成本请求模式">
+        {data.top_token_agents.length === 0 ? (
+          <div className="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500">当前窗口内还没有可统计 token 的文本响应。</div>
+        ) : (
+          <TokenTopAgentsTable items={data.top_token_agents} onOpenAgent={onOpenAgent} onOpenEvents={onOpenEvents} />
         )}
       </SectionCard>
 

@@ -512,6 +512,9 @@ def test_admin_panel_can_build_community_observability_rollup(client):
     assert payload["overview"]["failed_events_window"] >= 1
     assert payload["overview"]["observations_window"] >= 1
     assert payload["overview"]["pending_observations_total"] >= 1
+    assert payload["overview"]["tokenized_requests_window"] >= 3
+    assert payload["overview"]["total_tokens_window"] > 0
+    assert payload["overview"]["avg_tokens_per_request_window"] > 0
 
     scene_map = {item["scene"]: item for item in payload["scenes"]}
     assert scene_map["forum.request"]["event_count"] >= 2
@@ -524,22 +527,30 @@ def test_admin_panel_can_build_community_observability_rollup(client):
     risk_agents = {item["agent_uid"]: item for item in payload["risk_agents"]}
     assert auth["agent_uid"] in risk_agents
     assert risk_agents[auth["agent_uid"]]["recent_failure_count"] >= 1
+    assert risk_agents[auth["agent_uid"]]["total_tokens_estimated"] > 0
 
     active_users = {item["user_id"]: item for item in payload["active_users"]}
     assert auth["user"]["id"] in active_users
     assert active_users[auth["user"]["id"]]["recent_observation_count"] >= 1
+    assert active_users[auth["user"]["id"]]["total_tokens_estimated"] > 0
+
+    top_token_agents = {item["agent_uid"]: item for item in payload["top_token_agents"]}
+    assert auth["agent_uid"] in top_token_agents
+    assert top_token_agents[auth["agent_uid"]]["tokenized_request_count"] >= 3
 
     daily_agents = {item["agent_uid"]: item for item in payload["daily_openclaw_actions"]}
     assert auth["agent_uid"] in daily_agents
     assert daily_agents[auth["agent_uid"]]["is_today_active"] is True
     assert daily_agents[auth["agent_uid"]]["today_categories"]["content_creation"] >= 1
     assert daily_agents[auth["agent_uid"]]["today_categories"]["observation"] >= 1
+    assert daily_agents[auth["agent_uid"]]["total_tokens_estimated"] > 0
     assert len(daily_agents[auth["agent_uid"]]["days"]) == 14
 
     daily_users = {item["user_id"]: item for item in payload["daily_user_actions"]}
     assert auth["user"]["id"] in daily_users
     assert daily_users[auth["user"]["id"]]["is_today_active"] is True
     assert daily_users[auth["user"]["id"]]["today_action_total"] >= 1
+    assert daily_users[auth["user"]["id"]]["total_tokens_estimated"] > 0
 
 
 def test_arcade_structured_task_rejects_multiple_candidate_markdown_submission(client):

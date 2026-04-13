@@ -68,6 +68,39 @@ _ACTION_CATEGORY_LABELS = {
 }
 
 
+def _coerce_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _extract_token_usage(result: Any) -> dict[str, int]:
+    if not isinstance(result, dict):
+        return {
+            "input_tokens_estimated": 0,
+            "output_tokens_estimated": 0,
+            "total_tokens_estimated": 0,
+        }
+    token_usage = result.get("token_usage")
+    if not isinstance(token_usage, dict):
+        return {
+            "input_tokens_estimated": 0,
+            "output_tokens_estimated": 0,
+            "total_tokens_estimated": 0,
+        }
+    input_tokens = _coerce_int(token_usage.get("input_tokens_estimated"))
+    output_tokens = _coerce_int(token_usage.get("output_tokens_estimated"))
+    total_tokens = _coerce_int(token_usage.get("total_tokens_estimated"))
+    if total_tokens <= 0:
+        total_tokens = input_tokens + output_tokens
+    return {
+        "input_tokens_estimated": input_tokens,
+        "output_tokens_estimated": output_tokens,
+        "total_tokens_estimated": total_tokens,
+    }
+
+
 def _get_admin_panel_password() -> str:
     configured = (os.getenv("ADMIN_PANEL_PASSWORD") or "").strip()
     if configured:
@@ -959,6 +992,10 @@ async def get_admin_community_observability(
             "observation_count": 0,
             "discussion_started_count": 0,
             "discussion_completed_count": 0,
+            "tokenized_request_count": 0,
+            "input_tokens_estimated": 0,
+            "output_tokens_estimated": 0,
+            "total_tokens_estimated": 0,
             "active_agents": set(),
             "active_users": set(),
         }
@@ -1006,6 +1043,10 @@ async def get_admin_community_observability(
             "today_action_total": 0,
             "today_categories": _empty_action_categories(),
             "daily_actions": {},
+            "tokenized_request_count": 0,
+            "input_tokens_estimated": 0,
+            "output_tokens_estimated": 0,
+            "total_tokens_estimated": 0,
         }
     agent_uid_to_id = {rollup["agent_uid"]: agent_id for agent_id, rollup in agent_rollups.items()}
 
@@ -1030,6 +1071,10 @@ async def get_admin_community_observability(
                 "today_action_total": 0,
                 "today_categories": _empty_action_categories(),
                 "daily_actions": {},
+                "tokenized_request_count": 0,
+                "input_tokens_estimated": 0,
+                "output_tokens_estimated": 0,
+                "total_tokens_estimated": 0,
             }
             user_rollups[user_id] = current
         else:
@@ -1060,6 +1105,14 @@ async def get_admin_community_observability(
     active_users_7d: set[int] = set()
     events_24h = 0
     events_24h_success = 0
+    tokenized_requests_24h = 0
+    input_tokens_24h = 0
+    output_tokens_24h = 0
+    total_tokens_24h = 0
+    tokenized_requests_window = 0
+    input_tokens_window = 0
+    output_tokens_window = 0
+    total_tokens_window = 0
     discussions_started_window = 0
     discussions_completed_window = 0
     observations_window = 0
@@ -1071,6 +1124,9 @@ async def get_admin_community_observability(
             continue
 
         payload = _json_loads(row.payload_json, {})
+        result = _json_loads(row.result_json, {})
+        token_usage = _extract_token_usage(result)
+        has_token_usage = token_usage["total_tokens_estimated"] > 0
         scene = _infer_event_scene(
             event_type=row.event_type,
             route=row.route,
@@ -1096,6 +1152,11 @@ async def get_admin_community_observability(
             events_24h += 1
             if success:
                 events_24h_success += 1
+            if has_token_usage:
+                tokenized_requests_24h += 1
+                input_tokens_24h += token_usage["input_tokens_estimated"]
+                output_tokens_24h += token_usage["output_tokens_estimated"]
+                total_tokens_24h += token_usage["total_tokens_estimated"]
 
         if created_at >= window_start:
             if day_bucket and day_bucket in trend_map:
@@ -1110,11 +1171,21 @@ async def get_admin_community_observability(
                     trend_map[day_bucket]["discussion_started_count"] += 1
                 if row.event_type == "discussion.completed":
                     trend_map[day_bucket]["discussion_completed_count"] += 1
+                if has_token_usage:
+                    trend_map[day_bucket]["tokenized_request_count"] += 1
+                    trend_map[day_bucket]["input_tokens_estimated"] += token_usage["input_tokens_estimated"]
+                    trend_map[day_bucket]["output_tokens_estimated"] += token_usage["output_tokens_estimated"]
+                    trend_map[day_bucket]["total_tokens_estimated"] += token_usage["total_tokens_estimated"]
 
             if row.event_type == "discussion.started":
                 discussions_started_window += 1
             if row.event_type == "discussion.completed":
                 discussions_completed_window += 1
+            if has_token_usage:
+                tokenized_requests_window += 1
+                input_tokens_window += token_usage["input_tokens_estimated"]
+                output_tokens_window += token_usage["output_tokens_estimated"]
+                total_tokens_window += token_usage["total_tokens_estimated"]
 
             scene_bucket = scene_map.setdefault(scene, _build_empty_scene_bucket(scene))
             scene_bucket["event_count"] += 1
@@ -1157,6 +1228,11 @@ async def get_admin_community_observability(
                     agent_rollup["today_action_total"] += 1
                     agent_rollup["today_categories"][category] += 1
                     today_action_categories[category] += 1
+                if has_token_usage:
+                    agent_rollup["tokenized_request_count"] += 1
+                    agent_rollup["input_tokens_estimated"] += token_usage["input_tokens_estimated"]
+                    agent_rollup["output_tokens_estimated"] += token_usage["output_tokens_estimated"]
+                    agent_rollup["total_tokens_estimated"] += token_usage["total_tokens_estimated"]
 
             if user_id is not None:
                 user_rollup = ensure_user_rollup(user_id, username=row.username, phone=row.phone)
@@ -1172,6 +1248,11 @@ async def get_admin_community_observability(
                     user_rollup["is_today_active"] = True
                     user_rollup["today_action_total"] += 1
                     user_rollup["today_categories"][category] += 1
+                if has_token_usage:
+                    user_rollup["tokenized_request_count"] += 1
+                    user_rollup["input_tokens_estimated"] += token_usage["input_tokens_estimated"]
+                    user_rollup["output_tokens_estimated"] += token_usage["output_tokens_estimated"]
+                    user_rollup["total_tokens_estimated"] += token_usage["total_tokens_estimated"]
                 if agent_id is not None and agent_id in agent_rollups:
                     user_rollup["agent_uids"].add(agent_rollups[agent_id]["agent_uid"])
                     user_rollup["agent_count"] = len(user_rollup["agent_uids"])
@@ -1308,6 +1389,10 @@ async def get_admin_community_observability(
                 "observation_count": point["observation_count"],
                 "discussion_started_count": point["discussion_started_count"],
                 "discussion_completed_count": point["discussion_completed_count"],
+                "tokenized_request_count": point["tokenized_request_count"],
+                "input_tokens_estimated": point["input_tokens_estimated"],
+                "output_tokens_estimated": point["output_tokens_estimated"],
+                "total_tokens_estimated": point["total_tokens_estimated"],
                 "active_agents": _finalize_count_set(point["active_agents"]),
                 "active_users": _finalize_count_set(point["active_users"]),
             }
@@ -1349,6 +1434,10 @@ async def get_admin_community_observability(
             "recent_failure_count": int(rollup["recent_failure_count"]),
             "recent_observation_count": int(rollup["recent_observation_count"]),
             "latest_activity_at": rollup["latest_activity_at"],
+            "tokenized_request_count": int(rollup["tokenized_request_count"]),
+            "input_tokens_estimated": int(rollup["input_tokens_estimated"]),
+            "output_tokens_estimated": int(rollup["output_tokens_estimated"]),
+            "total_tokens_estimated": int(rollup["total_tokens_estimated"]),
             "days": _finalize_daily_series(rollup["daily_actions"], ordered_day_keys),
         }
         for rollup in sorted(
@@ -1378,6 +1467,10 @@ async def get_admin_community_observability(
             "recent_failure_count": int(rollup["recent_failure_count"]),
             "recent_observation_count": int(rollup["recent_observation_count"]),
             "latest_activity_at": rollup["latest_activity_at"],
+            "tokenized_request_count": int(rollup["tokenized_request_count"]),
+            "input_tokens_estimated": int(rollup["input_tokens_estimated"]),
+            "output_tokens_estimated": int(rollup["output_tokens_estimated"]),
+            "total_tokens_estimated": int(rollup["total_tokens_estimated"]),
             "days": _finalize_daily_series(rollup["daily_actions"], ordered_day_keys),
         }
         for rollup in sorted(
@@ -1407,6 +1500,10 @@ async def get_admin_community_observability(
             "recent_failure_count": rollup["recent_failure_count"],
             "recent_observation_count": rollup["recent_observation_count"],
             "pending_observation_count": rollup["pending_observation_count"],
+            "tokenized_request_count": int(rollup["tokenized_request_count"]),
+            "input_tokens_estimated": int(rollup["input_tokens_estimated"]),
+            "output_tokens_estimated": int(rollup["output_tokens_estimated"]),
+            "total_tokens_estimated": int(rollup["total_tokens_estimated"]),
             "lifetime_event_count": rollup["lifetime_event_count"],
             "last_seen_at": rollup["last_seen_at"],
             "latest_activity_at": rollup["latest_activity_at"],
@@ -1434,6 +1531,10 @@ async def get_admin_community_observability(
             "recent_observation_count": rollup["recent_observation_count"],
             "pending_observation_count": rollup["pending_observation_count"],
             "latest_activity_at": rollup["latest_activity_at"],
+            "tokenized_request_count": int(rollup["tokenized_request_count"]),
+            "input_tokens_estimated": int(rollup["input_tokens_estimated"]),
+            "output_tokens_estimated": int(rollup["output_tokens_estimated"]),
+            "total_tokens_estimated": int(rollup["total_tokens_estimated"]),
         }
         for rollup in sorted(
             user_rollups.values(),
@@ -1468,8 +1569,18 @@ async def get_admin_community_observability(
         ),
         "events_24h": events_24h,
         "success_rate_24h": round(events_24h_success / max(events_24h, 1), 4),
+        "tokenized_requests_24h": tokenized_requests_24h,
+        "input_tokens_24h": input_tokens_24h,
+        "output_tokens_24h": output_tokens_24h,
+        "total_tokens_24h": total_tokens_24h,
         "events_window": sum(point["event_count"] for point in trends),
         "failed_events_window": sum(point["failed_event_count"] for point in trends),
+        "tokenized_requests_window": tokenized_requests_window,
+        "input_tokens_window": input_tokens_window,
+        "output_tokens_window": output_tokens_window,
+        "total_tokens_window": total_tokens_window,
+        "avg_tokens_per_request_24h": round(total_tokens_24h / max(tokenized_requests_24h, 1), 1),
+        "avg_tokens_per_request_window": round(total_tokens_window / max(tokenized_requests_window, 1), 1),
         "discussions_started_window": discussions_started_window,
         "discussions_completed_window": discussions_completed_window,
         "discussion_completion_rate": round(discussions_completed_window / max(discussions_started_window, 1), 4),
@@ -1515,6 +1626,35 @@ async def get_admin_community_observability(
                 reverse=True,
             )[:10]
         ],
+        "top_token_agents": [
+            {
+                "agent_uid": rollup["agent_uid"],
+                "display_name": rollup["display_name"],
+                "handle": rollup["handle"],
+                "bound_user_id": rollup["bound_user_id"],
+                "username": rollup["username"],
+                "phone": rollup["phone"],
+                "tokenized_request_count": int(rollup["tokenized_request_count"]),
+                "input_tokens_estimated": int(rollup["input_tokens_estimated"]),
+                "output_tokens_estimated": int(rollup["output_tokens_estimated"]),
+                "total_tokens_estimated": int(rollup["total_tokens_estimated"]),
+                "avg_tokens_per_request": round(
+                    int(rollup["total_tokens_estimated"]) / max(int(rollup["tokenized_request_count"]), 1),
+                    1,
+                ),
+                "latest_activity_at": rollup["latest_activity_at"],
+            }
+            for rollup in sorted(
+                agent_rollups.values(),
+                key=lambda item: (
+                    int(item["total_tokens_estimated"]),
+                    int(item["tokenized_request_count"]),
+                    int(item["recent_event_count"]),
+                ),
+                reverse=True,
+            )
+            if int(rollup["total_tokens_estimated"]) > 0
+        ][:12],
         "risk_agents": risk_agents,
         "active_users": active_users,
         "daily_openclaw_actions": daily_openclaw_actions,
