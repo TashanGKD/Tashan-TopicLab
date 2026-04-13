@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import AppsPageCard from '../components/AppsPageCard'
 import ArcadeArenaCard from '../components/ArcadeArenaCard'
 import DigitalTwinCard from '../components/DigitalTwinCard'
@@ -23,6 +23,7 @@ type HomeEntryControl = {
   id: string
   label: string
   entryId?: string
+  to?: string
   disabled?: boolean
 }
 
@@ -33,6 +34,7 @@ type HomeEntryGroup = {
 }
 
 export default function HomePage() {
+  const navigate = useNavigate()
   const [autoplayPausedUntil, setAutoplayPausedUntil] = useState<number | null>(null)
   const [autoplayCycleKey, setAutoplayCycleKey] = useState(0)
   const cardStageRef = useRef<HTMLDivElement | null>(null)
@@ -81,7 +83,7 @@ export default function HomePage() {
       id: 'popular-science',
       label: '科教生态',
       controls: [
-        { id: 'research-skill-zone', label: '科研 Skills 专区', entryId: 'research-skill-zone' },
+        { id: 'research-skill-zone', label: '科研 Skills 专区', entryId: 'research-skill-zone', to: '/apps/skills' },
       ],
     },
     {
@@ -95,9 +97,9 @@ export default function HomePage() {
       id: 'openclaw-exclusive',
       label: 'OpenClaw 专属',
       controls: [
-        { id: 'digital-twin', label: '数字分身', entryId: 'digital-twin' },
-        { id: 'apps-page', label: '应用与技能', entryId: 'apps-page' },
-        { id: 'arcade-arena', label: '竞技场', entryId: 'arcade-arena' },
+        { id: 'digital-twin', label: '数字分身', entryId: 'digital-twin', to: '/profile-helper' },
+        { id: 'apps-page', label: '应用与技能', entryId: 'apps-page', to: '/apps' },
+        { id: 'arcade-arena', label: '竞技场', entryId: 'arcade-arena', to: '/arcade' },
       ],
     },
   ]
@@ -119,6 +121,24 @@ export default function HomePage() {
     if (options?.scrollToCard) {
       scrollCardStageIntoView()
     }
+  }
+
+  const handleHomeEntryControlClick = (control: HomeEntryControl) => {
+    if (control.disabled || control.entryId == null) {
+      return
+    }
+
+    const targetIndex = homeEntryItems.findIndex((item) => item.id === control.entryId)
+    if (targetIndex < 0) {
+      return
+    }
+
+    if (targetIndex === activeIndex && control.to) {
+      navigate(control.to)
+      return
+    }
+
+    handleManualCardChange(targetIndex, { scrollToCard: true })
   }
 
   const handleOpenClawHeroAction = () => {
@@ -232,7 +252,7 @@ export default function HomePage() {
                             <button
                               key={control.id}
                               type="button"
-                              onClick={isDisabled ? undefined : () => handleManualCardChange(targetIndex, { scrollToCard: true })}
+                              onClick={isDisabled ? undefined : () => handleHomeEntryControlClick(control)}
                               className="rounded-full border px-4 py-2 text-sm transition-all duration-300 motion-reduce:transition-none disabled:cursor-not-allowed disabled:hover:scale-100"
                               style={{
                                 borderColor: isActive ? activeTheme.activeEdge : 'rgba(203, 213, 225, 0.95)',
@@ -243,6 +263,7 @@ export default function HomePage() {
                                 opacity: isDisabled ? 0.74 : 1,
                               }}
                               aria-pressed={isActive}
+                              title={control.to ? '点击切换卡片，当前卡片再次点击直接进入页面' : undefined}
                               disabled={isDisabled}
                             >
                               {control.label}

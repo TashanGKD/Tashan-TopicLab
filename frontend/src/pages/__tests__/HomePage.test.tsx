@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import HomePage from '../HomePage'
 
@@ -85,6 +85,18 @@ vi.mock('../../components/VerticalCardCarousel', () => ({
 describe('HomePage', () => {
   const getEntryButton = (label: string) => screen.getByRole('button', { name: label })
   const getStage = () => screen.getByLabelText('首页卡片轮播舞台')
+  const renderHomePage = (initialEntries: string[] = ['/']) => render(
+    <MemoryRouter initialEntries={initialEntries}>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/apps" element={<div>Apps Route</div>} />
+        <Route path="/apps/skills" element={<div>Skills Route</div>} />
+        <Route path="/profile-helper" element={<div>Profile Helper Route</div>} />
+        <Route path="/arcade" element={<div>Arcade Route</div>} />
+        <Route path="/thinking" element={<div>Thinking Route</div>} />
+      </Routes>
+    </MemoryRouter>,
+  )
   let scrollIntoViewMock: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
@@ -105,11 +117,7 @@ describe('HomePage', () => {
   })
 
   it('renders the split hero with grouped home entry controls', () => {
-    render(
-      <MemoryRouter>
-        <HomePage />
-      </MemoryRouter>,
-    )
+    renderHomePage()
 
     expect(screen.getByRole('heading', { name: /保持专注/i })).toBeInTheDocument()
     expect(screen.getByText('科教生态')).toBeInTheDocument()
@@ -123,11 +131,7 @@ describe('HomePage', () => {
   })
 
   it('switches the active card when choosing another home entry', () => {
-    render(
-      <MemoryRouter>
-        <HomePage />
-      </MemoryRouter>,
-    )
+    renderHomePage()
 
     fireEvent.click(getEntryButton('竞技场')!)
 
@@ -141,11 +145,7 @@ describe('HomePage', () => {
       value: 390,
     })
 
-    render(
-      <MemoryRouter>
-        <HomePage />
-      </MemoryRouter>,
-    )
+    renderHomePage()
 
     fireEvent.click(getEntryButton('竞技场'))
 
@@ -157,11 +157,7 @@ describe('HomePage', () => {
   })
 
   it('does not scroll to the card stage after choosing another entry on desktop', () => {
-    render(
-      <MemoryRouter>
-        <HomePage />
-      </MemoryRouter>,
-    )
+    renderHomePage()
 
     fireEvent.click(getEntryButton('竞技场'))
 
@@ -173,11 +169,7 @@ describe('HomePage', () => {
   })
 
   it('autoplays from a random starting card', () => {
-    render(
-      <MemoryRouter>
-        <HomePage />
-      </MemoryRouter>,
-    )
+    renderHomePage()
 
     expect(Math.random).toHaveBeenCalled()
     expect(within(getStage()).getByText('OpenClaw 接入')).toBeInTheDocument()
@@ -191,11 +183,7 @@ describe('HomePage', () => {
   })
 
   it('pauses autoplay for 30 seconds after clicking copy in the OpenClaw card', () => {
-    render(
-      <MemoryRouter>
-        <HomePage />
-      </MemoryRouter>,
-    )
+    renderHomePage()
 
     fireEvent.click(screen.getAllByRole('button', { name: '触发复制暂停' })[0])
     expect(within(getStage()).getByText('OpenClaw 接入')).toBeInTheDocument()
@@ -221,11 +209,7 @@ describe('HomePage', () => {
   })
 
   it('triggers the same copy pause when clicking the hero OpenClaw entry button', () => {
-    render(
-      <MemoryRouter>
-        <HomePage />
-      </MemoryRouter>,
-    )
+    renderHomePage()
 
     fireEvent.click(getEntryButton('竞技场'))
     expect(within(getStage()).getByText('竞技场')).toBeInTheDocument()
@@ -258,11 +242,7 @@ describe('HomePage', () => {
       value: 390,
     })
 
-    render(
-      <MemoryRouter>
-        <HomePage />
-      </MemoryRouter>,
-    )
+    renderHomePage()
 
     fireEvent.click(getEntryButton('竞技场'))
     expect(within(getStage()).getByText('竞技场')).toBeInTheDocument()
@@ -287,5 +267,16 @@ describe('HomePage', () => {
 
     expect(getEntryButton('科研 Skills 专区')).toHaveAttribute('aria-pressed', 'true')
     expect(within(getStage()).getByText('科研 Skills 专区')).toBeInTheDocument()
+  })
+
+  it('navigates directly when clicking the active home entry control again', () => {
+    renderHomePage()
+
+    fireEvent.click(getEntryButton('应用与技能'))
+    expect(getEntryButton('应用与技能')).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(getEntryButton('应用与技能'))
+
+    expect(screen.getByText('Apps Route')).toBeInTheDocument()
   })
 })
