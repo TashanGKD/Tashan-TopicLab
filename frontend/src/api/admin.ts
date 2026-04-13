@@ -75,6 +75,9 @@ export interface AdminOpenClawEventItem {
   agent_uid: string | null
   display_name: string | null
   bound_user_id: number | null
+  resolved_user_id: number | null
+  username: string | null
+  phone: string | null
   session_id: string | null
   request_id: string | null
   event_type: string
@@ -335,7 +338,10 @@ export interface AdminOpenClawAgentListParams {
 }
 
 export interface AdminOpenClawEventListParams {
+  q?: string
   agent_uid?: string
+  bound_user_id?: number
+  openclaw_agent_id?: number
   event_type?: string
   limit?: number
   offset?: number
@@ -497,7 +503,10 @@ export const adminApi = {
     }),
   listOpenClawEvents: (params?: AdminOpenClawEventListParams) => {
     const search = new URLSearchParams()
+    if (params?.q) search.set('q', params.q)
     if (params?.agent_uid) search.set('agent_uid', params.agent_uid)
+    if (params?.bound_user_id != null) search.set('bound_user_id', String(params.bound_user_id))
+    if (params?.openclaw_agent_id != null) search.set('openclaw_agent_id', String(params.openclaw_agent_id))
     if (params?.event_type) search.set('event_type', params.event_type)
     if (params?.limit != null) search.set('limit', String(params.limit))
     if (params?.offset != null) search.set('offset', String(params.offset))

@@ -335,7 +335,7 @@ export default function AdminDashboardPage() {
         }
 
         const data = await adminApi.listOpenClawEvents({
-          agent_uid: query || undefined,
+          q: query || undefined,
           event_type: eventTypeQuery || undefined,
           limit: pageSize,
           offset,
@@ -617,6 +617,15 @@ export default function AdminDashboardPage() {
     setEventTypeQuery('')
   }
 
+  const jumpToUserEvents = (userId: number) => {
+    const value = String(userId)
+    setTab('openclaw_events')
+    setSearch(value)
+    setQuery(value)
+    setEventTypeDraft('')
+    setEventTypeQuery('')
+  }
+
   const jumpToOpenClawAgent = (agentUid: string) => {
     setTab('openclaw_agents')
     setSearch(agentUid)
@@ -643,7 +652,7 @@ export default function AdminDashboardPage() {
           : tab === 'openclaw_agents'
             ? '搜索 agent_uid / display_name / handle / 用户'
             : tab === 'openclaw_events'
-              ? '按 agent_uid 精确筛选'
+              ? '搜索 user_id / openclaw_id / agent_uid / 用户 / 路由 / 事件'
               : '搜索 twin / 用户 / instance / topic / normalized'
 
   const inspectorHint =
@@ -1122,7 +1131,7 @@ export default function AdminDashboardPage() {
                     <tr>
                       <th className="px-4 py-3 whitespace-nowrap">序号</th>
                       <th className="px-4 py-3">事件</th>
-                      <th className="px-4 py-3 whitespace-nowrap">身份</th>
+                      <th className="px-4 py-3 whitespace-nowrap">身份 / 用户</th>
                       <th className="px-4 py-3 whitespace-nowrap">结果</th>
                       <th className="px-4 py-3 whitespace-nowrap">时间</th>
                     </tr>
@@ -1141,9 +1150,10 @@ export default function AdminDashboardPage() {
                           <div className="mt-1 font-mono text-[11px] text-slate-400">{item.event_uid}</div>
                         </td>
                         <td className="px-4 py-3 align-top text-xs text-slate-600">
-                          <div className="line-clamp-1">{item.display_name || '--'}</div>
+                          <div className="line-clamp-1">{item.display_name || item.username || '--'}</div>
+                          <div className="mt-1 font-mono">openclaw_id {item.openclaw_agent_id ?? '--'}</div>
                           <div className="mt-1 font-mono">{item.agent_uid || '--'}</div>
-                          <div className="mt-1">用户 {item.bound_user_id ?? '--'}</div>
+                          <div className="mt-1">用户 {item.resolved_user_id ?? item.bound_user_id ?? '--'} / {item.username || item.phone || '--'}</div>
                         </td>
                         <td className="px-4 py-3 align-top text-xs text-slate-600">
                           <div className={`inline-flex rounded-full px-2 py-0.5 ${statusBadgeClass(item.success ? 'success' : 'failed')}`}>
@@ -1318,6 +1328,13 @@ export default function AdminDashboardPage() {
                       />
                       站点管理员标记
                     </label>
+                    <button
+                      type="button"
+                      onClick={() => jumpToUserEvents(selectedUser.id)}
+                      className="w-full rounded-2xl border border-blue-200 px-4 py-3 text-sm font-medium text-blue-700"
+                    >
+                      查看该用户全部动作
+                    </button>
                   </>
                 ) : (
                   <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">左侧选择一个用户后可编辑。</div>
@@ -1503,6 +1520,15 @@ export default function AdminDashboardPage() {
                       <div className="flex items-center justify-between gap-3">
                         <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">最近事件</div>
                         <div className="flex items-center gap-3">
+                          {selectedOpenClawAgent.bound_user_id ? (
+                            <button
+                              type="button"
+                              onClick={() => jumpToUserEvents(selectedOpenClawAgent.bound_user_id!)}
+                              className="text-xs font-medium text-blue-700"
+                            >
+                              查看该用户动作
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             onClick={() => jumpToTwinObservations(selectedOpenClawAgent.agent_uid)}
@@ -1580,21 +1606,34 @@ export default function AdminDashboardPage() {
                       </div>
                       <div className="mt-2">{selectedOpenClawEvent.action_name}</div>
                       <div className="font-mono">{selectedOpenClawEvent.event_uid}</div>
+                      <div>openclaw_id {selectedOpenClawEvent.openclaw_agent_id ?? '--'}</div>
                       <div>agent_uid {selectedOpenClawEvent.agent_uid || '--'}</div>
+                      <div>user {selectedOpenClawEvent.resolved_user_id ?? selectedOpenClawEvent.bound_user_id ?? '--'} / {selectedOpenClawEvent.username || selectedOpenClawEvent.phone || '--'}</div>
                       <div>route {selectedOpenClawEvent.route || '--'}</div>
                       <div>status {selectedOpenClawEvent.status_code ?? '--'} / {selectedOpenClawEvent.error_code || '--'}</div>
                       <div>时间 {formatDate(selectedOpenClawEvent.created_at)}</div>
                     </div>
 
-                    {selectedOpenClawEvent.agent_uid ? (
-                      <button
-                        type="button"
-                        onClick={() => jumpToOpenClawAgent(selectedOpenClawEvent.agent_uid!)}
-                        className="w-full rounded-2xl border border-blue-200 px-4 py-3 text-sm font-medium text-blue-700"
-                      >
-                        跳转到该 OpenClaw 身份
-                      </button>
-                    ) : null}
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {selectedOpenClawEvent.agent_uid ? (
+                        <button
+                          type="button"
+                          onClick={() => jumpToOpenClawAgent(selectedOpenClawEvent.agent_uid!)}
+                          className="w-full rounded-2xl border border-blue-200 px-4 py-3 text-sm font-medium text-blue-700"
+                        >
+                          跳转到该 OpenClaw 身份
+                        </button>
+                      ) : null}
+                      {(selectedOpenClawEvent.resolved_user_id ?? selectedOpenClawEvent.bound_user_id) ? (
+                        <button
+                          type="button"
+                          onClick={() => jumpToUserEvents((selectedOpenClawEvent.resolved_user_id ?? selectedOpenClawEvent.bound_user_id)!)}
+                          className="w-full rounded-2xl border border-blue-200 px-4 py-3 text-sm font-medium text-blue-700"
+                        >
+                          查看该用户全部动作
+                        </button>
+                      ) : null}
+                    </div>
 
                     <JsonPanel title="Payload" value={selectedOpenClawEvent.payload} />
                     <JsonPanel title="Result" value={selectedOpenClawEvent.result} />

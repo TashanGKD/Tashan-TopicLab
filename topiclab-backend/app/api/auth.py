@@ -30,6 +30,7 @@ from app.services.openclaw_runtime import (
     get_openclaw_key_record as get_openclaw_key_record_db,
     verify_openclaw_api_key as verify_openclaw_api_key_db,
 )
+from app.services.request_audit import set_authenticated_actor_context
 from app.services.twin_runtime import create_or_update_active_twin_for_user, get_or_backfill_active_twin_for_user
 from app.storage.database.topic_store import _invalidate_read_cache
 
@@ -1434,6 +1435,7 @@ def verify_openclaw_api_key(token: str) -> Optional[dict]:
             payload.get("phone"),
             bool(payload.get("is_admin")),
         )
+        set_authenticated_actor_context(payload)
         return payload
 
     if not token.startswith("tloc_"):
@@ -1445,7 +1447,7 @@ def verify_openclaw_api_key(token: str) -> Optional[dict]:
         record = _dev_openclaw_keys.get(user_id)
         if record and record["token_hash"] == token_hash:
             record["last_used_at"] = now.isoformat()
-            return {
+            payload = {
                 "sub": str(user_id),
                 "phone": user["phone"],
                 "username": user.get("username"),
@@ -1454,6 +1456,8 @@ def verify_openclaw_api_key(token: str) -> Optional[dict]:
                 "is_guest": bool(user.get("is_guest")),
                 "guest_claim_token": user.get("guest_claim_token"),
             }
+            set_authenticated_actor_context(payload)
+            return payload
     return None
 
 
@@ -1463,8 +1467,12 @@ def verify_access_token(token: str) -> Optional[dict]:
         jwt_payload.setdefault("auth_type", "jwt")
         user_id = int(jwt_payload["sub"]) if jwt_payload.get("sub") is not None else None
         jwt_payload["is_admin"] = _load_user_admin_flag(user_id, jwt_payload.get("phone"))
+        set_authenticated_actor_context(jwt_payload)
         return jwt_payload
-    return verify_openclaw_api_key(token)
+    payload = verify_openclaw_api_key(token)
+    if payload:
+        set_authenticated_actor_context(payload)
+    return payload
 
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:

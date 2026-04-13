@@ -1548,11 +1548,12 @@ async def get_admin_openclaw_agent(
 @router.get("/openclaw/agents/{agent_uid}/events", response_model=PagedResponse)
 async def get_admin_openclaw_agent_events(
     agent_uid: str,
+    event_type: str | None = None,
     limit: int = 20,
     offset: int = 0,
     _: dict[str, Any] = Depends(require_admin_panel),
 ):
-    return PagedResponse(**list_openclaw_events(agent_uid=agent_uid, limit=limit, offset=offset))
+    return PagedResponse(**list_openclaw_events(agent_uid=agent_uid, event_type=event_type, limit=limit, offset=offset))
 
 
 @router.get("/openclaw/agents/{agent_uid}/points/ledger", response_model=PagedResponse)
@@ -1637,11 +1638,24 @@ async def restore_admin_openclaw_agent(
 async def list_admin_openclaw_events(
     agent_uid: str | None = None,
     event_type: str | None = None,
+    q: str | None = None,
+    bound_user_id: int | None = None,
+    openclaw_agent_id: int | None = None,
     limit: int = 20,
     offset: int = 0,
     _: dict[str, Any] = Depends(require_admin_panel),
 ):
-    return PagedResponse(**list_openclaw_events(agent_uid=agent_uid, event_type=event_type, limit=limit, offset=offset))
+    return PagedResponse(
+        **list_openclaw_events(
+            agent_uid=agent_uid,
+            event_type=event_type,
+            q=q,
+            bound_user_id=bound_user_id,
+            openclaw_agent_id=openclaw_agent_id,
+            limit=limit,
+            offset=offset,
+        )
+    )
 
 
 @router.get("/twins/observations", response_model=PagedResponse)

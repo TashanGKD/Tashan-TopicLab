@@ -1082,6 +1082,9 @@ def list_openclaw_events(
     *,
     agent_uid: str | None = None,
     event_type: str | None = None,
+    q: str | None = None,
+    bound_user_id: int | None = None,
+    openclaw_agent_id: int | None = None,
     limit: int = 20,
     offset: int = 0,
 ) -> dict[str, Any]:
@@ -1092,9 +1095,42 @@ def list_openclaw_events(
     if agent_uid:
         filters.append("AND a.agent_uid = :agent_uid")
         params["agent_uid"] = agent_uid
+    if bound_user_id is not None:
+        filters.append("AND COALESCE(e.bound_user_id, a.bound_user_id) = :bound_user_id")
+        params["bound_user_id"] = int(bound_user_id)
+    if openclaw_agent_id is not None:
+        filters.append("AND e.openclaw_agent_id = :openclaw_agent_id")
+        params["openclaw_agent_id"] = int(openclaw_agent_id)
     if event_type:
         filters.append("AND e.event_type = :event_type")
         params["event_type"] = event_type
+    normalized_q = (q or "").strip()
+    if normalized_q:
+        like_value = f"%{normalized_q.lower()}%"
+        q_clauses = [
+            "LOWER(COALESCE(a.agent_uid, '')) LIKE :q",
+            "LOWER(COALESCE(a.display_name, '')) LIKE :q",
+            "LOWER(COALESCE(u.username, '')) LIKE :q",
+            "LOWER(COALESCE(u.phone, '')) LIKE :q",
+            "LOWER(COALESCE(e.event_type, '')) LIKE :q",
+            "LOWER(COALESCE(e.action_name, '')) LIKE :q",
+            "LOWER(COALESCE(e.route, '')) LIKE :q",
+            "LOWER(COALESCE(e.request_id, '')) LIKE :q",
+            "LOWER(COALESCE(e.target_id, '')) LIKE :q",
+        ]
+        params["q"] = like_value
+        if normalized_q.isdigit():
+            params["q_user_id"] = int(normalized_q)
+            params["q_openclaw_agent_id"] = int(normalized_q)
+            params["q_event_id"] = int(normalized_q)
+            q_clauses.extend(
+                [
+                    "COALESCE(e.bound_user_id, a.bound_user_id) = :q_user_id",
+                    "e.openclaw_agent_id = :q_openclaw_agent_id",
+                    "e.id = :q_event_id",
+                ]
+            )
+        filters.append(f"AND ({' OR '.join(q_clauses)})")
     where_sql = "\n".join(filters)
     with get_db_session() as session:
         total = int(
@@ -1104,6 +1140,7 @@ def list_openclaw_events(
                     SELECT COUNT(*)
                     FROM openclaw_activity_events e
                     LEFT JOIN openclaw_agents a ON a.id = e.openclaw_agent_id
+                    LEFT JOIN users u ON u.id = COALESCE(e.bound_user_id, a.bound_user_id)
                     {where_sql}
                     """
                 ),
@@ -1116,9 +1153,13 @@ def list_openclaw_events(
                 SELECT
                     e.*,
                     a.agent_uid,
-                    a.display_name
+                    a.display_name,
+                    COALESCE(e.bound_user_id, a.bound_user_id) AS resolved_user_id,
+                    u.username,
+                    u.phone
                 FROM openclaw_activity_events e
                 LEFT JOIN openclaw_agents a ON a.id = e.openclaw_agent_id
+                LEFT JOIN users u ON u.id = COALESCE(e.bound_user_id, a.bound_user_id)
                 {where_sql}
                 ORDER BY e.created_at DESC, e.id DESC
                 LIMIT :limit OFFSET :offset
@@ -1136,6 +1177,9 @@ def list_openclaw_events(
                 "agent_uid": getattr(row, "agent_uid", None),
                 "display_name": getattr(row, "display_name", None),
                 "bound_user_id": int(row.bound_user_id) if row.bound_user_id is not None else None,
+                "resolved_user_id": int(getattr(row, "resolved_user_id", None)) if getattr(row, "resolved_user_id", None) is not None else None,
+                "username": getattr(row, "username", None),
+                "phone": getattr(row, "phone", None),
                 "session_id": row.session_id,
                 "request_id": row.request_id,
                 "event_type": row.event_type,
