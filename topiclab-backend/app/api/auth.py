@@ -15,7 +15,7 @@ from urllib.parse import quote, urlencode
 
 import bcrypt
 import httpx
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from jose import JWTError, jwt
@@ -48,6 +48,8 @@ else:
     _dev_codes: dict[str, dict] = {}
     _dev_twins: dict[int, dict[str, dict]] = {}
     _dev_openclaw_keys: dict[int, dict] = {}
+    _dev_oauth_states: dict[str, dict] = {}
+    _dev_oauth_accounts: dict[tuple[str, str], int] = {}
     _dev_user_counter = [0]
 
     def _get_dev_user(phone: str) -> Optional[dict]:
@@ -197,6 +199,23 @@ class AuthResponse(BaseModel):
     token: Optional[str] = None
     claim_status: Optional[str] = None
     claim_detail: Optional[str] = None
+    redirect_path: Optional[str] = None
+
+
+class WatchaOAuthStartRequest(BaseModel):
+    redirect_uri: str = Field(..., min_length=1, max_length=2048, description="前端 OAuth 回调地址")
+    next_path: Optional[str] = Field(default="/", max_length=2048, description="登录成功后跳转路径")
+    claim_token: Optional[str] = Field(default=None, max_length=128, description="OpenClaw 临时账号认领 token")
+
+
+class WatchaOAuthStartResponse(BaseModel):
+    authorization_url: str
+    state: str
+
+
+class WatchaOAuthCallbackRequest(BaseModel):
+    code: str = Field(..., min_length=1, max_length=2048, description="观猹授权码")
+    state: str = Field(..., min_length=1, max_length=128, description="OAuth state")
 
 
 def _split_csv_env(name: str) -> set[str]:
@@ -422,6 +441,353 @@ def _build_openclaw_claim_register_path(claim_token: str) -> str:
 
 def _build_openclaw_claim_login_path(claim_token: str) -> str:
     return f"/login?openclaw_claim={quote(claim_token, safe='')}"
+
+
+WATCHA_PROVIDER = "watcha"
+WATCHA_AUTHORIZE_URL = os.getenv("WATCHA_AUTHORIZE_URL", "https://watcha.cn/oauth/authorize")
+WATCHA_TOKEN_URL = os.getenv("WATCHA_TOKEN_URL", "https://watcha.cn/oauth/api/token")
+WATCHA_USERINFO_URL = os.getenv("WATCHA_USERINFO_URL", "https://watcha.cn/oauth/api/userinfo")
+WATCHA_SCOPE = os.getenv("WATCHA_SCOPE", "read email phone")
+
+
+def _watcha_client_id() -> str:
+    return (os.getenv("WATCHA_CLIENT_ID") or "").strip()
+
+
+def _watcha_client_secret() -> str:
+    return (os.getenv("WATCHA_CLIENT_SECRET") or "").strip()
+
+
+def _require_watcha_oauth_config() -> tuple[str, str]:
+    client_id = _watcha_client_id()
+    client_secret = _watcha_client_secret()
+    if not client_id or not client_secret:
+        raise HTTPException(status_code=503, detail="观猹登录尚未配置")
+    return client_id, client_secret
+
+
+def _normalize_oauth_next_path(next_path: str | None) -> str:
+    path = (next_path or "/").strip() or "/"
+    if not path.startswith("/") or path.startswith("//"):
+        return "/"
+    return path
+
+
+def _resolve_watcha_redirect_uri(request_redirect_uri: str) -> str:
+    configured = (os.getenv("WATCHA_REDIRECT_URI") or "").strip()
+    return configured or request_redirect_uri.strip()
+
+
+def _build_watcha_authorization_url(*, client_id: str, redirect_uri: str, state: str) -> str:
+    params = {
+        'response_type': 'code',
+        'client_id': client_id,
+        'redirect_uri': redirect_uri,
+        'scope': WATCHA_SCOPE,
+        'state': state,
+    }
+    return f"{WATCHA_AUTHORIZE_URL}?{urlencode(params)}"
+
+
+def _save_oauth_state(
+    *,
+    state: str,
+    provider: str,
+    redirect_uri: str,
+    next_path: str,
+    claim_token: str | None,
+) -> None:
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+    if DATABASE_CONFIGURED:
+        with get_db_session() as session:
+            session.execute(
+                text(
+                    """
+                    DELETE FROM oauth_states
+                    WHERE provider = :provider
+                      AND expires_at < :now
+                    """
+                ),
+                {"provider": provider, "now": datetime.now(timezone.utc)},
+            )
+            session.execute(
+                text(
+                    """
+                    INSERT INTO oauth_states (state, provider, redirect_uri, next_path, claim_token, expires_at)
+                    VALUES (:state, :provider, :redirect_uri, :next_path, :claim_token, :expires_at)
+                    """
+                ),
+                {
+                    "state": state,
+                    "provider": provider,
+                    "redirect_uri": redirect_uri,
+                    "next_path": next_path,
+                    "claim_token": claim_token,
+                    "expires_at": expires_at,
+                },
+            )
+        return
+    _dev_oauth_states[state] = {
+        "provider": provider,
+        "redirect_uri": redirect_uri,
+        "next_path": next_path,
+        "claim_token": claim_token,
+        "expires_at": expires_at,
+    }
+
+
+def _consume_oauth_state(*, provider: str, state: str) -> dict:
+    now = datetime.now(timezone.utc)
+    if DATABASE_CONFIGURED:
+        with get_db_session() as session:
+            row = session.execute(
+                text(
+                    """
+                    SELECT state, provider, redirect_uri, next_path, claim_token, expires_at
+                    FROM oauth_states
+                    WHERE state = :state AND provider = :provider
+                    LIMIT 1
+                    """
+                ),
+                {"state": state, "provider": provider},
+            ).fetchone()
+            if not row:
+                raise HTTPException(status_code=400, detail="OAuth state 无效或已过期")
+            try:
+                expires_at = _normalize_expires_at(row.expires_at)
+            except (TypeError, ValueError) as exc:
+                session.execute(text("DELETE FROM oauth_states WHERE state = :state"), {"state": state})
+                raise HTTPException(status_code=400, detail="OAuth state 无效或已过期") from exc
+            session.execute(text("DELETE FROM oauth_states WHERE state = :state"), {"state": state})
+            if expires_at < now:
+                raise HTTPException(status_code=400, detail="OAuth state 无效或已过期")
+            return {
+                "state": row.state,
+                "provider": row.provider,
+                "redirect_uri": row.redirect_uri,
+                "next_path": row.next_path or "/",
+                "claim_token": row.claim_token,
+            }
+    record = _dev_oauth_states.pop(state, None)
+    if not record or record.get("provider") != provider or record["expires_at"] < now:
+        raise HTTPException(status_code=400, detail="OAuth state 无效或已过期")
+    return {"state": state, **record}
+
+
+async def _exchange_watcha_code_for_token(*, code: str, redirect_uri: str) -> dict:
+    client_id, client_secret = _require_watcha_oauth_config()
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        try:
+            response = await client.post(
+                WATCHA_TOKEN_URL,
+                data={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": redirect_uri,
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+        except httpx.HTTPError as exc:
+            logger.warning("Watcha token request failed: %s", exc)
+            raise HTTPException(status_code=502, detail="观猹登录暂时不可用，请稍后重试") from exc
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail="观猹登录响应异常") from exc
+    if response.status_code >= 400 or payload.get("error"):
+        logger.warning("Watcha token exchange failed: status=%s error=%s", response.status_code, payload.get("error"))
+        raise HTTPException(status_code=400, detail=payload.get("error_description") or "观猹授权失败")
+    if not payload.get("access_token"):
+        raise HTTPException(status_code=502, detail="观猹登录未返回 access_token")
+    return payload
+
+
+async def _fetch_watcha_userinfo(access_token: str) -> dict:
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        try:
+            response = await client.get(WATCHA_USERINFO_URL, params={"access_token": access_token})
+        except httpx.HTTPError as exc:
+            logger.warning("Watcha userinfo request failed: %s", exc)
+            raise HTTPException(status_code=502, detail="获取观猹用户信息失败") from exc
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail="观猹用户信息响应异常") from exc
+    data = payload.get("data") if isinstance(payload, dict) else None
+    if response.status_code >= 400 or payload.get("statusCode") not in (None, 200) or not isinstance(data, dict):
+        logger.warning("Watcha userinfo failed: status=%s payload_code=%s", response.status_code, payload.get("code"))
+        raise HTTPException(status_code=400, detail=payload.get("message") or "获取观猹用户信息失败")
+    if data.get("user_id") is None:
+        raise HTTPException(status_code=502, detail="观猹用户信息缺少 user_id")
+    return data
+
+
+def _watcha_synthetic_phone(provider_user_id: str) -> str:
+    digest = hashlib.sha1(provider_user_id.encode("utf-8")).hexdigest()[:12]
+    return f"watcha_{digest}"
+
+
+def _oauth_display_name(userinfo: dict) -> str:
+    nickname = str(userinfo.get("nickname") or "").strip()
+    return nickname[:50] if nickname else f"观猹用户 {userinfo['user_id']}"
+
+
+def _find_or_create_watcha_oauth_user(
+    session,
+    *,
+    userinfo: dict,
+    token_response: dict,
+) -> dict:
+    provider_user_id = str(userinfo["user_id"])
+    row = session.execute(
+        text(
+            """
+            SELECT u.id, u.phone, u.username, u.is_admin, u.is_guest, u.created_at
+            FROM oauth_accounts oa
+            JOIN users u ON u.id = oa.user_id
+            WHERE oa.provider = :provider
+              AND oa.provider_user_id = :provider_user_id
+            LIMIT 1
+            """
+        ),
+        {"provider": WATCHA_PROVIDER, "provider_user_id": provider_user_id},
+    ).fetchone()
+    if row:
+        user = {
+            "id": row.id,
+            "phone": row.phone,
+            "username": row.username,
+            "is_admin": bool(row.is_admin),
+            "is_guest": bool(row.is_guest),
+            "created_at": _to_iso_datetime(row.created_at),
+        }
+    else:
+        watcha_phone = str(userinfo.get("phone") or "").strip()
+        usable_phone = watcha_phone if re.fullmatch(r"^1[3-9]\d{9}$", watcha_phone) else None
+        user_row = None
+        if usable_phone:
+            user_row = session.execute(
+                text("SELECT id, phone, username, is_admin, is_guest, created_at FROM users WHERE phone = :phone"),
+                {"phone": usable_phone},
+            ).fetchone()
+        if user_row:
+            user = {
+                "id": user_row.id,
+                "phone": user_row.phone,
+                "username": user_row.username,
+                "is_admin": bool(user_row.is_admin),
+                "is_guest": bool(user_row.is_guest),
+                "created_at": _to_iso_datetime(user_row.created_at),
+            }
+        else:
+            username = _oauth_display_name(userinfo)
+            phone = usable_phone or _watcha_synthetic_phone(provider_user_id)
+            password_hash = bcrypt.hashpw(secrets.token_urlsafe(24).encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+            handle = _generate_user_handle(session, phone, username)
+            created = session.execute(
+                text(
+                    """
+                    INSERT INTO users (phone, password, username, is_admin, handle, is_guest, guest_claim_token, guest_claimed_at)
+                    VALUES (:phone, :password, :username, :is_admin, :handle, FALSE, NULL, NULL)
+                    RETURNING id, phone, username, is_admin, is_guest, created_at
+                    """
+                ),
+                {
+                    "phone": phone,
+                    "password": password_hash,
+                    "username": username,
+                    "is_admin": _is_admin_identity(None, phone),
+                    "handle": handle,
+                },
+            ).fetchone()
+            user = {
+                "id": created.id,
+                "phone": created.phone,
+                "username": created.username,
+                "is_admin": bool(created.is_admin),
+                "is_guest": bool(created.is_guest),
+                "created_at": _to_iso_datetime(created.created_at),
+            }
+    session.execute(
+        text(
+            """
+            INSERT INTO oauth_accounts (
+                user_id, provider, provider_user_id, nickname, avatar_url, email, phone,
+                access_token, refresh_token, scope, updated_at
+            ) VALUES (
+                :user_id, :provider, :provider_user_id, :nickname, :avatar_url, :email, :phone,
+                :access_token, :refresh_token, :scope, :updated_at
+            )
+            ON CONFLICT(provider, provider_user_id) DO UPDATE SET
+                user_id = excluded.user_id,
+                nickname = excluded.nickname,
+                avatar_url = excluded.avatar_url,
+                email = excluded.email,
+                phone = excluded.phone,
+                access_token = excluded.access_token,
+                refresh_token = excluded.refresh_token,
+                scope = excluded.scope,
+                updated_at = excluded.updated_at
+            """
+        ),
+        {
+            "user_id": int(user["id"]),
+            "provider": WATCHA_PROVIDER,
+            "provider_user_id": provider_user_id,
+            "nickname": userinfo.get("nickname"),
+            "avatar_url": userinfo.get("avatar_url"),
+            "email": userinfo.get("email"),
+            "phone": userinfo.get("phone"),
+            "access_token": token_response.get("access_token"),
+            "refresh_token": token_response.get("refresh_token"),
+            "scope": token_response.get("scope"),
+            "updated_at": datetime.now(timezone.utc),
+        },
+    )
+    return user
+
+
+def _upsert_watcha_oauth_user(
+    *,
+    userinfo: dict,
+    token_response: dict,
+    claim_token: str | None,
+) -> tuple[dict, str | None, str | None]:
+    if DATABASE_CONFIGURED:
+        with get_db_session() as session:
+            user = _find_or_create_watcha_oauth_user(session, userinfo=userinfo, token_response=token_response)
+            user["is_admin"] = _is_admin_identity(user["id"], user["phone"], bool(user.get("is_admin")))
+            claim_status, claim_detail = claim_guest_openclaw_account(
+                claim_token,
+                target_user_id=int(user["id"]),
+                target_username=user.get("username"),
+                session=session,
+            )
+            return user, claim_status, claim_detail
+
+    provider_user_id = str(userinfo["user_id"])
+    linked_user_id = _dev_oauth_accounts.get((WATCHA_PROVIDER, provider_user_id))
+    user = None
+    if linked_user_id is not None:
+        for candidate in _dev_users.values():
+            if int(candidate["id"]) == linked_user_id:
+                user = candidate
+                break
+    if user is None:
+        watcha_phone = str(userinfo.get("phone") or "").strip()
+        phone = watcha_phone if re.fullmatch(r"^1[3-9]\d{9}$", watcha_phone) else _watcha_synthetic_phone(provider_user_id)
+        user = _get_dev_user(phone)
+        if user is None:
+            user = _create_dev_user(
+                phone,
+                bcrypt.hashpw(secrets.token_urlsafe(24).encode("utf-8"), bcrypt.gensalt()).decode("utf-8"),
+                _oauth_display_name(userinfo),
+            )
+        _dev_oauth_accounts[(WATCHA_PROVIDER, provider_user_id)] = int(user["id"])
+    user["is_admin"] = _is_admin_identity(user["id"], user["phone"], bool(user.get("is_admin")))
+    return user, None, None
 
 
 def create_openclaw_skill_token(
@@ -1503,6 +1869,59 @@ async def require_openclaw_user(credentials: HTTPAuthorizationCredentials = Depe
 
 
 # API Endpoints
+@router.post("/watcha/start", response_model=WatchaOAuthStartResponse)
+async def start_watcha_oauth(req: WatchaOAuthStartRequest, request: Request):
+    client_id, _ = _require_watcha_oauth_config()
+    state = secrets.token_urlsafe(32).rstrip("=")
+    redirect_uri = _resolve_watcha_redirect_uri(req.redirect_uri)
+    next_path = _normalize_oauth_next_path(req.next_path)
+    _save_oauth_state(
+        state=state,
+        provider=WATCHA_PROVIDER,
+        redirect_uri=redirect_uri,
+        next_path=next_path,
+        claim_token=req.claim_token,
+    )
+    logger.info(
+        "Watcha OAuth started: state=%s host=%s next=%s",
+        state[:8],
+        request.headers.get("host"),
+        next_path,
+    )
+    return WatchaOAuthStartResponse(
+        authorization_url=_build_watcha_authorization_url(
+            client_id=client_id,
+            redirect_uri=redirect_uri,
+            state=state,
+        ),
+        state=state,
+    )
+
+
+@router.post("/watcha/callback", response_model=AuthResponse)
+async def finish_watcha_oauth(req: WatchaOAuthCallbackRequest):
+    state_record = _consume_oauth_state(provider=WATCHA_PROVIDER, state=req.state)
+    token_response = await _exchange_watcha_code_for_token(
+        code=req.code,
+        redirect_uri=str(state_record["redirect_uri"]),
+    )
+    userinfo = await _fetch_watcha_userinfo(str(token_response["access_token"]))
+    user, claim_status, claim_detail = _upsert_watcha_oauth_user(
+        userinfo=userinfo,
+        token_response=token_response,
+        claim_token=state_record.get("claim_token"),
+    )
+    token = create_jwt_token(user["id"], user["phone"], is_admin=bool(user.get("is_admin")))
+    return AuthResponse(
+        message="观猹登录成功",
+        token=token,
+        user=AuthUserResponse(**_serialize_auth_user(user)),
+        claim_status=claim_status,
+        claim_detail=claim_detail,
+        redirect_path=_normalize_oauth_next_path(state_record.get("next_path")),
+    )
+
+
 @router.post("/send-code")
 async def send_verification_code(req: SendCodeRequest):
     code = generate_code()

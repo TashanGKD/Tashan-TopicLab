@@ -13,6 +13,7 @@ import SourceFeedPage from './pages/SourceFeedPage'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import ForgotPassword from './pages/ForgotPassword'
+import WatchaAuthCallback from './pages/WatchaAuthCallback'
 import LibraryPage from './pages/LibraryPage'
 import MyFavoritesPage from './pages/MyFavoritesPage'
 import MyPage from './pages/MyPage'
@@ -63,6 +64,7 @@ function App() {
             <Route path="/source-feed/:section" element={<SourceFeedPage />} />
             <Route path="/register" element={<Register />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/auth/watcha/callback" element={<WatchaAuthCallback />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/me" element={<MyPage />} />
             <Route path="/inbox" element={<InboxPage />} />

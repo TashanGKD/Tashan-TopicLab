@@ -1461,6 +1461,97 @@ def _is_retryable_init_error(exc: Exception) -> bool:
     return "deadlock detected" in message or "could not obtain lock on relation" in message
 
 
+def _apply_oauth_ddl(session) -> None:
+    """Create OAuth state/account tables and indexes (idempotent)."""
+    is_sqlite = _is_sqlite_session(session)
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS oauth_states (
+                state VARCHAR(128) PRIMARY KEY,
+                provider VARCHAR(32) NOT NULL,
+                redirect_uri TEXT NOT NULL,
+                next_path TEXT,
+                claim_token VARCHAR(128),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                expires_at TEXT NOT NULL
+            )
+            """
+            if is_sqlite
+            else
+            """
+            CREATE TABLE IF NOT EXISTS oauth_states (
+                state VARCHAR(128) PRIMARY KEY,
+                provider VARCHAR(32) NOT NULL,
+                redirect_uri TEXT NOT NULL,
+                next_path TEXT,
+                claim_token VARCHAR(128),
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                expires_at TIMESTAMPTZ NOT NULL
+            )
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS idx_oauth_states_provider_expires
+            ON oauth_states(provider, expires_at)
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS oauth_accounts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                provider VARCHAR(32) NOT NULL,
+                provider_user_id VARCHAR(100) NOT NULL,
+                nickname VARCHAR(255),
+                avatar_url TEXT,
+                email VARCHAR(255),
+                phone VARCHAR(32),
+                access_token TEXT,
+                refresh_token TEXT,
+                scope TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(provider, provider_user_id)
+            )
+            """
+            if is_sqlite
+            else
+            """
+            CREATE TABLE IF NOT EXISTS oauth_accounts (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                provider VARCHAR(32) NOT NULL,
+                provider_user_id VARCHAR(100) NOT NULL,
+                nickname VARCHAR(255),
+                avatar_url TEXT,
+                email VARCHAR(255),
+                phone VARCHAR(32),
+                access_token TEXT,
+                refresh_token TEXT,
+                scope TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE(provider, provider_user_id)
+            )
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS idx_oauth_accounts_user_id
+            ON oauth_accounts(user_id)
+            """
+        )
+    )
+
+
 def _init_auth_tables_once() -> None:
     """Create auth-related tables if they do not exist."""
     with get_db_session() as session:
@@ -1556,6 +1647,7 @@ def _init_auth_tables_once() -> None:
             CREATE INDEX IF NOT EXISTS idx_verification_codes_phone_type
             ON verification_codes(phone, type)
         """))
+        _apply_oauth_ddl(session)
         session.execute(text(
             """
             CREATE TABLE IF NOT EXISTS digital_twins (

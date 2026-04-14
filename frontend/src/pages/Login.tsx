@@ -10,6 +10,7 @@ export default function Login() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [watchaLoading, setWatchaLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const showMessage = (type: 'success' | 'error', text: string) => {
@@ -44,6 +45,23 @@ export default function Login() {
       showMessage('error', err instanceof Error ? err.message : '登录失败');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const buildWatchaCallbackUri = () => {
+    const basePath = import.meta.env.BASE_URL || '/';
+    const normalizedBase = basePath.endsWith('/') ? basePath : `${basePath}/`;
+    return new URL(`${normalizedBase}auth/watcha/callback`, window.location.origin).toString();
+  };
+
+  const handleWatchaLogin = async () => {
+    setWatchaLoading(true);
+    try {
+      const data = await authApi.startWatchaLogin(buildWatchaCallbackUri(), from, claimToken);
+      window.location.assign(data.authorization_url);
+    } catch (err: unknown) {
+      showMessage('error', err instanceof Error ? err.message : '观猹登录暂时不可用');
+      setWatchaLoading(false);
     }
   };
 
@@ -110,6 +128,27 @@ export default function Login() {
               {loading ? '登录中...' : '登录'}
             </button>
           </form>
+
+          <div className="my-5 flex items-center gap-3">
+            <div className="h-px flex-1 bg-gray-200" />
+            <span className="text-xs text-gray-400 font-serif">或</span>
+            <div className="h-px flex-1 bg-gray-200" />
+          </div>
+
+          <button
+            type="button"
+            onClick={handleWatchaLogin}
+            disabled={loading || watchaLoading}
+            className="w-full py-2 rounded-lg border border-gray-200 text-sm font-serif font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 hover:bg-gray-50"
+            style={{ color: 'var(--text-primary)' }}
+          >
+            <img
+              src="https://watcha.tos-cn-beijing.volces.com/products/logo/1752064513_guan-cha-insights.png?x-tos-process=image/resize,w_720/format,webp"
+              alt=""
+              className="h-5 w-5 rounded-full object-cover"
+            />
+            {watchaLoading ? '正在前往观猹...' : '使用观猹登录'}
+          </button>
 
           <div className="mt-4 flex justify-between text-sm text-gray-500 font-serif">
             <Link to="/forgot-password" className="hover:underline" style={{ color: 'var(--text-primary)' }}>忘记密码？</Link>

@@ -24,6 +24,12 @@ export interface AuthResponse {
   token?: string;
   claim_status?: string;
   claim_detail?: string;
+  redirect_path?: string;
+}
+
+export interface WatchaOAuthStartResponse {
+  authorization_url: string;
+  state: string;
 }
 
 export interface SendCodeResponse {
@@ -109,6 +115,30 @@ export const authApi = {
     });
     if (!res.ok) {
       throw new Error(await readApiError(res, '登录失败'));
+    }
+    return res.json();
+  },
+
+  startWatchaLogin: async (redirectUri: string, nextPath: string, claimToken?: string | null): Promise<WatchaOAuthStartResponse> => {
+    const res = await fetch(`${API_BASE}/auth/watcha/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ redirect_uri: redirectUri, next_path: nextPath, claim_token: claimToken ?? null }),
+    });
+    if (!res.ok) {
+      throw new Error(await readApiError(res, '观猹登录暂时不可用'));
+    }
+    return res.json();
+  },
+
+  completeWatchaLogin: async (code: string, state: string): Promise<AuthResponse> => {
+    const res = await fetch(`${API_BASE}/auth/watcha/callback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, state }),
+    });
+    if (!res.ok) {
+      throw new Error(await readApiError(res, '观猹登录失败'));
     }
     return res.json();
   },

@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
-import { refreshCurrentUserProfile, tokenManager, User } from '../api/auth'
+import { authApi, refreshCurrentUserProfile, tokenManager, User } from '../api/auth'
 import { inboxApi } from '../api/client'
 import { useMobileChromeHidden } from '../hooks/useMobileChromeHidden'
 import { shouldHideGlobalChrome } from '../utils/layoutChrome'
+
+const WATCHA_LOGO_URL = 'https://watcha.tos-cn-beijing.volces.com/products/logo/1752064513_guan-cha-insights.png?x-tos-process=image/resize,w_720/format,webp'
 
 const navLinks = [
   { to: '/', label: '首页', match: (path: string) => path === '/' },
@@ -64,6 +66,12 @@ const mobileTabs = [
   },
 ] as const
 
+function buildWatchaCallbackUri() {
+  const basePath = import.meta.env.BASE_URL || '/'
+  const normalizedBase = basePath.endsWith('/') ? basePath : `${basePath}/`
+  return new URL(`${normalizedBase}auth/watcha/callback`, window.location.origin).toString()
+}
+
 export default function TopNav() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -73,6 +81,7 @@ export default function TopNav() {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [userMenuPosition, setUserMenuPosition] = useState({ top: 0, left: 0 })
   const [scrolled, setScrolled] = useState(false)
+  const [watchaLoading, setWatchaLoading] = useState(false)
   const mobileChromeHidden = useMobileChromeHidden()
   const userMenuTriggerRef = useRef<HTMLButtonElement | null>(null)
   const userMenuRef = useRef<HTMLDivElement | null>(null)
@@ -204,6 +213,19 @@ export default function TopNav() {
     navigate('/')
   }
 
+  const handleWatchaLogin = async () => {
+    if (watchaLoading) return
+    setWatchaLoading(true)
+    const nextPath = `${location.pathname}${location.search}`
+    try {
+      const data = await authApi.startWatchaLogin(buildWatchaCallbackUri(), nextPath, null)
+      window.location.assign(data.authorization_url)
+    } catch {
+      setWatchaLoading(false)
+      navigate('/login', { state: { from: nextPath } })
+    }
+  }
+
   const hideNav = shouldHideGlobalChrome(location.pathname)
   const activeMobileTabIndex = Math.max(0, mobileTabs.findIndex((tab) => tab.match(location.pathname)))
   const mobileTabCount = mobileTabs.length
@@ -333,6 +355,20 @@ export default function TopNav() {
                 >
                   登录
                 </Link>
+                <button
+                  type="button"
+                  onClick={handleWatchaLogin}
+                  disabled={watchaLoading}
+                  className="grid h-7 w-7 place-items-center rounded-full border border-gray-200 bg-white transition-all hover:-translate-y-0.5 hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+                  title="使用观猹登录"
+                  aria-label="使用观猹登录"
+                >
+                  <img
+                    src={WATCHA_LOGO_URL}
+                    alt=""
+                    className="h-5 w-5 rounded-full object-cover"
+                  />
+                </button>
                 <Link
                   to="/register"
                   className="px-3 py-1.5 rounded-[var(--radius-md)] text-sm font-serif font-medium transition-all hover:opacity-90 whitespace-nowrap"
