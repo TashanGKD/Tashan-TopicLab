@@ -20,7 +20,7 @@ export default function HomeFeatureCardShell({
 
   return (
     <section
-      className="relative h-full overflow-hidden rounded-[28px] border px-5 py-6 sm:rounded-[32px] sm:px-8 sm:py-10 lg:px-12 lg:py-12"
+      className="relative h-full overflow-hidden rounded-[28px] border px-5 py-6 sm:rounded-[32px] sm:px-7 sm:py-9 lg:px-10 lg:py-10"
       style={{
         background: theme.cardGradient,
         borderColor: theme.borderColor,
@@ -44,10 +44,10 @@ export default function HomeFeatureCardShell({
         style={{ background: theme.topLine }}
       />
 
-      <div className="relative flex h-full max-w-4xl flex-col justify-between gap-6 sm:gap-8">
+      <div className="relative flex h-full max-w-4xl flex-col justify-between gap-5 sm:gap-7">
         <div className="max-w-3xl">
           <span
-            className="inline-flex items-center rounded-full px-3.5 py-1.5 text-[10px] tracking-[0.24em] sm:px-4 sm:text-[11px] sm:tracking-[0.28em]"
+            className="inline-flex items-center rounded-full px-3 py-1.5 text-[9px] tracking-[0.22em] sm:px-3.5 sm:text-[10px] sm:tracking-[0.26em]"
             style={{
               color: theme.eyebrowText,
               backgroundColor: theme.eyebrowBackground,
@@ -58,21 +58,21 @@ export default function HomeFeatureCardShell({
             {eyebrow}
           </span>
 
-          <h2 className="mt-5 max-w-2xl text-[2.35rem] font-serif font-semibold leading-[0.94] sm:mt-7 sm:text-5xl sm:leading-[0.98] lg:text-[4.4rem]">
+          <h2 className="mt-4 max-w-2xl text-[2.05rem] font-serif font-semibold leading-[0.96] sm:mt-6 sm:text-[2.55rem] sm:leading-[1] lg:text-[3.65rem]">
             <span style={{ color: theme.titleColor, textShadow: `0 1px 0 ${theme.titleShadow}` }}>
               {title}
             </span>
           </h2>
 
           <div
-            className="mt-4 max-w-3xl text-[13px] leading-6 sm:mt-6 sm:text-[15px] sm:leading-7"
+            className="mt-3 max-w-3xl text-[12px] leading-[22px] sm:mt-5 sm:text-[14px] sm:leading-6"
             style={{ color: theme.bodyColor }}
           >
             {description}
           </div>
         </div>
 
-        <div className="flex flex-col gap-6 sm:gap-8">{children}</div>
+        <div className="flex flex-col gap-5 sm:gap-7">{children}</div>
       </div>
     </section>
   )

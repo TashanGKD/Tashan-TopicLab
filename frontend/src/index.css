@@ -7,6 +7,9 @@
 
 /* Tashan Design Tokens - 统一颜色系统 */
 :root {
+  /* ========== 全局视觉比例 (Visual Scale) ========== */
+  --app-root-font-size: 85%;
+
   /* ========== 主题色 (Brand) ========== */
   --brand-primary: #3B82F6;
   --brand-dark: #1E40AF;
@@ -50,11 +53,11 @@
 
   /* ========== 圆角 (Radius) - 精简版 ========== */
   /* 只保留 3 个核心等级：默认、大、完全圆形 */
-  --radius-sm: 12px;     /* 已废弃，映射到 --radius-md */
-  --radius-md: 12px;     /* 默认圆角 - 卡片、按钮、输入框、容器 (70%) */
-  --radius-lg: 16px;     /* 大圆角 - 弹窗、下拉菜单、缩略图 (20%) */
-  --radius-xl: 16px;     /* 已废弃，映射到 --radius-lg */
-  --radius-2xl: 16px;    /* 已废弃，映射到 --radius-lg */
+  --radius-sm: 10.2px;   /* 已废弃，映射到 --radius-md */
+  --radius-md: 10.2px;   /* 默认圆角 - 卡片、按钮、输入框、容器 (70%) */
+  --radius-lg: 13.6px;   /* 大圆角 - 弹窗、下拉菜单、缩略图 (20%) */
+  --radius-xl: 13.6px;   /* 已废弃，映射到 --radius-lg */
+  --radius-2xl: 13.6px;  /* 已废弃，映射到 --radius-lg */
   --radius-full: 9999px; /* 完全圆形 - 头像、Chip、徽章、筛选按钮 (10%) */
 
   /* ========== 过渡 (Transition) ========== */
@@ -76,6 +79,7 @@
 /* Base Styles */
 @layer base {
   html {
+    font-size: var(--app-root-font-size);
     font-family: 'Noto Serif SC', STSong, SimSun, serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;

@@ -19,11 +19,11 @@ export default function DigitalTwinCard() {
       title="数字分身"
       description="OpenClaw 接入后，通过持续对话、画像沉淀与量表校对，逐步建立一个更懂你研究目标、判断方式与协作偏好的长期代理。"
     >
-      <div className="flex flex-col gap-6 sm:gap-8">
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-col gap-5 sm:gap-7">
+        <div className="flex flex-wrap items-center gap-2.5">
           <Link
             to="/profile-helper"
-            className="group relative z-10 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-[13px] transition-all duration-300 hover:-translate-y-0.5 motion-reduce:transition-none sm:px-5 sm:py-2.5 sm:text-sm"
+            className="group relative z-10 inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-[12px] transition-all duration-300 hover:-translate-y-0.5 motion-reduce:transition-none sm:px-4 sm:py-2.5 sm:text-[13px]"
             style={{
               borderColor: theme.actionBorder,
               color: theme.actionText,
@@ -36,7 +36,7 @@ export default function DigitalTwinCard() {
           </Link>
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-[12px] leading-6 sm:text-sm sm:leading-6" style={{ color: theme.bodyColor }}>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[11px] leading-5 sm:text-[12px] sm:leading-6" style={{ color: theme.bodyColor }}>
           {DIGITAL_TWIN_FEATURES.map((item, index) => (
             <span key={item}>
               {item}

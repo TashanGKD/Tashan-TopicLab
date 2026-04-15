@@ -242,7 +242,7 @@ function OpenClawSkillCardView({ controller }: { controller: OpenClawSkillCardCo
 
   return (
     <section
-      className="relative h-full overflow-hidden rounded-[28px] border px-5 py-6 sm:rounded-[32px] sm:px-8 sm:py-10 lg:px-12 lg:py-12"
+      className="relative h-full overflow-hidden rounded-[28px] border px-5 py-6 sm:rounded-[32px] sm:px-7 sm:py-9 lg:px-10 lg:py-10"
       style={{
         background: theme.cardGradient,
         borderColor: theme.borderColor,
@@ -266,10 +266,10 @@ function OpenClawSkillCardView({ controller }: { controller: OpenClawSkillCardCo
         style={{ background: theme.topLine }}
       />
 
-      <div className="relative flex h-full max-w-4xl flex-col justify-between gap-6 sm:gap-8">
+      <div className="relative flex h-full max-w-4xl flex-col justify-between gap-5 sm:gap-7">
         <div className="max-w-3xl">
           <span
-            className="inline-flex items-center rounded-full px-3.5 py-1.5 text-[10px] tracking-[0.24em] sm:px-4 sm:text-[11px] sm:tracking-[0.28em]"
+            className="inline-flex items-center rounded-full px-3 py-1.5 text-[9px] tracking-[0.22em] sm:px-3.5 sm:text-[10px] sm:tracking-[0.26em]"
             style={{
               color: theme.eyebrowText,
               backgroundColor: theme.eyebrowBackground,
@@ -280,14 +280,14 @@ function OpenClawSkillCardView({ controller }: { controller: OpenClawSkillCardCo
             AGENT 注册指南
           </span>
 
-          <h2 className="mt-5 max-w-2xl text-[2.35rem] font-serif font-semibold leading-[0.94] sm:mt-7 sm:text-5xl sm:leading-[0.98] lg:text-[4.4rem]">
+          <h2 className="mt-4 max-w-2xl text-[2.05rem] font-serif font-semibold leading-[0.96] sm:mt-6 sm:text-[2.55rem] sm:leading-[1] lg:text-[3.65rem]">
             <span style={{ color: theme.titleColor, textShadow: `0 1px 0 ${theme.titleShadow}` }}>
               OpenClaw 注册
             </span>
           </h2>
 
           <p
-            className="mt-4 max-w-3xl text-[13px] leading-6 sm:mt-6 sm:text-[15px] sm:leading-7"
+            className="mt-3 max-w-3xl text-[12px] leading-[22px] sm:mt-5 sm:text-[14px] sm:leading-6"
             style={{ color: theme.bodyColor }}
           >
             只需一次复制，你的龙虾助理就能接入他山世界，帮你筛选、分析和跟进信息。
@@ -295,13 +295,13 @@ function OpenClawSkillCardView({ controller }: { controller: OpenClawSkillCardCo
 
         </div>
 
-        <div className="flex flex-col gap-6 sm:gap-8">
+        <div className="flex flex-col gap-5 sm:gap-7">
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
               onClick={() => { void copy() }}
               disabled={loading}
-              className="group relative z-10 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-[13px] transition-all duration-300 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none sm:px-5 sm:py-2.5 sm:text-sm"
+              className="group relative z-10 inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-[12px] transition-all duration-300 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none sm:px-4 sm:py-2.5 sm:text-[13px]"
               style={{
                 borderColor: copied ? 'rgba(36, 49, 71, 0.22)' : theme.actionBorder,
                 color: copied ? '#f8fafc' : theme.actionText,
@@ -315,7 +315,7 @@ function OpenClawSkillCardView({ controller }: { controller: OpenClawSkillCardCo
 
           {generatedSkillUrl ? (
             <div
-              className="rounded-[20px] border px-4 py-3.5 text-[13px]"
+              className="rounded-[20px] border px-4 py-3.5 text-[12px] sm:text-[13px]"
               style={{
                 borderColor: showLoginPrompt ? 'rgba(245, 158, 11, 0.18)' : theme.surfaceBorder,
                 background: showLoginPrompt
@@ -336,14 +336,14 @@ function OpenClawSkillCardView({ controller }: { controller: OpenClawSkillCardCo
                     <div className="flex gap-2">
                       <Link
                         to={guestClaimRegisterPath || '/register'}
-                        className="inline-flex items-center justify-center rounded-full px-4 py-1.5 text-[13px] font-medium text-white transition-all duration-300 hover:-translate-y-0.5"
+                        className="inline-flex items-center justify-center rounded-full px-3.5 py-1.5 text-[12px] font-medium text-white transition-all duration-300 hover:-translate-y-0.5 sm:text-[13px]"
                         style={{ backgroundColor: 'var(--accent-warning)' }}
                       >
                         去注册
                       </Link>
                       <Link
                         to={guestClaimLoginPath || '/login'}
-                        className="inline-flex items-center justify-center rounded-full px-4 py-1.5 text-[13px] font-medium text-white transition-all duration-300 hover:-translate-y-0.5"
+                        className="inline-flex items-center justify-center rounded-full px-3.5 py-1.5 text-[12px] font-medium text-white transition-all duration-300 hover:-translate-y-0.5 sm:text-[13px]"
                         style={{ backgroundColor: 'var(--accent-warning)' }}
                       >
                         去登录
@@ -397,7 +397,7 @@ function OpenClawSkillCardView({ controller }: { controller: OpenClawSkillCardCo
             {SITE_METRICS.map((metric) => (
               <div
                 key={metric.key}
-                className="flex flex-col justify-between rounded-[16px] border px-3 py-3 sm:rounded-[18px] sm:px-3.5 sm:py-3.5"
+                className="flex flex-col justify-between rounded-[16px] border px-3 py-2.5 sm:rounded-[18px] sm:px-3.5 sm:py-3"
                 style={{
                   borderColor: theme.surfaceBorder,
                   backgroundColor: theme.surfaceBackground,
@@ -409,7 +409,7 @@ function OpenClawSkillCardView({ controller }: { controller: OpenClawSkillCardCo
                   {metric.label}
                 </p>
                 <p
-                  className="mt-2 font-serif text-[1.4rem] leading-none tracking-[-0.04em] sm:text-[1.6rem]"
+                  className="mt-1.5 font-serif text-[1.25rem] leading-none tracking-[-0.04em] sm:text-[1.45rem]"
                   style={{ color: theme.statValue }}
                 >
                   {siteStats[metric.key]}

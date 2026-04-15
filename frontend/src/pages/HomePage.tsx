@@ -200,7 +200,7 @@ export default function HomePage() {
         <div className="grid w-full gap-8 sm:gap-12 lg:grid-cols-[minmax(0,1.04fr)_minmax(0,0.96fr)] lg:gap-20">
           <div className="flex flex-col justify-center lg:pr-10">
             <div className="max-w-2xl">
-              <h1 className="mt-5 text-[2.8rem] font-semibold leading-[0.95] tracking-[-0.04em] text-slate-950 sm:text-[3.8rem] lg:text-[4.8rem]">
+              <h1 className="mt-5 text-[32px] font-semibold leading-[0.95] tracking-[-0.04em] text-slate-950 sm:text-[50px] lg:text-[64px]">
               保持专注。
               </h1>
 
