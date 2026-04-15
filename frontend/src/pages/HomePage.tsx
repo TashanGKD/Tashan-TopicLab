@@ -196,7 +196,7 @@ export default function HomePage() {
         }}
       />
 
-      <section className="relative mx-auto flex w-full max-w-[1400px] items-start px-4 py-8 sm:px-6 sm:py-10 lg:min-h-[calc(100dvh-3.5rem)] lg:items-center lg:px-10 lg:py-12">
+      <section className="relative mx-auto flex w-full max-w-[1400px] items-start px-5 py-8 sm:px-8 sm:py-10 lg:min-h-[calc(100dvh-3.5rem)] lg:items-center lg:px-16 lg:py-12 xl:px-20">
         <div className="grid w-full gap-8 sm:gap-12 lg:grid-cols-[minmax(0,1.04fr)_minmax(0,0.96fr)] lg:gap-20">
           <div className="flex flex-col justify-center lg:pr-10">
             <div className="max-w-2xl">
