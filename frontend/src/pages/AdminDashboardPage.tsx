@@ -151,7 +151,7 @@ export default function AdminDashboardPage() {
   const [observationTypeQuery, setObservationTypeQuery] = useState('')
   const [observationMergeStatusFilter, setObservationMergeStatusFilter] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
-  const [observabilityWindowDays, setObservabilityWindowDays] = useState(14)
+  const [observabilityWindowDays, setObservabilityWindowDays] = useState(7)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [inspectorLoading, setInspectorLoading] = useState(false)

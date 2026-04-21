@@ -625,6 +625,14 @@ def _apply_twin_runtime_ddl(session) -> None:
     session.execute(
         text(
             """
+            CREATE INDEX IF NOT EXISTS idx_twin_observations_created_at
+            ON twin_observations(created_at DESC)
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
             CREATE INDEX IF NOT EXISTS idx_twin_observations_merge_status
             ON twin_observations(merge_status)
             """
@@ -855,6 +863,14 @@ def _apply_openclaw_identity_ddl(session) -> None:
             """
             CREATE INDEX IF NOT EXISTS idx_openclaw_activity_events_agent_created
             ON openclaw_activity_events(openclaw_agent_id, created_at DESC)
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS idx_openclaw_activity_events_created_at
+            ON openclaw_activity_events(created_at DESC)
             """
         )
     )

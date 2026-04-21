@@ -553,6 +553,118 @@ def test_admin_panel_can_build_community_observability_rollup(client):
     assert daily_users[auth["user"]["id"]]["total_tokens_estimated"] > 0
 
 
+def test_admin_community_observability_limits_event_and_observation_queries_to_window(client, monkeypatch):
+    import app.api.admin as admin_module
+
+    admin_panel = admin_panel_login(client)
+    auth = register_login_and_openclaw_key(client, phone="13800009112", username="ops-window")
+
+    create_topic = client.post(
+        "/api/v1/openclaw/topics",
+        headers={"Authorization": f"Bearer {auth['openclaw_key']}"},
+        json={"title": "窗口观测", "body": "验证后台窗口查询", "category": "request"},
+    )
+    assert create_topic.status_code == 201, create_topic.text
+
+    original_get_db_session = admin_module.get_db_session
+    captured_sql: list[str] = []
+
+    class RecordingSession:
+        def __init__(self, wrapped):
+            self._wrapped = wrapped
+
+        def execute(self, statement, *args, **kwargs):
+            captured_sql.append(str(statement))
+            return self._wrapped.execute(statement, *args, **kwargs)
+
+        def __getattr__(self, name):
+            return getattr(self._wrapped, name)
+
+    class RecordingSessionContext:
+        def __init__(self, wrapped):
+            self._wrapped = wrapped
+
+        def __enter__(self):
+            return RecordingSession(self._wrapped.__enter__())
+
+        def __exit__(self, exc_type, exc, tb):
+            return self._wrapped.__exit__(exc_type, exc, tb)
+
+    def recording_get_db_session():
+        return RecordingSessionContext(original_get_db_session())
+
+    monkeypatch.setattr(admin_module, "get_db_session", recording_get_db_session)
+
+    resp = client.get(
+        "/admin/community/observability",
+        headers={"Authorization": f"Bearer {admin_panel['token']}"},
+        params={"window_days": 14},
+    )
+    assert resp.status_code == 200, resp.text
+
+    event_queries = [sql for sql in captured_sql if "FROM openclaw_activity_events e" in sql]
+    observation_queries = [sql for sql in captured_sql if "FROM twin_observations o" in sql]
+
+    assert event_queries, captured_sql
+    assert observation_queries, captured_sql
+    assert all("WHERE e.created_at >= :window_start" in sql for sql in event_queries)
+    assert all("LIMIT :event_limit" in sql for sql in event_queries)
+    assert all("WHERE o.created_at >= :window_start" in sql for sql in observation_queries)
+
+
+def test_admin_users_uses_preaggregated_counts_instead_of_correlated_subqueries(client, monkeypatch):
+    import app.api.admin as admin_module
+
+    admin_panel = admin_panel_login(client)
+    register_login_and_openclaw_key(client, phone="13800009113", username="ops-users")
+
+    original_get_db_session = admin_module.get_db_session
+    captured_sql: list[str] = []
+
+    class RecordingSession:
+        def __init__(self, wrapped):
+            self._wrapped = wrapped
+
+        def execute(self, statement, *args, **kwargs):
+            captured_sql.append(str(statement))
+            return self._wrapped.execute(statement, *args, **kwargs)
+
+        def __getattr__(self, name):
+            return getattr(self._wrapped, name)
+
+    class RecordingSessionContext:
+        def __init__(self, wrapped):
+            self._wrapped = wrapped
+
+        def __enter__(self):
+            return RecordingSession(self._wrapped.__enter__())
+
+        def __exit__(self, exc_type, exc, tb):
+            return self._wrapped.__exit__(exc_type, exc, tb)
+
+    def recording_get_db_session():
+        return RecordingSessionContext(original_get_db_session())
+
+    monkeypatch.setattr(admin_module, "get_db_session", recording_get_db_session)
+
+    resp = client.get(
+        "/admin/users",
+        headers={"Authorization": f"Bearer {admin_panel['token']}"},
+        params={"limit": 20, "offset": 0},
+    )
+    assert resp.status_code == 200, resp.text
+
+    user_queries = [sql for sql in captured_sql if "FROM users u" in sql and "SELECT" in sql]
+    assert user_queries, captured_sql
+    row_query = max(user_queries, key=len)
+
+    assert "LEFT JOIN (" in row_query
+    assert "GROUP BY creator_user_id" in row_query
+    assert "GROUP BY user_id" in row_query
+    assert "SELECT COUNT(*) FROM topics t" not in row_query
+    assert "SELECT COUNT(*) FROM site_feedback f" not in row_query
+
+
 def test_arcade_structured_task_rejects_multiple_candidate_markdown_submission(client):
     admin = admin_panel_login(client)
     create = client.post(

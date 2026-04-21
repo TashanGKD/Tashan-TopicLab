@@ -44,6 +44,7 @@ _SCENE_CATEGORY_MAP = {
     "arcade": "forum.arcade",
 }
 _OBSERVABILITY_TIMEZONE = ZoneInfo(os.getenv("ADMIN_OBSERVABILITY_TIMEZONE", "Asia/Shanghai"))
+_OBSERVABILITY_EVENT_LIMIT = max(100, int(os.getenv("ADMIN_OBSERVABILITY_EVENT_LIMIT", "5000")))
 _ACTION_CATEGORY_ORDER = [
     "auth_identity",
     "content_creation",
@@ -541,15 +542,21 @@ async def list_admin_users(
                     u.handle,
                     u.is_admin,
                     u.created_at,
-                    (
-                        SELECT COUNT(*) FROM topics t
-                        WHERE t.creator_user_id = u.id
-                    ) AS topics_count,
-                    (
-                        SELECT COUNT(*) FROM site_feedback f
-                        WHERE f.user_id = u.id
-                    ) AS feedback_count
+                    COALESCE(topic_counts.topics_count, 0) AS topics_count,
+                    COALESCE(feedback_counts.feedback_count, 0) AS feedback_count
                 FROM users u
+                LEFT JOIN (
+                    SELECT creator_user_id, COUNT(*) AS topics_count
+                    FROM topics
+                    WHERE creator_user_id IS NOT NULL
+                    GROUP BY creator_user_id
+                ) AS topic_counts ON topic_counts.creator_user_id = u.id
+                LEFT JOIN (
+                    SELECT user_id, COUNT(*) AS feedback_count
+                    FROM site_feedback
+                    WHERE user_id IS NOT NULL
+                    GROUP BY user_id
+                ) AS feedback_counts ON feedback_counts.user_id = u.id
                 WHERE (
                     :q = ''
                     OR LOWER(COALESCE(u.username, '')) LIKE :like_q
@@ -877,6 +884,7 @@ async def get_admin_community_observability(
     window_start = window_start_local.astimezone(timezone.utc)
     recent_7d_start = recent_7d_start_local.astimezone(timezone.utc)
     recent_24h_start = now - timedelta(hours=24)
+    metrics_fetch_start = min(window_start, recent_7d_start)
     ordered_day_keys = [
         (today_local - timedelta(days=index)).isoformat()
         for index in range(safe_window_days - 1, -1, -1)
@@ -900,14 +908,16 @@ async def get_admin_community_observability(
                     COALESCE(w.balance, 0) AS balance,
                     u.username,
                     u.phone,
-                    (
-                        SELECT COUNT(*)
-                        FROM openclaw_activity_events e
-                        WHERE e.openclaw_agent_id = a.id
-                    ) AS lifetime_event_count
+                    COALESCE(event_counts.lifetime_event_count, 0) AS lifetime_event_count
                 FROM openclaw_agents a
                 LEFT JOIN openclaw_wallets w ON w.openclaw_agent_id = a.id
                 LEFT JOIN users u ON u.id = a.bound_user_id
+                LEFT JOIN (
+                    SELECT openclaw_agent_id, COUNT(*) AS lifetime_event_count
+                    FROM openclaw_activity_events
+                    WHERE openclaw_agent_id IS NOT NULL
+                    GROUP BY openclaw_agent_id
+                ) AS event_counts ON event_counts.openclaw_agent_id = a.id
                 ORDER BY a.updated_at DESC, a.id DESC
                 """
             )
@@ -941,9 +951,12 @@ async def get_admin_community_observability(
                 FROM openclaw_activity_events e
                 LEFT JOIN openclaw_agents a ON a.id = e.openclaw_agent_id
                 LEFT JOIN users u ON u.id = COALESCE(e.bound_user_id, a.bound_user_id)
+                WHERE e.created_at >= :window_start
                 ORDER BY e.created_at DESC, e.id DESC
+                LIMIT :event_limit
                 """
-            )
+            ),
+            {"window_start": metrics_fetch_start, "event_limit": _OBSERVABILITY_EVENT_LIMIT},
         ).fetchall()
         observation_rows = session.execute(
             text(
@@ -966,10 +979,23 @@ async def get_admin_community_observability(
                 FROM twin_observations o
                 JOIN twin_core t ON t.twin_id = o.twin_id
                 LEFT JOIN users u ON u.id = t.owner_user_id
+                WHERE o.created_at >= :window_start
                 ORDER BY o.created_at DESC, o.id DESC
                 """
-            )
+            ),
+            {"window_start": metrics_fetch_start},
         ).fetchall()
+        observations_pending_total = int(
+            session.execute(
+                text(
+                    """
+                    SELECT COUNT(*)
+                    FROM twin_observations
+                    WHERE merge_status = 'pending_review'
+                    """
+                )
+            ).scalar_one()
+        )
         topic_rows = session.execute(text("SELECT id, category FROM topics")).fetchall()
         post_rows = session.execute(
             text(
@@ -1275,7 +1301,6 @@ async def get_admin_community_observability(
                     }
                 )
 
-    observations_pending_total = 0
     for row in observation_rows:
         created_at = _parse_datetime(row.created_at)
         if created_at is None:
@@ -1286,9 +1311,6 @@ async def get_admin_community_observability(
         merge_status = str(row.merge_status or "")
         agent_rollup = agent_rollups.get(agent_uid_to_id[row.instance_id]) if row.instance_id in agent_uid_to_id else None
         day_bucket = _format_day_bucket(created_at, tz=_OBSERVABILITY_TIMEZONE)
-
-        if merge_status == "pending_review":
-            observations_pending_total += 1
 
         if created_at >= recent_7d_start:
             active_users_7d.add(owner_user_id)
