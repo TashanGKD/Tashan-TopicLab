@@ -1,4 +1,4 @@
-ARG PYTHON_BASE_IMAGE=docker.m.daocloud.io/library/python:3.11-slim
+ARG PYTHON_BASE_IMAGE=python:3.11-slim
 ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 ARG PIP_TRUSTED_HOST=mirrors.aliyun.com
 FROM ${PYTHON_BASE_IMAGE}
