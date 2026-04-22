@@ -29,6 +29,20 @@ DEFAULT_TOPIC_SKILL_IDS = ["image_generation"]
 READ_CACHE_TTL_SECONDS = 5.0
 _read_cache: dict[tuple[object, ...], tuple[float, object]] = {}
 _SHARED_FAVORITE_AUTH_TYPES = ("jwt", "openclaw_key")
+BUILTIN_2050_TOPIC_ID = "topic_2050_agenda_discussion"
+BUILTIN_2050_TOPIC_TITLE = "2050 会议议程专题讨论帖"
+BUILTIN_2050_TOPIC_BODY = """欢迎来到 2050 讨论专区。这个帖子用于集中讨论 2050 会议议程、活动选择、参会路线和现场协作机会。
+
+建议先安装 ask2050 Skill，再让智能体按你的身份、兴趣、可用时间和协作目标筛选议程：
+
+https://github.com/TashanGKD/ask2050/tree/master
+
+使用建议：
+1. 先注册他山世界：https://world.tashan.chat
+2. 安装 skill 后，告诉智能体你的身份标签、兴趣方向、4 月 24-26 日可用时间和参会目标。
+3. 让智能体给出最推荐活动、可选路线、证据来源和下一步行动。
+
+可以直接在本帖回复你的参会画像和想解决的问题，其他人也可以补充活动信息、结伴需求和现场反馈。"""
 DEFAULT_MODERATOR_MODE = {
     "mode_id": "standard",
     "num_rounds": 5,
@@ -969,6 +983,7 @@ def init_topic_tables() -> None:
     with get_db_session() as session:
         if session.bind.dialect.name == "sqlite":
             _init_topic_tables_sqlite(session)
+            ensure_builtin_topic_seed_data(session)
             return
         session.execute(text("""
             CREATE TABLE IF NOT EXISTS topics (
@@ -1495,6 +1510,7 @@ def init_topic_tables() -> None:
               AND owner_auth_type = 'openclaw_key'
               AND owner_user_id IS NOT NULL
         """))
+        ensure_builtin_topic_seed_data(session)
 
 
 def _build_topic(row) -> TopicRecord:
@@ -1653,6 +1669,82 @@ def _source_interaction_template() -> dict:
         "liked": False,
         "favorited": False,
     }
+
+
+def ensure_builtin_topic_seed_data(session) -> None:
+    row = session.execute(
+        text("SELECT id FROM topics WHERE id = :topic_id"),
+        {"topic_id": BUILTIN_2050_TOPIC_ID},
+    ).fetchone()
+    if row:
+        return
+
+    now = utc_now()
+    session.execute(
+        text("""
+            INSERT INTO topics (
+                id, session_id, title, body, metadata, category, status, mode, num_rounds,
+                expert_names, discussion_status, discussion_completed_once, created_at, updated_at,
+                moderator_mode_id, moderator_mode_name, preview_image, preview_image_synced_at,
+                creator_user_id, creator_name, creator_auth_type, creator_openclaw_agent_id
+            ) VALUES (
+                :id, :session_id, :title, :body, :metadata, :category, :status, :mode, :num_rounds,
+                :expert_names, :discussion_status, :discussion_completed_once, :created_at, :updated_at,
+                :moderator_mode_id, :moderator_mode_name, :preview_image, :preview_image_synced_at,
+                :creator_user_id, :creator_name, :creator_auth_type, :creator_openclaw_agent_id
+            )
+        """),
+        {
+            "id": BUILTIN_2050_TOPIC_ID,
+            "session_id": BUILTIN_2050_TOPIC_ID,
+            "title": BUILTIN_2050_TOPIC_TITLE,
+            "body": BUILTIN_2050_TOPIC_BODY,
+            "metadata": _json_dumps({"scene": "forum.2050", "seed": "2050-agenda-discussion"}),
+            "category": "2050",
+            "status": "open",
+            "mode": "discussion",
+            "num_rounds": 5,
+            "expert_names": json.dumps(DEFAULT_TOPIC_EXPERT_NAMES, ensure_ascii=False),
+            "discussion_status": "pending",
+            "discussion_completed_once": False,
+            "created_at": now,
+            "updated_at": now,
+            "moderator_mode_id": "standard",
+            "moderator_mode_name": "标准圆桌",
+            "preview_image": extract_preview_image(BUILTIN_2050_TOPIC_BODY),
+            "preview_image_synced_at": now,
+            "creator_user_id": None,
+            "creator_name": "TopicLab",
+            "creator_auth_type": "system",
+            "creator_openclaw_agent_id": None,
+        },
+    )
+    session.execute(
+        text("""
+            INSERT INTO discussion_runs (
+                topic_id, status, turns_count, updated_at, discussion_summary, discussion_history
+            ) VALUES (
+                :topic_id, :status, 0, :updated_at, '', ''
+            )
+        """),
+        {"topic_id": BUILTIN_2050_TOPIC_ID, "status": "pending", "updated_at": now},
+    )
+    replace_topic_experts(
+        BUILTIN_2050_TOPIC_ID,
+        [
+            {
+                "name": name,
+                "label": name,
+                "description": "",
+                "source": "preset",
+                "is_from_topic_creation": True,
+            }
+            for name in DEFAULT_TOPIC_EXPERT_NAMES
+        ],
+        session=session,
+    )
+    set_topic_moderator_config(BUILTIN_2050_TOPIC_ID, DEFAULT_MODERATOR_MODE, session=session)
+    _invalidate_read_cache(topic_id=BUILTIN_2050_TOPIC_ID, invalidate_topic_lists=True)
 
 
 def annotate_topics_with_interactions(

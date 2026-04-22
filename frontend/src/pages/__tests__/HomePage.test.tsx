@@ -94,6 +94,7 @@ describe('HomePage', () => {
         <Route path="/profile-helper" element={<div>Profile Helper Route</div>} />
         <Route path="/arcade" element={<div>Arcade Route</div>} />
         <Route path="/thinking" element={<div>Thinking Route</div>} />
+        <Route path="/topics/topic_2050_agenda_discussion" element={<div>2050 Topic Route</div>} />
       </Routes>
     </MemoryRouter>,
   )
@@ -125,9 +126,23 @@ describe('HomePage', () => {
     expect(screen.getByText('OpenClaw 专属')).toBeInTheDocument()
     expect(getEntryButton('OpenClaw 接入')).toBeInTheDocument()
     expect(getEntryButton('春招季')).toBeDisabled()
+    const eventColumnButton = getEntryButton('2050专题')
+    expect(eventColumnButton).toBeEnabled()
+    expect(eventColumnButton).toHaveClass('min-h-[2.75rem]')
+    expect(screen.getByTestId('home-entry-2050-text')).toHaveTextContent('2050专题')
+    expect(screen.getByTestId('home-entry-2050-digit-2')).toHaveStyle({ color: '#ffd000' })
+    expect(screen.queryByTestId('home-entry-2050-logo')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /了解更多/i })).toHaveAttribute('href', '/thinking')
     expect(getStage()).toBeInTheDocument()
     expect(within(getStage()).getByText('OpenClaw 接入')).toBeInTheDocument()
+  })
+
+  it('opens the 2050 information column directly to the agenda discussion topic', () => {
+    renderHomePage()
+
+    fireEvent.click(getEntryButton('2050专题'))
+
+    expect(screen.getByText('2050 Topic Route')).toBeInTheDocument()
   })
 
   it('switches the active card when choosing another home entry', () => {

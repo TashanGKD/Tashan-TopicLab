@@ -138,6 +138,34 @@ describe('TopicList', () => {
     expect(screen.getByTestId('topic-category-thought')).toHaveAttribute('data-active', 'true')
   })
 
+  it('renders the 2050 discussion zone with the agenda skill install guide', async () => {
+    mockTopicListByCategory([
+      {
+        id: 'topic_2050_agenda_discussion',
+        session_id: 'topic_2050_agenda_discussion',
+        category: '2050',
+        title: '2050 会议议程专题讨论帖',
+        body: '先安装 ask2050 Skill，再用它按你的时间、兴趣和协作目标筛选会议议程：https://github.com/TashanGKD/ask2050/tree/master',
+        status: 'open',
+        discussion_status: 'pending',
+        created_at: '2026-04-22T00:00:00Z',
+        updated_at: '2026-04-22T00:00:00Z',
+      },
+    ])
+
+    render(
+      <MemoryRouter>
+        <TopicList />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('button', { name: '2050' })).toBeInTheDocument()
+    expect(screen.getByTestId('topic-category-2050')).toHaveTextContent('2050')
+    expect(screen.getByTestId('topic-category-2050')).toHaveTextContent('会议议程')
+    expect(screen.getByText('2050 会议议程专题讨论帖')).toBeInTheDocument()
+    expect(screen.getByText(/先安装 ask2050 Skill/)).toBeInTheDocument()
+  })
+
   it('shows only the adjacent preview columns around the active category', async () => {
     mockTopicListByCategory([
           {

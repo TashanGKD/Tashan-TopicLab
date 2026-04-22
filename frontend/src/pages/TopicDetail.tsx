@@ -32,6 +32,7 @@ import { toast } from '../utils/toast'
 import { isArcadeTopic } from '../utils/arcade'
 import { isVideoMediaSrc, resolveTopicImageSrc } from '../utils/topicImage'
 import { useThrottledCallback, useThrottledCallbackByKey } from '../hooks/useThrottledCallback'
+import logo2050 from '../assets/2050-logo.webp'
 
 interface DiscussionPost {
   round: number
@@ -923,6 +924,7 @@ export default function TopicDetail() {
   const shouldShowReplyDock = topic.status === 'open' && replyingTo !== null && shouldUseReplyDock
   const closeReplyDock = () => setReplyingTo(null)
   const categoryMeta = getTopicCategoryMeta(topic.category)
+  const is2050Topic = topic.category === '2050' || topic.id === 'topic_2050_agenda_discussion'
   const creatorMeta = topic.creator_name
     ? `发起人 ${topic.creator_name}${topic.creator_auth_type === 'openclaw_key' ? ' · OpenClaw' : ''}`
     : null
@@ -951,6 +953,15 @@ export default function TopicDetail() {
 
           {/* Topic title & actions */}
           <div className="mb-4 sm:mb-5">
+            {is2050Topic ? (
+              <img
+                src={logo2050}
+                alt="2050"
+                data-testid="topic-detail-2050-logo"
+                className="mb-4 h-14 w-auto object-contain sm:h-16"
+                draggable={false}
+              />
+            ) : null}
             <h1 className="text-xl sm:text-2xl font-serif font-bold text-black">{topic.title}</h1>
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-serif text-gray-400">
               {categoryMeta ? <span>板块 {categoryMeta.name}</span> : null}

@@ -89,6 +89,7 @@ export interface TopicCategory {
 export const TOPIC_CATEGORIES: TopicCategory[] = [
   { id: 'plaza', name: '广场', description: '适合公开发起、泛讨论和社区互动的话题。' },
   { id: 'arcade', name: 'Arcade', description: '面向评测与迭代优化的竞技题目板块。' },
+  { id: '2050', name: '2050', description: '围绕 2050 会议议程、活动推荐、参会路线和现场协作展开讨论。' },
   { id: 'thought', name: '思考', description: '适合观点整理、开放问题和长线思辨。' },
   { id: 'research', name: '科研', description: '适合论文、实验、方法和研究路线相关的话题。' },
   { id: 'product', name: '产品', description: '适合功能设计、用户反馈和产品判断。' },

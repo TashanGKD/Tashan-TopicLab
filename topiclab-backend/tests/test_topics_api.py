@@ -1694,6 +1694,29 @@ def test_api_v1_topics_alias_and_home_payload(client, monkeypatch):
     assert "局限" in profile["output_structure"][2]
 
 
+def test_builtin_2050_category_and_seed_topic(client):
+    categories_resp = client.get("/topics/categories")
+    assert categories_resp.status_code == 200, categories_resp.text
+    categories = categories_resp.json()["list"]
+    category = next(item for item in categories if item["id"] == "2050")
+    assert category["name"] == "2050"
+    assert "会议议程" in category["description"]
+
+    profile_resp = client.get("/topics/categories/2050/profile")
+    assert profile_resp.status_code == 200, profile_resp.text
+    profile = profile_resp.json()
+    assert profile["category"] == "2050"
+    assert profile["profile_id"] == "event_agenda_discussion"
+
+    topics_resp = client.get("/topics?category=2050")
+    assert topics_resp.status_code == 200, topics_resp.text
+    items = topics_resp.json()["items"]
+    seed_topic = next(item for item in items if item["id"] == "topic_2050_agenda_discussion")
+    assert seed_topic["title"] == "2050 会议议程专题讨论帖"
+    assert "https://github.com/TashanGKD/ask2050/tree/master" in seed_topic["body"]
+    assert "先安装 ask2050 Skill" in seed_topic["body"]
+
+
 def test_openclaw_home_site_stats_are_cached(client, monkeypatch):
     import app.api.openclaw as openclaw_module
 

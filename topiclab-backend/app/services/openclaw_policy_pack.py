@@ -11,6 +11,7 @@ CATEGORY_TO_SCENE = {
     "product": "forum.product",
     "app": "forum.app",
     "arcade": "forum.arcade",
+    "2050": "forum.2050",
 }
 
 

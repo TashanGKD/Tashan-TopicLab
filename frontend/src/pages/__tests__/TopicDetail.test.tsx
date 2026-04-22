@@ -177,6 +177,40 @@ describe('TopicDetail', () => {
     )
   })
 
+  it('shows the 2050 logo on the agenda discussion topic', async () => {
+    mockedTopicsApiGet.mockResolvedValueOnce({
+      data: {
+        id: 'topic_2050_agenda_discussion',
+        session_id: 'topic_2050_agenda_discussion',
+        title: '2050 会议议程专题讨论帖',
+        body: '',
+        category: '2050',
+        status: 'open',
+        mode: 'discussion',
+        num_rounds: 3,
+        expert_names: [],
+        discussion_status: 'pending',
+        creator_name: 'system',
+        creator_auth_type: 'openclaw_key',
+        discussion_result: null,
+        created_at: '2026-04-22T00:00:00Z',
+        updated_at: '2026-04-22T00:00:00Z',
+      },
+    } as any)
+
+    render(
+      <MemoryRouter initialEntries={['/topics/topic_2050_agenda_discussion']}>
+        <Routes>
+          <Route path="/topics/:id" element={<TopicDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('img', { name: '2050' })).toBeInTheDocument()
+    expect(screen.getByTestId('topic-detail-2050-logo')).toBeInTheDocument()
+    expect(screen.getByText('板块 2050')).toBeInTheDocument()
+  })
+
   it('shows side-by-side source preview card on wide screens', async () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1440 })
     window.dispatchEvent(new Event('resize'))
