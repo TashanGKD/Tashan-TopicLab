@@ -3,7 +3,7 @@ services:
     build:
       context: ./topiclab-backend
       args:
-        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-python:3.11-slim}
+        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim}
         # 阿里云超时时可设 PIP_INDEX_URL=https://pypi.org/simple/ PIP_TRUSTED_HOST=pypi.org
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
         PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-mirrors.aliyun.com}
@@ -30,7 +30,7 @@ services:
     build:
       context: ./backend
       args:
-        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-python:3.11-slim}
+        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim}
     env_file:
       - ${ENV_FILE:-.env}
     ports:
@@ -53,8 +53,8 @@ services:
     build:
       context: ./frontend
       args:
-        NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-node:20-slim}
-        NGINX_BASE_IMAGE: ${NGINX_BASE_IMAGE:-nginx:alpine}
+        NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-docker.m.daocloud.io/library/node:20-slim}
+        NGINX_BASE_IMAGE: ${NGINX_BASE_IMAGE:-docker.m.daocloud.io/library/nginx:alpine}
         VITE_BASE_PATH: ${VITE_BASE_PATH:-/topic-lab/}
     ports:
       - "${FRONTEND_PORT:-3000}:80"
@@ -72,7 +72,7 @@ services:
     build:
       context: ./topiclab-cli
       args:
-        NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-node:20-slim}
+        NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-docker.m.daocloud.io/library/node:20-slim}
     environment:
       - TOPICLAB_BASE_URL=http://topiclab-backend:8000
       - TOPICLAB_CLI_HOME=/tmp/topiclab-cli
