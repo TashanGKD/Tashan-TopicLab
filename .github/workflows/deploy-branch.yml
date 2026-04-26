@@ -98,24 +98,9 @@ jobs:
             docker compose up -d
             docker image prune -f
 
-            mkdir -p /etc/nginx/snippets
-            # Branch snippet: root redirect + proxy. Include ONLY in the branch domain's server block.
-            printf '%s\n' \
-              "location = / {" \
-              "    return 302 /topic-lab/${BRANCH_SANITIZED}/;" \
-              '}' \
-              "location ^~ /topic-lab/${BRANCH_SANITIZED}/ {" \
-              "    proxy_pass http://127.0.0.1:${FRONTEND_PORT}/topic-lab/${BRANCH_SANITIZED}/;" \
-              '    proxy_set_header Host $host;' \
-              '    proxy_set_header X-Real-IP $remote_addr;' \
-              '    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' \
-              '    proxy_set_header X-Forwarded-Proto $scheme;' \
-              '}' \
-              | sudo tee "/etc/nginx/snippets/topic-lab-${BRANCH_SANITIZED}.conf" > /dev/null
-            sudo nginx -t && sudo nginx -s reload
-
             echo "--------------------------------------------"
-            echo "Frontend: http://${{ secrets.DEPLOY_HOST }}/topic-lab/${BRANCH_SANITIZED}"
+            echo "Frontend container port: ${FRONTEND_PORT}"
+            echo "Branch preview nginx routing is managed separately from this smoke deploy."
             echo "Branch:   $BRANCH"
             echo "Commit:   ${{ github.sha }}"
             echo "--------------------------------------------"

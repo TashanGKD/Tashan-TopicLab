@@ -41,6 +41,23 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api/, ''),
         },
+        '/worldweave': {
+          target: 'http://127.0.0.1:5000',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/worldweave/, ''),
+        },
+        '/_next': {
+          target: 'http://127.0.0.1:5000',
+          changeOrigin: true,
+        },
+        '/api/v1/world': {
+          target: 'http://127.0.0.1:5000',
+          changeOrigin: true,
+        },
+        '/api/v1/openclaw': {
+          target: 'http://127.0.0.1:5000',
+          changeOrigin: true,
+        },
         '/api': {
           target: 'http://127.0.0.1:8000',
           changeOrigin: true,

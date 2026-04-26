@@ -113,6 +113,10 @@ def _get_information_collection_base_url() -> str:
     return os.getenv("INFORMATION_COLLECTION_BASE_URL", "http://ic.nexus.tashan.ac.cn").rstrip("/")
 
 
+def _get_worldweave_base_url() -> str:
+    return os.getenv("WORLDWEAVE_BASE_URL", "http://127.0.0.1:5000").rstrip("/")
+
+
 def _get_source_feed_list_cache_ttl_seconds() -> float:
     raw = (os.getenv("SOURCE_FEED_LIST_CACHE_TTL_SECONDS", "") or "").strip()
     if not raw:
@@ -235,7 +239,12 @@ async def get_source_feed_articles(
             page_payload = _clone_source_feed_page_payload(cached[1])
 
     if page_payload is None:
-        upstream_url = f"{_get_information_collection_base_url()}/api/v1/articles"
+        is_worldweave = source_type_key == "worldweave-signal"
+        upstream_url = (
+            f"{_get_worldweave_base_url()}/api/v1/topiclab/source-feed/articles"
+            if is_worldweave
+            else f"{_get_information_collection_base_url()}/api/v1/articles"
+        )
         upstream_params: dict[str, Any] = {"limit": limit, "offset": offset}
         if source_type_key:
             upstream_params["source_type"] = source_type_key
@@ -251,7 +260,7 @@ async def get_source_feed_articles(
             raise HTTPException(status_code=502, detail="无法连接信源服务") from exc
 
         payload = response.json()
-        data = payload.get("data")
+        data = payload if is_worldweave else payload.get("data")
         if not isinstance(data, dict):
             raise HTTPException(status_code=502, detail="信源服务返回格式异常")
 

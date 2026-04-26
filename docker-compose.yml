@@ -12,6 +12,8 @@ services:
     environment:
       - WORKSPACE_BASE=/app/workspace
       - TOPICLAB_SYNC_URL=${TOPICLAB_SYNC_URL:-http://topiclab-backend:8000}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${TOPICLAB_BACKEND_PORT:-8001}:8000"
     volumes:
@@ -56,6 +58,8 @@ services:
         NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-docker.m.daocloud.io/library/node:20-slim}
         NGINX_BASE_IMAGE: ${NGINX_BASE_IMAGE:-docker.m.daocloud.io/library/nginx:alpine}
         VITE_BASE_PATH: ${VITE_BASE_PATH:-/topic-lab/}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${FRONTEND_PORT:-3000}:80"
     depends_on:

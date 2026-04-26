@@ -26,11 +26,20 @@ const QUICK_LINKS = [
 ]
 
 const SOURCE_FEED_SECTIONS = [
-  { id: 'source' as const, label: '媒体' },
+  { id: 'source' as const, label: '世界脉络' },
+  { id: 'media' as const, label: '媒体' },
   { id: 'academic' as const, label: '学术' },
 ]
 
-/** 媒体页仅展示微信公众号 RSS 入库信源（与上游 IC articles 筛选一致） */
+const VALID_SOURCE_FEED_SECTION_IDS = [
+  'source',
+  'source-list',
+  'media',
+  'academic',
+] as const
+
+const WORLDWEAVE_SOURCE_TYPE_FILTER = 'worldweave-signal'
+/** 媒体页保留原有微信公众号 RSS 入库信源，方便继续从旧信息源开题讨论 */
 const MEDIA_SOURCE_TYPE_FILTER = 'we-mp-rss'
 /** 学术页信源类型（与上游 IC articles 筛选一致） */
 const ACADEMIC_SOURCE_TYPE_FILTER = 'gqy'
@@ -45,6 +54,68 @@ const ACADEMIC_ARXIV_FEED_SET = new Set<string>(
 )
 /** 单次首屏/加载更多最多翻上游 gqy 页数，避免全非目标分区时死循环 */
 const ACADEMIC_MAX_RAW_PAGES = 24
+const WORLDWEAVE_FRONTEND_URL =
+  import.meta.env.VITE_WORLDWEAVE_FRONTEND_URL || '/worldweave/'
+const WORLDWEAVE_FRAME_URL = WORLDWEAVE_FRONTEND_URL.includes('#')
+  ? WORLDWEAVE_FRONTEND_URL
+  : `${WORLDWEAVE_FRONTEND_URL.replace(/\/?$/, '/')}#world-map-panel`
+
+function WorldWeaveSourceFrame() {
+  return (
+    <div className="min-h-[calc(100vh-64px)] bg-[#f3f7fb] px-2 py-3 sm:px-4 sm:py-4">
+      <div className="mx-auto mb-4 max-w-[1280px]">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div
+            className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-serif font-semibold text-slate-600 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition hover:text-slate-950"
+          >
+            <span>Trends</span>
+            <span className="text-xs font-normal text-slate-400">外部导航</span>
+          </div>
+          {QUICK_LINKS.map((link) => (
+            <a
+              key={link.href}
+              href={link.href}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={link.label}
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-serif font-semibold text-slate-600 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition hover:text-slate-950"
+            >
+              <span>{link.label}</span>
+            </a>
+          ))}
+        </div>
+        <div className="-mx-1 mb-4 mt-8 px-1">
+          <div className="flex gap-1 border-b border-gray-200">
+            {SOURCE_FEED_SECTIONS.map((item) => {
+              const active = item.id === 'source'
+              return (
+                <Link
+                  key={item.id}
+                  to={`/info/${item.id}`}
+                  className={`-mb-px flex-shrink-0 px-3 py-2.5 text-sm font-serif transition-colors border-b-2 ${
+                    active
+                      ? 'border-[var(--color-dark)] text-[var(--color-dark)] font-medium'
+                      : 'border-transparent text-gray-500 hover:text-gray-900'
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+      <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
+        <iframe
+          title="世界脉络"
+          src={WORLDWEAVE_FRAME_URL}
+          className="block h-[calc(100vh-110px)] min-h-[760px] w-full border-0"
+          loading="eager"
+        />
+      </div>
+    </div>
+  )
+}
 
 function dedupeArticles(items: SourceFeedArticle[]) {
   const seen = new Set<number>()
@@ -102,12 +173,18 @@ function buildArticleSnapshot(article: SourceFeedArticle) {
   }
 }
 
-type SourceFeedSectionId = (typeof SOURCE_FEED_SECTIONS)[number]['id']
+type SourceFeedSectionId = (typeof VALID_SOURCE_FEED_SECTION_IDS)[number]
 
 function isSourceFeedSectionId(
   value: string | undefined,
 ): value is SourceFeedSectionId {
-  return SOURCE_FEED_SECTIONS.some((s) => s.id === value)
+  return VALID_SOURCE_FEED_SECTION_IDS.includes(value as SourceFeedSectionId)
+}
+
+function articleSourceTypeForSection(section: SourceFeedSectionId) {
+  if (section === 'source-list') return WORLDWEAVE_SOURCE_TYPE_FILTER
+  if (section === 'media') return MEDIA_SOURCE_TYPE_FILTER
+  return null
 }
 
 async function pullArxivRowsFromGqy(startRawOffset: number): Promise<{
@@ -193,7 +270,7 @@ export default function SourceFeedPage() {
   }, [academicLoading])
 
   useEffect(() => {
-    if (section !== 'source') return
+    if (!articleSourceTypeForSection(section)) return
     void loadFirstPage()
   }, [section])
 
@@ -230,7 +307,7 @@ export default function SourceFeedPage() {
         (window.innerHeight + window.scrollY)
       if (remaining > 900) return
       if (
-        section === 'source' &&
+        articleSourceTypeForSection(section) &&
         !loadingMoreRef.current &&
         hasMoreRef.current
       ) {
@@ -251,12 +328,12 @@ export default function SourceFeedPage() {
 
   useEffect(() => {
     if (
-      section === 'source' &&
+      articleSourceTypeForSection(section) &&
       (loading || loadingMore || !hasMore || articles.length === 0)
     )
       return
     if (
-      section === 'source' &&
+      articleSourceTypeForSection(section) &&
       document.documentElement.scrollHeight <= window.innerHeight + 160
     ) {
       void loadMore()
@@ -266,10 +343,12 @@ export default function SourceFeedPage() {
   const loadFirstPage = async () => {
     setLoading(true)
     try {
+      const sourceType = articleSourceTypeForSection(section)
+      if (!sourceType) return
       const res = await sourceFeedApi.list({
         limit: PAGE_SIZE,
         offset: 0,
-        source_type: MEDIA_SOURCE_TYPE_FILTER,
+        source_type: sourceType,
       })
       const nextList = dedupeArticles(res.data.list)
       setArticles(nextList)
@@ -290,11 +369,13 @@ export default function SourceFeedPage() {
     loadingMoreRef.current = true
     setLoadingMore(true)
     try {
+      const sourceType = articleSourceTypeForSection(section)
+      if (!sourceType) return
       const offset = pageRef.current * PAGE_SIZE
       const res = await sourceFeedApi.list({
         limit: PAGE_SIZE,
         offset,
-        source_type: MEDIA_SOURCE_TYPE_FILTER,
+        source_type: sourceType,
       })
       const nextPage = res.data.list
       setArticles((prev) => dedupeArticles([...prev, ...nextPage]))
@@ -412,10 +493,10 @@ export default function SourceFeedPage() {
         prev.map((item) =>
           item.id === articleId ? { ...item, interaction } : item,
         )
-      if (section === 'academic') {
-        setAcademicArticles(patch)
-      } else {
+      if (articleSourceTypeForSection(section)) {
         setArticles(patch)
+      } else {
+        setAcademicArticles(patch)
       }
     },
     [section],
@@ -545,10 +626,14 @@ export default function SourceFeedPage() {
   const throttledShare = useThrottledCallbackByKey(handleShare, (a) => a.id)
   const throttledReply = useThrottledCallbackByKey(handleReply, (a) => a.id)
 
+  if (section === 'source') {
+    return <WorldWeaveSourceFrame />
+  }
+
   return (
     <LibraryPageLayout
       title="信息"
-      description="集中查看平台沉淀的媒体与学术信源，支持搜索、收藏、点赞，并从信源直接进入对应话题。你的 OpenClaw 可让直接帮你做筛选归纳，并发起讨论。"
+      description="集中查看实时信号、媒体与学术信源，支持搜索、收藏、点赞，并从信源直接进入对应话题。你的 OpenClaw 可以继续做筛选归纳，并发起讨论。"
       actions={
         <form
           className="w-full sm:w-[320px]"
@@ -584,24 +669,15 @@ export default function SourceFeedPage() {
       <div className="max-w-5xl">
         <div className="flex flex-wrap items-center gap-2.5">
           <div
-            className="mr-1 flex items-center gap-2 rounded-full border px-3 py-2"
+            className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-serif font-semibold transition-colors"
             style={{
               borderColor: 'var(--border-default)',
-              backgroundColor: 'var(--bg-secondary)',
+              backgroundColor: 'var(--bg-container)',
+              color: 'var(--text-secondary)',
             }}
           >
-            <span
-              className="text-sm font-serif font-semibold"
-              style={{ color: 'var(--text-primary)' }}
-            >
-              Trends
-            </span>
-            <span
-              className="text-xs font-serif"
-              style={{ color: 'var(--text-tertiary)' }}
-            >
-              外部导航
-            </span>
+            <span>Trends</span>
+            <span className="text-xs font-normal opacity-60">外部导航</span>
           </div>
           {QUICK_LINKS.map((link) => (
             <a
@@ -619,30 +695,15 @@ export default function SourceFeedPage() {
             >
               <span>{link.label}</span>
               <span
-                className="flex h-6 w-6 items-center justify-center rounded-full"
-                style={{
-                  backgroundColor: 'var(--bg-secondary)',
-                  color: 'var(--text-tertiary)',
-                }}
+                aria-hidden="true"
+                className="inline-flex h-5 w-5 items-center justify-center rounded-full text-xs"
+                style={{ backgroundColor: 'var(--bg-muted)' }}
               >
-                <svg
-                  viewBox="0 0 20 20"
-                  fill="none"
-                  aria-hidden="true"
-                  className="h-3.5 w-3.5"
-                >
-                  <path
-                    d="M7 13L13 7M8 7h5v5"
-                    stroke="currentColor"
-                    strokeWidth="1.6"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
+                ↗
               </span>
             </a>
           ))}
-        </div>
+      </div>
       </div>
 
       <div className="-mx-1 mb-4 mt-8 px-1">
@@ -666,11 +727,13 @@ export default function SourceFeedPage() {
         </div>
       </div>
 
-      {section === 'source' && (
+      {articleSourceTypeForSection(section) && (
         <>
           {loading && <p className="font-serif text-gray-500">加载中...</p>}
           {!loading && articles.length === 0 && (
-            <p className="font-serif text-gray-500">暂无文章</p>
+            <p className="font-serif text-gray-500">
+              {section === 'media' ? '暂无媒体信源' : '暂无实时信号'}
+            </p>
           )}
           {!loading && articles.length > 0 && filteredArticles.length === 0 && (
             <p className="font-serif text-gray-500">没有匹配结果</p>
