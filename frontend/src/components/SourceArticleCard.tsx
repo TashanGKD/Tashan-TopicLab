@@ -49,6 +49,9 @@ function formatDateTime(value: string) {
 
 function getArticleTag(article: SourceFeedArticle) {
   const marker = `${article.source_feed_name} ${article.url}`.toLowerCase()
+  if (article.source_type === 'worldweave-signal') {
+    return '信号'
+  }
   if (marker.includes('arxiv')) {
     return '论文'
   }

@@ -58,8 +58,8 @@ describe('SourceFeedPage', () => {
           {
             id: 258,
             title: '远端入库文章',
-            source_feed_name: '信息采集库',
-            source_type: 'we-mp-rss',
+            source_feed_name: 'arXiv cs.AI',
+            source_type: 'gqy',
             url: 'https://example.com/article',
             pic_url: 'https://mmbiz.qpic.cn/example.jpg',
             description: '用于验证独立信源页面渲染。',
@@ -69,8 +69,8 @@ describe('SourceFeedPage', () => {
           {
             id: 259,
             title: '第二条信源文章',
-            source_feed_name: '极客公园',
-            source_type: 'we-mp-rss',
+            source_feed_name: 'arXiv cs.LG',
+            source_type: 'gqy',
             url: 'https://example.com/article-2',
             pic_url: null,
             description: '用于验证信息流列表。',
@@ -87,48 +87,78 @@ describe('SourceFeedPage', () => {
   it('renders the standalone source feed page', async () => {
     renderSourceFeed()
 
+    const frame = await screen.findByTitle('世界脉络')
+    expect(frame).toBeInTheDocument()
+    expect(frame.getAttribute('src')).toBe('/worldweave/#world-map-panel')
+    expect(await screen.findByText('Trends')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '全球情报' }).getAttribute('href')).toBe('https://42vf4xnfxh.coze.site/')
+    expect(screen.getByRole('link', { name: '开源代码库' }).getAttribute('href')).toBe('https://home.gqy20.top/TrendPluse/')
+    expect(screen.getByRole('link', { name: '世界脉络' }).getAttribute('href')).toBe('/info/source')
+    expect(screen.getByRole('link', { name: '媒体' }).getAttribute('href')).toBe('/info/media')
+    expect(screen.getAllByRole('link', { name: '学术' }).some((link) => link.getAttribute('href') === '/info/academic')).toBe(true)
+    expect(mockedSourceFeedApiList).not.toHaveBeenCalled()
+  })
+
+  it('keeps a native source list for opening WorldWeave signals as topics', async () => {
+    renderSourceFeed('/info/source-list')
+
+    await waitFor(() => {
+      expect(mockedSourceFeedApiList).toHaveBeenCalledWith(
+        expect.objectContaining({ source_type: 'worldweave-signal' }),
+      )
+    })
+    expect(await screen.findByText('远端入库文章')).toBeInTheDocument()
+    expect(
+      await screen.findAllByRole('button', { name: '回复到话题' }),
+    ).not.toHaveLength(0)
+  })
+
+  it('keeps the original media source feed as a selectable topic source', async () => {
+    renderSourceFeed('/info/media')
+
     await waitFor(() => {
       expect(mockedSourceFeedApiList).toHaveBeenCalledWith(
         expect.objectContaining({ source_type: 'we-mp-rss' }),
       )
     })
-    expect(
-      await screen.findByRole('heading', { name: '信息' }),
-    ).toBeInTheDocument()
-    expect(await screen.findByText('Trends')).toBeInTheDocument()
-    expect(
-      await screen.findByText('这里先承接需要浏览和筛选的信息。现阶段包括媒体与学术两类内容，后续招聘、机会和更多资源也会逐步并入这一入口。'),
-    ).toBeInTheDocument()
-    const academicLinks = await screen.findAllByRole('link', { name: '学术' })
-    expect(
-      academicLinks.some(
-        (el) =>
-          el.getAttribute('href') ===
-          'https://daiduo2.github.io/academic-trend-monitor/',
-      ),
-    ).toBe(true)
-    expect(
-      academicLinks.some((el) =>
-        el.getAttribute('href')?.endsWith('/info/academic'),
-      ),
-    ).toBe(true)
-    expect(
-      screen.getByRole('link', { name: '媒体' }).getAttribute('href'),
-    ).toContain('/info/source')
-    expect(
-      await screen.findByRole('button', { name: '搜索' }),
-    ).toBeInTheDocument()
     expect(await screen.findByText('远端入库文章')).toBeInTheDocument()
-    expect(await screen.findByText('第二条信源文章')).toBeInTheDocument()
     expect(
       await screen.findAllByRole('button', { name: '回复到话题' }),
     ).not.toHaveLength(0)
-    const image = await screen.findByRole('img', { name: '远端入库文章' })
-    expect(image.getAttribute('src')).toContain('/api/source-feed/image?url=')
   })
 
   it('filters cards by search query', async () => {
-    renderSourceFeed()
+    mockedSourceFeedApiList.mockResolvedValue({
+      data: {
+        list: [
+          {
+            id: 501,
+            title: 'Agentic BPM: A Manifesto',
+            source_feed_name: 'arXiv cs.AI',
+            source_type: 'gqy',
+            url: 'https://arxiv.org/abs/2603.18916',
+            pic_url: null,
+            description: '第一条论文',
+            publish_time: '2026-03-12 17:25:00',
+            created_at: '2026-03-12T11:09:13.216155',
+          },
+          {
+            id: 502,
+            title: '第二条论文',
+            source_feed_name: 'arXiv cs.LG',
+            source_type: 'gqy',
+            url: 'https://arxiv.org/abs/2603.18917',
+            pic_url: null,
+            description: '用于验证搜索。',
+            publish_time: '2026-03-12 18:25:00',
+            created_at: '2026-03-12T12:09:13.216155',
+          },
+        ],
+        limit: 12,
+        offset: 0,
+      },
+    } as any)
+    renderSourceFeed('/info/academic')
 
     const input = (await screen.findAllByRole('textbox', { name: '搜索' }))[0]
     const form = input.closest('form')
@@ -138,18 +168,18 @@ describe('SourceFeedPage', () => {
     fireEvent.submit(form!)
 
     expect(
-      (await screen.findAllByText('第二条信源文章')).length,
+      (await screen.findAllByText('第二条论文')).length,
     ).toBeGreaterThan(0)
     await waitFor(() => {
-      expect(screen.queryAllByText('远端入库文章')).toHaveLength(0)
+      expect(screen.queryAllByText('Agentic BPM: A Manifesto')).toHaveLength(0)
     })
   })
 
   it('uses four columns with max 280px cards on wide screens', async () => {
     setViewport(1440)
-    renderSourceFeed()
+    renderSourceFeed('/info/academic')
 
-    const grid = await screen.findByTestId('source-feed-grid')
+    const grid = await screen.findByTestId('academic-feed-grid')
     await waitFor(() => {
       expect(grid).toHaveStyle({
         gridTemplateColumns: 'repeat(4, 267px)',
@@ -159,9 +189,9 @@ describe('SourceFeedPage', () => {
 
   it('keeps at least two columns on mobile by shrinking card width', async () => {
     setViewport(390)
-    renderSourceFeed()
+    renderSourceFeed('/info/academic')
 
-    const grid = await screen.findByTestId('source-feed-grid')
+    const grid = await screen.findByTestId('academic-feed-grid')
     await waitFor(() => {
       expect(grid).toHaveStyle({
         gridTemplateColumns: 'repeat(2, 174px)',

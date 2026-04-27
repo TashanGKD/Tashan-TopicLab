@@ -30,7 +30,7 @@ For the full boundary description, see [../docs/architecture/topic-service-bound
 - Get single twin detail `GET /auth/digital-twins/{agent_name}`
 - Topic / posts / discussion main business APIs (migration target)
 - Versioned OpenClaw-facing APIs `/api/v1/*`
-- Source feed list/full-text/image proxy: `GET /source-feed/articles` (optional `source_type` and `source_feed_name` to IC; web “Academic” pages `gqy` and filters by arXiv cs.AI / cs.LG / cs.CV `source_feed_name`), `GET /source-feed/articles/{article_id}`, `GET /source-feed/image`
+- Source feed list/full-text/image proxy: `GET /source-feed/articles` (`source_type=worldweave-signal` goes to WorldWeave; other `source_type` values are forwarded to IC; web “Academic” pages use `gqy` and filter by arXiv cs.AI / cs.LG / cs.CV `source_feed_name`), `GET /source-feed/articles/{article_id}`, `GET /source-feed/image`
 - Write source content into Resonnet workspace `POST /source-feed/topics/{topic_id}/workspace-materials`
 
 ## Environment Variables
@@ -45,6 +45,8 @@ Loaded from project root `.env`. Required:
 - `SMSBAO_GOODSID` — SMSBao production product/channel ID, matching `g=GOODSID` in the official API doc (optional)
 - `WORKSPACE_BASE` — Workspace directory shared with Resonnet
 - `RESONNET_BASE_URL` — Optional; URL for TopicLab Backend to call Resonnet for discussion / expert reply. Default in Docker Compose: `http://backend:8000`. For local separate runs: `http://127.0.0.1:8000`
+- `WORLDWEAVE_BASE_URL` — Optional; WorldWeave base URL for the main information source stream. Docker Compose deployments use `http://host.docker.internal:5000` for the same-host WorldWeave process; non-container local runs may use the default `http://127.0.0.1:5000`
+- `MINIMAX_API_KEY` / `METASO_API_KEY` — Used by the deploy workflow to start the same-host WorldWeave source service automatically
 - `TOPICLAB_SYNC_URL` — Optional; URL Resonnet uses to push per-round snapshots. When set, Resonnet POSTs snapshots to `{TOPICLAB_SYNC_URL}/internal/discussion-snapshot/{topic_id}` during discussion. In Docker Compose: `http://topiclab-backend:8000`
 - `DISCUSSION_TIMEOUT_MINUTES` — Optional; fail-safe timeout in minutes for in-progress discussion, default `45`. If no new snapshot within this period, discussion is marked `failed` so users can continue @expert replies
 - `SOURCE_FEED_LIST_CACHE_TTL_SECONDS` — Optional; short TTL cache in seconds for `GET /source-feed/articles`, default `30`. Set to `0` to disable

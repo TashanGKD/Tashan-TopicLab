@@ -68,10 +68,15 @@ jobs:
             docker compose up -d
             docker image prune -f
 
+            # WorldWeave is the source dashboard embedded by TopicLab /info/source.
+            # It is deployed on the same host and proxied through nginx below.
+            bash scripts/deploy-worldweave.sh .env
+
             # Read frontend port from .env (default 3000); trim whitespace/CRLF to avoid nginx config issues
             FRONTEND_PORT=$(grep -E '^FRONTEND_PORT=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d ' \r' || echo 3000)
 
             # Write nginx snippet (location block only, included by world.tashan.chat server block).
+            # WorldWeave routes are handled inside the frontend container nginx.
             # Requires VITE_BASE_PATH=/ in DEPLOY_ENV so frontend matches /api/.
             mkdir -p /etc/nginx/snippets
             printf '%s\n' \
