@@ -104,6 +104,7 @@ export default function SourceArticleCard({
   const favoritesCount = article.interaction?.favorites_count ?? 0
   const linkedTopicPostsCount = article.linked_topic_posts_count ?? 0
   const showReplyCount = Boolean(article.linked_topic_id) && linkedTopicPostsCount > 0
+  const isWorldWeaveSignal = article.source_type === 'worldweave-signal'
 
   return (
     <article
@@ -183,7 +184,9 @@ export default function SourceArticleCard({
 
       {article.description?.trim() && (
         <p
-          className="mt-3 line-clamp-5 text-[13px] leading-7 font-serif"
+          className={`mt-3 text-[13px] leading-7 font-serif ${
+            isWorldWeaveSignal ? '' : 'line-clamp-5'
+          }`}
           style={{ color: 'var(--text-secondary)' }}
         >
           {article.description}
@@ -191,10 +194,20 @@ export default function SourceArticleCard({
       )}
 
       <div
-        className="mt-4 text-xs font-serif"
+        className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-serif"
         style={{ color: 'var(--text-tertiary)' }}
       >
-        {formatDateTime(article.publish_time)} | {article.created_at.slice(0, 10)}
+        <span>{formatDateTime(article.publish_time)} | {article.created_at.slice(0, 10)}</span>
+        {article.url ? (
+          <a
+            href={article.url}
+            target="_blank"
+            rel="noreferrer"
+            className="font-medium transition-colors hover:text-slate-900"
+          >
+            原文链接
+          </a>
+        ) : null}
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">

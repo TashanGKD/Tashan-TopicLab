@@ -56,9 +56,7 @@ const ACADEMIC_ARXIV_FEED_SET = new Set<string>(
 const ACADEMIC_MAX_RAW_PAGES = 24
 const WORLDWEAVE_FRONTEND_URL =
   import.meta.env.VITE_WORLDWEAVE_FRONTEND_URL || '/worldweave/'
-const WORLDWEAVE_FRAME_URL = WORLDWEAVE_FRONTEND_URL.includes('#')
-  ? WORLDWEAVE_FRONTEND_URL
-  : `${WORLDWEAVE_FRONTEND_URL.replace(/\/?$/, '/')}#world-map-panel`
+const WORLDWEAVE_FRAME_URL = WORLDWEAVE_FRONTEND_URL.replace(/\/?$/, '/')
 const WORLDWEAVE_HEALTH_URL = `${WORLDWEAVE_FRAME_URL.split('#')[0].replace(/\/?$/, '/')}api/v1/openclaw/skill.md`
 const SHOULD_CHECK_WORLDWEAVE = WORLDWEAVE_FRONTEND_URL.startsWith('/')
 const WORLDWEAVE_FRAME_MIN_HEIGHT = 860
@@ -141,7 +139,7 @@ function WorldWeaveSourceFrame() {
         frame.style.height = previousInlineHeight
 
         setWorldWeaveFrameHeight((currentHeight) =>
-          Math.abs(currentHeight - nextHeight) > 8 ? nextHeight : currentHeight,
+          nextHeight > currentHeight + 8 ? nextHeight : currentHeight,
         )
       })
     }

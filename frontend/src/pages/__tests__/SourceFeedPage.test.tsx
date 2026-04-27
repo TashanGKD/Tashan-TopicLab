@@ -93,7 +93,7 @@ describe('SourceFeedPage', () => {
 
     const frame = await screen.findByTitle('世界脉络')
     expect(frame).toBeInTheDocument()
-    expect(frame.getAttribute('src')).toBe('/worldweave/#world-map-panel')
+    expect(frame.getAttribute('src')).toBe('/worldweave/')
     expect(frame).toHaveStyle({ height: '860px' })
     expect(frame).toHaveAttribute('scrolling', 'no')
     expect(mockedWorldWeaveFetch).toHaveBeenCalledWith(
