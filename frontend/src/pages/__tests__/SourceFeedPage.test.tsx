@@ -94,7 +94,7 @@ describe('SourceFeedPage', () => {
     const frame = await screen.findByTitle('世界脉络')
     expect(frame).toBeInTheDocument()
     expect(frame.getAttribute('src')).toBe('/worldweave/#world-map-panel')
-    expect(frame).toHaveStyle({ height: '1200px' })
+    expect(frame).toHaveStyle({ height: '860px' })
     expect(frame).toHaveAttribute('scrolling', 'no')
     expect(mockedWorldWeaveFetch).toHaveBeenCalledWith(
       '/worldweave/api/v1/openclaw/skill.md',
@@ -107,6 +107,77 @@ describe('SourceFeedPage', () => {
     expect(screen.getByRole('link', { name: '媒体' }).getAttribute('href')).toBe('/info/media')
     expect(screen.getAllByRole('link', { name: '学术' }).some((link) => link.getAttribute('href') === '/info/academic')).toBe(true)
     expect(mockedSourceFeedApiList).not.toHaveBeenCalled()
+  })
+
+  it('does not grow the WorldWeave iframe from viewport-derived document height', async () => {
+    const originalRequestAnimationFrame = window.requestAnimationFrame
+    const originalCancelAnimationFrame = window.cancelAnimationFrame
+    Object.defineProperty(window, 'requestAnimationFrame', {
+      configurable: true,
+      value: (callback: FrameRequestCallback) => {
+        callback(0)
+        return 1
+      },
+    })
+    Object.defineProperty(window, 'cancelAnimationFrame', {
+      configurable: true,
+      value: vi.fn(),
+    })
+
+    try {
+      renderSourceFeed()
+
+      const frame = (await screen.findByTitle('世界脉络')) as HTMLIFrameElement
+      const iframeDocument =
+        document.implementation.createHTMLDocument('世界脉络')
+
+      Object.defineProperty(frame, 'contentDocument', {
+        configurable: true,
+        get: () => iframeDocument,
+      })
+      Object.defineProperty(frame, 'contentWindow', {
+        configurable: true,
+        get: () => ({ document: iframeDocument }),
+      })
+
+      const viewportHeight = () =>
+        Number.parseInt(frame.style.height || '0', 10)
+      for (const element of [
+        iframeDocument.body,
+        iframeDocument.documentElement,
+      ]) {
+        Object.defineProperty(element, 'scrollHeight', {
+          configurable: true,
+          get: viewportHeight,
+        })
+        Object.defineProperty(element, 'offsetHeight', {
+          configurable: true,
+          get: viewportHeight,
+        })
+      }
+
+      fireEvent.load(frame)
+
+      await waitFor(() => {
+        expect(frame).toHaveStyle({ height: '892px' })
+      })
+
+      fireEvent.load(frame)
+      fireEvent.load(frame)
+
+      await waitFor(() => {
+        expect(frame).toHaveStyle({ height: '892px' })
+      })
+    } finally {
+      Object.defineProperty(window, 'requestAnimationFrame', {
+        configurable: true,
+        value: originalRequestAnimationFrame,
+      })
+      Object.defineProperty(window, 'cancelAnimationFrame', {
+        configurable: true,
+        value: originalCancelAnimationFrame,
+      })
+    }
   })
 
   it('shows a readable WorldWeave outage state instead of a blank iframe', async () => {

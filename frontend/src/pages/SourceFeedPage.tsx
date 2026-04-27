@@ -61,7 +61,8 @@ const WORLDWEAVE_FRAME_URL = WORLDWEAVE_FRONTEND_URL.includes('#')
   : `${WORLDWEAVE_FRONTEND_URL.replace(/\/?$/, '/')}#world-map-panel`
 const WORLDWEAVE_HEALTH_URL = `${WORLDWEAVE_FRAME_URL.split('#')[0].replace(/\/?$/, '/')}api/v1/openclaw/skill.md`
 const SHOULD_CHECK_WORLDWEAVE = WORLDWEAVE_FRONTEND_URL.startsWith('/')
-const WORLDWEAVE_FRAME_MIN_HEIGHT = 1200
+const WORLDWEAVE_FRAME_MIN_HEIGHT = 860
+const WORLDWEAVE_FRAME_MEASUREMENT_HEIGHT = 860
 const WORLDWEAVE_FRAME_HEIGHT_PADDING = 32
 
 type WorldWeaveStatus = 'checking' | 'ready' | 'unavailable'
@@ -126,14 +127,18 @@ function WorldWeaveSourceFrame() {
         html.style.overflow = 'hidden'
         body.style.overflow = 'hidden'
 
+        const previousInlineHeight = frame.style.height
+        frame.style.height = `${WORLDWEAVE_FRAME_MEASUREMENT_HEIGHT}px`
+
         const nextHeight = Math.max(
           WORLDWEAVE_FRAME_MIN_HEIGHT,
           body.scrollHeight,
           body.offsetHeight,
-          html.clientHeight,
           html.scrollHeight,
           html.offsetHeight,
         ) + WORLDWEAVE_FRAME_HEIGHT_PADDING
+
+        frame.style.height = previousInlineHeight
 
         setWorldWeaveFrameHeight((currentHeight) =>
           Math.abs(currentHeight - nextHeight) > 8 ? nextHeight : currentHeight,
