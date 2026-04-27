@@ -159,14 +159,14 @@ describe('SourceFeedPage', () => {
       fireEvent.load(frame)
 
       await waitFor(() => {
-        expect(frame).toHaveStyle({ height: '892px' })
+        expect(frame).toHaveStyle({ height: '860px' })
       })
 
       fireEvent.load(frame)
       fireEvent.load(frame)
 
       await waitFor(() => {
-        expect(frame).toHaveStyle({ height: '892px' })
+        expect(frame).toHaveStyle({ height: '860px' })
       })
     } finally {
       Object.defineProperty(window, 'requestAnimationFrame', {
