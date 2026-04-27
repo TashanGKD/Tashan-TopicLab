@@ -59,8 +59,113 @@ const WORLDWEAVE_FRONTEND_URL =
 const WORLDWEAVE_FRAME_URL = WORLDWEAVE_FRONTEND_URL.includes('#')
   ? WORLDWEAVE_FRONTEND_URL
   : `${WORLDWEAVE_FRONTEND_URL.replace(/\/?$/, '/')}#world-map-panel`
+const WORLDWEAVE_HEALTH_URL = `${WORLDWEAVE_FRAME_URL.split('#')[0].replace(/\/?$/, '/')}api/v1/openclaw/skill.md`
+const SHOULD_CHECK_WORLDWEAVE = WORLDWEAVE_FRONTEND_URL.startsWith('/')
+const WORLDWEAVE_FRAME_MIN_HEIGHT = 1200
+const WORLDWEAVE_FRAME_HEIGHT_PADDING = 32
+
+type WorldWeaveStatus = 'checking' | 'ready' | 'unavailable'
 
 function WorldWeaveSourceFrame() {
+  const frameRef = useRef<HTMLIFrameElement | null>(null)
+  const [worldWeaveStatus, setWorldWeaveStatus] = useState<WorldWeaveStatus>(
+    SHOULD_CHECK_WORLDWEAVE ? 'checking' : 'ready',
+  )
+  const [worldWeaveFrameHeight, setWorldWeaveFrameHeight] = useState(
+    WORLDWEAVE_FRAME_MIN_HEIGHT,
+  )
+
+  useEffect(() => {
+    if (!SHOULD_CHECK_WORLDWEAVE) return
+
+    let active = true
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => controller.abort(), 3000)
+
+    fetch(WORLDWEAVE_HEALTH_URL, {
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+      .then((response) => {
+        if (!active) return
+        setWorldWeaveStatus(response.ok ? 'ready' : 'unavailable')
+      })
+      .catch(() => {
+        if (!active) return
+        setWorldWeaveStatus('unavailable')
+      })
+      .finally(() => {
+        window.clearTimeout(timeoutId)
+      })
+
+    return () => {
+      active = false
+      window.clearTimeout(timeoutId)
+      controller.abort()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (worldWeaveStatus !== 'ready') return
+
+    const frame = frameRef.current
+    if (!frame) return
+
+    let animationFrameId = 0
+    let resizeObserver: ResizeObserver | null = null
+    let intervalId = 0
+
+    const resizeFrame = () => {
+      window.cancelAnimationFrame(animationFrameId)
+      animationFrameId = window.requestAnimationFrame(() => {
+        const doc = frame.contentDocument ?? frame.contentWindow?.document
+        const body = doc?.body
+        const html = doc?.documentElement
+        if (!doc || !body || !html) return
+
+        html.style.overflow = 'hidden'
+        body.style.overflow = 'hidden'
+
+        const nextHeight = Math.max(
+          WORLDWEAVE_FRAME_MIN_HEIGHT,
+          body.scrollHeight,
+          body.offsetHeight,
+          html.clientHeight,
+          html.scrollHeight,
+          html.offsetHeight,
+        ) + WORLDWEAVE_FRAME_HEIGHT_PADDING
+
+        setWorldWeaveFrameHeight((currentHeight) =>
+          Math.abs(currentHeight - nextHeight) > 8 ? nextHeight : currentHeight,
+        )
+      })
+    }
+
+    const attachObserver = () => {
+      const doc = frame.contentDocument ?? frame.contentWindow?.document
+      const body = doc?.body
+      if (!body) return
+
+      if (typeof ResizeObserver !== 'undefined') {
+        resizeObserver?.disconnect()
+        resizeObserver = new ResizeObserver(resizeFrame)
+        resizeObserver.observe(body)
+      }
+      resizeFrame()
+    }
+
+    frame.addEventListener('load', attachObserver)
+    attachObserver()
+    intervalId = window.setInterval(resizeFrame, 1500)
+
+    return () => {
+      window.cancelAnimationFrame(animationFrameId)
+      window.clearInterval(intervalId)
+      resizeObserver?.disconnect()
+      frame.removeEventListener('load', attachObserver)
+    }
+  }, [worldWeaveStatus])
+
   return (
     <div className="min-h-[calc(100vh-64px)] bg-[#f3f7fb] px-2 py-3 sm:px-4 sm:py-4">
       <div className="mx-auto mb-4 max-w-[1280px]">
@@ -106,12 +211,32 @@ function WorldWeaveSourceFrame() {
         </div>
       </div>
       <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
-        <iframe
-          title="世界脉络"
-          src={WORLDWEAVE_FRAME_URL}
-          className="block h-[calc(100vh-110px)] min-h-[760px] w-full border-0"
-          loading="eager"
-        />
+        {worldWeaveStatus === 'ready' ? (
+          <iframe
+            ref={frameRef}
+            title="世界脉络"
+            src={WORLDWEAVE_FRAME_URL}
+            className="block w-full border-0"
+            scrolling="no"
+            style={{ height: `${worldWeaveFrameHeight}px` }}
+            loading="eager"
+          />
+        ) : (
+          <div className="flex h-[calc(100vh-110px)] min-h-[760px] items-center justify-center bg-slate-50 px-6 text-center">
+            <div className="max-w-md">
+              <h2 className="font-serif text-xl font-semibold text-slate-900">
+                {worldWeaveStatus === 'checking'
+                  ? '正在连接世界脉络'
+                  : '世界脉络服务未连接'}
+              </h2>
+              {worldWeaveStatus === 'unavailable' && (
+                <p className="mt-3 text-sm leading-6 text-slate-500">
+                  请确认 WorldWeave 已在本机 3020 端口启动，并重新刷新页面。
+                </p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

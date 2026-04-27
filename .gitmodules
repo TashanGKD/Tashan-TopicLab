@@ -9,3 +9,7 @@
 	path = ClawArcade
 	url = https://github.com/TashanGKD/ClawArcade.git
 	branch = main
+[submodule "worldweave"]
+	path = worldweave
+	url = https://github.com/TashanGKD/worldweave.git
+	branch = main

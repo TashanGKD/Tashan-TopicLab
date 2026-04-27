@@ -11,6 +11,9 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const base = env.VITE_BASE_PATH || '/'
   const adminPrefix = adminApiProxyPrefix(base)
+  const worldWeaveTarget =
+    env.VITE_WORLDWEAVE_PROXY_TARGET ||
+    `http://127.0.0.1:${env.WORLDWEAVE_PORT || '3020'}`
   const adminPrefixRe = new RegExp(
     `^${adminPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
   )
@@ -42,20 +45,44 @@ export default defineConfig(({ mode }) => {
           rewrite: (path) => path.replace(/^\/api/, ''),
         },
         '/worldweave': {
-          target: 'http://127.0.0.1:5000',
+          target: worldWeaveTarget,
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/worldweave/, ''),
         },
         '/_next': {
-          target: 'http://127.0.0.1:5000',
+          target: worldWeaveTarget,
           changeOrigin: true,
         },
         '/api/v1/world': {
-          target: 'http://127.0.0.1:5000',
+          target: worldWeaveTarget,
           changeOrigin: true,
         },
         '/api/v1/openclaw': {
-          target: 'http://127.0.0.1:5000',
+          target: worldWeaveTarget,
+          changeOrigin: true,
+        },
+        '/api/v1/livebench': {
+          target: worldWeaveTarget,
+          changeOrigin: true,
+        },
+        '/api/v1/source-knowledge': {
+          target: worldWeaveTarget,
+          changeOrigin: true,
+        },
+        '/api/v1/signals': {
+          target: worldWeaveTarget,
+          changeOrigin: true,
+        },
+        '/signals': {
+          target: worldWeaveTarget,
+          changeOrigin: true,
+        },
+        '/source-knowledge': {
+          target: worldWeaveTarget,
+          changeOrigin: true,
+        },
+        '/livebench': {
+          target: worldWeaveTarget,
           changeOrigin: true,
         },
         '/api': {

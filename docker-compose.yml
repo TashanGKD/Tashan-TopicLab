@@ -1,4 +1,29 @@
 services:
+  worldweave:
+    build:
+      context: ./worldweave
+      dockerfile: ../docker/worldweave.Dockerfile
+      args:
+        NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-docker.m.daocloud.io/library/node:20-slim}
+    env_file:
+      - ${ENV_FILE:-.env}
+    environment:
+      - PORT=3020
+      - HOST=0.0.0.0
+      - WORLD_HOST=0.0.0.0
+    ports:
+      - "${WORLDWEAVE_HOST_PORT:-3020}:3020"
+    volumes:
+      - worldweave-cache:/app/.cache
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3020/api/v1/openclaw/skill.md').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 20s
+      retries: 15
+      start_period: 60s
+
   topiclab-backend:
     build:
       context: ./topiclab-backend
@@ -12,6 +37,7 @@ services:
     environment:
       - WORKSPACE_BASE=/app/workspace
       - TOPICLAB_SYNC_URL=${TOPICLAB_SYNC_URL:-http://topiclab-backend:8000}
+      - WORLDWEAVE_BASE_URL=http://worldweave:3020
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -63,6 +89,8 @@ services:
     ports:
       - "${FRONTEND_PORT:-3000}:80"
     depends_on:
+      worldweave:
+        condition: service_healthy
       backend:
         condition: service_healthy
       topiclab-backend:
@@ -96,3 +124,6 @@ services:
 networks:
   app-network:
     driver: bridge
+
+volumes:
+  worldweave-cache:

@@ -50,7 +50,9 @@ _ALLOWED_IMAGE_HOSTS = {
 }
 _DEFAULT_SOURCE_FEED_LIST_CACHE_TTL_SECONDS = 30.0
 _MAX_SOURCE_FEED_LIST_CACHE_ENTRIES = 256
+_WORLDWEAVE_SOURCE_TYPE = "worldweave-signal"
 _source_feed_list_cache: dict[tuple[int, int, str, str], tuple[float, dict[str, Any]]] = {}
+_worldweave_source_article_cache: dict[int, tuple[float, dict[str, Any]]] = {}
 
 
 class SourceFeedWorkspaceHydrateRequest(BaseModel):
@@ -114,7 +116,7 @@ def _get_information_collection_base_url() -> str:
 
 
 def _get_worldweave_base_url() -> str:
-    return os.getenv("WORLDWEAVE_BASE_URL", "http://127.0.0.1:5000").rstrip("/")
+    return os.getenv("WORLDWEAVE_BASE_URL", "http://127.0.0.1:3020").rstrip("/")
 
 
 def _get_source_feed_list_cache_ttl_seconds() -> float:
@@ -145,6 +147,31 @@ def _clone_source_feed_page_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "limit": int(payload.get("limit", 0) or 0),
         "offset": int(payload.get("offset", 0) or 0),
     }
+
+
+def _remember_worldweave_source_articles(articles: list[dict[str, Any]], cache_ttl: float) -> None:
+    ttl = cache_ttl if cache_ttl > 0 else _DEFAULT_SOURCE_FEED_LIST_CACHE_TTL_SECONDS
+    expires_at = time.monotonic() + ttl
+    for article in articles:
+        if str(article.get("source_type") or "") != _WORLDWEAVE_SOURCE_TYPE:
+            continue
+        try:
+            article_id = int(article.get("id", 0))
+        except (TypeError, ValueError):
+            continue
+        if article_id > 0:
+            _worldweave_source_article_cache[article_id] = (expires_at, dict(article))
+
+
+def _get_cached_worldweave_source_article(article_id: int) -> dict[str, Any] | None:
+    cached = _worldweave_source_article_cache.get(article_id)
+    if not cached:
+        return None
+    expires_at, article = cached
+    if expires_at <= time.monotonic():
+        _worldweave_source_article_cache.pop(article_id, None)
+        return None
+    return dict(article)
 
 
 def _normalize_pic_url(url: Any) -> str | None:
@@ -239,7 +266,7 @@ async def get_source_feed_articles(
             page_payload = _clone_source_feed_page_payload(cached[1])
 
     if page_payload is None:
-        is_worldweave = source_type_key == "worldweave-signal"
+        is_worldweave = source_type_key == _WORLDWEAVE_SOURCE_TYPE
         upstream_url = (
             f"{_get_worldweave_base_url()}/api/v1/topiclab/source-feed/articles"
             if is_worldweave
@@ -273,6 +300,8 @@ async def get_source_feed_articles(
             "limit": int(data.get("limit", limit)),
             "offset": int(data.get("offset", offset)),
         }
+        if is_worldweave:
+            _remember_worldweave_source_articles(page_payload["list"], cache_ttl)
         if cache_ttl > 0:
             _prune_source_feed_list_cache(now)
             _source_feed_list_cache[cache_key] = (now + cache_ttl, _clone_source_feed_page_payload(page_payload))
@@ -290,6 +319,11 @@ async def get_source_feed_articles(
 
 @router.get("/articles/{article_id}")
 async def get_source_feed_article_detail(article_id: int):
+    cached_worldweave_article = _get_cached_worldweave_source_article(article_id)
+    if cached_worldweave_article is not None:
+        payload = build_source_article_from_snapshot(cached_worldweave_article).__dict__
+        annotate_source_articles_with_interactions([payload])
+        return payload
     try:
         article = await fetch_source_feed_article_detail(article_id)
     except httpx.HTTPStatusError as exc:

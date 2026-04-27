@@ -18,8 +18,8 @@ set +a
 
 WORLDWEAVE_REPO_URL="${WORLDWEAVE_REPO_URL:-https://github.com/TashanGKD/worldweave.git}"
 WORLDWEAVE_REF="${WORLDWEAVE_REF:-main}"
-WORLDWEAVE_DIR="${WORLDWEAVE_DIR:-$ROOT_DIR/.cache/worldweave}"
-WORLDWEAVE_PORT="${WORLDWEAVE_PORT:-5000}"
+WORLDWEAVE_DIR="${WORLDWEAVE_DIR:-$ROOT_DIR/worldweave}"
+WORLDWEAVE_PORT="${WORLDWEAVE_PORT:-3020}"
 WORLDWEAVE_HOST="${WORLDWEAVE_HOST:-127.0.0.1}"
 WORLDWEAVE_PM2_NAME="${WORLDWEAVE_PM2_NAME:-worldweave}"
 WORLDWEAVE_SOURCE_PM2_NAME="${WORLDWEAVE_SOURCE_PM2_NAME:-worldweave-source-refresh}"
@@ -38,15 +38,21 @@ if (( ${#missing[@]} > 0 )); then
   exit 1
 fi
 
-mkdir -p "$(dirname "$WORLDWEAVE_DIR")"
 if [[ ! -d "$WORLDWEAVE_DIR/.git" ]]; then
-  git clone "$WORLDWEAVE_REPO_URL" "$WORLDWEAVE_DIR"
+  if [[ "$WORLDWEAVE_DIR" == "$ROOT_DIR/worldweave" ]]; then
+    git -C "$ROOT_DIR" submodule update --init --recursive worldweave
+  else
+    mkdir -p "$(dirname "$WORLDWEAVE_DIR")"
+    git clone "$WORLDWEAVE_REPO_URL" "$WORLDWEAVE_DIR"
+  fi
 fi
 
 cd "$WORLDWEAVE_DIR"
-git remote set-url origin "$WORLDWEAVE_REPO_URL"
-git fetch origin "$WORLDWEAVE_REF"
-git reset --hard "origin/$WORLDWEAVE_REF"
+if [[ -n "${WORLDWEAVE_REF:-}" ]]; then
+  git remote set-url origin "$WORLDWEAVE_REPO_URL"
+  git fetch origin "$WORLDWEAVE_REF"
+  git reset --hard "origin/$WORLDWEAVE_REF"
+fi
 
 cat > .env.local <<EOF
 MINIMAX_API_KEY=$MINIMAX_API_KEY

@@ -34,6 +34,7 @@ vi.mock('../../api/client', async () => {
 })
 
 const mockedSourceFeedApiList = vi.mocked(sourceFeedApi.list)
+const mockedWorldWeaveFetch = vi.fn()
 
 describe('SourceFeedPage', () => {
   const setViewport = (width: number) => {
@@ -47,10 +48,13 @@ describe('SourceFeedPage', () => {
 
   afterEach(() => {
     cleanup()
+    vi.unstubAllGlobals()
   })
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mockedWorldWeaveFetch.mockResolvedValue({ ok: true })
+    vi.stubGlobal('fetch', mockedWorldWeaveFetch)
     setViewport(1280)
     mockedSourceFeedApiList.mockResolvedValue({
       data: {
@@ -90,6 +94,12 @@ describe('SourceFeedPage', () => {
     const frame = await screen.findByTitle('世界脉络')
     expect(frame).toBeInTheDocument()
     expect(frame.getAttribute('src')).toBe('/worldweave/#world-map-panel')
+    expect(frame).toHaveStyle({ height: '1200px' })
+    expect(frame).toHaveAttribute('scrolling', 'no')
+    expect(mockedWorldWeaveFetch).toHaveBeenCalledWith(
+      '/worldweave/api/v1/openclaw/skill.md',
+      expect.objectContaining({ cache: 'no-store' }),
+    )
     expect(await screen.findByText('Trends')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '全球情报' }).getAttribute('href')).toBe('https://42vf4xnfxh.coze.site/')
     expect(screen.getByRole('link', { name: '开源代码库' }).getAttribute('href')).toBe('https://home.gqy20.top/TrendPluse/')
@@ -97,6 +107,18 @@ describe('SourceFeedPage', () => {
     expect(screen.getByRole('link', { name: '媒体' }).getAttribute('href')).toBe('/info/media')
     expect(screen.getAllByRole('link', { name: '学术' }).some((link) => link.getAttribute('href') === '/info/academic')).toBe(true)
     expect(mockedSourceFeedApiList).not.toHaveBeenCalled()
+  })
+
+  it('shows a readable WorldWeave outage state instead of a blank iframe', async () => {
+    mockedWorldWeaveFetch.mockResolvedValue({ ok: false })
+
+    renderSourceFeed()
+
+    expect(await screen.findByText('世界脉络服务未连接')).toBeInTheDocument()
+    expect(
+      screen.getByText('请确认 WorldWeave 已在本机 3020 端口启动，并重新刷新页面。'),
+    ).toBeInTheDocument()
+    expect(screen.queryByTitle('世界脉络')).not.toBeInTheDocument()
   })
 
   it('keeps a native source list for opening WorldWeave signals as topics', async () => {

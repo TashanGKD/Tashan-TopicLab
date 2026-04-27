@@ -1241,6 +1241,58 @@ def test_source_feed_articles_forwards_gqy_source_type_to_upstream(client, monke
     assert seen_params[0].get("source_type") == "gqy"
 
 
+def test_worldweave_source_feed_detail_uses_cached_list_snapshot(client, monkeypatch):
+    import app.api.source_feed as source_feed_module
+
+    seen_urls: list[str] = []
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "list": [
+                    {
+                        "id": 912345,
+                        "title": "世界脉络信号",
+                        "source_feed_name": "世界脉络",
+                        "source_type": "worldweave-signal",
+                        "url": "https://example.com/world-signal",
+                        "pic_url": None,
+                        "description": "用于验证 WorldWeave 详情回读。",
+                        "publish_time": "2026-04-27T10:00:00+00:00",
+                        "created_at": "2026-04-27T10:00:00+00:00",
+                    }
+                ],
+                "limit": 5,
+                "offset": 0,
+            }
+
+    class FakeHttpClient:
+        async def get(self, url, params=None, timeout=6.0):
+            seen_urls.append(url)
+            return FakeResponse()
+
+    monkeypatch.setenv("SOURCE_FEED_LIST_CACHE_TTL_SECONDS", "30")
+    monkeypatch.setenv("WORLDWEAVE_BASE_URL", "http://worldweave.test")
+    source_feed_module._source_feed_list_cache.clear()
+    source_feed_module._worldweave_source_article_cache.clear()
+    monkeypatch.setattr(source_feed_module, "get_shared_async_client", lambda _: FakeHttpClient())
+
+    list_resp = client.get("/source-feed/articles?limit=5&offset=0&source_type=worldweave-signal")
+    assert list_resp.status_code == 200, list_resp.text
+    assert list_resp.json()["list"][0]["id"] == 912345
+
+    detail_resp = client.get("/source-feed/articles/912345")
+    assert detail_resp.status_code == 200, detail_resp.text
+    assert detail_resp.json()["title"] == "世界脉络信号"
+    assert detail_resp.json()["source_type"] == "worldweave-signal"
+    assert seen_urls == ["http://worldweave.test/api/v1/topiclab/source-feed/articles"]
+    source_feed_module._source_feed_list_cache.clear()
+    source_feed_module._worldweave_source_article_cache.clear()
+
+
 def test_discussion_and_mention_complete_via_executor(client, monkeypatch):
     monkeypatch.setattr(
         "app.api.topics.moderate_post_content",
