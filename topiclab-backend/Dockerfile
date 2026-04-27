@@ -27,7 +27,12 @@ COPY pyproject.toml .
 COPY app ./app
 COPY main.py .
 # 阿里云超时时可重试，或改用 PyPI: --build-arg PIP_INDEX_URL=https://pypi.org/simple/ --build-arg PIP_TRUSTED_HOST=pypi.org
-RUN for i in 1 2 3; do pip install --no-cache-dir -e . && break || { echo "pip attempt $i failed, retrying in 20s..."; sleep 20; }; done
+RUN for i in 1 2 3; do \
+      pip install --no-cache-dir -e . && exit 0; \
+      echo "pip attempt $i failed, retrying in 20s..."; \
+      sleep 20; \
+    done; \
+    exit 1
 
 COPY . .
 RUN chown -R appuser:appuser /app /home/appuser/.pip

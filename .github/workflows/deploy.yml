@@ -71,7 +71,19 @@ jobs:
             fi
             echo "$DEPLOY_ENV" > .env
 
-            docker compose build --no-cache
+            run_with_heartbeat() {
+              local label="$1"
+              shift
+              "$@" &
+              local pid="$!"
+              while kill -0 "$pid" 2>/dev/null; do
+                echo "[deploy] ${label} still running at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                sleep 30
+              done
+              wait "$pid"
+            }
+
+            run_with_heartbeat "docker compose build" docker compose build
             docker compose down
             docker compose up -d
             for i in $(seq 1 30); do
