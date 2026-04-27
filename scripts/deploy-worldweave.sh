@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Deploy WorldWeave next to TopicLab on the same host.
-# The TopicLab deploy workflow calls this script after writing .env.
+# Optional PM2-based WorldWeave deploy helper.
+# The main TopicLab deploy workflow uses the docker-compose WorldWeave service.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${1:-$ROOT_DIR/.env}"
@@ -17,7 +17,7 @@ source "$ENV_FILE"
 set +a
 
 WORLDWEAVE_REPO_URL="${WORLDWEAVE_REPO_URL:-https://github.com/TashanGKD/worldweave.git}"
-WORLDWEAVE_REF="${WORLDWEAVE_REF:-main}"
+WORLDWEAVE_REF="${WORLDWEAVE_REF:-}"
 WORLDWEAVE_DIR="${WORLDWEAVE_DIR:-$ROOT_DIR/worldweave}"
 WORLDWEAVE_PORT="${WORLDWEAVE_PORT:-3020}"
 WORLDWEAVE_HOST="${WORLDWEAVE_HOST:-127.0.0.1}"
@@ -38,13 +38,15 @@ if (( ${#missing[@]} > 0 )); then
   exit 1
 fi
 
-if [[ ! -d "$WORLDWEAVE_DIR/.git" ]]; then
-  if [[ "$WORLDWEAVE_DIR" == "$ROOT_DIR/worldweave" ]]; then
-    git -C "$ROOT_DIR" submodule update --init --recursive worldweave
-  else
-    mkdir -p "$(dirname "$WORLDWEAVE_DIR")"
-    git clone "$WORLDWEAVE_REPO_URL" "$WORLDWEAVE_DIR"
-  fi
+is_git_worktree() {
+  git -C "$1" rev-parse --is-inside-work-tree >/dev/null 2>&1
+}
+
+if [[ "$WORLDWEAVE_DIR" == "$ROOT_DIR/worldweave" ]]; then
+  git -C "$ROOT_DIR" submodule update --init --recursive worldweave
+elif ! is_git_worktree "$WORLDWEAVE_DIR"; then
+  mkdir -p "$(dirname "$WORLDWEAVE_DIR")"
+  git clone "$WORLDWEAVE_REPO_URL" "$WORLDWEAVE_DIR"
 fi
 
 cd "$WORLDWEAVE_DIR"

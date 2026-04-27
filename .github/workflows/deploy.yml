@@ -42,15 +42,23 @@ jobs:
             fi
             cd "$REPO_DIR"
             git remote set-url origin "$REPO_URL"
-            # Configure submodule URLs before fetch; otherwise fetch uses cached SSH URL and fails
             SUBMODULE_AUTH="${SUBMODULE_TOKEN:-$GITHUB_TOKEN}"
-            BACKEND_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/TashanGKD/Resonnet.git"
-            git config submodule.backend.url "$BACKEND_URL"
-            [ -d .git/modules/backend ] && git config -f .git/modules/backend/config remote.origin.url "$BACKEND_URL"
+            set_submodule_url() {
+              local name="$1"
+              local repo="$2"
+              local url="https://x-access-token:${SUBMODULE_AUTH}@github.com/${repo}.git"
+              git config "submodule.${name}.url" "$url"
+              [ -d ".git/modules/${name}" ] && git config -f ".git/modules/${name}/config" remote.origin.url "$url"
+            }
             for i in 1 2 3; do git fetch origin && break || { [ $i -eq 3 ] && echo "git fetch failed after 3 retries" && exit 1; sleep 5; }; done
             git reset --hard origin/main
-            git submodule update --init backend
             git submodule sync --recursive
+            # Configure submodule URLs after sync; otherwise cached SSH URLs or .gitmodules defaults can win.
+            set_submodule_url backend TashanGKD/Resonnet
+            set_submodule_url topiclab-cli TashanGKD/TopicLab-CLI
+            set_submodule_url ClawArcade TashanGKD/ClawArcade
+            set_submodule_url worldweave TashanGKD/worldweave
+            git submodule update --init backend
             git config -f .git/modules/backend/config submodule.libs/assignable_skills/_submodules/ai-research.url "https://x-access-token:${SUBMODULE_AUTH}@github.com/Orchestra-Research/AI-Research-SKILLs.git"
             git config -f .git/modules/backend/config submodule.libs/assignable_skills/_submodules/anthropics.url "https://x-access-token:${SUBMODULE_AUTH}@github.com/anthropics/skills.git"
             git config -f .git/modules/backend/config submodule.libs/assignable_skills/_submodules/claude-scientific.url "https://x-access-token:${SUBMODULE_AUTH}@github.com/K-Dense-AI/claude-scientific-skills.git"
@@ -66,11 +74,18 @@ jobs:
             docker compose build --no-cache
             docker compose down
             docker compose up -d
+            for i in $(seq 1 30); do
+              if docker compose exec -T worldweave node -e "fetch('http://127.0.0.1:3020/api/v1/openclaw/skill.md').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
+                break
+              fi
+              if [ "$i" = "30" ]; then
+                echo "::error::WorldWeave container did not become healthy on port 3020."
+                docker compose logs --tail=120 worldweave
+                exit 1
+              fi
+              sleep 2
+            done
             docker image prune -f
-
-            # WorldWeave is the source dashboard embedded by TopicLab /info/source.
-            # It is deployed on the same host and proxied through nginx below.
-            bash scripts/deploy-worldweave.sh .env
 
             # Read frontend port from .env (default 3000); trim whitespace/CRLF to avoid nginx config issues
             FRONTEND_PORT=$(grep -E '^FRONTEND_PORT=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d ' \r' || echo 3000)
