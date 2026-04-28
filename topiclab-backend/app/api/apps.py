@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 from hashlib import sha256
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -15,7 +13,7 @@ from pydantic import BaseModel
 from app.api.auth import security, verify_access_token
 from app.api.topics import ToggleActionRequest, _normalize_topic_category
 from app.services.source_feed_pipeline import hydrate_topic_workspace
-from app.storage.database.topic_store import create_topic, get_topic, get_topic_id_by_app, link_app_to_topic, set_topic_user_action
+from app.storage.database.topic_store import create_topic, get_app_topic_summaries, get_topic, get_topic_id_by_app, link_app_to_topic, list_app_catalog_items, set_topic_user_action
 
 router = APIRouter(prefix="/apps", tags=["apps"])
 
@@ -48,57 +46,17 @@ def _require_owner_identity(user: dict | None) -> tuple[int, str]:
     return user_id, auth_type or "jwt"
 
 
-def _default_manifest_path() -> Path:
-    return Path(__file__).resolve().parents[1] / "resources" / "apps_catalog.json"
-
-
-def _iter_manifest_paths() -> list[Path]:
-    paths: list[Path] = [_default_manifest_path()]
-    raw_extra = (os.getenv("TOPICLAB_APP_CATALOG_PATHS") or "").strip()
-    if not raw_extra:
-        return paths
-
-    for entry in raw_extra.split(os.pathsep):
-        value = entry.strip()
-        if not value:
-            continue
-        path = Path(value).expanduser()
-        if path.is_dir():
-            paths.extend(sorted(item for item in path.glob("*.json") if item.is_file()))
-        elif path.is_file():
-            paths.append(path)
-    return paths
-
-
-def _load_manifest(path: Path) -> list[dict[str, Any]]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if isinstance(payload, dict):
-        apps = payload.get("apps", [])
-    elif isinstance(payload, list):
-        apps = payload
-    else:
-        raise ValueError(f"Unsupported catalog format in {path}")
-    if not isinstance(apps, list):
-        raise ValueError(f"Invalid apps list in {path}")
-    return [item for item in apps if isinstance(item, dict)]
-
-
 def _load_catalog() -> tuple[list[dict[str, Any]], str]:
     merged: dict[str, dict[str, Any]] = {}
     digest = sha256()
-    for path in _iter_manifest_paths():
-        if not path.exists():
+    for item in list_app_catalog_items():
+        app_id = str(item.get("id") or "").strip()
+        if not app_id:
             continue
-        raw = path.read_bytes()
-        digest.update(raw)
-        for item in _load_manifest(path):
-            app_id = str(item.get("id") or "").strip()
-            if not app_id:
-                continue
-            merged[app_id] = {
-                **merged.get(app_id, {}),
-                **item,
-            }
+        merged[app_id] = {
+            **merged.get(app_id, {}),
+            **item,
+        }
     def normalized_sort_label(item: dict[str, Any]) -> str:
         name = str(item.get("name") or "").strip()
         app_id = str(item.get("id") or "").strip()
@@ -109,11 +67,14 @@ def _load_catalog() -> tuple[list[dict[str, Any]], str]:
             return app_id.casefold()
         return candidate.casefold()
 
-    def sort_key(item: dict[str, Any]) -> tuple[int, str, str]:
+    def sort_key(item: dict[str, Any]) -> tuple[int, int, str, str]:
+        sort_weight = int(item.get("sort_weight") or (-100 if item.get("pinned") else 0))
         builtin_rank = 0 if bool(item.get("builtin")) else 1
-        return (builtin_rank, normalized_sort_label(item), str(item.get("id") or "").casefold())
+        return (sort_weight, builtin_rank, normalized_sort_label(item), str(item.get("id") or "").casefold())
 
     apps = sorted(merged.values(), key=sort_key)
+    for item in apps:
+        digest.update(json.dumps(item, ensure_ascii=False, sort_keys=True).encode("utf-8"))
     return apps, digest.hexdigest()[:16]
 
 
@@ -174,8 +135,14 @@ def _serialize_app_item(
     *,
     user_id: int | None = None,
     auth_type: str | None = None,
+    topic_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     payload = dict(item)
+    if topic_summary is not None:
+        payload.update(topic_summary)
+        payload["interaction"] = topic_summary.get("interaction") or _default_app_interaction()
+        return payload
+
     linked_topic_id = get_topic_id_by_app(str(item.get("id") or ""))
     payload["linked_topic_id"] = linked_topic_id
     payload["interaction"] = _default_app_interaction()
@@ -189,6 +156,28 @@ def _serialize_app_item(
     payload["linked_topic_posts_count"] = linked_topic.get("posts_count")
     payload["interaction"] = dict(linked_topic.get("interaction") or _default_app_interaction())
     return payload
+
+
+def _serialize_app_list(
+    apps: list[dict[str, Any]],
+    *,
+    user_id: int | None = None,
+    auth_type: str | None = None,
+) -> list[dict[str, Any]]:
+    summaries = get_app_topic_summaries(
+        [str(item.get("id") or "") for item in apps],
+        user_id=user_id,
+        auth_type=auth_type,
+    )
+    return [
+        _serialize_app_item(
+            item,
+            user_id=user_id,
+            auth_type=auth_type,
+            topic_summary=summaries.get(str(item.get("id") or "")),
+        )
+        for item in apps
+    ]
 
 
 def _find_app_or_404(app_id: str) -> tuple[dict[str, Any], str]:
@@ -230,8 +219,8 @@ async def list_apps(user: dict | None = Depends(_get_optional_user)):
     return {
         "version": version,
         "count": len(apps),
-        "import_sources": [str(path) for path in _iter_manifest_paths() if path.exists()],
-        "list": [_serialize_app_item(item, user_id=user_id, auth_type=auth_type) for item in apps],
+        "import_sources": ["database:app_catalog"],
+        "list": _serialize_app_list(apps, user_id=user_id, auth_type=auth_type),
     }
 
 

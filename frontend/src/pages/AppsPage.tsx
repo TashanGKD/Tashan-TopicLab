@@ -57,6 +57,7 @@ const APPS_AI_TOPIC_HERO = {
 }
 
 const APPS_PROMO_AUTOPLAY_MS = 5000
+const SKILL_BATCH_SIZE = 24
 
 const appsPromoTracks: PromoHeroTrack[] = [
   {
@@ -85,17 +86,41 @@ function normalizeUrl(value?: string) {
 function getAppLinks(app: AppDisplayItem) {
   const docs = normalizeUrl(app.links?.docs)
   const repo = normalizeUrl(app.links?.repo)
+  const linkLabels = (app as AppDisplayItem & { link_labels?: { docs?: string; repo?: string; combined?: string } }).link_labels
+  const docsLabel = linkLabels?.docs || '查看文档'
+  const repoLabel = linkLabels?.repo || 'GitHub'
   if (docs && repo && docs === repo) {
-    return [{ href: docs, label: '文档 / GitHub', primary: true }]
+    return [{ href: docs, label: linkLabels?.combined || '文档 / GitHub', primary: true }]
   }
 
   return [
-    docs ? { href: docs, label: '查看文档', primary: true } : null,
-    repo ? { href: repo, label: 'GitHub', primary: false } : null,
+    docs ? { href: docs, label: docsLabel, primary: true } : null,
+    repo ? { href: repo, label: repoLabel, primary: false } : null,
   ].filter(Boolean) as Array<{ href: string; label: string; primary: boolean }>
 }
 
 function AppIcon({ kind }: { kind?: string }) {
+  if (kind === 'thesis-skills') {
+    return (
+      <img
+        src={`${import.meta.env.BASE_URL}media/apps/thesis-skills.jpg`}
+        alt=""
+        aria-hidden
+        className="h-12 w-12 rounded-2xl object-cover"
+      />
+    )
+  }
+
+  if (kind === 'prisma') {
+    return (
+      <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" aria-hidden>
+        <path d="M4 16.5L12 4l8 12.5" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M7 16.5h10" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" />
+        <circle cx="12" cy="16.5" r="2.3" fill="currentColor" />
+      </svg>
+    )
+  }
+
   if (kind === 'spark') {
     return (
       <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -180,8 +205,10 @@ export default function AppsPage() {
   const [skillCategories, setSkillCategories] = useState<SkillHubCategoriesResponse | null>(null)
   const [skillCategoryFilter, setSkillCategoryFilter] = useState('')
   const [skillClusterFilter, setSkillClusterFilter] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [appsLoading, setAppsLoading] = useState(true)
+  const [appsError, setAppsError] = useState<string | null>(null)
+  const [skillsLoading, setSkillsLoading] = useState(true)
+  const [skillsError, setSkillsError] = useState<string | null>(null)
   const [pendingTopicIds, setPendingTopicIds] = useState<Set<string>>(new Set())
   const [pendingLikeIds, setPendingLikeIds] = useState<Set<string>>(new Set())
   const [leftAppColumn, rightAppColumn] = useMemo(
@@ -203,48 +230,73 @@ export default function AppsPage() {
   useEffect(() => {
     let alive = true
 
-    const loadAllSkills = async () => {
-      const batchSize = 100
-      let offset = 0
-      let total = Number.POSITIVE_INFINITY
-      const all: SkillHubSkillSummary[] = []
-
-      while (offset < total) {
-        const res = await skillHubApi.listSkills({ sort: 'new', limit: batchSize, offset })
-        const page = res.data.list ?? []
-        total = res.data.total ?? page.length
-        all.push(...page)
-        if (page.length < batchSize) break
-        offset += page.length
-      }
-
-      return sortAppsPageSkills(all)
+    const mergeSkillBatch = (prev: SkillHubSkillSummary[], page: SkillHubSkillSummary[]) => {
+      const seen = new Set(prev.map((item) => item.id))
+      return sortAppsPageSkills([...prev, ...page.filter((item) => !seen.has(item.id))])
     }
 
-    const load = async () => {
+    const loadApps = async () => {
       try {
-        setLoading(true)
-        setError(null)
-        const [appsRes, skills, categoriesRes] = await Promise.all([
-          appsApi.list(),
-          loadAllSkills(),
-          skillHubApi.listCategories(),
-        ])
+        setAppsLoading(true)
+        setAppsError(null)
+        const appsRes = await appsApi.list()
         if (!alive) return
         setApps(appsRes.data.list)
-        setResearchSkills(skills)
-        setSkillCategories(categoriesRes.data)
       } catch (err) {
         if (!alive) return
-        setError(err instanceof Error ? err.message : '应用总页加载失败')
+        setAppsError(err instanceof Error ? err.message : '应用列表加载失败')
       } finally {
         if (alive) {
-          setLoading(false)
+          setAppsLoading(false)
         }
       }
     }
 
-    void load()
+    const loadSkillCategories = async () => {
+      try {
+        const categoriesRes = await skillHubApi.listCategories()
+        if (!alive) return
+        setSkillCategories(categoriesRes.data)
+      } catch (err) {
+        if (!alive) return
+        setSkillsError(err instanceof Error ? err.message : '技能分类加载失败')
+      }
+    }
+
+    const loadSkillBatches = async () => {
+      try {
+        setSkillsLoading(true)
+        setSkillsError(null)
+        setResearchSkills([])
+
+        let offset = 0
+        let total = Number.POSITIVE_INFINITY
+
+        while (alive && offset < total) {
+          const res = await skillHubApi.listSkills({ sort: 'new', limit: SKILL_BATCH_SIZE, offset })
+          if (!alive) return
+          const page = res.data.list ?? []
+          total = res.data.total ?? offset + page.length
+          setResearchSkills((prev) => mergeSkillBatch(prev, page))
+
+          if (page.length < SKILL_BATCH_SIZE) {
+            break
+          }
+          offset += page.length
+        }
+      } catch (err) {
+        if (!alive) return
+        setSkillsError(err instanceof Error ? err.message : '技能列表加载失败')
+      } finally {
+        if (alive) {
+          setSkillsLoading(false)
+        }
+      }
+    }
+
+    void loadApps()
+    void loadSkillCategories()
+    void loadSkillBatches()
     return () => {
       alive = false
     }
@@ -353,21 +405,20 @@ export default function AppsPage() {
 
       <PromoHeroCarousel tracks={appsPromoTracks} autoplayMs={APPS_PROMO_AUTOPLAY_MS} className="mt-6" />
 
-      {loading ? (
+      {appsLoading ? (
         <div className="mt-6 rounded-[var(--radius-xl)] border p-5 text-sm" style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}>
-          正在加载…
+          应用加载中…
         </div>
       ) : null}
 
-      {error ? (
+      {appsError ? (
         <div className="mt-6 rounded-[var(--radius-xl)] border p-5 text-sm" style={{ borderColor: 'var(--accent-error)', color: 'var(--accent-error)' }}>
-          {error}
+          {appsError}
         </div>
       ) : null}
 
-      {!loading && !error ? (
-        <>
-          <section className="mt-8">
+      {!appsLoading && !appsError ? (
+        <section className="mt-8">
             <div>
               <h2 className="text-2xl font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>
                 应用
@@ -420,9 +471,10 @@ export default function AppsPage() {
                 ))}
               </div>
             </div>
-          </section>
+        </section>
+      ) : null}
 
-          <section className="mt-8">
+      <section className="mt-8">
             <div>
               <h2 className="text-2xl font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>
                 技能
@@ -451,6 +503,11 @@ export default function AppsPage() {
                 />
               </section>
             </div>
+            {skillsError ? (
+              <div className="mt-5 rounded-[var(--radius-xl)] border p-5 text-sm" style={{ borderColor: 'var(--accent-error)', color: 'var(--accent-error)' }}>
+                {skillsError}
+              </div>
+            ) : null}
             <div className="mt-5 lg:hidden">
               {filteredResearchSkills.map((skill) => (
                 <AppsSkillCard
@@ -530,12 +587,15 @@ export default function AppsPage() {
             </div>
             {filteredResearchSkills.length === 0 ? (
               <div className="mt-5 rounded-[var(--radius-xl)] border p-5 text-sm" style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}>
-                暂无可展示的科研应用。
+                {skillsLoading ? '技能加载中…' : '暂无可展示的科研应用。'}
               </div>
             ) : null}
-          </section>
-        </>
-      ) : null}
+            {skillsLoading && filteredResearchSkills.length > 0 ? (
+              <div className="mt-5 rounded-[var(--radius-xl)] border p-5 text-sm" style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}>
+                技能加载中…
+              </div>
+            ) : null}
+      </section>
     </LibraryPageLayout>
   )
 }

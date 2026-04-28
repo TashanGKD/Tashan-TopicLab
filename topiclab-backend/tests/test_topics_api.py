@@ -1,5 +1,6 @@
 import asyncio
 import importlib
+import json
 import time
 from io import BytesIO
 from datetime import datetime, timedelta, timezone
@@ -3450,7 +3451,155 @@ def test_apps_catalog_removes_scispark_and_sorts_builtin_first_then_alphabetical
 
     ids = [item["id"] for item in payload["list"]]
     assert "scispark" not in ids
-    assert ids == ["topiclab-cli", "giiisp-paper-search-apis", "manim-creator", "paperbanana-dashscope", "research-dream", "scientify"]
+    assert ids == [
+        "prisma-literature-screening",
+        "thesis-skills",
+        "topiclab-cli",
+        "giiisp-paper-search-apis",
+        "manim-creator",
+        "paperbanana-dashscope",
+        "research-dream",
+        "scientify",
+    ]
+
+
+def test_apps_catalog_exposes_prisma_literature_screening_assistant(client):
+    resp = client.get("/api/v1/apps")
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+
+    prisma = next((item for item in payload["list"] if item["id"] == "prisma-literature-screening"), None)
+    assert prisma is not None
+    assert prisma["name"] == "PRISMA 文献筛选助手"
+    assert prisma["icon"] == "prisma"
+    assert prisma["pinned"] is True
+    assert prisma["sort_weight"] == -100
+    assert prisma["summary"] == "面向系统综述、Meta 分析与证据整合项目的端到端文献筛选工作台。"
+    assert "本地优先文献筛选工具" in prisma["description"]
+    assert "PRISMA 2020 流程图" in prisma["description"]
+    assert prisma["links"]["docs"] == "https://quzhiii.github.io/-PRISMA-/"
+    assert prisma["links"]["repo"] == "https://github.com/quzhiii/-PRISMA-"
+    assert prisma["link_labels"]["docs"] == "进入应用"
+
+
+def test_apps_catalog_exposes_thesis_skills_as_pinned_app(client):
+    resp = client.get("/api/v1/apps")
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+
+    thesis = next((item for item in payload["list"] if item["id"] == "thesis-skills"), None)
+    assert thesis is not None
+    assert thesis["name"] == "Thesis Skills"
+    assert thesis["icon"] == "thesis-skills"
+    assert thesis["pinned"] is True
+    assert thesis["sort_weight"] == -100
+    assert thesis["link_labels"]["docs"] == "进入应用"
+    assert "论文格式迁移、引用校验和规范检查" in thesis["summary"]
+    assert "Word 到 LaTeX 迁移" in thesis["description"]
+    assert "Zotero/EndNote 文献导入" in thesis["description"]
+    assert thesis["links"]["docs"] == "https://github.com/quzhiii/thesis-skills/tree/main"
+    assert thesis["links"]["repo"] == "https://github.com/quzhiii/thesis-skills/"
+
+
+def test_apps_catalog_reads_database_payload(client):
+    from app.storage.database.postgres_client import get_db_session
+
+    with get_db_session() as session:
+        row = session.execute(
+            text("SELECT payload_json FROM app_catalog WHERE app_id = 'prisma-literature-screening'"),
+        ).one()
+        payload = json.loads(row.payload_json)
+        payload["summary"] = "数据库内应用目录覆盖值"
+        session.execute(
+            text(
+                """
+                UPDATE app_catalog
+                SET payload_json = :payload_json,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE app_id = :app_id
+                """
+            ),
+            {
+                "app_id": "prisma-literature-screening",
+                "payload_json": json.dumps(payload, ensure_ascii=False),
+            },
+        )
+
+    resp = client.get("/api/v1/apps")
+    assert resp.status_code == 200, resp.text
+    prisma = next(item for item in resp.json()["list"] if item["id"] == "prisma-literature-screening")
+    assert prisma["summary"] == "数据库内应用目录覆盖值"
+
+
+def test_apps_catalog_patches_existing_prisma_payload(client):
+    from app.storage.database.postgres_client import get_db_session
+    from app.storage.database.topic_store import ensure_app_catalog_seed_data
+
+    with get_db_session() as session:
+        row = session.execute(
+            text("SELECT payload_json FROM app_catalog WHERE app_id = 'prisma-literature-screening'"),
+        ).one()
+        payload = json.loads(row.payload_json)
+        payload.pop("link_labels", None)
+        payload.pop("pinned", None)
+        payload.pop("sort_weight", None)
+        session.execute(
+            text(
+                """
+                UPDATE app_catalog
+                SET payload_json = :payload_json,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE app_id = :app_id
+                """
+            ),
+            {
+                "app_id": "prisma-literature-screening",
+                "payload_json": json.dumps(payload, ensure_ascii=False),
+            },
+        )
+        ensure_app_catalog_seed_data(session)
+
+    resp = client.get("/api/v1/apps")
+    assert resp.status_code == 200, resp.text
+    first = resp.json()["list"][0]
+    assert first["id"] == "prisma-literature-screening"
+    assert first["link_labels"]["docs"] == "进入应用"
+    assert first["pinned"] is True
+    assert first["sort_weight"] == -100
+
+
+def test_apps_catalog_request_seeds_missing_manifest_apps(client):
+    from app.storage.database.postgres_client import get_db_session
+
+    with get_db_session() as session:
+        session.execute(text("DELETE FROM app_catalog WHERE app_id = 'thesis-skills'"))
+
+    resp = client.get("/api/v1/apps")
+    assert resp.status_code == 200, resp.text
+    ids = [item["id"] for item in resp.json()["list"]]
+    assert ids[:2] == ["prisma-literature-screening", "thesis-skills"]
+
+    thesis = next(item for item in resp.json()["list"] if item["id"] == "thesis-skills")
+    assert thesis["pinned"] is True
+    assert thesis["sort_weight"] == -100
+    assert thesis["link_labels"]["docs"] == "进入应用"
+
+
+def test_apps_catalog_list_does_not_fetch_each_linked_topic(client, monkeypatch):
+    topic_resp = client.post("/api/v1/apps/research-dream/topic")
+    assert topic_resp.status_code == 200, topic_resp.text
+
+    import app.api.apps as apps_module
+
+    def fail_get_topic(*args, **kwargs):
+        raise AssertionError("list_apps should use bulk app topic summaries")
+
+    monkeypatch.setattr(apps_module, "get_topic", fail_get_topic)
+
+    resp = client.get("/api/v1/apps")
+    assert resp.status_code == 200, resp.text
+    research_dream = next(item for item in resp.json()["list"] if item["id"] == "research-dream")
+    assert research_dream["linked_topic_id"] == topic_resp.json()["topic"]["id"]
 
 
 def test_apps_catalog_exposes_giiisp_skill_docs_and_scope(client):

@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import copy
 import os
+from pathlib import Path
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import json
@@ -126,6 +127,204 @@ def _json_dumps(value) -> str | None:
     if value is None:
         return None
     return json.dumps(value, ensure_ascii=False)
+
+
+def _default_app_catalog_manifest_path() -> Path:
+    return Path(__file__).resolve().parents[2] / "resources" / "apps_catalog.json"
+
+
+def _iter_app_catalog_manifest_paths() -> list[Path]:
+    paths: list[Path] = [_default_app_catalog_manifest_path()]
+    raw_extra = (os.getenv("TOPICLAB_APP_CATALOG_PATHS") or "").strip()
+    if not raw_extra:
+        return paths
+
+    for entry in raw_extra.split(os.pathsep):
+        value = entry.strip()
+        if not value:
+            continue
+        path = Path(value).expanduser()
+        if path.is_dir():
+            paths.extend(sorted(item for item in path.glob("*.json") if item.is_file()))
+        elif path.is_file():
+            paths.append(path)
+    return paths
+
+
+def _load_app_catalog_manifest(path: Path) -> list[dict]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(payload, dict):
+        apps = payload.get("apps", [])
+    elif isinstance(payload, list):
+        apps = payload
+    else:
+        raise ValueError(f"Unsupported catalog format in {path}")
+    if not isinstance(apps, list):
+        raise ValueError(f"Invalid apps list in {path}")
+    return [item for item in apps if isinstance(item, dict)]
+
+
+def _load_seed_app_catalog_items() -> list[tuple[str, dict, str]]:
+    merged: dict[str, tuple[dict, str]] = {}
+    for path in _iter_app_catalog_manifest_paths():
+        if not path.exists():
+            continue
+        for item in _load_app_catalog_manifest(path):
+            app_id = str(item.get("id") or "").strip()
+            if not app_id:
+                continue
+            previous, _previous_source = merged.get(app_id, ({}, ""))
+            merged[app_id] = ({**previous, **item}, str(path))
+    return [(app_id, payload, source_path) for app_id, (payload, source_path) in merged.items()]
+
+
+def _ensure_app_catalog_table_sqlite(session) -> None:
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS app_catalog (
+                app_id VARCHAR(255) PRIMARY KEY,
+                payload_json TEXT NOT NULL,
+                source_path TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+
+
+def _ensure_app_catalog_table_postgres(session) -> None:
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS app_catalog (
+                app_id VARCHAR(255) PRIMARY KEY,
+                payload_json JSONB NOT NULL,
+                source_path TEXT NOT NULL DEFAULT '',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+    )
+
+
+def ensure_app_catalog_seed_data(session) -> None:
+    if session.bind.dialect.name == "sqlite":
+        _ensure_app_catalog_table_sqlite(session)
+        insert_sql = """
+            INSERT OR IGNORE INTO app_catalog (
+                app_id, payload_json, source_path, created_at, updated_at
+            ) VALUES (
+                :app_id, :payload_json, :source_path, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            )
+        """
+    else:
+        _ensure_app_catalog_table_postgres(session)
+        insert_sql = """
+            INSERT INTO app_catalog (
+                app_id, payload_json, source_path, created_at, updated_at
+            ) VALUES (
+                :app_id, CAST(:payload_json AS JSONB), :source_path, NOW(), NOW()
+            )
+            ON CONFLICT (app_id) DO NOTHING
+        """
+
+    for app_id, payload, source_path in _load_seed_app_catalog_items():
+        session.execute(
+            text(insert_sql),
+            {
+                "app_id": app_id,
+                "payload_json": _json_dumps(payload),
+                "source_path": source_path,
+            },
+        )
+    _patch_prisma_app_catalog_payload(session)
+
+
+def _patch_prisma_app_catalog_payload(session) -> None:
+    row = session.execute(
+        text("SELECT payload_json FROM app_catalog WHERE app_id = :app_id"),
+        {"app_id": "prisma-literature-screening"},
+    ).first()
+    if not row:
+        return
+
+    payload = _json_loads(row.payload_json, {})
+    if not isinstance(payload, dict):
+        return
+
+    link_labels = payload.get("link_labels")
+    if not isinstance(link_labels, dict):
+        link_labels = {}
+    changed = False
+    if link_labels.get("docs") != "进入应用":
+        link_labels["docs"] = "进入应用"
+        payload["link_labels"] = link_labels
+        changed = True
+    if payload.get("pinned") is not True:
+        payload["pinned"] = True
+        changed = True
+    if payload.get("sort_weight") != -100:
+        payload["sort_weight"] = -100
+        changed = True
+    if not changed:
+        return
+
+    if session.bind.dialect.name == "sqlite":
+        session.execute(
+            text(
+                """
+                UPDATE app_catalog
+                SET payload_json = :payload_json,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE app_id = :app_id
+                """
+            ),
+            {
+                "app_id": "prisma-literature-screening",
+                "payload_json": _json_dumps(payload),
+            },
+        )
+    else:
+        session.execute(
+            text(
+                """
+                UPDATE app_catalog
+                SET payload_json = CAST(:payload_json AS JSONB),
+                    updated_at = NOW()
+                WHERE app_id = :app_id
+                """
+            ),
+            {
+                "app_id": "prisma-literature-screening",
+                "payload_json": _json_dumps(payload),
+            },
+        )
+
+
+def list_app_catalog_items() -> list[dict]:
+    with get_db_session() as session:
+        if session.bind.dialect.name == "sqlite":
+            _ensure_app_catalog_table_sqlite(session)
+        else:
+            _ensure_app_catalog_table_postgres(session)
+        ensure_app_catalog_seed_data(session)
+        rows = session.execute(
+            text(
+                """
+                SELECT payload_json
+                FROM app_catalog
+                """
+            )
+        ).fetchall()
+    items: list[dict] = []
+    for row in rows:
+        payload = _json_loads(row.payload_json, {})
+        if isinstance(payload, dict):
+            items.append(payload)
+    return items
 
 
 def _cache_get(key: tuple[object, ...]):
@@ -970,6 +1169,7 @@ def _init_topic_tables_sqlite(session) -> None:
     ]
     for statement in statements:
         session.execute(text(statement))
+    ensure_app_catalog_seed_data(session)
     if not _sqlite_has_column(session, "topics", "discussion_completed_once"):
         session.execute(text("ALTER TABLE topics ADD COLUMN discussion_completed_once BOOLEAN NOT NULL DEFAULT FALSE"))
     if not _sqlite_has_column(session, "topics", "metadata"):
@@ -1069,6 +1269,7 @@ def init_topic_tables() -> None:
             CREATE INDEX IF NOT EXISTS idx_topic_app_links_topic_id
             ON topic_app_links(topic_id)
         """))
+        ensure_app_catalog_seed_data(session)
         session.execute(text("""
             CREATE TABLE IF NOT EXISTS posts (
                 id VARCHAR(36) PRIMARY KEY,
@@ -2110,6 +2311,80 @@ def get_topic_id_by_app(app_id: str) -> str | None:
     if not row:
         return None
     return str(row.topic_id)
+
+
+def get_app_topic_summaries(
+    app_ids: list[str],
+    *,
+    user_id: int | None = None,
+    auth_type: str | None = None,
+) -> dict[str, dict]:
+    clean_app_ids = [str(app_id).strip() for app_id in app_ids if str(app_id).strip()]
+    if not clean_app_ids:
+        return {}
+
+    summaries: dict[str, dict] = {}
+    with get_db_session() as session:
+        rows = session.execute(
+            text(
+                """
+                SELECT
+                    l.app_id,
+                    l.topic_id,
+                    COALESCE(t.posts_count, 0) AS posts_count,
+                    COALESCE(t.likes_count, 0) AS likes_count,
+                    COALESCE(t.favorites_count, 0) AS favorites_count,
+                    COALESCE(t.shares_count, 0) AS shares_count
+                FROM topic_app_links AS l
+                JOIN topics AS t ON t.id = l.topic_id
+                WHERE l.app_id IN :app_ids
+                """
+            ).bindparams(bindparam("app_ids", expanding=True)),
+            {"app_ids": clean_app_ids},
+        ).fetchall()
+
+        for row in rows:
+            summaries[str(row.app_id)] = {
+                "linked_topic_id": str(row.topic_id),
+                "linked_topic_posts_count": int(row.posts_count or 0),
+                "interaction": {
+                    "likes_count": int(row.likes_count or 0),
+                    "favorites_count": int(row.favorites_count or 0),
+                    "shares_count": int(row.shares_count or 0),
+                    "liked": False,
+                    "favorited": False,
+                },
+            }
+
+        if summaries and user_id is not None and auth_type:
+            auth_types = list(_favorite_auth_types(auth_type))
+            state_rows = session.execute(
+                text(
+                    """
+                    SELECT topic_id, auth_type, liked, favorited
+                    FROM topic_user_actions
+                    WHERE topic_id IN :topic_ids
+                      AND user_id = :user_id
+                      AND auth_type IN :auth_types
+                    """
+                ).bindparams(bindparam("topic_ids", expanding=True), bindparam("auth_types", expanding=True)),
+                {
+                    "topic_ids": [item["linked_topic_id"] for item in summaries.values()],
+                    "user_id": user_id,
+                    "auth_types": auth_types,
+                },
+            ).fetchall()
+            topic_to_app = {item["linked_topic_id"]: app_id for app_id, item in summaries.items()}
+            for row in state_rows:
+                app_id = topic_to_app.get(str(row.topic_id))
+                if not app_id:
+                    continue
+                interaction = summaries[app_id]["interaction"]
+                if row.auth_type == auth_type:
+                    interaction["liked"] = bool(row.liked)
+                interaction["favorited"] = bool(interaction.get("favorited")) or bool(row.favorited)
+
+    return summaries
 
 
 def is_topic_from_app(topic_id: str) -> bool:

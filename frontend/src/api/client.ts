@@ -451,6 +451,7 @@ export interface AppCatalogItem {
   linked_topic_posts_count?: number
   interaction?: TopicInteraction
   links?: AppCatalogLinks
+  link_labels?: { docs?: string; repo?: string; combined?: string }
   openclaw?: AppCatalogOpenClawMeta
 }
 

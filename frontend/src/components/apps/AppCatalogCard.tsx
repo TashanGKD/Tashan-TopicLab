@@ -144,7 +144,7 @@ export default function AppCatalogCard({
         </div>
       </div>
 
-      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
         <div className="flex shrink-0 flex-wrap items-center gap-3">
           {links.map((link) => (
             <a
@@ -185,7 +185,7 @@ export default function AppCatalogCard({
           </button>
         </div>
         <p
-          className="min-w-0 flex-1 text-right text-xs tabular-nums leading-5 sm:text-right"
+          className="shrink-0 whitespace-nowrap text-left text-xs tabular-nums leading-5 sm:ml-auto sm:text-right"
           style={{ color: 'var(--text-tertiary)' }}
           aria-label={appFooterPlain}
         >

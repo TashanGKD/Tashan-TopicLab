@@ -102,6 +102,64 @@
       }
     },
     {
+      "id": "prisma-literature-screening",
+      "name": "PRISMA 文献筛选助手",
+      "summary": "面向系统综述、Meta 分析与证据整合项目的端到端文献筛选工作台。",
+      "description": "PRISMA 文献筛选助手是一款面向系统综述、Meta 分析与证据整合的本地优先文献筛选工具，支持文献导入、去重、规则筛选、人工复核、质量评价与证据等级整理，并可导出 PRISMA 2020 流程图和筛选明细，帮助研究者提升文献筛选效率与流程可追溯性。",
+      "icon": "prisma",
+      "pinned": true,
+      "sort_weight": -100,
+      "tags": ["research", "literature", "systematic-review", "meta-analysis", "evidence"],
+      "links": {
+        "docs": "https://quzhiii.github.io/-PRISMA-/",
+        "repo": "https://github.com/quzhiii/-PRISMA-",
+        "catalog_source": "https://github.com/quzhiii/-PRISMA-"
+      },
+      "link_labels": {
+        "docs": "进入应用"
+      },
+      "openclaw": {
+        "topic_seed": {
+          "category": "research",
+          "title": "评估 PRISMA 文献筛选助手是否适合系统综述与证据整合流程",
+          "body": "我想评估应用 PRISMA 文献筛选助手 的实际效果。\n\n应用信息：\n- 名称：PRISMA 文献筛选助手\n- 访问地址：https://quzhiii.github.io/-PRISMA-/\n- 仓库：https://github.com/quzhiii/-PRISMA-\n- 定位：面向系统综述、Meta 分析与证据整合项目的端到端文献筛选工作台\n\n请围绕以下方面展开：\n1. 是否适合系统综述、Meta 分析与证据整合项目\n2. 文献导入、去重、规则筛选、人工复核、质量评价与证据等级整理是否能覆盖实际筛选流程\n3. PRISMA 2020 流程图和筛选明细导出对流程追溯与论文写作是否有帮助\n4. 本地优先工具在数据安全、协作、版本管理与长期维护方面需要注意哪些事项\n"
+        },
+        "review_feedback": {
+          "scenario": "apps:prisma-literature-screening",
+          "body_template": "我要评价应用 PRISMA 文献筛选助手。\n\n评价维度：\n- 使用场景：\n- 文献筛选流程覆盖度：\n- PRISMA 2020 导出体验：\n- 实际体验：\n- 优点：\n- 问题/不足：\n- 改进建议：\n"
+        }
+      }
+    },
+    {
+      "id": "thesis-skills",
+      "name": "Thesis Skills",
+      "summary": "面向研究生论文写作与投稿场景的论文格式迁移、引用校验和规范检查技能仓库。",
+      "description": "Thesis Skills 是一个面向研究生论文与期刊投稿的确定性技能仓库，聚焦 Word 到 LaTeX 迁移、Zotero/EndNote 文献导入、引用编号锁定、格式规则检查与一键修复循环，帮助论文写作者降低排版返工、引用错乱和格式不合规风险，提升论文整理与提交效率。",
+      "icon": "thesis-skills",
+      "pinned": true,
+      "sort_weight": -100,
+      "tags": ["research", "thesis", "writing", "latex", "citation", "formatting"],
+      "links": {
+        "docs": "https://github.com/quzhiii/thesis-skills/tree/main",
+        "repo": "https://github.com/quzhiii/thesis-skills/",
+        "catalog_source": "https://github.com/quzhiii/thesis-skills/"
+      },
+      "link_labels": {
+        "docs": "进入应用"
+      },
+      "openclaw": {
+        "topic_seed": {
+          "category": "research",
+          "title": "评估 Thesis Skills 是否适合论文写作、格式迁移与投稿检查流程",
+          "body": "我想评估应用 Thesis Skills 的实际效果。\n\n应用信息：\n- 名称：Thesis Skills\n- 访问地址：https://github.com/quzhiii/thesis-skills/tree/main\n- 仓库：https://github.com/quzhiii/thesis-skills/\n- 定位：面向研究生论文写作与投稿场景的论文格式迁移、引用校验和规范检查技能仓库\n\n请围绕以下方面展开：\n1. 是否适合研究生论文与期刊投稿前的格式迁移和规范检查\n2. Word 到 LaTeX 迁移、Zotero/EndNote 文献导入、引用编号锁定等能力能否覆盖常见论文整理流程\n3. 格式规则检查与一键修复循环对降低返工、引用错乱和格式不合规风险是否有帮助\n4. 纳入长期论文写作工具链前，需要确认哪些输入格式、模板约束和人工复核边界\n"
+        },
+        "review_feedback": {
+          "scenario": "apps:thesis-skills",
+          "body_template": "我要评价应用 Thesis Skills。\n\n评价维度：\n- 使用场景：\n- Word 到 LaTeX 迁移体验：\n- 引用校验与编号锁定效果：\n- 格式规则检查覆盖度：\n- 实际体验：\n- 优点：\n- 问题/不足：\n- 改进建议：\n"
+        }
+      }
+    },
+    {
       "id": "scientify",
       "name": "Scientify",
       "summary": "持续在线的 OpenClaw 科研工作流插件，可长期跟踪论文、沉淀知识并推动研究假设验证。",

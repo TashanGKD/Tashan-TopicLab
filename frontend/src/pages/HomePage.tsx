@@ -25,7 +25,6 @@ type HomeEntryControl = {
   entryId?: string
   to?: string
   disabled?: boolean
-  variant?: '2050-column'
 }
 
 type HomeEntryGroup = {
@@ -85,6 +84,7 @@ export default function HomePage() {
       label: '科教生态',
       controls: [
         { id: 'research-skill-zone', label: '科研 Skills 专区', entryId: 'research-skill-zone', to: '/apps/skills' },
+        { id: 'research-apps-zone', label: '科研应用专区', to: '/apps' },
       ],
     },
     {
@@ -92,7 +92,6 @@ export default function HomePage() {
       label: '信息专栏',
       controls: [
         { id: 'spring-campus', label: '春招季', disabled: true },
-        { id: '2050-agenda', label: '2050专题', to: '/topics/topic_2050_agenda_discussion', variant: '2050-column' },
       ],
     },
     {
@@ -256,18 +255,13 @@ export default function HomePage() {
                             : homeEntryItems.findIndex((item) => item.id === control.entryId)
                           const isActive = targetIndex === activeIndex && targetIndex >= 0
                           const isDisabled = control.disabled ?? (!control.to && targetIndex < 0)
-                          const is2050Column = control.variant === '2050-column'
 
                           return (
                             <button
                               key={control.id}
                               type="button"
                               onClick={isDisabled ? undefined : () => handleHomeEntryControlClick(control)}
-                              className={`rounded-full border text-sm transition-all duration-300 motion-reduce:transition-none disabled:cursor-not-allowed disabled:hover:scale-100 ${
-                                is2050Column
-                                  ? 'inline-flex min-h-[2.75rem] items-center px-5 py-2.5 hover:scale-[0.98]'
-                                  : 'px-4 py-2'
-                              }`}
+                              className="rounded-full border px-4 py-2 text-sm transition-all duration-300 motion-reduce:transition-none disabled:cursor-not-allowed disabled:hover:scale-100"
                               style={{
                                 borderColor: isActive ? activeTheme.activeEdge : 'rgba(203, 213, 225, 0.95)',
                                 backgroundColor: isActive ? activeTheme.actionBackground : 'rgba(255,255,255,0.58)',
@@ -280,18 +274,7 @@ export default function HomePage() {
                               title={control.entryId && control.to ? '点击切换卡片，当前卡片再次点击直接进入页面' : undefined}
                               disabled={isDisabled}
                             >
-                              {is2050Column ? (
-                                <span
-                                  data-testid="home-entry-2050-text"
-                                  className="inline-flex items-baseline text-[15px] font-semibold leading-none sm:text-base"
-                                >
-                                  <span data-testid="home-entry-2050-digit-2" style={{ color: '#ffd000' }}>2</span>
-                                  <span data-testid="home-entry-2050-digit-0-blue" style={{ color: '#7ebcff' }}>0</span>
-                                  <span data-testid="home-entry-2050-digit-5" style={{ color: '#5c3ab8' }}>5</span>
-                                  <span data-testid="home-entry-2050-digit-0-cream" style={{ color: '#ffeccf' }}>0</span>
-                                  <span className="ml-1 text-slate-700">专题</span>
-                                </span>
-                              ) : control.label}
+                              {control.label}
                             </button>
                           )
                         })}

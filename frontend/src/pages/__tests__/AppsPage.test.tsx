@@ -27,6 +27,16 @@ const mockedAppsList = vi.mocked(appsApi.list)
 const mockedSkillHubList = vi.mocked(skillHubApi.listSkills)
 const mockedSkillHubCategories = vi.mocked(skillHubApi.listCategories)
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
 describe('AppsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -35,14 +45,14 @@ describe('AppsPage', () => {
       data: {
         list: [
           {
-            id: 'topiclab-cli',
-            name: 'TopicLab CLI',
-            summary: 'CLI runtime',
-            description: 'A runtime app.',
-            icon: 'spark',
-            tags: ['cli'],
-            builtin: true,
-            links: { docs: 'https://example.com/docs', repo: 'https://example.com/repo' },
+            id: 'prisma-literature-screening',
+            name: 'PRISMA 文献筛选助手',
+            summary: 'Screening workspace',
+            description: 'A PRISMA app.',
+            icon: 'prisma',
+            tags: ['research'],
+            links: { docs: 'https://example.com/prisma', repo: 'https://example.com/prisma-repo' },
+            link_labels: { docs: '进入应用' },
             interaction: { likes_count: 0, shares_count: 0, favorites_count: 0, liked: false, favorited: false },
           },
         ],
@@ -127,7 +137,8 @@ describe('AppsPage', () => {
     await screen.findByRole('heading', { name: '应用' })
     expect((await screen.findAllByText('Literature Map')).length).toBeGreaterThan(0)
     expect(screen.getAllByText('CLI Install').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('TopicLab CLI').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('PRISMA 文献筛选助手').length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('link', { name: '进入应用' }).length).toBeGreaterThan(0)
     expect(screen.getByText('一级学科')).toBeInTheDocument()
     expect(screen.getByText('研究领域（Cluster）')).toBeInTheDocument()
     expect(screen.getByText('集中收录可安装的科研 Skill：按一级学科与研究领域（Cluster）筛选，查看说明、售价与 CLI 安装命令，并参与评测、许愿与发布。')).toBeInTheDocument()
@@ -138,6 +149,23 @@ describe('AppsPage', () => {
     await waitFor(() => expect(mockedAppsList).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(mockedSkillHubList).toHaveBeenCalled())
     await waitFor(() => expect(mockedSkillHubCategories).toHaveBeenCalledTimes(1))
+  })
+
+  it('renders app catalog before skill batches finish loading', async () => {
+    const skillsDeferred = createDeferred<any>()
+    mockedSkillHubList.mockReturnValue(skillsDeferred.promise)
+
+    render(
+      <MemoryRouter initialEntries={['/apps']}>
+        <Routes>
+          <Route path="/apps" element={<AppsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect((await screen.findAllByText('PRISMA 文献筛选助手')).length).toBeGreaterThan(0)
+    expect(screen.getByText('技能加载中…')).toBeInTheDocument()
+    expect(mockedSkillHubList).toHaveBeenCalledWith({ sort: 'new', limit: 24, offset: 0 })
   })
 
 })
