@@ -43,6 +43,7 @@ function getStageWidths(stageWidth: number) {
 type CategoryTopicPage = {
   items: TopicListItem[]
   nextCursor: string | null
+  categoryScoped: boolean
 }
 
 function normalizeTopicCategory(topic: TopicListItem, fallbackCategory: string): TopicListItem {
@@ -55,16 +56,12 @@ function normalizeTopicCategory(topic: TopicListItem, fallbackCategory: string):
 function groupTopicsByCategory(categoryPages: Record<string, CategoryTopicPage>) {
   const categoryItems = TOPIC_CATEGORIES.map((category) => {
     const categoryTopics = categoryPages[category.id]?.items ?? []
-    if (categoryTopics.length === 0) {
-      return null
-    }
-
     return {
       category,
       topicCount: categoryTopics.length,
       topics: categoryTopics,
     }
-  }).filter((item): item is NonNullable<typeof item> => item !== null)
+  })
 
   return categoryItems.sort((a, b) => {
     if (b.topicCount !== a.topicCount) {
@@ -73,6 +70,29 @@ function groupTopicsByCategory(categoryPages: Record<string, CategoryTopicPage>)
     return TOPIC_CATEGORIES.findIndex((category) => category.id === a.category.id)
       - TOPIC_CATEGORIES.findIndex((category) => category.id === b.category.id)
   })
+}
+
+function buildInitialCategoryPages(items: TopicListItem[], nextCursor: string | null): Record<string, CategoryTopicPage> {
+  const categoryIds = new Set<string>()
+  const grouped = items.reduce<Record<string, TopicListItem[]>>((acc, topic) => {
+    const categoryId = topic.category ?? 'plaza'
+    categoryIds.add(categoryId)
+    acc[categoryId] = acc[categoryId] ?? []
+    acc[categoryId].push(normalizeTopicCategory(topic, categoryId))
+    return acc
+  }, {})
+
+  const pageNextCursor = categoryIds.size === 1 ? nextCursor : null
+  return Object.fromEntries(
+    Object.entries(grouped).map(([categoryId, categoryTopics]) => [
+      categoryId,
+      {
+        items: categoryTopics,
+        nextCursor: pageNextCursor,
+        categoryScoped: false,
+      },
+    ]),
+  )
 }
 
 export default function TopicList() {
@@ -145,27 +165,38 @@ export default function TopicList() {
   const loadTopics = async () => {
     setLoading(true)
     try {
-      const responses = await Promise.all(
-        TOPIC_CATEGORIES.map(async (category) => {
-          const res = await topicsApi.list({
-            category: category.id,
-            q: searchQuery || undefined,
-            limit: PAGE_SIZE,
-          })
-          return [
-            category.id,
-            {
-              items: res.data.items.map((topic) => normalizeTopicCategory(topic, category.id)),
-              nextCursor: res.data.next_cursor,
-            },
-          ] as const
-        }),
-      )
-      setCategoryPages(Object.fromEntries(responses))
+      const res = await topicsApi.list({
+        q: searchQuery || undefined,
+        limit: PAGE_SIZE,
+      })
+      setCategoryPages(buildInitialCategoryPages(res.data.items, res.data.next_cursor))
     } catch (err) {
       handleApiError(err, '加载话题列表失败')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadCategoryTopics = async (categoryId: string) => {
+    setLoadingMoreCategory(categoryId)
+    try {
+      const res = await topicsApi.list({
+        category: categoryId,
+        q: searchQuery || undefined,
+        limit: PAGE_SIZE,
+      })
+      setCategoryPages((prev) => ({
+        ...prev,
+        [categoryId]: {
+          items: res.data.items.map((topic) => normalizeTopicCategory(topic, categoryId)),
+          nextCursor: res.data.next_cursor,
+          categoryScoped: true,
+        },
+      }))
+    } catch (err) {
+      handleApiError(err, '加载话题列表失败')
+    } finally {
+      setLoadingMoreCategory(null)
     }
   }
 
@@ -183,7 +214,7 @@ export default function TopicList() {
         limit: PAGE_SIZE,
       })
       setCategoryPages((prev) => {
-        const current = prev[categoryId] ?? { items: [], nextCursor: null }
+        const current = prev[categoryId] ?? { items: [], nextCursor: null, categoryScoped: true }
         const nextItems = [
           ...current.items,
           ...res.data.items
@@ -195,6 +226,7 @@ export default function TopicList() {
           [categoryId]: {
             items: nextItems,
             nextCursor: res.data.next_cursor,
+            categoryScoped: true,
           },
         }
       })
@@ -322,6 +354,7 @@ export default function TopicList() {
   const throttledFavorite = useThrottledCallbackByKey(handleTopicFavorite, (t) => t.id)
   const throttledShare = useThrottledCallbackByKey(handleTopicShare, (t) => t.id)
   const topicColumns = groupTopicsByCategory(categoryPages)
+  const hasAnyTopics = Object.values(categoryPages).some((page) => page.items.length > 0)
   const activeIndex = topicColumns.findIndex(({ category }) => category.id === activeCategory)
   const resolvedActiveIndex = activeIndex >= 0 ? activeIndex : 0
   const activeColumn = topicColumns[resolvedActiveIndex] ?? null
@@ -347,18 +380,23 @@ export default function TopicList() {
       : 'animate-fade-in'
 
   useEffect(() => {
-    if (topicColumns.length === 0) {
+    if (topicColumns.length === 0 || !hasAnyTopics) {
       setActiveCategory('')
       return
     }
-    if (!topicColumns.some(({ category }) => category.id === activeCategory)) {
-      setActiveCategory(topicColumns[0].category.id)
+    if (!activeCategory || !topicColumns.some(({ category }) => category.id === activeCategory)) {
+      const firstCategoryWithTopics = topicColumns.find(({ topicCount }) => topicCount > 0)
+      setActiveCategory((firstCategoryWithTopics ?? topicColumns[0]).category.id)
     }
-  }, [activeCategory, topicColumns])
+  }, [activeCategory, hasAnyTopics, topicColumns])
 
   const handleCategoryJump = useCallback((categoryId: string) => {
     setActiveCategory(categoryId)
-  }, [])
+    const page = categoryPages[categoryId]
+    if (!page?.categoryScoped && loadingMoreCategory !== categoryId) {
+      void loadCategoryTopics(categoryId)
+    }
+  }, [categoryPages, loadingMoreCategory, searchQuery])
 
   useEffect(() => {
     const activeTab = categoryTabRefs.current[activeCategory]
@@ -527,13 +565,13 @@ export default function TopicList() {
           <p className="text-gray-500 font-serif">加载中...</p>
         )}
 
-        {!loading && topicColumns.length === 0 && (
+        {!loading && !hasAnyTopics && (
           <p className="text-gray-500 font-serif">
             {searchQuery ? '没有找到匹配的话题' : '当前板块暂无话题'}
           </p>
         )}
 
-        {!loading && activeColumn ? (
+        {!loading && hasAnyTopics && activeColumn ? (
           <div className="mx-auto w-full pb-4">
             <div
               ref={contentStageRef}

@@ -27,7 +27,17 @@ function mockTopicListByCategory(
   },
 ) {
   mockedTopicsApiList.mockImplementation(async (params?: { category?: string; cursor?: string | null }) => {
-    const categoryId = params?.category ?? 'plaza'
+    if (!params?.category) {
+      const categoryIds = new Set(items.map((item) => item.category ?? 'plaza'))
+      const singleCategoryId = categoryIds.size === 1 ? Array.from(categoryIds)[0] : null
+      return {
+        data: {
+          items,
+          next_cursor: singleCategoryId ? options?.nextCursorByCategory?.[singleCategoryId] ?? null : null,
+        },
+      } as any
+    }
+    const categoryId = params.category
     const cursorKey = params?.cursor ?? '__initial__'
     const paged = options?.pagedResults?.[categoryId]?.[cursorKey]
     if (paged) {
@@ -95,6 +105,33 @@ describe('TopicList', () => {
     expect(image.getAttribute('src')).toMatch(
       /\/api\/topics\/topic-1\/assets\/generated_images\/list_preview\.png\?w=128&h=128&q=72&fm=webp$/,
     )
+  })
+
+  it('loads the first topic page with one uncategorized request', async () => {
+    render(
+      <MemoryRouter>
+        <TopicList />
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('img', { name: '带图片的话题 预览图' })
+
+    expect(mockedTopicsApiList).toHaveBeenCalledTimes(1)
+    expect(mockedTopicsApiList).toHaveBeenCalledWith({ q: undefined, limit: 20 })
+  })
+
+  it('loads a category page on demand when its tab is selected', async () => {
+    render(
+      <MemoryRouter>
+        <TopicList />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Arcade' }))
+
+    await waitFor(() => {
+      expect(mockedTopicsApiList).toHaveBeenCalledWith({ category: 'arcade', q: undefined, limit: 20 })
+    })
   })
 
   it('filters topics by selected category', async () => {
@@ -242,7 +279,7 @@ describe('TopicList', () => {
     })
 
     await waitFor(() => {
-      expect(mockedTopicsApiList).toHaveBeenCalledWith({ category: 'research', q: '多智能体', limit: 20 })
+      expect(mockedTopicsApiList).toHaveBeenCalledWith({ q: '多智能体', limit: 20 })
     })
   })
 
@@ -670,7 +707,7 @@ describe('TopicList', () => {
     })
   })
 
-  it('wraps the preview columns when the active category is at either edge', async () => {
+  it('renders adjacent preview columns around the active category', async () => {
     mockTopicListByCategory([
           {
             id: 'topic-1',
@@ -718,7 +755,6 @@ describe('TopicList', () => {
     expect(screen.getByTestId('topic-category-slot-left').childElementCount).toBe(1)
     expect(screen.getByTestId('topic-category-slot-center').querySelector('[data-active="true"]')).toBeTruthy()
     expect(screen.getByTestId('topic-category-slot-right').childElementCount).toBe(1)
-    expect(screen.getByTestId('topic-category-research')).toBeInTheDocument()
     expect(screen.getByTestId('topic-category-thought')).toBeInTheDocument()
 
     fireEvent.click((await screen.findAllByRole('button', { name: '科研' }))[0])
@@ -728,7 +764,7 @@ describe('TopicList', () => {
       expect(screen.getByTestId('topic-category-slot-center').querySelector('[data-active="true"]')).toBeTruthy()
       expect(screen.getByTestId('topic-category-slot-right').childElementCount).toBe(1)
       expect(screen.getByTestId('topic-category-thought')).toBeInTheDocument()
-      expect(screen.getByTestId('topic-category-plaza')).toBeInTheDocument()
+      expect(screen.getByTestId('topic-category-arcade')).toBeInTheDocument()
     })
   })
 })
