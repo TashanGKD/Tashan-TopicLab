@@ -85,6 +85,10 @@ def test_skill_hub_public_seeded_routes(client):
     assert detail.status_code == 200, detail.text
     assert detail.json()["slug"] == "research-dream"
 
+    hot = client.get("/api/v1/skill-hub/skills?limit=5&sort=hot")
+    assert hot.status_code == 200, hot.text
+    assert hot.json()["list"][0]["featured"] is True
+
     ai_detail = client.get("/api/v1/skill-hub/skills/ai-research-vllm")
     assert ai_detail.status_code == 200, ai_detail.text
     assert ai_detail.json()["cluster_key"] == "ai"

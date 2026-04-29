@@ -32,6 +32,9 @@ function getVisibilityBucket(skill: SkillHubSkillSummary) {
 }
 
 export function compareAppsPageSkills(a: SkillHubSkillSummary, b: SkillHubSkillSummary) {
+  const featuredDiff = Number(Boolean(b.featured)) - Number(Boolean(a.featured))
+  if (featuredDiff !== 0) return featuredDiff
+
   const bucketDiff = getVisibilityBucket(a) - getVisibilityBucket(b)
   if (bucketDiff !== 0) return bucketDiff
 

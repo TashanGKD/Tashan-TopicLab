@@ -39,6 +39,29 @@ function makeSkill(overrides: Partial<SkillHubSkillSummary>): SkillHubSkillSumma
 }
 
 describe('sortAppsPageSkills', () => {
+  it('keeps featured skills ahead of normal skills', () => {
+    const sorted = sortAppsPageSkills([
+      makeSkill({
+        id: 1,
+        slug: 'newer-normal',
+        name: 'Newer Normal',
+        published_at: '2026-03-14T00:00:00Z',
+      }),
+      makeSkill({
+        id: 2,
+        slug: 'featured-older',
+        name: 'Featured Older',
+        featured: true,
+        published_at: '2026-03-01T00:00:00Z',
+      }),
+    ])
+
+    expect(sorted.map((skill) => skill.slug)).toEqual([
+      'featured-older',
+      'newer-normal',
+    ])
+  })
+
   it('sorts normal sources by published time first, then downloads', () => {
     const sorted = sortAppsPageSkills([
       makeSkill({

@@ -908,12 +908,12 @@ def list_skills(
     safe_limit = max(1, min(limit, 100))
     safe_offset = max(0, offset)
     order_by = {
-        "new": "published_at DESC, id DESC",
-        "downloads": "total_downloads DESC, avg_rating DESC, id DESC",
-        "stars": "avg_rating DESC, total_reviews DESC, id DESC",
-        "top": "avg_rating DESC, total_downloads DESC, id DESC",
-        "hot": "(weekly_downloads * 2 + total_favorites + total_reviews) DESC, avg_rating DESC, id DESC",
-    }.get(sort, "(weekly_downloads * 2 + total_favorites + total_reviews) DESC, avg_rating DESC, id DESC")
+        "new": "featured DESC, published_at DESC, id DESC",
+        "downloads": "featured DESC, total_downloads DESC, avg_rating DESC, id DESC",
+        "stars": "featured DESC, avg_rating DESC, total_reviews DESC, id DESC",
+        "top": "featured DESC, avg_rating DESC, total_downloads DESC, id DESC",
+        "hot": "featured DESC, (weekly_downloads * 2 + total_favorites + total_reviews) DESC, avg_rating DESC, id DESC",
+    }.get(sort, "featured DESC, (weekly_downloads * 2 + total_favorites + total_reviews) DESC, avg_rating DESC, id DESC")
     clean_q = (q or "").strip().lower()
     params: dict[str, Any] = {
         "q": clean_q,
