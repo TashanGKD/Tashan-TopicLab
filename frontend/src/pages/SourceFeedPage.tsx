@@ -57,51 +57,17 @@ const ACADEMIC_MAX_RAW_PAGES = 24
 const WORLDWEAVE_FRONTEND_URL =
   import.meta.env.VITE_WORLDWEAVE_FRONTEND_URL || '/worldweave/'
 const WORLDWEAVE_FRAME_URL = WORLDWEAVE_FRONTEND_URL.replace(/\/?$/, '/')
-const WORLDWEAVE_HEALTH_URL = `${WORLDWEAVE_FRAME_URL.split('#')[0].replace(/\/?$/, '/')}api/v1/openclaw/skill.md`
-const SHOULD_CHECK_WORLDWEAVE = WORLDWEAVE_FRONTEND_URL.startsWith('/')
-const WORLDWEAVE_FRAME_MIN_HEIGHT = 860
+const WORLDWEAVE_FRAME_MIN_HEIGHT = 1280
 const WORLDWEAVE_FRAME_HEIGHT_PADDING = 32
 
 type WorldWeaveStatus = 'checking' | 'ready' | 'unavailable'
 
 function WorldWeaveSourceFrame() {
   const frameRef = useRef<HTMLIFrameElement | null>(null)
-  const [worldWeaveStatus, setWorldWeaveStatus] = useState<WorldWeaveStatus>(
-    SHOULD_CHECK_WORLDWEAVE ? 'checking' : 'ready',
-  )
+  const [worldWeaveStatus, setWorldWeaveStatus] = useState<WorldWeaveStatus>('ready')
   const [worldWeaveFrameHeight, setWorldWeaveFrameHeight] = useState(
     WORLDWEAVE_FRAME_MIN_HEIGHT,
   )
-
-  useEffect(() => {
-    if (!SHOULD_CHECK_WORLDWEAVE) return
-
-    let active = true
-    const controller = new AbortController()
-    const timeoutId = window.setTimeout(() => controller.abort(), 3000)
-
-    fetch(WORLDWEAVE_HEALTH_URL, {
-      cache: 'no-store',
-      signal: controller.signal,
-    })
-      .then((response) => {
-        if (!active) return
-        setWorldWeaveStatus(response.ok ? 'ready' : 'unavailable')
-      })
-      .catch(() => {
-        if (!active) return
-        setWorldWeaveStatus('unavailable')
-      })
-      .finally(() => {
-        window.clearTimeout(timeoutId)
-      })
-
-    return () => {
-      active = false
-      window.clearTimeout(timeoutId)
-      controller.abort()
-    }
-  }, [])
 
   useEffect(() => {
     if (worldWeaveStatus !== 'ready') return
@@ -225,6 +191,7 @@ function WorldWeaveSourceFrame() {
             scrolling="no"
             style={{ height: `${worldWeaveFrameHeight}px` }}
             loading="eager"
+            onError={() => setWorldWeaveStatus('unavailable')}
           />
         ) : (
           <div className="flex h-[calc(100vh-110px)] min-h-[760px] items-center justify-center bg-slate-50 px-6 text-center">
