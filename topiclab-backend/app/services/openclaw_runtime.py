@@ -1008,9 +1008,17 @@ def apply_rule_points(
     )
 
 
-def list_openclaw_agents(*, q: str | None = None, status: str | None = None, limit: int = 20, offset: int = 0) -> dict[str, Any]:
+def list_openclaw_agents(
+    *,
+    q: str | None = None,
+    status: str | None = None,
+    user_kind: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict[str, Any]:
     clean_q = (q or "").strip().lower()
     like_q = f"%{clean_q}%"
+    clean_user_kind = (user_kind or "").strip().lower()
     safe_limit = max(1, min(limit, 100))
     safe_offset = max(0, offset)
     filters = [
@@ -1029,7 +1037,30 @@ def list_openclaw_agents(*, q: str | None = None, status: str | None = None, lim
     if status:
         filters.append("AND a.status = :status")
         params["status"] = status
+    if clean_user_kind == "zombie":
+        filters.append(
+            """
+            AND LOWER(COALESCE(u.phone, '')) LIKE 'guest%'
+            AND COALESCE(e.total_actions, 0) <= 1
+            """
+        )
+    elif clean_user_kind == "real":
+        filters.append(
+            """
+            AND NOT (
+                LOWER(COALESCE(u.phone, '')) LIKE 'guest%'
+                AND COALESCE(e.total_actions, 0) <= 1
+            )
+            """
+        )
     where_sql = "\n".join(filters)
+    event_count_join_sql = """
+                LEFT JOIN (
+                    SELECT openclaw_agent_id AS agent_id, COUNT(*) AS total_actions
+                    FROM openclaw_activity_events
+                    GROUP BY openclaw_agent_id
+                ) e ON e.agent_id = a.id
+    """
     with get_db_session() as session:
         total = int(
             session.execute(
@@ -1038,6 +1069,7 @@ def list_openclaw_agents(*, q: str | None = None, status: str | None = None, lim
                     SELECT COUNT(*)
                     FROM openclaw_agents a
                     LEFT JOIN users u ON u.id = a.bound_user_id
+                    {event_count_join_sql}
                     {where_sql}
                     """
                 ),
@@ -1051,10 +1083,12 @@ def list_openclaw_agents(*, q: str | None = None, status: str | None = None, lim
                     a.*,
                     u.username,
                     u.phone,
-                    COALESCE(w.balance, 0) AS balance
+                    COALESCE(w.balance, 0) AS balance,
+                    COALESCE(e.total_actions, 0) AS total_actions
                 FROM openclaw_agents a
                 LEFT JOIN users u ON u.id = a.bound_user_id
                 LEFT JOIN openclaw_wallets w ON w.openclaw_agent_id = a.id
+                {event_count_join_sql}
                 {where_sql}
                 ORDER BY a.updated_at DESC, a.id DESC
                 LIMIT :limit OFFSET :offset
@@ -1069,6 +1103,7 @@ def list_openclaw_agents(*, q: str | None = None, status: str | None = None, lim
                 "username": getattr(row, "username", None),
                 "phone": getattr(row, "phone", None),
                 "points_balance": int(getattr(row, "balance", 0) or 0),
+                "total_actions": int(getattr(row, "total_actions", 0) or 0),
             }
             for row in rows
         ],

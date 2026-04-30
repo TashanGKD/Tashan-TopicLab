@@ -23,6 +23,7 @@ type AdminTab =
   | 'openclaw_events'
   | 'twin_observations'
 type SortOrder = 'asc' | 'desc'
+type OpenClawUserKindFilter = '' | 'zombie' | 'real'
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
 const OPENCLAW_AGENT_STATUS_OPTIONS = [
@@ -30,6 +31,11 @@ const OPENCLAW_AGENT_STATUS_OPTIONS = [
   { value: 'active', label: 'active' },
   { value: 'suspended', label: 'suspended' },
   { value: 'archived', label: 'archived' },
+]
+const OPENCLAW_USER_KIND_OPTIONS: Array<{ value: OpenClawUserKindFilter; label: string }> = [
+  { value: '', label: '全部用户' },
+  { value: 'zombie', label: '僵尸用户' },
+  { value: 'real', label: '真人用户（排除僵尸）' },
 ]
 
 const SORT_OPTIONS: Record<AdminTab, Array<{ value: string; label: string }>> = {
@@ -145,6 +151,7 @@ export default function AdminDashboardPage() {
   const [sortBy, setSortBy] = useState(DEFAULT_SORT.users.sortBy)
   const [sortOrder, setSortOrder] = useState<SortOrder>(DEFAULT_SORT.users.sortOrder)
   const [agentStatusFilter, setAgentStatusFilter] = useState('')
+  const [openClawUserKindFilter, setOpenClawUserKindFilter] = useState<OpenClawUserKindFilter>('')
   const [eventTypeDraft, setEventTypeDraft] = useState('')
   const [eventTypeQuery, setEventTypeQuery] = useState('')
   const [observationTypeDraft, setObservationTypeDraft] = useState('')
@@ -226,12 +233,13 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     setOffset(0)
-  }, [tab, query, pageSize, sortBy, sortOrder, agentStatusFilter, eventTypeQuery, observationTypeQuery, observationMergeStatusFilter])
+  }, [tab, query, pageSize, sortBy, sortOrder, agentStatusFilter, openClawUserKindFilter, eventTypeQuery, observationTypeQuery, observationMergeStatusFilter])
 
   useEffect(() => {
     setSearch('')
     setQuery('')
     setAgentStatusFilter('')
+    setOpenClawUserKindFilter('')
     setEventTypeDraft('')
     setEventTypeQuery('')
     setObservationTypeDraft('')
@@ -307,6 +315,7 @@ export default function AdminDashboardPage() {
           const data = await adminApi.listOpenClawAgents({
             q: query,
             status: agentStatusFilter || undefined,
+            user_kind: openClawUserKindFilter || undefined,
             limit: pageSize,
             offset,
           })
@@ -362,6 +371,7 @@ export default function AdminDashboardPage() {
     }
   }, [
     agentStatusFilter,
+    openClawUserKindFilter,
     eventTypeQuery,
     observationMergeStatusFilter,
     observationTypeQuery,
@@ -812,9 +822,18 @@ export default function AdminDashboardPage() {
                           </option>
                         ))}
                       </select>
-                      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-500">
-                        固定按最近更新时间倒序
-                      </div>
+                      <select
+                        aria-label="用户类型筛选"
+                        value={openClawUserKindFilter}
+                        onChange={(event) => setOpenClawUserKindFilter(event.target.value as OpenClawUserKindFilter)}
+                        className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-sky-500"
+                      >
+                        {OPENCLAW_USER_KIND_OPTIONS.map((option) => (
+                          <option key={option.value || 'all'} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
                     </>
                   ) : tab === 'openclaw_events' ? (
                     <>
@@ -898,6 +917,11 @@ export default function AdminDashboardPage() {
                   ) : tab === 'openclaw_agents' ? (
                     <>
                       状态筛选：<span className="font-medium text-slate-700">{agentStatusFilter || '全部'}</span>
+                      {' / '}
+                      用户类型：
+                      <span className="font-medium text-slate-700">
+                        {OPENCLAW_USER_KIND_OPTIONS.find((item) => item.value === openClawUserKindFilter)?.label || '全部用户'}
+                      </span>
                     </>
                   ) : tab === 'openclaw_events' ? (
                     <>
@@ -1106,6 +1130,7 @@ export default function AdminDashboardPage() {
                         <td className="px-4 py-3 align-top text-xs text-slate-600">
                           <div className={`inline-flex rounded-full px-2 py-0.5 ${statusBadgeClass(item.status)}`}>{item.status}</div>
                           <div className="mt-2 font-mono">他山石 {item.points_balance}</div>
+                          <div className="mt-1 font-mono">动作 {item.total_actions}</div>
                           <div className="mt-1">{item.is_primary ? 'Primary' : 'Secondary'}</div>
                         </td>
                         <td className="px-4 py-3 align-top font-mono text-xs text-slate-600">

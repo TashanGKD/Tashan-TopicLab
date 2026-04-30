@@ -63,6 +63,7 @@ export interface AdminOpenClawAgentItem {
   username: string | null
   phone: string | null
   points_balance: number
+  total_actions: number
   created_at: string
   updated_at: string
   last_seen_at: string | null
@@ -379,6 +380,7 @@ export interface AdminListParams {
 export interface AdminOpenClawAgentListParams {
   q?: string
   status?: string
+  user_kind?: 'zombie' | 'real'
   limit?: number
   offset?: number
 }
@@ -499,6 +501,7 @@ export const adminApi = {
     const search = new URLSearchParams()
     if (params?.q) search.set('q', params.q)
     if (params?.status) search.set('status', params.status)
+    if (params?.user_kind) search.set('user_kind', params.user_kind)
     if (params?.limit != null) search.set('limit', String(params.limit))
     if (params?.offset != null) search.set('offset', String(params.offset))
     return adminRequest<AdminPagedResponse<AdminOpenClawAgentItem>>(

@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from pydantic import BaseModel, Field
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.exc import IntegrityError
 
 from app.api.auth import JWT_ALGORITHM, JWT_SECRET, security
@@ -350,6 +350,255 @@ def _finalize_count_set(value: set[int | str | None]) -> int:
     return len({item for item in value if item not in (None, "")})
 
 
+def _build_empty_trend_point(day_key: str) -> dict[str, Any]:
+    return {
+        "date": day_key,
+        "event_count": 0,
+        "failed_event_count": 0,
+        "observation_count": 0,
+        "merged_observation_count": 0,
+        "discussion_started_count": 0,
+        "discussion_completed_count": 0,
+        "tokenized_request_count": 0,
+        "input_tokens_estimated": 0,
+        "output_tokens_estimated": 0,
+        "total_tokens_estimated": 0,
+        "active_agents": set(),
+        "active_users": set(),
+    }
+
+
+def _compute_daily_observability_rollup(
+    session,
+    *,
+    day_key: str,
+    tz: timezone | ZoneInfo,
+    computed_at: datetime,
+) -> dict[str, Any]:
+    day = datetime.strptime(day_key, "%Y-%m-%d").date()
+    day_start = _build_day_start(day, tz=tz).astimezone(timezone.utc)
+    day_end = (_build_day_start(day, tz=tz) + timedelta(days=1)).astimezone(timezone.utc)
+    point = _build_empty_trend_point(day_key)
+    categories = _empty_action_categories()
+
+    event_rows = session.execute(
+        text(
+            """
+            SELECT
+                e.openclaw_agent_id,
+                COALESCE(e.bound_user_id, a.bound_user_id) AS resolved_user_id,
+                e.event_type,
+                e.success,
+                e.result_json,
+                e.created_at
+            FROM openclaw_activity_events e
+            LEFT JOIN openclaw_agents a ON a.id = e.openclaw_agent_id
+            WHERE e.created_at >= :day_start
+              AND e.created_at < :day_end
+            """
+        ),
+        {"day_start": day_start, "day_end": day_end},
+    ).fetchall()
+    for row in event_rows:
+        category = _classify_event_category(row.event_type)
+        token_usage = _extract_token_usage(_json_loads(row.result_json, {}))
+        has_token_usage = token_usage["total_tokens_estimated"] > 0
+        success = bool(row.success)
+        agent_id = int(row.openclaw_agent_id) if row.openclaw_agent_id is not None else None
+        user_id = int(row.resolved_user_id) if row.resolved_user_id is not None else None
+
+        point["event_count"] += 1
+        categories[category] += 1
+        if not success:
+            point["failed_event_count"] += 1
+        if agent_id is not None:
+            point["active_agents"].add(agent_id)
+        if user_id is not None:
+            point["active_users"].add(user_id)
+        if row.event_type == "discussion.started":
+            point["discussion_started_count"] += 1
+        if row.event_type == "discussion.completed":
+            point["discussion_completed_count"] += 1
+        if has_token_usage:
+            point["tokenized_request_count"] += 1
+            point["input_tokens_estimated"] += token_usage["input_tokens_estimated"]
+            point["output_tokens_estimated"] += token_usage["output_tokens_estimated"]
+            point["total_tokens_estimated"] += token_usage["total_tokens_estimated"]
+
+    observation_rows = session.execute(
+        text(
+            """
+            SELECT
+                o.merge_status,
+                t.owner_user_id,
+                a.id AS openclaw_agent_id
+            FROM twin_observations o
+            JOIN twin_core t ON t.twin_id = o.twin_id
+            LEFT JOIN openclaw_agents a ON a.agent_uid = o.instance_id
+            WHERE o.created_at >= :day_start
+              AND o.created_at < :day_end
+            """
+        ),
+        {"day_start": day_start, "day_end": day_end},
+    ).fetchall()
+    for row in observation_rows:
+        point["observation_count"] += 1
+        categories["observation"] += 1
+        if str(row.merge_status or "") == "merged":
+            point["merged_observation_count"] += 1
+        if row.openclaw_agent_id is not None:
+            point["active_agents"].add(int(row.openclaw_agent_id))
+        if row.owner_user_id is not None:
+            point["active_users"].add(int(row.owner_user_id))
+
+    return {
+        "rollup_date": day_key,
+        "timezone": str(tz),
+        "event_count": int(point["event_count"]),
+        "failed_event_count": int(point["failed_event_count"]),
+        "observation_count": int(point["observation_count"]),
+        "merged_observation_count": int(point["merged_observation_count"]),
+        "discussion_started_count": int(point["discussion_started_count"]),
+        "discussion_completed_count": int(point["discussion_completed_count"]),
+        "tokenized_request_count": int(point["tokenized_request_count"]),
+        "input_tokens_estimated": int(point["input_tokens_estimated"]),
+        "output_tokens_estimated": int(point["output_tokens_estimated"]),
+        "total_tokens_estimated": int(point["total_tokens_estimated"]),
+        "active_agent_count": _finalize_count_set(point["active_agents"]),
+        "active_user_count": _finalize_count_set(point["active_users"]),
+        "active_agent_ids_json": json.dumps(sorted(point["active_agents"]), ensure_ascii=False),
+        "active_user_ids_json": json.dumps(sorted(point["active_users"]), ensure_ascii=False),
+        "action_categories_json": json.dumps(_serialize_action_categories(categories), ensure_ascii=False),
+        "computed_at": computed_at,
+    }
+
+
+def _upsert_daily_observability_rollup(session, rollup: dict[str, Any]) -> None:
+    session.execute(
+        text(
+            """
+            DELETE FROM admin_community_observability_daily_rollups
+            WHERE rollup_date = :rollup_date
+              AND timezone = :timezone
+            """
+        ),
+        rollup,
+    )
+    session.execute(
+        text(
+            """
+            INSERT INTO admin_community_observability_daily_rollups (
+                rollup_date,
+                timezone,
+                event_count,
+                failed_event_count,
+                observation_count,
+                merged_observation_count,
+                discussion_started_count,
+                discussion_completed_count,
+                tokenized_request_count,
+                input_tokens_estimated,
+                output_tokens_estimated,
+                total_tokens_estimated,
+                active_agent_count,
+                active_user_count,
+                active_agent_ids_json,
+                active_user_ids_json,
+                action_categories_json,
+                computed_at
+            ) VALUES (
+                :rollup_date,
+                :timezone,
+                :event_count,
+                :failed_event_count,
+                :observation_count,
+                :merged_observation_count,
+                :discussion_started_count,
+                :discussion_completed_count,
+                :tokenized_request_count,
+                :input_tokens_estimated,
+                :output_tokens_estimated,
+                :total_tokens_estimated,
+                :active_agent_count,
+                :active_user_count,
+                :active_agent_ids_json,
+                :active_user_ids_json,
+                :action_categories_json,
+                :computed_at
+            )
+            """
+        ),
+        rollup,
+    )
+
+
+def _load_historical_daily_observability_rollups(
+    *,
+    day_keys: list[str],
+    tz: timezone | ZoneInfo,
+    computed_at: datetime,
+) -> dict[str, Any]:
+    if not day_keys:
+        return {}
+    timezone_name = str(tz)
+    with get_db_session() as session:
+        _ensure_admin_observability_rollup_schema(session)
+        rows = session.execute(
+            text(
+                """
+                SELECT *
+                FROM admin_community_observability_daily_rollups
+                WHERE timezone = :timezone
+                  AND rollup_date IN :day_keys
+                """
+            ).bindparams(bindparam("day_keys", expanding=True)),
+            {"timezone": timezone_name, "day_keys": day_keys},
+        ).fetchall()
+        existing = {str(row.rollup_date): row for row in rows}
+        missing_days = [day_key for day_key in day_keys if day_key not in existing]
+        missing_days.extend(
+            day_key
+            for day_key, row in existing.items()
+            if getattr(row, "computed_at", None) is None
+        )
+        for day_key in dict.fromkeys(missing_days):
+            rollup = _compute_daily_observability_rollup(
+                session,
+                day_key=day_key,
+                tz=tz,
+                computed_at=computed_at,
+            )
+            _upsert_daily_observability_rollup(session, rollup)
+        if missing_days:
+            rows = session.execute(
+                text(
+                    """
+                    SELECT *
+                    FROM admin_community_observability_daily_rollups
+                    WHERE timezone = :timezone
+                      AND rollup_date IN :day_keys
+                    """
+                ).bindparams(bindparam("day_keys", expanding=True)),
+                {"timezone": timezone_name, "day_keys": day_keys},
+            ).fetchall()
+    return {str(row.rollup_date): row for row in rows}
+
+
+def _apply_historical_daily_rollup(point: dict[str, Any], row: Any) -> None:
+    point["event_count"] = int(row.event_count or 0)
+    point["failed_event_count"] = int(row.failed_event_count or 0)
+    point["observation_count"] = int(row.observation_count or 0)
+    point["merged_observation_count"] = int(getattr(row, "merged_observation_count", 0) or 0)
+    point["discussion_started_count"] = int(row.discussion_started_count or 0)
+    point["discussion_completed_count"] = int(row.discussion_completed_count or 0)
+    point["tokenized_request_count"] = int(row.tokenized_request_count or 0)
+    point["input_tokens_estimated"] = int(row.input_tokens_estimated or 0)
+    point["output_tokens_estimated"] = int(row.output_tokens_estimated or 0)
+    point["total_tokens_estimated"] = int(row.total_tokens_estimated or 0)
+    point["active_agents"] = set(_json_loads(row.active_agent_ids_json, []))
+    point["active_users"] = set(_json_loads(row.active_user_ids_json, []))
+
+
 def _normalized_like(query: str | None) -> tuple[str, str]:
     clean = (query or "").strip().lower()
     return clean, f"%{clean}%"
@@ -361,6 +610,36 @@ def _resolve_sort_clause(sort_by: str | None, sort_order: str | None, allowed: d
         return fallback
     direction = "ASC" if (sort_order or "").strip().lower() == "asc" else "DESC"
     return f"{field} {direction}"
+
+
+def _ensure_admin_observability_rollup_schema(session) -> None:
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS admin_community_observability_daily_rollups (
+                rollup_date VARCHAR(10) NOT NULL,
+                timezone VARCHAR(64) NOT NULL,
+                event_count INTEGER NOT NULL DEFAULT 0,
+                failed_event_count INTEGER NOT NULL DEFAULT 0,
+                observation_count INTEGER NOT NULL DEFAULT 0,
+                merged_observation_count INTEGER NOT NULL DEFAULT 0,
+                discussion_started_count INTEGER NOT NULL DEFAULT 0,
+                discussion_completed_count INTEGER NOT NULL DEFAULT 0,
+                tokenized_request_count INTEGER NOT NULL DEFAULT 0,
+                input_tokens_estimated INTEGER NOT NULL DEFAULT 0,
+                output_tokens_estimated INTEGER NOT NULL DEFAULT 0,
+                total_tokens_estimated INTEGER NOT NULL DEFAULT 0,
+                active_agent_count INTEGER NOT NULL DEFAULT 0,
+                active_user_count INTEGER NOT NULL DEFAULT 0,
+                active_agent_ids_json TEXT NOT NULL DEFAULT '[]',
+                active_user_ids_json TEXT NOT NULL DEFAULT '[]',
+                action_categories_json TEXT NOT NULL DEFAULT '{}',
+                computed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (rollup_date, timezone)
+            )
+            """
+        )
+    )
 
 
 def _ensure_admin_schema_once() -> None:
@@ -388,6 +667,7 @@ def _ensure_admin_schema_once() -> None:
                     """
                 )
             )
+            _ensure_admin_observability_rollup_schema(session)
         _ADMIN_PANEL_SCHEMA_READY = True
 
 
@@ -1009,22 +1289,15 @@ async def get_admin_community_observability(
 
     topic_categories = {str(row.id): row.category for row in topic_rows}
     post_topic_categories = {str(row.id): row.category for row in post_rows}
+    historical_day_keys = [day_key for day_key in ordered_day_keys if day_key != today_key]
+    historical_daily_rollups = _load_historical_daily_observability_rollups(
+        day_keys=historical_day_keys,
+        tz=_OBSERVABILITY_TIMEZONE,
+        computed_at=now,
+    )
 
     trend_map: dict[str, dict[str, Any]] = {
-        day_key: {
-            "date": day_key,
-            "event_count": 0,
-            "failed_event_count": 0,
-            "observation_count": 0,
-            "discussion_started_count": 0,
-            "discussion_completed_count": 0,
-            "tokenized_request_count": 0,
-            "input_tokens_estimated": 0,
-            "output_tokens_estimated": 0,
-            "total_tokens_estimated": 0,
-            "active_agents": set(),
-            "active_users": set(),
-        }
+        day_key: _build_empty_trend_point(day_key)
         for day_key in ordered_day_keys
     }
 
@@ -1324,6 +1597,8 @@ async def get_admin_community_observability(
 
             if day_bucket and day_bucket in trend_map:
                 trend_map[day_bucket]["observation_count"] += 1
+                if merge_status == "merged":
+                    trend_map[day_bucket]["merged_observation_count"] += 1
                 trend_map[day_bucket]["active_users"].add(owner_user_id)
                 if agent_rollup is not None:
                     trend_map[day_bucket]["active_agents"].add(agent_rollup["agent_id"])
@@ -1361,6 +1636,17 @@ async def get_admin_community_observability(
                 user_rollup["is_today_active"] = True
                 user_rollup["today_action_total"] += 1
                 user_rollup["today_categories"]["observation"] += 1
+
+    for day_key, row in historical_daily_rollups.items():
+        if day_key in trend_map:
+            _apply_historical_daily_rollup(trend_map[day_key], row)
+
+    recent_7d_keys = set(ordered_day_keys[-7:])
+    for day_key, row in historical_daily_rollups.items():
+        if day_key not in recent_7d_keys:
+            continue
+        active_agents_7d.update(_json_loads(row.active_agent_ids_json, []))
+        active_users_7d.update(_json_loads(row.active_user_ids_json, []))
 
     for rollup in agent_rollups.values():
         latest_activity_dt = _parse_datetime(rollup["latest_activity_at"])
@@ -1570,6 +1856,17 @@ async def get_admin_community_observability(
         if rollup["recent_event_count"] > 0 or rollup["recent_observation_count"] > 0
     ][:12]
 
+    window_event_count = sum(int(point["event_count"]) for point in trend_map.values())
+    window_failed_event_count = sum(int(point["failed_event_count"]) for point in trend_map.values())
+    window_tokenized_request_count = sum(int(point["tokenized_request_count"]) for point in trend_map.values())
+    window_input_tokens = sum(int(point["input_tokens_estimated"]) for point in trend_map.values())
+    window_output_tokens = sum(int(point["output_tokens_estimated"]) for point in trend_map.values())
+    window_total_tokens = sum(int(point["total_tokens_estimated"]) for point in trend_map.values())
+    window_discussions_started = sum(int(point["discussion_started_count"]) for point in trend_map.values())
+    window_discussions_completed = sum(int(point["discussion_completed_count"]) for point in trend_map.values())
+    window_observation_count = sum(int(point["observation_count"]) for point in trend_map.values())
+    window_merged_observation_count = sum(int(point["merged_observation_count"]) for point in trend_map.values())
+
     overview = {
         "total_agents": len(agent_rollups),
         "bound_agents": len([item for item in agent_rollups.values() if item["bound_user_id"] is not None]),
@@ -1595,19 +1892,19 @@ async def get_admin_community_observability(
         "input_tokens_24h": input_tokens_24h,
         "output_tokens_24h": output_tokens_24h,
         "total_tokens_24h": total_tokens_24h,
-        "events_window": sum(point["event_count"] for point in trends),
-        "failed_events_window": sum(point["failed_event_count"] for point in trends),
-        "tokenized_requests_window": tokenized_requests_window,
-        "input_tokens_window": input_tokens_window,
-        "output_tokens_window": output_tokens_window,
-        "total_tokens_window": total_tokens_window,
+        "events_window": window_event_count,
+        "failed_events_window": window_failed_event_count,
+        "tokenized_requests_window": window_tokenized_request_count,
+        "input_tokens_window": window_input_tokens,
+        "output_tokens_window": window_output_tokens,
+        "total_tokens_window": window_total_tokens,
         "avg_tokens_per_request_24h": round(total_tokens_24h / max(tokenized_requests_24h, 1), 1),
-        "avg_tokens_per_request_window": round(total_tokens_window / max(tokenized_requests_window, 1), 1),
-        "discussions_started_window": discussions_started_window,
-        "discussions_completed_window": discussions_completed_window,
-        "discussion_completion_rate": round(discussions_completed_window / max(discussions_started_window, 1), 4),
-        "observations_window": observations_window,
-        "merged_observations_window": merged_observations_window,
+        "avg_tokens_per_request_window": round(window_total_tokens / max(window_tokenized_request_count, 1), 1),
+        "discussions_started_window": window_discussions_started,
+        "discussions_completed_window": window_discussions_completed,
+        "discussion_completion_rate": round(window_discussions_completed / max(window_discussions_started, 1), 4),
+        "observations_window": window_observation_count,
+        "merged_observations_window": window_merged_observation_count,
         "pending_observations_total": observations_pending_total,
         "risk_agents": len([item for item in agent_rollups.values() if item["risk_level"] in {"high", "medium"}]),
     }
@@ -1689,11 +1986,12 @@ async def get_admin_community_observability(
 async def list_admin_openclaw_agents(
     q: str | None = None,
     status: str | None = None,
+    user_kind: str | None = None,
     limit: int = 20,
     offset: int = 0,
     _: dict[str, Any] = Depends(require_admin_panel),
 ):
-    return PagedResponse(**list_openclaw_agents(q=q, status=status, limit=limit, offset=offset))
+    return PagedResponse(**list_openclaw_agents(q=q, status=status, user_kind=user_kind, limit=limit, offset=offset))
 
 
 @router.get("/openclaw/agents/{agent_uid}")

@@ -603,14 +603,78 @@ def test_admin_community_observability_limits_event_and_observation_queries_to_w
     )
     assert resp.status_code == 200, resp.text
 
-    event_queries = [sql for sql in captured_sql if "FROM openclaw_activity_events e" in sql]
-    observation_queries = [sql for sql in captured_sql if "FROM twin_observations o" in sql]
+    event_queries = [
+        sql
+        for sql in captured_sql
+        if "FROM openclaw_activity_events e" in sql and "LIMIT :event_limit" in sql
+    ]
+    observation_queries = [
+        sql
+        for sql in captured_sql
+        if "FROM twin_observations o" in sql and "WHERE o.created_at >= :window_start" in sql
+    ]
 
     assert event_queries, captured_sql
     assert observation_queries, captured_sql
     assert all("WHERE e.created_at >= :window_start" in sql for sql in event_queries)
     assert all("LIMIT :event_limit" in sql for sql in event_queries)
     assert all("WHERE o.created_at >= :window_start" in sql for sql in observation_queries)
+
+
+def test_admin_community_observability_persists_historical_daily_rollups(client):
+    import app.api.admin as admin_module
+    from app.storage.database.postgres_client import get_db_session
+
+    admin_panel = admin_panel_login(client)
+    auth = register_login_and_openclaw_key(client, phone="13800009114", username="ops-history")
+    yesterday_local = datetime.now(admin_module._OBSERVABILITY_TIMEZONE).date() - timedelta(days=1)
+    yesterday_noon_utc = (
+        datetime.combine(yesterday_local, datetime.min.time(), tzinfo=admin_module._OBSERVABILITY_TIMEZONE)
+        + timedelta(hours=12)
+    ).astimezone(timezone.utc)
+
+    with get_db_session() as session:
+        agent_id = session.execute(
+            text("SELECT id FROM openclaw_agents WHERE agent_uid = :agent_uid"),
+            {"agent_uid": auth["agent_uid"]},
+        ).scalar_one()
+        session.execute(
+            text(
+                """
+                UPDATE openclaw_activity_events
+                SET created_at = :created_at
+                WHERE openclaw_agent_id = :agent_id
+                """
+            ),
+            {"created_at": yesterday_noon_utc, "agent_id": agent_id},
+        )
+
+    resp = client.get(
+        "/admin/community/observability",
+        headers={"Authorization": f"Bearer {admin_panel['token']}"},
+        params={"window_days": 7},
+    )
+    assert resp.status_code == 200, resp.text
+    trends = {item["date"]: item for item in resp.json()["trends"]}
+    assert trends[yesterday_local.isoformat()]["event_count"] >= 1
+    assert trends[yesterday_local.isoformat()]["active_agents"] >= 1
+
+    with get_db_session() as session:
+        row = session.execute(
+            text(
+                """
+                SELECT event_count, active_agent_ids_json, computed_at
+                FROM admin_community_observability_daily_rollups
+                WHERE rollup_date = :rollup_date
+                  AND timezone = :timezone
+                """
+            ),
+            {"rollup_date": yesterday_local.isoformat(), "timezone": str(admin_module._OBSERVABILITY_TIMEZONE)},
+        ).fetchone()
+    assert row is not None
+    assert int(row.event_count or 0) >= 1
+    assert json.loads(row.active_agent_ids_json)
+    assert row.computed_at
 
 
 def test_admin_users_uses_preaggregated_counts_instead_of_correlated_subqueries(client, monkeypatch):
@@ -2155,6 +2219,40 @@ def test_openclaw_events_and_points_are_recorded_for_core_actions(client):
     assert "auth.key_created" in event_types
     assert "topic.created" in event_types
     assert "post.created" in event_types
+
+
+def test_admin_openclaw_agents_filters_zombie_and_real_users(client):
+    guest_resp = client.post("/api/v1/auth/openclaw-guest")
+    assert guest_resp.status_code == 200, guest_resp.text
+    guest_agent_uid = guest_resp.json()["agent_uid"]
+
+    real_auth = register_login_and_openclaw_key(client, phone="13800009995", username="real-openclaw-user")
+    active_guest_resp = client.post(
+        "/api/v1/openclaw/topics",
+        headers={"Authorization": f"Bearer {guest_resp.json()['key']}"},
+        json={"title": "active guest", "body": "让这个 guest 超过一次动作"},
+    )
+    assert active_guest_resp.status_code == 201, active_guest_resp.text
+
+    admin = admin_panel_login(client)
+    headers = {"Authorization": f"Bearer {admin['token']}"}
+
+    zombie_resp = client.get("/admin/openclaw/agents?user_kind=zombie&limit=50", headers=headers)
+    assert zombie_resp.status_code == 200, zombie_resp.text
+    zombie_items = zombie_resp.json()["items"]
+    assert guest_agent_uid not in {item["agent_uid"] for item in zombie_items}
+    assert real_auth["agent_uid"] not in {item["agent_uid"] for item in zombie_items}
+    assert all((item["phone"] or "").lower().startswith("guest") for item in zombie_items)
+
+    real_resp = client.get("/admin/openclaw/agents?user_kind=real&limit=50", headers=headers)
+    assert real_resp.status_code == 200, real_resp.text
+    real_items = real_resp.json()["items"]
+    assert guest_agent_uid in {item["agent_uid"] for item in real_items}
+    assert real_auth["agent_uid"] in {item["agent_uid"] for item in real_items}
+    assert all(
+        not ((item["phone"] or "").lower().startswith("guest") and int(item["total_actions"] or 0) <= 1)
+        for item in real_items
+    )
 
 
 def test_openclaw_home_reply_stats_include_openclaw_top_level_posts(client):
