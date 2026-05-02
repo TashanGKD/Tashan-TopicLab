@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import {
   FavoriteCategory,
   FavoriteCategoryItemsPage,
@@ -21,21 +21,7 @@ function updateCategoryList(categories: FavoriteCategory[], updated: FavoriteCat
   return categories.map((item) => (item.id === updated.id ? { ...item, ...updated } : item))
 }
 
-function buildArticleSnapshot(article: SourceFeedArticle) {
-  return {
-    title: article.title,
-    source_feed_name: article.source_feed_name,
-    source_type: article.source_type,
-    url: article.url,
-    pic_url: article.pic_url ?? null,
-    description: article.description,
-    publish_time: article.publish_time,
-    created_at: article.created_at,
-  }
-}
-
 export default function MyFavoritesPage() {
-  const navigate = useNavigate()
   const [tab, setTab] = useState<FavoriteTab>('topics')
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all')
   const [loading, setLoading] = useState(true)
@@ -49,7 +35,6 @@ export default function MyFavoritesPage() {
   const [pendingTopicFavoriteIds, setPendingTopicFavoriteIds] = useState<Set<string>>(new Set())
   const [pendingSourceLikeIds, setPendingSourceLikeIds] = useState<Set<number>>(new Set())
   const [pendingSourceFavoriteIds, setPendingSourceFavoriteIds] = useState<Set<number>>(new Set())
-  const [pendingSourceReplyIds, setPendingSourceReplyIds] = useState<Set<number>>(new Set())
   const [pendingTopicCategoryIds, setPendingTopicCategoryIds] = useState<Set<string>>(new Set())
   const [pendingSourceCategoryIds, setPendingSourceCategoryIds] = useState<Set<number>>(new Set())
   const token = tokenManager.get()
@@ -412,23 +397,6 @@ export default function MyFavoritesPage() {
     }
   }
 
-  const handleReplySourceArticle = async (article: SourceFeedArticle) => {
-    setPendingSourceReplyIds(prev => new Set(prev).add(article.id))
-    try {
-      const res = await sourceFeedApi.ensureTopic(article.id, buildArticleSnapshot(article))
-      navigate(`/topics/${res.data.topic.id}`)
-      toast.success('已打开对应话题')
-    } catch (err) {
-      handleApiError(err, '打开信源对应话题失败')
-    } finally {
-      setPendingSourceReplyIds(prev => {
-        const next = new Set(prev)
-        next.delete(article.id)
-        return next
-      })
-    }
-  }
-
   const handleAssignTopicCategory = async (topic: TopicListItem, categoryId: string) => {
     setPendingTopicCategoryIds(prev => new Set(prev).add(topic.id))
     try {
@@ -637,12 +605,9 @@ export default function MyFavoritesPage() {
               </p>
               <p className="mt-2 text-sm text-gray-500">
                 {selectedCategoryId === 'all'
-                  ? '现在去话题列表或话题详情页点一下收藏，内容就会出现在这里。'
+                  ? '话题入口已对网站用户隐藏，已有收藏暂时只保留在数据中。'
                   : '先在某个已收藏话题卡片里把它加入这个分类。'}
               </p>
-              <Link to="/topics" className="mt-4 inline-flex rounded-full border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 hover:border-gray-300 hover:text-black">
-                去看话题
-              </Link>
             </div>
           ) : null}
 
@@ -692,10 +657,8 @@ export default function MyFavoritesPage() {
                   onLike={handleLikeSource}
                   onFavorite={handleFavoriteSource}
                   onShare={handleShareSourceArticle}
-                  onReply={handleReplySourceArticle}
                   likePending={pendingSourceLikeIds.has(article.id)}
                   favoritePending={pendingSourceFavoriteIds.has(article.id)}
-                  replyPending={pendingSourceReplyIds.has(article.id)}
                   favoriteCategories={categories}
                   categoryPending={pendingSourceCategoryIds.has(article.id)}
                   onAssignCategory={handleAssignSourceCategory}

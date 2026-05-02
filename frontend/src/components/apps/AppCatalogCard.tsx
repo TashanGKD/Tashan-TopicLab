@@ -22,9 +22,7 @@ interface AppCatalogCardProps {
   app: AppCatalogItem & { install_command?: string }
   icon: ReactNode
   pendingLike: boolean
-  pendingTopic: boolean
   onToggleLike: () => void
-  onOpenTopic: () => void
   onOpenFeedback: () => void
   links: Array<{ href: string; label: string; primary: boolean }>
 }
@@ -33,20 +31,16 @@ export default function AppCatalogCard({
   app,
   icon,
   pendingLike,
-  pendingTopic,
   onToggleLike,
-  onOpenTopic,
   onOpenFeedback,
   links,
 }: AppCatalogCardProps) {
   const ia = app.interaction
   const favoritesCount = ia?.favorites_count ?? 0
   const sharesCount = ia?.shares_count ?? 0
-  const postsCount = app.linked_topic_posts_count
   const appFooterPlain = [
     `收藏 ${formatCompactNumber(favoritesCount)}`,
     `分享 ${formatCompactNumber(sharesCount)}`,
-    typeof postsCount === 'number' ? `话题帖 ${formatCompactNumber(postsCount)}` : null,
   ]
     .filter(Boolean)
     .join(' · ')
@@ -166,15 +160,6 @@ export default function AppCatalogCard({
               {link.label}
             </a>
           ))}
-          <button
-            type="button"
-            onClick={onOpenTopic}
-            disabled={pendingTopic}
-            className="inline-flex items-center rounded-[var(--radius-md)] border px-3 py-2 text-sm font-medium transition-colors"
-            style={{ borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}
-          >
-            {pendingTopic ? '打开中…' : '进入话题'}
-          </button>
           <button
             type="button"
             onClick={onOpenFeedback}

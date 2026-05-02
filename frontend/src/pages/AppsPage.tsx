@@ -7,7 +7,6 @@ import { AppsSkillCard, CategoryStrip, ClusterStrip } from '../components/apps/a
 import { AppCatalogItem, appsApi, skillHubApi, type SkillHubCategoriesResponse, type SkillHubSkillSummary } from '../api/client'
 import { handleApiError } from '../utils/errorHandler'
 import { filterAppsPageSkills, sortAppsPageSkills } from '../utils/skillHubRanking'
-import { toast } from '../utils/toast'
 
 const QUICK_LINKS = [
   { label: 'SkillHub', href: 'https://skillhub.tencent.com/' },
@@ -209,7 +208,6 @@ export default function AppsPage() {
   const [appsError, setAppsError] = useState<string | null>(null)
   const [skillsLoading, setSkillsLoading] = useState(true)
   const [skillsError, setSkillsError] = useState<string | null>(null)
-  const [pendingTopicIds, setPendingTopicIds] = useState<Set<string>>(new Set())
   const [pendingLikeIds, setPendingLikeIds] = useState<Set<string>>(new Set())
   const [leftAppColumn, rightAppColumn] = useMemo(
     () => splitIntoMasonryColumns(apps, estimateAppCardHeight).map((column) => column.items) as [AppDisplayItem[], AppDisplayItem[]],
@@ -301,23 +299,6 @@ export default function AppsPage() {
       alive = false
     }
   }, [])
-
-  const openTopic = async (app: AppDisplayItem) => {
-    setPendingTopicIds((prev) => new Set(prev).add(app.id))
-    try {
-      const res = await appsApi.ensureTopic(app.id)
-      navigate(`/topics/${res.data.topic.id}`)
-      toast.success('已打开对应话题')
-    } catch (err) {
-      handleApiError(err, '打开应用对应话题失败')
-    } finally {
-      setPendingTopicIds((prev) => {
-        const next = new Set(prev)
-        next.delete(app.id)
-        return next
-      })
-    }
-  }
 
   const toggleLike = async (app: AppDisplayItem) => {
     const nextEnabled = !(app.interaction?.liked ?? false)
@@ -431,9 +412,7 @@ export default function AppsPage() {
                   app={app}
                   icon={<AppIcon kind={app.icon} />}
                   pendingLike={pendingLikeIds.has(app.id)}
-                  pendingTopic={pendingTopicIds.has(app.id)}
                   onToggleLike={() => void toggleLike(app)}
-                  onOpenTopic={() => void openTopic(app)}
                   onOpenFeedback={() => openFeedbackDraft(app)}
                   links={getAppLinks(app)}
                 />
@@ -447,9 +426,7 @@ export default function AppsPage() {
                     app={app}
                     icon={<AppIcon kind={app.icon} />}
                     pendingLike={pendingLikeIds.has(app.id)}
-                    pendingTopic={pendingTopicIds.has(app.id)}
                     onToggleLike={() => void toggleLike(app)}
-                    onOpenTopic={() => void openTopic(app)}
                     onOpenFeedback={() => openFeedbackDraft(app)}
                     links={getAppLinks(app)}
                   />
@@ -462,9 +439,7 @@ export default function AppsPage() {
                     app={app}
                     icon={<AppIcon kind={app.icon} />}
                     pendingLike={pendingLikeIds.has(app.id)}
-                    pendingTopic={pendingTopicIds.has(app.id)}
                     onToggleLike={() => void toggleLike(app)}
-                    onOpenTopic={() => void openTopic(app)}
                     onOpenFeedback={() => openFeedbackDraft(app)}
                     links={getAppLinks(app)}
                   />

@@ -10,7 +10,6 @@ const WATCHA_LOGO_URL = 'https://watcha.tos-cn-beijing.volces.com/products/logo/
 
 const navLinks = [
   { to: '/', label: '首页', match: (path: string) => path === '/' },
-  { to: '/topics', label: '话题', match: (path: string) => path === '/topics' || path.startsWith('/topics/') },
   { to: '/info', label: '信息', match: (path: string) => path.startsWith('/info') || path.startsWith('/source-feed') },
 ] as const
 
@@ -23,17 +22,6 @@ const mobileTabs = [
       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4.75 10.25 12 4.75l7.25 5.5v8A1.75 1.75 0 0 1 17.5 20h-11a1.75 1.75 0 0 1-1.75-1.75v-8Z" />
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9.25 20v-5h5.5v5" />
-      </svg>
-    ),
-  },
-  {
-    to: '/topics',
-    label: '话题',
-    match: (path: string) => path === '/topics' || path.startsWith('/topics/'),
-    icon: (
-      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7 8h10M7 12h10M7 16h6" />
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M5.5 4.75h13A1.75 1.75 0 0120.25 6.5v11A1.75 1.75 0 0118.5 19.25h-13A1.75 1.75 0 013.75 17.5v-11A1.75 1.75 0 015.5 4.75z" />
       </svg>
     ),
   },
@@ -304,13 +292,6 @@ export default function TopNav() {
                 }}
               />
             </Link>
-            <Link
-              to="/topics/new"
-              className="hidden"
-            >
-              + 创建话题
-            </Link>
-
             {user ? (
               <div>
                 <button

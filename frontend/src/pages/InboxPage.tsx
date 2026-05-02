@@ -287,18 +287,15 @@ export default function InboxPage() {
                         {markingIds.has(item.id) ? '处理中…' : '标已读'}
                       </button>
                     ) : null}
-                    <Link
-                      to={`/topics/${item.topic_id}?focusPost=${encodeURIComponent(item.reply_post_id)}&threadRoot=${encodeURIComponent(item.parent_post_id)}#post-${item.reply_post_id}`}
-                      onClick={() => {
-                        if (!item.is_read) {
-                          void handleMarkRead(item.id)
-                        }
+                    <span
+                      className="rounded-[var(--radius-md)] border px-3 py-2 text-sm font-medium"
+                      style={{
+                        borderColor: 'var(--border-default)',
+                        color: 'var(--text-tertiary)',
                       }}
-                      className="rounded-[var(--radius-md)] px-3 py-2 text-sm font-medium text-white"
-                      style={{ backgroundColor: 'var(--text-primary)' }}
                     >
-                      查看讨论
-                    </Link>
+                      讨论入口已隐藏
+                    </span>
                   </div>
                 </div>
               </article>

@@ -2,9 +2,6 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import TopNav from './components/TopNav'
 import Footer from './components/Footer'
 import HomePage from './pages/HomePage'
-import TopicList from './pages/TopicList'
-import CreateTopic from './pages/CreateTopic'
-import TopicDetail from './pages/TopicDetail'
 import ExpertEdit from './pages/ExpertEdit'
 import ProfileHelperPage from './pages/ProfileHelperPage'
 import AgentLinkLibraryPage from './pages/AgentLinkLibraryPage'
@@ -80,9 +77,7 @@ function App() {
             <Route path="/apps/skills/:slug" element={<AppsSkillDetailPage />} />
             <Route path="/thinking" element={<ThinkingPage />} />
             <Route path="/favorites" element={<MyFavoritesPage />} />
-            <Route path="/topics" element={<TopicList />} />
-            <Route path="/topics/new" element={<CreateTopic />} />
-            <Route path="/topics/:id" element={<TopicDetail />} />
+            <Route path="/topics/*" element={<Navigate to="/" replace />} />
             <Route path="/library" element={<Navigate to="/library/experts" replace />} />
             <Route path="/library/:section" element={<LibraryPage />} />
             <Route path="/experts" element={<Navigate to="/library/experts" replace />} />

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useLocation, useParams } from 'react-router-dom'
 import { sourceFeedApi, SourceFeedArticle } from '../api/client'
 import { tokenManager, User } from '../api/auth'
 import LibraryPageLayout from '../components/LibraryPageLayout'
@@ -270,19 +270,6 @@ function splitIntoColumns<T>(items: T[], columnCount: number): T[][] {
   return columns
 }
 
-function buildArticleSnapshot(article: SourceFeedArticle) {
-  return {
-    title: article.title,
-    source_feed_name: article.source_feed_name,
-    source_type: article.source_type,
-    url: article.url,
-    pic_url: article.pic_url ?? null,
-    description: article.description,
-    publish_time: article.publish_time,
-    created_at: article.created_at,
-  }
-}
-
 type SourceFeedSectionId = (typeof VALID_SOURCE_FEED_SECTION_IDS)[number]
 
 function isSourceFeedSectionId(
@@ -335,7 +322,6 @@ async function pullArxivRowsFromGqy(startRawOffset: number): Promise<{
 export default function SourceFeedPage() {
   const { section } = useParams<{ section: string }>()
   const location = useLocation()
-  const navigate = useNavigate()
 
   if (!isSourceFeedSectionId(section)) {
     return <Navigate to="/info/source" replace />
@@ -359,7 +345,6 @@ export default function SourceFeedPage() {
   const [pendingFavoriteIds, setPendingFavoriteIds] = useState<Set<number>>(
     new Set(),
   )
-  const [pendingReplyIds, setPendingReplyIds] = useState<Set<number>>(new Set())
   const loadingMoreRef = useRef(false)
   const hasMoreRef = useRef(true)
   const pageRef = useRef(0)
@@ -705,36 +690,12 @@ export default function SourceFeedPage() {
     [updateArticleInteraction],
   )
 
-  const handleReply = useCallback(
-    async (article: SourceFeedArticle) => {
-      setPendingReplyIds((prev) => new Set(prev).add(article.id))
-      try {
-        const res = await sourceFeedApi.ensureTopic(
-          article.id,
-          buildArticleSnapshot(article),
-        )
-        navigate(`/topics/${res.data.topic.id}`)
-        toast.success('已打开对应话题')
-      } catch (err) {
-        handleApiError(err, '打开信源对应话题失败')
-      } finally {
-        setPendingReplyIds((prev) => {
-          const next = new Set(prev)
-          next.delete(article.id)
-          return next
-        })
-      }
-    },
-    [navigate],
-  )
-
   const throttledLike = useThrottledCallbackByKey(handleLike, (a) => a.id)
   const throttledFavorite = useThrottledCallbackByKey(
     handleFavorite,
     (a) => a.id,
   )
   const throttledShare = useThrottledCallbackByKey(handleShare, (a) => a.id)
-  const throttledReply = useThrottledCallbackByKey(handleReply, (a) => a.id)
 
   if (section === 'source') {
     return <WorldWeaveSourceFrame />
@@ -743,7 +704,7 @@ export default function SourceFeedPage() {
   return (
     <LibraryPageLayout
       title="信息"
-      description="集中查看实时信号、媒体与学术信源，支持搜索、收藏、点赞，并从信源直接进入对应话题。你的 OpenClaw 可以继续做筛选归纳，并发起讨论。"
+      description="集中查看实时信号、媒体与学术信源，支持搜索、收藏、点赞。话题入口已对网站用户隐藏，OpenClaw 仍可通过 API 继续筛选归纳并发起讨论。"
       actions={
         <form
           className="w-full sm:w-[320px]"
@@ -867,10 +828,8 @@ export default function SourceFeedPage() {
                       onLike={throttledLike}
                       onFavorite={throttledFavorite}
                       onShare={throttledShare}
-                      onReply={throttledReply}
                       likePending={pendingLikeIds.has(article.id)}
                       favoritePending={pendingFavoriteIds.has(article.id)}
-                      replyPending={pendingReplyIds.has(article.id)}
                     />
                   ))}
                 </div>
@@ -905,8 +864,8 @@ export default function SourceFeedPage() {
               </li>
               <li>
                 <span className="min-w-0">
-                  <strong>开题讨论</strong>
-                  ：从条目一键开话题，和多专家讨论流程与「媒体」信息流一致。
+                  <strong>OpenClaw 开题</strong>
+                  ：网站端不再展示话题入口；需要讨论时由 OpenClaw 通过 API 创建和读取。
                 </span>
               </li>
               <li>
@@ -953,10 +912,8 @@ export default function SourceFeedPage() {
                       onLike={throttledLike}
                       onFavorite={throttledFavorite}
                       onShare={throttledShare}
-                      onReply={throttledReply}
                       likePending={pendingLikeIds.has(article.id)}
                       favoritePending={pendingFavoriteIds.has(article.id)}
-                      replyPending={pendingReplyIds.has(article.id)}
                     />
                   ))}
                 </div>

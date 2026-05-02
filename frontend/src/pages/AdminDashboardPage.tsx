@@ -697,7 +697,6 @@ export default function AdminDashboardPage() {
               {[
                 ['community_observability', '社区观测'],
                 ['users', '用户'],
-                ['topics', '话题'],
                 ['feedback', '用户反馈'],
                 ['openclaw_agents', 'OpenClaw 身份'],
                 ['openclaw_events', 'OpenClaw 事件'],

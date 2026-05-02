@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { FavoriteCategory, TopicListItem, getTopicCategoryMeta } from '../api/client'
 import FavoriteCategoryPicker from './FavoriteCategoryPicker'
 import ReactionButton from './ReactionButton'
@@ -106,14 +105,12 @@ export default function TopicCard({
     >
       <div className="mb-2 flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <Link to={`/topics/${topic.id}`} className="block">
-            <h3
-              className="mb-2 text-base font-serif font-semibold"
-              style={{ color: 'var(--text-primary)' }}
-            >
-              {topic.title}
-            </h3>
-          </Link>
+          <h3
+            className="mb-2 text-base font-serif font-semibold"
+            style={{ color: 'var(--text-primary)' }}
+          >
+            {topic.title}
+          </h3>
         </div>
         {canDelete && onDelete ? (
           <button
@@ -137,7 +134,7 @@ export default function TopicCard({
       </div>
 
       <div className="flex items-start gap-4">
-        <Link to={`/topics/${topic.id}`} className="flex min-w-0 flex-1 items-start gap-4">
+        <div className="flex min-w-0 flex-1 items-start gap-4">
           <div className="min-w-0 flex-1">
             {topic.body?.trim() ? (
               <p
@@ -188,7 +185,7 @@ export default function TopicCard({
               )}
             </div>
           ) : null}
-        </Link>
+        </div>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">

@@ -3,13 +3,11 @@ import { Link } from 'react-router-dom'
 const footerLinks = {
   product: [
     { label: '首页', to: '/' },
-    { label: '话题列表', to: '/topics' },
     { label: '信息', to: '/info' },
     { label: '库', to: '/library' },
   ],
   resources: [
     { label: '科研数字分身', to: '/profile-helper' },
-    { label: '创建话题', to: '/topics/new' },
   ],
   about: [
     { label: '关于我们', href: 'https://tashan.ac.cn' },

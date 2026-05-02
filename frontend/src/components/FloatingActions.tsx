@@ -15,7 +15,7 @@ type FloatingActionButtonProps = {
   style?: React.CSSProperties
 }
 
-/** 与话题列表「创建话题」等主操作相同的玻璃拟态圆形按钮，可在沉浸式子页复用 */
+/** 与全站主操作相同的玻璃拟态圆形按钮，可在沉浸式子页复用 */
 export function FloatingActionButton({ ariaLabel, children, className = '', onClick, to, iconColorClassName = 'text-slate-700 hover:text-slate-900', style }: FloatingActionButtonProps) {
   const baseClassName = `relative flex h-12 w-12 items-center justify-center rounded-full border shadow-md transition-all duration-300 ease-out hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 ${iconColorClassName} ${className}`.trim()
   const defaultStyle = {
@@ -239,21 +239,6 @@ export default function FloatingActions() {
         )}
       />
       <ScrollToBottomButton />
-      <FloatingActionButton
-        ariaLabel="创建话题"
-        to="/topics/new"
-        iconColorClassName="text-white hover:text-white"
-        style={{
-          background: 'linear-gradient(180deg, rgba(51,65,85,0.68) 0%, rgba(30,41,59,0.54) 100%)',
-          borderColor: 'rgba(255, 255, 255, 0.1)',
-          boxShadow: '0 10px 24px rgba(15, 23, 42, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.08)',
-          backdropFilter: 'blur(16px) saturate(1.15)',
-        }}
-      >
-        <svg className="relative h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v14M5 12h14" />
-        </svg>
-      </FloatingActionButton>
     </div>
   )
 }

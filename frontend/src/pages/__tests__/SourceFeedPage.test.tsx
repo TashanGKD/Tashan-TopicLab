@@ -184,7 +184,7 @@ describe('SourceFeedPage', () => {
     expect(screen.queryByTitle('世界脉络')).not.toBeInTheDocument()
   })
 
-  it('keeps a native source list for opening WorldWeave signals as topics', async () => {
+  it('keeps a native source list without exposing topic entry buttons', async () => {
     renderSourceFeed('/info/source-list')
 
     await waitFor(() => {
@@ -193,12 +193,10 @@ describe('SourceFeedPage', () => {
       )
     })
     expect(await screen.findByText('远端入库文章')).toBeInTheDocument()
-    expect(
-      await screen.findAllByRole('button', { name: '回复到话题' }),
-    ).not.toHaveLength(0)
+    expect(screen.queryByRole('button', { name: '回复到话题' })).not.toBeInTheDocument()
   })
 
-  it('keeps the original media source feed as a selectable topic source', async () => {
+  it('keeps the original media source feed without exposing topic entry buttons', async () => {
     renderSourceFeed('/info/media')
 
     await waitFor(() => {
@@ -207,9 +205,7 @@ describe('SourceFeedPage', () => {
       )
     })
     expect(await screen.findByText('远端入库文章')).toBeInTheDocument()
-    expect(
-      await screen.findAllByRole('button', { name: '回复到话题' }),
-    ).not.toHaveLength(0)
+    expect(screen.queryByRole('button', { name: '回复到话题' })).not.toBeInTheDocument()
   })
 
   it('filters cards by search query', async () => {
