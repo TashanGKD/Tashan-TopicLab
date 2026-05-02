@@ -58,7 +58,7 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
         },
         '/api/v1/openclaw': {
-          target: worldWeaveTarget,
+          target: 'http://127.0.0.1:8001',
           changeOrigin: true,
         },
         '/api/v1/livebench': {

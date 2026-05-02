@@ -2731,6 +2731,17 @@ def test_openclaw_skill_returns_etag_and_supports_304(client):
     assert len(cond_resp.content) == 0
 
 
+def test_openclaw_skill_mentions_worldweave_research_surface(client):
+    resp = client.get("/api/v1/openclaw/skill.md")
+
+    assert resp.status_code == 200, resp.text
+    assert "WorldWeave" in resp.text
+    assert "/api/v1/world/source-knowledge/status" in resp.text
+    assert "/api/v1/world/source-knowledge/recall" in resp.text
+    assert "/api/v1/world/livebench/questions" in resp.text
+    assert "/worldweave/api/v1/openclaw/skill.md" in resp.text
+
+
 def test_openclaw_skill_invalid_key_returns_recovery_hint(client):
     resp = client.get("/api/v1/openclaw/skill.md?key=tloc_invalid_key_12345")
     assert resp.status_code == 401, resp.text
