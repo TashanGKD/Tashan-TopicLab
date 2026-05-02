@@ -57,6 +57,7 @@ const ACADEMIC_MAX_RAW_PAGES = 24
 const WORLDWEAVE_FRONTEND_URL =
   import.meta.env.VITE_WORLDWEAVE_FRONTEND_URL || '/worldweave/'
 const WORLDWEAVE_FRAME_URL = WORLDWEAVE_FRONTEND_URL.replace(/\/?$/, '/')
+const WORLDWEAVE_LOCAL_PORT = import.meta.env.WORLDWEAVE_PORT || '5000'
 const WORLDWEAVE_FRAME_MIN_HEIGHT = 1280
 const WORLDWEAVE_FRAME_HEIGHT_PADDING = 32
 
@@ -68,6 +69,18 @@ function WorldWeaveSourceFrame() {
   const [worldWeaveFrameHeight, setWorldWeaveFrameHeight] = useState(
     WORLDWEAVE_FRAME_MIN_HEIGHT,
   )
+
+  useEffect(() => {
+    const frame = frameRef.current
+    if (!frame) return
+
+    const markUnavailable = () => setWorldWeaveStatus('unavailable')
+    frame.addEventListener('error', markUnavailable)
+
+    return () => {
+      frame.removeEventListener('error', markUnavailable)
+    }
+  }, [])
 
   useEffect(() => {
     if (worldWeaveStatus !== 'ready') return
@@ -203,7 +216,7 @@ function WorldWeaveSourceFrame() {
               </h2>
               {worldWeaveStatus === 'unavailable' && (
                 <p className="mt-3 text-sm leading-6 text-slate-500">
-                  请确认 WorldWeave 已在本机 3020 端口启动，并重新刷新页面。
+                  请确认 WorldWeave 已在本机 {WORLDWEAVE_LOCAL_PORT} 端口启动，并重新刷新页面。
                 </p>
               )}
             </div>
