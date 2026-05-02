@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => {
   const adminPrefix = adminApiProxyPrefix(base)
   const worldWeaveTarget =
     env.VITE_WORLDWEAVE_PROXY_TARGET ||
-    `http://127.0.0.1:${env.WORLDWEAVE_PORT || '3020'}`
+    `http://127.0.0.1:${env.WORLDWEAVE_PORT || '5000'}`
   const adminPrefixRe = new RegExp(
     `^${adminPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
   )

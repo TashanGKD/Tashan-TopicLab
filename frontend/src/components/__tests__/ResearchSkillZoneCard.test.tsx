@@ -22,7 +22,7 @@ describe('ResearchSkillZoneCard', () => {
 
   it('renders the description', () => {
     renderWithRouter(<ResearchSkillZoneCard />)
-    const descriptions = screen.getAllByText(/收录科研场景下的可安装应用与技能/)
+    const descriptions = screen.getAllByText(/赋能科研智能体生态/)
     expect(descriptions.length).toBeGreaterThan(0)
   })
 
