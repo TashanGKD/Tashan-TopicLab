@@ -12,6 +12,7 @@ services:
       - PORT=3020
       - HOST=0.0.0.0
       - WORLD_HOST=0.0.0.0
+      - WORLD_WEB_ENABLE_HEAVY_REFRESH=0
     ports:
       - "${WORLDWEAVE_HOST_PORT:-3020}:3020"
     volumes:
@@ -30,19 +31,14 @@ services:
     env_file:
       - ${ENV_FILE:-.env}
     environment:
-      - WORLD_BATCH_REFRESH_BASE_URL=http://worldweave:3020
       - WORLD_SOURCE_REFRESH_INTERVAL_MINUTES=${WORLD_SOURCE_REFRESH_INTERVAL_MINUTES:-30}
       - WORLD_SOURCE_REFRESH_TIMEOUT_MINUTES=${WORLD_SOURCE_REFRESH_TIMEOUT_MINUTES:-20}
+      - WORLD_SOURCE_REFRESH_WORKER_PORT=5020
+      - WORLD_SOURCE_REFRESH_WORKER_HOST=127.0.0.1
     command:
       - sh
       - -lc
-      - >
-        node scripts/world-source-refresh.mjs
-        --loop
-        --include-heavy-world-sync
-        --world-base-url http://worldweave:3020
-        --interval-minutes "$${WORLD_SOURCE_REFRESH_INTERVAL_MINUTES}"
-        --timeout-minutes "$${WORLD_SOURCE_REFRESH_TIMEOUT_MINUTES}"
+      - node scripts/world-source-refresh-daemon.mjs && tail -f /app/.cache/world-source-refresh-daemon.out.log
     depends_on:
       worldweave:
         condition: service_healthy

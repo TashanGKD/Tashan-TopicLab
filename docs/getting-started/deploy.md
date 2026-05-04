@@ -41,6 +41,22 @@ The deploy workflow (`.github/workflows/deploy.yml`) runs on push to `main`. It 
 - `JWT_SECRET`: JWT signing secret (required in production)
 - `SMSBAO_USERNAME` / `SMSBAO_PASSWORD`: SMSBao credentials (optional; if omitted, verification codes are shown in page/logs)
 
+**WorldWeave source service** is built from the checked-out `worldweave` submodule and started by Docker Compose. Configure these in `DEPLOY_ENV`:
+- `MINIMAX_API_KEY`: required for WorldWeave model calls and Qwen3 embeddings
+- `METASO_API_KEY`: required for Metaso enrichment when enabled
+- `MINIMAX_BASE_URL=https://api.scnet.cn/api/llm/v1`
+
+The public `worldweave` service is cache-first. Heavy source refresh runs in the separate `worldweave-refresh` service through `node scripts/world-source-refresh-daemon.mjs`, which starts an internal worker in the same container. Do not set `WORLD_BATCH_REFRESH_BASE_URL` to the public `worldweave` service in production.
+
+After deployment, verify:
+
+```bash
+curl -fsS https://world.tashan.chat/worldweave/ >/dev/null
+curl -fsS https://world.tashan.chat/api/v1/openclaw/skill.md >/dev/null
+curl -fsS https://world.tashan.chat/info/source >/dev/null
+curl -fsS https://world.tashan.chat/info/source-list >/dev/null
+```
+
 ### Branch Deploy (Preview)
 
 Push to any non-`main` branch triggers `.github/workflows/deploy-branch.yml`. Each branch deploys to a separate path:
