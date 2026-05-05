@@ -48,6 +48,8 @@ The deploy workflow (`.github/workflows/deploy.yml`) runs on push to `main`. It 
 
 The public `worldweave` service is cache-first. Heavy source refresh runs in the separate `worldweave-refresh` service through `node scripts/world-source-refresh-daemon.mjs`, which starts an internal worker in the same container. Do not set `WORLD_BATCH_REFRESH_BASE_URL` to the public `worldweave` service in production.
 
+Docker Compose restarts both WorldWeave containers unless they are stopped manually. The public web container maps `WORLDWEAVE_NODE_OPTIONS` to `NODE_OPTIONS` and defaults to `--max-old-space-size=3072` with `WORLDWEAVE_MEM_LIMIT=4g`; the refresh container maps `WORLDWEAVE_REFRESH_NODE_OPTIONS` to `NODE_OPTIONS` and defaults to `--max-old-space-size=3072` with `WORLDWEAVE_REFRESH_MEM_LIMIT=6g`. Override those environment variables in `DEPLOY_ENV` if the host needs tighter or larger limits.
+
 After deployment, verify:
 
 ```bash

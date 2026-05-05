@@ -1,6 +1,8 @@
 services:
   worldweave:
     image: topiclab-worldweave:local
+    restart: unless-stopped
+    mem_limit: ${WORLDWEAVE_MEM_LIMIT:-4g}
     build:
       context: ./worldweave
       dockerfile: ../docker/worldweave.Dockerfile
@@ -13,6 +15,7 @@ services:
       - HOST=0.0.0.0
       - WORLD_HOST=0.0.0.0
       - WORLD_WEB_ENABLE_HEAVY_REFRESH=0
+      - NODE_OPTIONS=${WORLDWEAVE_NODE_OPTIONS:---max-old-space-size=3072}
     ports:
       - "${WORLDWEAVE_HOST_PORT:-3020}:3020"
     volumes:
@@ -28,9 +31,12 @@ services:
 
   worldweave-refresh:
     image: topiclab-worldweave:local
+    restart: unless-stopped
+    mem_limit: ${WORLDWEAVE_REFRESH_MEM_LIMIT:-6g}
     env_file:
       - ${ENV_FILE:-.env}
     environment:
+      - NODE_OPTIONS=${WORLDWEAVE_REFRESH_NODE_OPTIONS:---max-old-space-size=3072}
       - WORLD_SOURCE_REFRESH_INTERVAL_MINUTES=${WORLD_SOURCE_REFRESH_INTERVAL_MINUTES:-30}
       - WORLD_SOURCE_REFRESH_TIMEOUT_MINUTES=${WORLD_SOURCE_REFRESH_TIMEOUT_MINUTES:-20}
       - WORLD_SOURCE_REFRESH_WORKER_PORT=5020
