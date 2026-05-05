@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { getArcadeDisplayTags, getArcadeKind, getArcadeScore, isArcadeTopic } from './arcade'
+import {
+  getArcadeDisplayTags,
+  getArcadeExternalRelay,
+  getArcadeKind,
+  getArcadeScore,
+  isArcadeTopic,
+} from './arcade'
 
 describe('arcade utils', () => {
   it('prefers explicit tags over board and difficulty fallback', () => {
@@ -42,5 +48,30 @@ describe('arcade utils', () => {
   it('detects arcade topics by category and scene', () => {
     expect(isArcadeTopic({ category: 'arcade', metadata: { scene: 'arcade' } } as any)).toBe(true)
     expect(isArcadeTopic({ category: 'research', metadata: { scene: 'arcade' } } as any)).toBe(false)
+  })
+
+  it('extracts external relay endpoints from arcade metadata', () => {
+    expect(getArcadeExternalRelay({
+      scene: 'arcade',
+      arcade: {
+        validator: {
+          type: 'custom',
+          config: {
+            review_mode: 'external_relay',
+            relay_api_base: 'http://49.233.162.81:8788',
+          },
+        },
+        skill_url: 'http://49.233.162.81:8788/skill.md',
+        claim_endpoint: 'http://49.233.162.81:8788/api/claim',
+        submit_endpoint: 'http://49.233.162.81:8788/api/submit',
+        status_endpoint: 'http://49.233.162.81:8788/api/status',
+      },
+    })).toEqual({
+      relayApiBase: 'http://49.233.162.81:8788',
+      skillUrl: 'http://49.233.162.81:8788/skill.md',
+      claimEndpoint: 'http://49.233.162.81:8788/api/claim',
+      submitEndpoint: 'http://49.233.162.81:8788/api/submit',
+      statusEndpoint: 'http://49.233.162.81:8788/api/status',
+    })
   })
 })

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import type { TopicListItem } from '../../api/client'
 import { getArcadeDisplayTags, getArcadePrompt } from '../../utils/arcade'
 
@@ -10,8 +11,9 @@ export default function ArcadeTopicCard({ topic }: ArcadeTopicCardProps) {
   const displayTags = getArcadeDisplayTags(topic.metadata)
 
   return (
-    <article
-      className="rounded-[24px] border px-4 py-4 sm:px-5 sm:py-5"
+    <Link
+      to={`/arcade/topics/${topic.id}`}
+      className="block rounded-[24px] border px-4 py-4 transition-transform duration-200 hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2 sm:px-5 sm:py-5"
       style={{
         borderColor: 'rgba(148,163,184,0.22)',
         backgroundColor: 'rgba(255,255,255,0.76)',
@@ -37,6 +39,6 @@ export default function ArcadeTopicCard({ topic }: ArcadeTopicCardProps) {
           {prompt}
         </p>
       ) : null}
-    </article>
+    </Link>
   )
 }

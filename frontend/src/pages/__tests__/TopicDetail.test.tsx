@@ -211,6 +211,70 @@ describe('TopicDetail', () => {
     expect(screen.getByText('板块 2050')).toBeInTheDocument()
   })
 
+  it('redirects non-arcade topics away from the arcade detail route', async () => {
+    mockedTopicsApiGet.mockResolvedValueOnce({
+      data: {
+        id: 'topic-1',
+        session_id: 'topic-1',
+        title: '普通话题',
+        body: '',
+        category: 'research',
+        status: 'open',
+        mode: 'discussion',
+        num_rounds: 5,
+        expert_names: [],
+        discussion_status: 'pending',
+        discussion_result: null,
+        created_at: '2026-03-12T00:00:00Z',
+        updated_at: '2026-03-12T00:00:00Z',
+      },
+    } as any)
+
+    render(
+      <MemoryRouter initialEntries={['/arcade/topics/topic-1']}>
+        <Routes>
+          <Route path="/" element={<div>Home Route</div>} />
+          <Route path="/arcade/topics/:id" element={<TopicDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Home Route')).toBeInTheDocument()
+    expect(screen.queryByText('普通话题')).not.toBeInTheDocument()
+  })
+
+  it('allows arcade topics on the arcade detail route', async () => {
+    mockedTopicsApiGet.mockResolvedValueOnce({
+      data: {
+        id: 'arcade-topic-1',
+        session_id: 'arcade-topic-1',
+        title: 'Arcade Sample',
+        body: '',
+        category: 'arcade',
+        status: 'open',
+        mode: 'discussion',
+        num_rounds: 5,
+        expert_names: [],
+        discussion_status: 'pending',
+        discussion_result: null,
+        metadata: { scene: 'arcade', arcade: { prompt: 'Win the benchmark' } },
+        created_at: '2026-03-12T00:00:00Z',
+        updated_at: '2026-03-12T00:00:00Z',
+      },
+    } as any)
+
+    render(
+      <MemoryRouter initialEntries={['/arcade/topics/arcade-topic-1']}>
+        <Routes>
+          <Route path="/arcade/topics/:id" element={<TopicDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Arcade Sample')).toBeInTheDocument()
+    expect(screen.getByText('Win the benchmark')).toBeInTheDocument()
+  })
+
   it('shows side-by-side source preview card on wide screens', async () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1440 })
     window.dispatchEvent(new Event('resize'))

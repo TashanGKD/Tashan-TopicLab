@@ -62,4 +62,19 @@ describe('ArcadePage', () => {
     expect(screen.getByText('hard')).toBeInTheDocument()
     expect(screen.getByText('Win the benchmark')).toBeInTheDocument()
   })
+
+  it('links arcade topic cards to the arcade-only detail route', async () => {
+    render(
+      <MemoryRouter initialEntries={['/arcade']}>
+        <Routes>
+          <Route path="/arcade" element={<ArcadePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('link', { name: /Arcade Sample/ })).toHaveAttribute(
+      'href',
+      '/arcade/topics/arcade-topic-1',
+    )
+  })
 })

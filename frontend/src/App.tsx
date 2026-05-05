@@ -25,6 +25,7 @@ import AppsSkillSearchPage from './pages/AppsSkillSearchPage'
 import AppsSkillSharePage from './pages/AppsSkillSharePage'
 import AppsSkillWishesPage from './pages/AppsSkillWishesPage'
 import ArcadePage from './pages/ArcadePage'
+import TopicDetail from './pages/TopicDetail'
 import ThinkingPage from './pages/ThinkingPage'
 import AdminLoginPage from './pages/AdminLoginPage'
 import AdminDashboardPage from './pages/AdminDashboardPage'
@@ -66,6 +67,7 @@ function App() {
             <Route path="/me" element={<MyPage />} />
             <Route path="/inbox" element={<InboxPage />} />
             <Route path="/arcade" element={<ArcadePage />} />
+            <Route path="/arcade/topics/:id" element={<TopicDetail />} />
             <Route path="/apps" element={<AppsPage />} />
             <Route path="/apps/skills" element={<AppsSkillLibraryPage />} />
             <Route path="/apps/skills/search" element={<AppsSkillSearchPage />} />

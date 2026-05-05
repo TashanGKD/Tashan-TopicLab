@@ -1,5 +1,5 @@
 import { startTransition, useEffect, useRef, useState } from 'react'
-import { Link, useLocation, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
@@ -78,6 +78,7 @@ const POLL_INTERVAL_MS = 3500
 export default function TopicDetail() {
   const { id } = useParams<{ id: string }>()
   const location = useLocation()
+  const navigate = useNavigate()
   const initialSkillIds = (location.state as { skillList?: string[] } | null)?.skillList
   const [topic, setTopic] = useState<Topic | null>(null)
   const [loading, setLoading] = useState(true)
@@ -346,6 +347,10 @@ export default function TopicDetail() {
     setPostNextCursor(null)
     try {
       const res = await topicsApi.get(topicId)
+      if (location.pathname.startsWith('/arcade/topics/') && !isArcadeTopicData(res.data)) {
+        navigate('/', { replace: true })
+        return
+      }
       setTopic(res.data)
       setLoading(false)
       void loadPosts(topicId, isArcadeTopicData(res.data))

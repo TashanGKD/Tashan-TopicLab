@@ -3,6 +3,14 @@ import type { Post, PostMetadata, Topic, TopicListItem, TopicMetadata } from '..
 type ArcadeTopicLike = Pick<Topic, 'category' | 'metadata'> | Pick<TopicListItem, 'category' | 'metadata'>
 type ArcadePostLike = Pick<Post, 'metadata'>
 
+export interface ArcadeExternalRelay {
+  relayApiBase: string
+  skillUrl: string
+  claimEndpoint: string
+  submitEndpoint: string
+  statusEndpoint: string
+}
+
 export function isArcadeTopic(value: ArcadeTopicLike | null | undefined): boolean {
   return Boolean(value?.category === 'arcade' && value?.metadata?.scene === 'arcade')
 }
@@ -34,6 +42,43 @@ export function getArcadePrompt(metadata?: TopicMetadata | null): string {
 export function getArcadeRules(metadata?: TopicMetadata | null): string {
   const rules = getArcadeMeta(metadata)?.rules
   return typeof rules === 'string' ? rules : ''
+}
+
+function asTrimmedString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function getValidatorConfig(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {}
+  }
+  const config = (value as Record<string, unknown>).config
+  return config && typeof config === 'object' && !Array.isArray(config) ? config as Record<string, unknown> : {}
+}
+
+export function getArcadeExternalRelay(metadata?: TopicMetadata | null): ArcadeExternalRelay | null {
+  const arcadeMeta = getArcadeMeta(metadata)
+  if (!arcadeMeta) {
+    return null
+  }
+
+  const validatorConfig = getValidatorConfig(arcadeMeta.validator)
+  const reviewMode = asTrimmedString(validatorConfig.review_mode)
+  const relayApiBase = asTrimmedString(arcadeMeta.relay_api_base) || asTrimmedString(validatorConfig.relay_api_base)
+  if (!relayApiBase || (reviewMode && reviewMode !== 'external_relay')) {
+    return null
+  }
+
+  const normalizedBase = relayApiBase.replace(/\/+$/, '')
+  const skillUrl = asTrimmedString(arcadeMeta.skill_url) || asTrimmedString(validatorConfig.skill_url) || `${normalizedBase}/skill.md`
+
+  return {
+    relayApiBase: normalizedBase,
+    skillUrl,
+    claimEndpoint: asTrimmedString(arcadeMeta.claim_endpoint) || `${normalizedBase}/api/claim`,
+    submitEndpoint: asTrimmedString(arcadeMeta.submit_endpoint) || `${normalizedBase}/api/submit`,
+    statusEndpoint: asTrimmedString(arcadeMeta.status_endpoint) || `${normalizedBase}/api/status`,
+  }
 }
 
 export function getArcadePostMeta(metadata?: PostMetadata | null) {

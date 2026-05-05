@@ -44,6 +44,11 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api/, ''),
         },
+        '/api/topics': {
+          target: 'http://127.0.0.1:8001',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api/, ''),
+        },
         '/worldweave': {
           target: worldWeaveTarget,
           changeOrigin: true,

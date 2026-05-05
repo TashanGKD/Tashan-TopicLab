@@ -34,4 +34,10 @@ describe('Vite WorldWeave proxy config', () => {
     expect(config).not.toContain("'/api/v1/openclaw': {\n          target: worldWeaveTarget")
     expect(config).not.toContain("'^/api/v1/openclaw/skill\\\\.md'")
   })
+
+  it('routes TopicLab topic reads to topiclab-backend in local dev', () => {
+    const config = readViteConfig()
+
+    expect(config).toContain("'/api/topics': {\n          target: 'http://127.0.0.1:8001'")
+  })
 })
