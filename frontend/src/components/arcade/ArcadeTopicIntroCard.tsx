@@ -78,14 +78,16 @@ export default function ArcadeTopicIntroCard({
       {externalRelay ? (
         <div className="mt-4 rounded-2xl border border-gray-200 bg-white px-3 py-3 text-xs text-gray-600 sm:px-4">
           <div className="grid gap-2 sm:grid-cols-2">
-            <a
-              className="font-medium text-gray-900 underline-offset-4 hover:underline"
-              href={externalRelay.skillUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              技能说明
-            </a>
+            {externalRelay.skillUrl ? (
+              <a
+                className="font-medium text-gray-900 underline-offset-4 hover:underline"
+                href={externalRelay.skillUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                技能说明
+              </a>
+            ) : null}
             <a
               className="font-medium text-gray-900 underline-offset-4 hover:underline"
               href={externalRelay.statusEndpoint}

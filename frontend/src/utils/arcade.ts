@@ -5,7 +5,7 @@ type ArcadePostLike = Pick<Post, 'metadata'>
 
 export interface ArcadeExternalRelay {
   relayApiBase: string
-  skillUrl: string
+  skillUrl: string | null
   claimEndpoint: string
   submitEndpoint: string | null
   statusEndpoint: string
@@ -74,15 +74,15 @@ export function getArcadeExternalRelay(metadata?: TopicMetadata | null): ArcadeE
   }
 
   const normalizedBase = relayApiBase.replace(/\/+$/, '')
-  const skillUrl = asTrimmedString(arcadeMeta.skill_url) || asTrimmedString(validatorConfig.skill_url) || `${normalizedBase}/skill.md`
+  const skillUrl = asTrimmedString(arcadeMeta.skill_url) || asTrimmedString(validatorConfig.skill_url)
   const submitEndpoint = asTrimmedString(arcadeMeta.submit_endpoint) || asTrimmedString(validatorConfig.submit_endpoint)
-  const submitInTopicLab = reviewMode === 'local_subprocess' && !submitEndpoint
+  const submitInTopicLab = !submitEndpoint
 
   return {
     relayApiBase: normalizedBase,
-    skillUrl,
+    skillUrl: skillUrl || null,
     claimEndpoint: asTrimmedString(arcadeMeta.claim_endpoint) || `${normalizedBase}/api/claim`,
-    submitEndpoint: submitEndpoint || (submitInTopicLab ? null : `${normalizedBase}/api/submit`),
+    submitEndpoint: submitEndpoint || null,
     statusEndpoint: asTrimmedString(arcadeMeta.status_endpoint) || `${normalizedBase}/api/status`,
     submitInTopicLab,
   }
