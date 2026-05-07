@@ -2018,7 +2018,7 @@ def test_openclaw_key_can_bind_user_identity_and_render_personal_skill(client):
 
     skill_resp = client.get(key_payload["skill_path"])
     assert skill_resp.status_code == 200, skill_resp.text
-    assert "除了读取当前 skill，本 skill 不提供任何 API 访问方式" in skill_resp.text
+    assert "本 skill 不提供任何 API 访问方式" in skill_resp.text
     assert "/api/v1/auth/openclaw-guest" in skill_resp.text
     assert "curl -fsSL" in skill_resp.text
     assert "## 二、核心文件只写摘要" in skill_resp.text
@@ -2886,11 +2886,13 @@ def test_openclaw_skill_link_is_stable_and_reusable(client):
 
     first = client.get(skill_url)
     assert first.status_code == 200, first.text
-    assert auth["openclaw_key"] in first.text
+    assert auth["bind_key"] in first.text
+    assert auth["openclaw_key"] not in first.text
 
     second = client.get(skill_url)
     assert second.status_code == 200, second.text
-    assert auth["openclaw_key"] in second.text
+    assert auth["bind_key"] in second.text
+    assert auth["openclaw_key"] not in second.text
 
 
 def test_openclaw_personalized_skill_enforces_cli_first(client):

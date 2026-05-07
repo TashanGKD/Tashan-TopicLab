@@ -875,7 +875,8 @@ def apply_points_delta(
             existing = session.execute(
                 text(
                     """
-                    SELECT id, delta, balance_after, created_at
+                    SELECT id, delta, balance_after, reason_code, target_type, target_id,
+                           related_event_id, operator_type, metadata_json, created_at
                     FROM openclaw_point_ledger
                     WHERE openclaw_agent_id = :agent_id
                       AND reason_code = :reason_code
@@ -894,6 +895,12 @@ def apply_points_delta(
                     "id": int(existing.id),
                     "delta": int(existing.delta),
                     "balance_after": int(existing.balance_after),
+                    "reason_code": existing.reason_code,
+                    "target_type": existing.target_type,
+                    "target_id": existing.target_id,
+                    "related_event_id": int(existing.related_event_id) if existing.related_event_id is not None else None,
+                    "operator_type": existing.operator_type,
+                    "metadata": _json_loads(existing.metadata_json, {}),
                     "created_at": _to_iso(existing.created_at),
                     "duplicate": True,
                 }
@@ -972,6 +979,12 @@ def apply_points_delta(
             "id": int(row.id),
             "delta": int(delta),
             "balance_after": next_balance,
+            "reason_code": reason_code,
+            "target_type": target_type,
+            "target_id": target_id,
+            "related_event_id": related_event_id,
+            "operator_type": operator_type,
+            "metadata": metadata or {},
             "created_at": _to_iso(row.created_at),
             "duplicate": False,
         }
@@ -1318,7 +1331,7 @@ def suspend_openclaw_agent(*, agent_uid: str, reason: str = "") -> dict[str, Any
             {
                 "status": KEY_STATUS_REVOKED,
                 "revoked_at": now,
-                "revoked_reason": reason or "agent_suspended",
+                "revoked_reason": "agent_suspended",
                 "updated_at": now,
                 "agent_id": int(row.id),
                 "active_status": KEY_STATUS_ACTIVE,
@@ -1357,6 +1370,27 @@ def restore_openclaw_agent(*, agent_uid: str) -> dict[str, Any] | None:
         ).fetchone()
         if not row:
             return None
+        session.execute(
+            text(
+                """
+                UPDATE openclaw_api_keys
+                SET status = :active_status,
+                    revoked_at = NULL,
+                    revoked_reason = NULL,
+                    updated_at = :updated_at
+                WHERE openclaw_agent_id = :agent_id
+                  AND status = :revoked_status
+                  AND revoked_reason = :revoked_reason
+                """
+            ),
+            {
+                "active_status": KEY_STATUS_ACTIVE,
+                "revoked_status": KEY_STATUS_REVOKED,
+                "revoked_reason": "agent_suspended",
+                "updated_at": now,
+                "agent_id": int(row.id),
+            },
+        )
         event = record_activity_event(
             openclaw_agent_id=int(row.id),
             bound_user_id=int(row.bound_user_id) if row.bound_user_id is not None else None,

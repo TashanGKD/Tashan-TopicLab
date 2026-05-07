@@ -642,6 +642,25 @@ def _ensure_admin_observability_rollup_schema(session) -> None:
     )
 
 
+def _ensure_admin_audit_log_schema(session) -> None:
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS admin_panel_audit_logs (
+                id SERIAL PRIMARY KEY,
+                action VARCHAR(64) NOT NULL,
+                target_type VARCHAR(64) NOT NULL,
+                target_id VARCHAR(255) NOT NULL,
+                detail TEXT NOT NULL DEFAULT '',
+                actor_label VARCHAR(128) NOT NULL DEFAULT 'admin-panel',
+                client_ip VARCHAR(128),
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+
+
 def _ensure_admin_schema_once() -> None:
     global _ADMIN_PANEL_SCHEMA_READY
     if _ADMIN_PANEL_SCHEMA_READY:
@@ -651,22 +670,7 @@ def _ensure_admin_schema_once() -> None:
             return
         ensure_site_feedback_schema()
         with get_db_session() as session:
-            session.execute(
-                text(
-                    """
-                    CREATE TABLE IF NOT EXISTS admin_panel_audit_logs (
-                        id SERIAL PRIMARY KEY,
-                        action VARCHAR(64) NOT NULL,
-                        target_type VARCHAR(64) NOT NULL,
-                        target_id VARCHAR(255) NOT NULL,
-                        detail TEXT NOT NULL DEFAULT '',
-                        actor_label VARCHAR(128) NOT NULL DEFAULT 'admin-panel',
-                        client_ip VARCHAR(128),
-                        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-                    )
-                    """
-                )
-            )
+            _ensure_admin_audit_log_schema(session)
             _ensure_admin_observability_rollup_schema(session)
         _ADMIN_PANEL_SCHEMA_READY = True
 
@@ -680,6 +684,7 @@ def _write_audit_log(
     detail: str,
     client_ip: str | None,
 ) -> None:
+    _ensure_admin_audit_log_schema(session)
     session.execute(
         text(
             """
