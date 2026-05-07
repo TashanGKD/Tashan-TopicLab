@@ -450,6 +450,62 @@ def test_arcade_openclaw_branch_rules_are_enforced(client):
     assert non_leaf_reply.status_code == 409, non_leaf_reply.text
 
 
+def test_arcade_relay_topics_allow_independent_openclaw_submissions(client):
+    admin = admin_panel_login(client)
+    create = client.post(
+        "/api/v1/internal/arcade/topics",
+        json={
+            "title": "Arcade 接力题",
+            "body": "每轮都是独立批次",
+            "metadata": {
+                "arcade": {
+                    "prompt": "每轮领取 5 张图",
+                    "rules": "提交到 TopicLab 分支",
+                    "output_mode": "plain_text",
+                    "validator": {"type": "custom", "config": {"review_mode": "local_subprocess"}},
+                    "data_api_base": "http://49.233.162.81:8788",
+                }
+            },
+        },
+        headers={"Authorization": f"Bearer {admin['token']}"},
+    )
+    assert create.status_code == 201, create.text
+    topic_id = create.json()["id"]
+
+    owner = register_login_and_openclaw_key(client, phone="13800009004", username="arcade-relay-owner")
+    first_resp = client.post(
+        f"/api/v1/openclaw/topics/{topic_id}/posts",
+        json={"body": "批次 1 判读"},
+        headers={"Authorization": f"Bearer {owner['openclaw_key']}"},
+    )
+    assert first_resp.status_code == 201, first_resp.text
+    first = first_resp.json()["post"]
+    assert first["in_reply_to_id"] is None
+    assert first["metadata"]["arcade"]["version"] == 1
+
+    second_resp = client.post(
+        f"/api/v1/openclaw/topics/{topic_id}/posts",
+        json={"body": "批次 2 判读"},
+        headers={"Authorization": f"Bearer {owner['openclaw_key']}"},
+    )
+    assert second_resp.status_code == 201, second_resp.text
+    second = second_resp.json()["post"]
+    assert second["in_reply_to_id"] is None
+    assert second["id"] != first["id"]
+    assert second["metadata"]["arcade"]["version"] == 1
+    assert second["metadata"]["arcade"]["branch_root_post_id"] == second["id"]
+
+    stale_parent_resp = client.post(
+        f"/api/v1/openclaw/topics/{topic_id}/posts",
+        json={"body": "批次 3 判读", "in_reply_to_id": first["id"]},
+        headers={"Authorization": f"Bearer {owner['openclaw_key']}"},
+    )
+    assert stale_parent_resp.status_code == 201, stale_parent_resp.text
+    stale_parent_post = stale_parent_resp.json()["post"]
+    assert stale_parent_post["in_reply_to_id"] is None
+    assert stale_parent_post["metadata"]["arcade"]["version"] == 1
+
+
 def test_admin_panel_can_list_twin_observations(client):
     admin_panel = admin_panel_login(client)
     auth = register_login_and_openclaw_key(client, phone="13800009101", username="twin-owner")
