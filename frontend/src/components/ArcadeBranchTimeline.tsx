@@ -55,6 +55,136 @@ function getRankMedal(rank: number): string | null {
   return null
 }
 
+interface RelaySubmissionRow {
+  imageUrl: string
+  sourceId: string
+  role: string
+  anomalyScore: string
+  confidence: string
+  needsFollowup: string
+  evidenceTags: string[]
+  qualityFlags: string[]
+  reason: string
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  interesting: '优先回看',
+  bridge: '需要复核',
+  data_issue: '先查质量',
+  typical: '普通样本',
+  control: '对照样本',
+  unsure: '证据不足',
+}
+
+const ROLE_DESCRIPTIONS: Record<string, string> = {
+  interesting: '图上有较清楚的异常结构，值得优先进入人工复核。',
+  bridge: '有可疑线索，但还需要散点、背景或上下文交叉确认。',
+  data_issue: '主要风险来自采样、背景、缺测、低信噪或单点牵引。',
+  typical: '没有明显峰、尾、再亮或长期漂移，可暂作普通样本。',
+  control: '适合当普通参照，用来校准本轮判断尺度。',
+  unsure: '图像证据不足，先保留记录，不把拟合形状当成确定变化。',
+}
+
+const TAG_LABELS: Record<string, string> = {
+  peak_or_bump: '峰或鼓包',
+  tail_or_plateau: '尾部/平台',
+  rebrightening: '再亮',
+  nonmonotonic: '非单调',
+  color_separation: '双波段分离',
+  large_amplitude: '大振幅',
+  rapid_rise: '快速上升',
+  rapid_decline: '快速衰减',
+  slow_decline: '缓慢衰减',
+  long_duration: '持续时间长',
+  smooth_control: '平稳对照',
+  sparse_sampling: '采样稀疏',
+  background_or_contamination: '背景/污染',
+  single_band_signal: '单波段信号',
+  band_missing: '波段缺失',
+  baseline_offset: '基线错位',
+  outlier_only: '离群点主导',
+  context_risk: '上下文风险',
+  low_snr: '低信噪',
+  unclear: '证据不清',
+  good_sampling: '采样可用',
+  cadence_gap: '观测空窗',
+  heavy_imputation: '插补较多',
+  background_issue: '背景问题',
+  saturation_or_edge: '饱和/边缘',
+  image_unreadable: '图像难读',
+  none: '暂无明显质量问题',
+}
+
+function tagLabel(tag: string): string {
+  const label = TAG_LABELS[tag]
+  return label ? `${label} · ${tag}` : tag
+}
+
+function sourceIdFromImageUrl(url: string): string {
+  const fileName = decodeURIComponent(url.split('?')[0].split('#')[0].split('/').pop() || '')
+  return fileName
+    .replace(/_sample_review\.png$/i, '')
+    .replace(/_sample_gp\.png$/i, '')
+    .replace(/_sample_scatter\.png$/i, '')
+    .replace(/\.png$/i, '')
+}
+
+function reviewImageUrl(url: string): string {
+  if (url.includes('/all_sample_review/')) return url
+  if (url.includes('/all_sample_gp/')) {
+    return url.replace('/all_sample_gp/', '/all_sample_review/').replace(/_sample_gp\.png(\?|#|$)/, '_sample_review.png$1')
+  }
+  if (url.includes('/all_sample_scatter/')) {
+    return url.replace('/all_sample_scatter/', '/all_sample_review/').replace(/_sample_scatter\.png(\?|#|$)/, '_sample_review.png$1')
+  }
+  return url
+}
+
+const DATA_SAMPLE_REVIEW_VERSION = 'scatter-card-v7'
+
+function reviewDisplayImageUrl(url: string): string {
+  const reviewUrl = reviewImageUrl(url)
+  if (!reviewUrl.includes('/all_sample_review/')) return reviewUrl
+  const separator = reviewUrl.includes('?') ? '&' : '?'
+  return `${reviewUrl}${separator}v=${DATA_SAMPLE_REVIEW_VERSION}`
+}
+
+function scatterImageUrl(url: string): string {
+  if (url.includes('/all_sample_scatter/')) return url
+  if (url.includes('/all_sample_review/')) {
+    return url.replace('/all_sample_review/', '/all_sample_scatter/').replace(/_sample_review\.png(\?|#|$)/, '_sample_scatter.png$1')
+  }
+  if (url.includes('/all_sample_gp/')) {
+    return url.replace('/all_sample_gp/', '/all_sample_scatter/').replace(/_sample_gp\.png(\?|#|$)/, '_sample_scatter.png$1')
+  }
+  return url
+}
+
+function parseRelaySubmission(body: string): RelaySubmissionRow[] {
+  const rows: RelaySubmissionRow[] = []
+  const lines = body.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+  if (lines.length === 0) return rows
+  for (const line of lines) {
+    const match = line.match(/^!\[[^\]]*]\(([^)]+)\)\s*\|\s*(.+)$/)
+    if (!match) return []
+    const fields = match[2].split('|').map((field) => field.trim())
+    if (fields.length !== 7) return []
+    const [role, anomalyScore, confidence, needsFollowup, evidenceText, qualityText, reason] = fields
+    rows.push({
+      imageUrl: match[1].trim(),
+      sourceId: sourceIdFromImageUrl(match[1].trim()),
+      role,
+      anomalyScore,
+      confidence,
+      needsFollowup,
+      evidenceTags: evidenceText.split(',').map((tag) => tag.trim()).filter(Boolean),
+      qualityFlags: qualityText.split(',').map((tag) => tag.trim()).filter(Boolean),
+      reason,
+    })
+  }
+  return rows
+}
+
 export default function ArcadeBranchTimeline({
   posts,
   onDelete,
@@ -210,7 +340,8 @@ function CompactArcadeEntry({
   liked: boolean
   liking: boolean
 }) {
-  const [expanded, setExpanded] = useState(false)
+  const relayRows = kind === 'submission' ? parseRelaySubmission(post.body) : []
+  const [expanded, setExpanded] = useState(relayRows.length > 0)
   const needsClamp = post.body.length > 220
 
   return (
@@ -267,34 +398,38 @@ function CompactArcadeEntry({
           </div>
 
           <div className="rounded-[0.8rem] border border-gray-100 bg-white px-3 py-2.5">
-            <div className={`markdown-content markdown-content-compact arcade-post-body text-sm text-gray-700 ${
-              !expanded && needsClamp ? 'max-h-24 overflow-hidden' : ''
-            }`}>
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm, remarkMath]}
-                rehypePlugins={[rehypeKatex]}
-                components={{
-                  img: ({ src = '', alt = '', ...props }) => {
-                    const resolvedSrc = resolveTopicImageSrc(post.topic_id, src, { format: 'webp', quality: 82 })
-                    if (isVideoMediaSrc(resolvedSrc)) {
-                      return (
-                        <video
-                          controls
-                          preload="metadata"
-                          className="max-h-[20rem] w-full rounded-lg bg-black/90"
-                          src={resolvedSrc}
-                          aria-label={alt || 'video'}
-                        />
-                      )
-                    }
-                    return <img {...props} src={resolvedSrc} alt={alt} loading="lazy" />
-                  },
-                }}
-              >
-                {post.body}
-              </ReactMarkdown>
-            </div>
-            {needsClamp ? (
+            {relayRows.length > 0 ? (
+              <RelaySubmissionCards rows={relayRows} expanded={expanded} />
+            ) : (
+              <div className={`markdown-content markdown-content-compact arcade-post-body text-sm text-gray-700 ${
+                !expanded && needsClamp ? 'max-h-24 overflow-hidden' : ''
+              }`}>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm, remarkMath]}
+                  rehypePlugins={[rehypeKatex]}
+                  components={{
+                    img: ({ src = '', alt = '', ...props }) => {
+                      const resolvedSrc = resolveTopicImageSrc(post.topic_id, src, { format: 'webp', quality: 82 })
+                      if (isVideoMediaSrc(resolvedSrc)) {
+                        return (
+                          <video
+                            controls
+                            preload="metadata"
+                            className="max-h-[20rem] w-full rounded-lg bg-black/90"
+                            src={resolvedSrc}
+                            aria-label={alt || 'video'}
+                          />
+                        )
+                      }
+                      return <img {...props} src={resolvedSrc} alt={alt} loading="lazy" />
+                    },
+                  }}
+                >
+                  {post.body}
+                </ReactMarkdown>
+              </div>
+            )}
+            {needsClamp || relayRows.length > 0 ? (
               <button
                 type="button"
                 onClick={() => setExpanded((value) => !value)}
@@ -332,5 +467,70 @@ function CompactArcadeEntry({
         </div>
       </div>
     </article>
+  )
+}
+
+function RelaySubmissionCards({
+  rows,
+  expanded,
+}: {
+  rows: RelaySubmissionRow[]
+  expanded: boolean
+}) {
+  const visibleRows = expanded ? rows : rows.slice(0, 2)
+  return (
+    <div className="space-y-3">
+      {visibleRows.map((row, index) => {
+        const imageSrc = reviewDisplayImageUrl(row.imageUrl)
+        const roleLabel = ROLE_LABELS[row.role] ?? row.role
+        const followupLabel = row.needsFollowup === 'yes' ? '建议回看' : '暂不追'
+        return (
+          <div key={`${row.imageUrl}-${index}`} className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50/70">
+            <div className="grid items-start gap-4 p-3 lg:grid-cols-[minmax(34rem,1.32fr)_minmax(22rem,0.68fr)]">
+              <a href={reviewImageUrl(row.imageUrl)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-slate-200 bg-white">
+                <img src={imageSrc} alt={`${row.sourceId} 复核图`} loading="lazy" className="h-auto w-full" />
+              </a>
+              <div className="space-y-2.5 rounded-xl bg-white/70 p-3 shadow-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-black px-2.5 py-1 text-xs font-semibold text-white">{index + 1}</span>
+                  <span className="font-serif text-xl text-slate-950">{row.sourceId || '未知源'}</span>
+                  <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs text-rose-700">
+                    {roleLabel} · 异常分 {row.anomalyScore}
+                  </span>
+                </div>
+                <p className="text-sm leading-relaxed text-slate-600">{ROLE_DESCRIPTIONS[row.role] ?? '结构化判读结果。'}</p>
+                <div className="grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
+                  <div className="rounded-lg border border-slate-100 bg-white px-3 py-2">置信度：{row.confidence}</div>
+                  <div className="rounded-lg border border-slate-100 bg-white px-3 py-2">回看建议：{followupLabel}</div>
+                </div>
+                <div className="rounded-xl bg-white p-3 text-sm leading-7 text-slate-800 shadow-sm">
+                  <div className="mb-1 text-xs font-semibold text-slate-500">模型留下的复核便签</div>
+                  {row.reason}
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap gap-1.5">
+                    {row.evidenceTags.map((tag) => (
+                      <span key={`e-${tag}`} className="rounded-full bg-sky-50 px-2 py-0.5 text-xs text-sky-700">{tagLabel(tag)}</span>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {row.qualityFlags.map((tag) => (
+                      <span key={`q-${tag}`} className="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700">{tagLabel(tag)}</span>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <a href={scatterImageUrl(row.imageUrl)} target="_blank" rel="noreferrer" className="rounded-full bg-white px-2.5 py-1 text-slate-500 underline-offset-2 hover:text-black hover:underline">原始散点</a>
+                  <a href={row.imageUrl} target="_blank" rel="noreferrer" className="rounded-full bg-white px-2.5 py-1 text-slate-500 underline-offset-2 hover:text-black hover:underline">提交图</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })}
+      {!expanded && rows.length > visibleRows.length ? (
+        <p className="text-xs text-slate-400">还有 {rows.length - visibleRows.length} 张，展开查看完整本轮判读。</p>
+      ) : null}
+    </div>
   )
 }
