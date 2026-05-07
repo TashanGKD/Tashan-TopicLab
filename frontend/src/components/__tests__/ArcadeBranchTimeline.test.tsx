@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import ArcadeBranchTimeline from '../ArcadeBranchTimeline'
 
@@ -192,5 +192,90 @@ describe('ArcadeBranchTimeline', () => {
     const evaluationBody = bodies[1]
     expect(evaluationBody).toHaveTextContent('1,10,20,25,30,35,40,45,50,55,59,60,61,62,63')
     expect(evaluationBody).toHaveTextContent('0.3711,0.5885,0.6583,0.6877,0.6886,0.6887,0.7007,0.7044,0.7070,0.7130,0.7152')
+  })
+
+  it('keeps long non-relay arcade submissions collapsed by default', () => {
+    const longBody = Array.from({ length: 24 }, (_, index) => `第 ${index + 1} 行普通提交内容`).join('\n')
+    const { container } = render(
+      <ArcadeBranchTimeline
+        posts={[
+          {
+            id: 'submission-1',
+            topic_id: 'topic-1',
+            author: "Zerui's openclaw",
+            author_type: 'human',
+            owner_user_id: 1,
+            expert_name: null,
+            expert_label: null,
+            body: longBody,
+            metadata: {
+              scene: 'arcade',
+              arcade: {
+                post_kind: 'submission',
+                branch_owner_openclaw_agent_id: 1,
+                branch_root_post_id: 'submission-1',
+                version: 1,
+              },
+            },
+            mentions: [],
+            in_reply_to_id: null,
+            root_post_id: 'submission-1',
+            status: 'completed',
+            created_at: '2026-03-27T03:00:00Z',
+            interaction: { likes_count: 0, shares_count: 0, liked: false },
+          },
+        ]}
+      />,
+    )
+
+    const view = within(container)
+    expect(view.getByRole('button', { name: '展开' })).toBeInTheDocument()
+    expect(view.queryByRole('button', { name: '收起' })).not.toBeInTheDocument()
+    expect(container.querySelector('.arcade-post-body')).toHaveClass('max-h-24')
+  })
+
+  it('renders relay submission cards expanded by default', () => {
+    const { container } = render(
+      <ArcadeBranchTimeline
+        posts={[
+          {
+            id: 'submission-1',
+            topic_id: 'topic-1',
+            author: "Zerui's openclaw",
+            author_type: 'human',
+            owner_user_id: 1,
+            expert_name: null,
+            expert_label: null,
+            body: [
+              '![](https://relay.test/all_sample_gp/ZTF-001_sample_gp.png) | interesting | 5 | high | yes | peak_or_bump,color_separation | good_sampling | peak is sharp and color separated',
+              '![](https://relay.test/all_sample_gp/ZTF-002_sample_gp.png) | bridge | 3 | medium | yes | tail_or_plateau | sparse_sampling | tail is possible but sampling is sparse',
+              '![](https://relay.test/all_sample_gp/ZTF-003_sample_gp.png) | typical | 1 | low | no | smooth_control | none | smooth control sample',
+            ].join('\n'),
+            metadata: {
+              scene: 'arcade',
+              arcade: {
+                post_kind: 'submission',
+                branch_owner_openclaw_agent_id: 1,
+                branch_root_post_id: 'submission-1',
+                version: 1,
+              },
+            },
+            mentions: [],
+            in_reply_to_id: null,
+            root_post_id: 'submission-1',
+            status: 'completed',
+            created_at: '2026-03-27T03:00:00Z',
+            interaction: { likes_count: 0, shares_count: 0, liked: false },
+          },
+        ]}
+      />,
+    )
+
+    const view = within(container)
+    expect(view.getByRole('button', { name: '收起' })).toBeInTheDocument()
+    expect(view.getByText('ZTF-001')).toBeInTheDocument()
+    expect(view.getByText('ZTF-002')).toBeInTheDocument()
+    expect(view.getByText('ZTF-003')).toBeInTheDocument()
+    expect(view.queryByText(/还有 1 张/)).not.toBeInTheDocument()
   })
 })

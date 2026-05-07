@@ -340,8 +340,8 @@ function CompactArcadeEntry({
   liked: boolean
   liking: boolean
 }) {
-  const [expanded, setExpanded] = useState(kind === 'submission' || kind === 'evaluation')
   const relayRows = kind === 'submission' ? parseRelaySubmission(post.body) : []
+  const [expanded, setExpanded] = useState(relayRows.length > 0)
   const needsClamp = post.body.length > 220
 
   return (
