@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { TopicMetadata } from '../../api/client'
 import { getArcadeDisplayTags, getArcadeExternalRelay, getArcadeMeta, getArcadePrompt, getArcadeRules } from '../../utils/arcade'
+import { resolveArcadeTopicImageSrc } from '../../utils/topicImage'
 
 interface ArcadeTopicIntroCardProps {
   topicId: string
@@ -21,6 +22,12 @@ export default function ArcadeTopicIntroCard({
   const heroImageUrl = typeof arcadeMeta?.hero_image_url === 'string' ? arcadeMeta.hero_image_url : ''
   const routeImageUrl = typeof arcadeMeta?.route_image_url === 'string' ? arcadeMeta.route_image_url : ''
   const clusterOverviewImageUrl = typeof arcadeMeta?.cluster_overview_image_url === 'string' ? arcadeMeta.cluster_overview_image_url : ''
+  const scienceCandidateImageUrl = typeof arcadeMeta?.science_candidate_image_url === 'string' ? arcadeMeta.science_candidate_image_url : ''
+  const arcadeImageOptions = { quality: 82, format: 'webp' as const }
+  const heroImageSrc = resolveArcadeTopicImageSrc(topicId, heroImageUrl, arcadeImageOptions)
+  const routeImageSrc = resolveArcadeTopicImageSrc(topicId, routeImageUrl, arcadeImageOptions)
+  const clusterOverviewImageSrc = resolveArcadeTopicImageSrc(topicId, clusterOverviewImageUrl, arcadeImageOptions)
+  const scienceCandidateImageSrc = resolveArcadeTopicImageSrc(topicId, scienceCandidateImageUrl, arcadeImageOptions)
 
   return (
     <section className="mb-5 rounded-[28px] border border-gray-200 bg-gradient-to-br from-slate-50 via-white to-sky-50/40 px-4 py-4 sm:px-5">
@@ -63,7 +70,7 @@ export default function ArcadeTopicIntroCard({
         <div>
           {heroImageUrl ? (
             <a href={heroImageUrl} target="_blank" rel="noreferrer" className="block rounded-2xl border border-white bg-white p-2 shadow-sm">
-              <img src={heroImageUrl} alt="虾的公众科学参赛示意图" className="h-auto w-full rounded-xl" />
+              <img src={heroImageSrc} alt="虾的公众科学参赛示意图" className="h-auto w-full rounded-xl" />
             </a>
           ) : null}
         </div>
@@ -96,16 +103,21 @@ export default function ArcadeTopicIntroCard({
           </div>
         </div>
       ) : null}
-      {routeImageUrl || clusterOverviewImageUrl ? (
+      {routeImageUrl || clusterOverviewImageUrl || scienceCandidateImageUrl ? (
         <div className="mt-4 space-y-3">
           {routeImageUrl ? (
             <a href={routeImageUrl} target="_blank" rel="noreferrer" className="block rounded-2xl border border-white bg-white p-2 shadow-sm">
-              <img src={routeImageUrl} alt="Sample 层级路线图" className="h-auto w-full rounded-xl" />
+              <img src={routeImageSrc} alt="Sample 层级路线图" className="h-auto w-full rounded-xl" loading="lazy" />
             </a>
           ) : null}
           {clusterOverviewImageUrl ? (
             <a href={clusterOverviewImageUrl} target="_blank" rel="noreferrer" className="block rounded-2xl border border-white bg-white p-2 shadow-sm">
-              <img src={clusterOverviewImageUrl} alt="Cluster Review 每簇第一页总览" className="h-auto w-full rounded-xl" />
+              <img src={clusterOverviewImageSrc} alt="Cluster Review 每簇第一页总览" className="h-auto w-full rounded-xl" loading="lazy" />
+            </a>
+          ) : null}
+          {scienceCandidateImageUrl ? (
+            <a href={scienceCandidateImageUrl} target="_blank" rel="noreferrer" className="block rounded-2xl border border-white bg-white p-2 shadow-sm">
+              <img src={scienceCandidateImageSrc} alt="人工复核候选源示意图" className="h-auto w-full rounded-xl" loading="lazy" />
             </a>
           ) : null}
         </div>

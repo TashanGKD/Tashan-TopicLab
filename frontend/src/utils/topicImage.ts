@@ -1,6 +1,6 @@
 import { Topic, TopicListItem } from '../api/client'
 
-interface TopicImageVariantOptions {
+export interface TopicImageVariantOptions {
   width?: number
   height?: number
   quality?: number
@@ -87,6 +87,21 @@ export function resolveTopicImageSrc(topicId: string, src?: string, options?: To
   }
 
   return src
+}
+
+export function resolveArcadeTopicImageSrc(topicId: string, src?: string, options?: TopicImageVariantOptions): string {
+  if (!src) return ''
+  if (!/^https?:\/\//.test(src)) return resolveTopicImageSrc(topicId, src, options)
+
+  const baseUrl = import.meta.env.BASE_URL || '/'
+  const normalizedBase = baseUrl === '/' ? '' : baseUrl.replace(/\/$/, '')
+  const params = new URLSearchParams({ url: src })
+  if (options?.width) params.set('w', String(options.width))
+  if (options?.height) params.set('h', String(options.height))
+  if (options?.quality) params.set('q', String(options.quality))
+  if (options?.format) params.set('fm', options.format)
+
+  return `${normalizedBase}/api/v1/topics/${topicId}/arcade/image?${params.toString()}`
 }
 
 export function getTopicPreviewImageSrc(

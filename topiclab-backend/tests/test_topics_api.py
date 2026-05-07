@@ -290,6 +290,87 @@ def test_arcade_topic_internal_create_and_metadata_roundtrip(client):
     assert forbidden.status_code == 403, forbidden.text
 
 
+def test_arcade_topic_declared_external_image_can_be_served_as_webp(client, monkeypatch):
+    import app.api.topics as topics_module
+
+    admin = admin_panel_login(client)
+    image_url = "http://49.233.162.81:8788/public/sample-level-route-cn.png"
+    create = client.post(
+        "/api/v1/internal/arcade/topics",
+        json={
+            "title": "Arcade 图片题目",
+            "body": "题目正文",
+            "metadata": {
+                "scene": "arcade",
+                "arcade": {
+                    "prompt": "看图判断。",
+                    "rules": "留下理由。",
+                    "route_image_url": image_url,
+                },
+            },
+        },
+        headers={"Authorization": f"Bearer {admin['token']}"},
+    )
+    assert create.status_code == 201, create.text
+    topic_id = create.json()["id"]
+
+    png_bytes = BytesIO()
+    Image.new("RGB", (12, 8), color=(240, 30, 30)).save(png_bytes, format="PNG")
+
+    async def fake_fetch_arcade_image(url: str) -> tuple[bytes, str]:
+        assert url == image_url
+        return png_bytes.getvalue(), "image/png"
+
+    monkeypatch.setattr(topics_module, "_fetch_arcade_topic_image", fake_fetch_arcade_image)
+
+    response = client.get(
+        f"/api/v1/topics/{topic_id}/arcade/image",
+        params={"url": image_url, "fm": "webp", "q": "82"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"] == "image/webp"
+    with Image.open(BytesIO(response.content)) as image:
+        assert image.format == "WEBP"
+        assert image.size == (12, 8)
+
+
+def test_arcade_topic_image_proxy_rejects_undeclared_url(client, monkeypatch):
+    import app.api.topics as topics_module
+
+    admin = admin_panel_login(client)
+    declared_url = "http://49.233.162.81:8788/public/sample-level-route-cn.png"
+    create = client.post(
+        "/api/v1/internal/arcade/topics",
+        json={
+            "title": "Arcade 图片题目",
+            "body": "题目正文",
+            "metadata": {
+                "scene": "arcade",
+                "arcade": {
+                    "prompt": "看图判断。",
+                    "rules": "留下理由。",
+                    "route_image_url": declared_url,
+                },
+            },
+        },
+        headers={"Authorization": f"Bearer {admin['token']}"},
+    )
+    assert create.status_code == 201, create.text
+
+    async def fail_fetch_arcade_image(url: str) -> tuple[bytes, str]:
+        raise AssertionError(f"undeclared URL should not be fetched: {url}")
+
+    monkeypatch.setattr(topics_module, "_fetch_arcade_topic_image", fail_fetch_arcade_image)
+
+    response = client.get(
+        f"/api/v1/topics/{create.json()['id']}/arcade/image",
+        params={"url": "http://example.com/not-declared.png", "fm": "webp"},
+    )
+
+    assert response.status_code == 403, response.text
+
+
 def test_arcade_openclaw_branch_rules_are_enforced(client):
     admin = admin_panel_login(client)
     create = client.post(

@@ -3,6 +3,15 @@ import { describe, expect, it } from 'vitest'
 
 import ArcadeTopicIntroCard from '../arcade/ArcadeTopicIntroCard'
 
+function expectArcadeImageProxy(src: string | null, topicId: string, originalUrl: string) {
+  expect(src).toBeTruthy()
+  const parsed = new URL(src ?? '', 'http://localhost')
+  expect(parsed.pathname).toBe(`/api/v1/topics/${topicId}/arcade/image`)
+  expect(parsed.searchParams.get('url')).toBe(originalUrl)
+  expect(parsed.searchParams.get('q')).toBe('82')
+  expect(parsed.searchParams.get('fm')).toBe('webp')
+}
+
 describe('ArcadeTopicIntroCard', () => {
   it('renders external relay endpoints as read-only task links', () => {
     render(
@@ -68,6 +77,7 @@ describe('ArcadeTopicIntroCard', () => {
             hero_image_url: 'http://49.233.162.81:8788/public/aida-public-science.svg',
             route_image_url: 'http://49.233.162.81:8788/public/sample-level-route-cn.png',
             cluster_overview_image_url: 'http://49.233.162.81:8788/public/cluster-review-first-pages-mosaic.png',
+            science_candidate_image_url: 'http://49.233.162.81:8788/public/manual-recheck-science-candidates.png',
           },
         }}
         renderMarkdown={(value) => <p>{value}</p>}
@@ -77,9 +87,26 @@ describe('ArcadeTopicIntroCard', () => {
 
     expect(view.getByText('数据接力')).toBeInTheDocument()
     expect(view.getByText('每轮只发 5 张瞬变源光变图。看完以后，请留下能被后来者复核的判断：图上哪里像真实变化，哪里可能只是采样、背景或低信噪在捣乱，哪些源值得继续回看。')).toBeInTheDocument()
-    expect(view.getByRole('img', { name: '虾的公众科学参赛示意图' })).toHaveAttribute('src', 'http://49.233.162.81:8788/public/aida-public-science.svg')
-    expect(view.getByRole('img', { name: 'Sample 层级路线图' })).toHaveAttribute('src', 'http://49.233.162.81:8788/public/sample-level-route-cn.png')
-    expect(view.getByRole('img', { name: 'Cluster Review 每簇第一页总览' })).toHaveAttribute('src', 'http://49.233.162.81:8788/public/cluster-review-first-pages-mosaic.png')
+    expectArcadeImageProxy(
+      view.getByRole('img', { name: '虾的公众科学参赛示意图' }).getAttribute('src'),
+      'topic-103',
+      'http://49.233.162.81:8788/public/aida-public-science.svg',
+    )
+    expectArcadeImageProxy(
+      view.getByRole('img', { name: 'Sample 层级路线图' }).getAttribute('src'),
+      'topic-103',
+      'http://49.233.162.81:8788/public/sample-level-route-cn.png',
+    )
+    expectArcadeImageProxy(
+      view.getByRole('img', { name: 'Cluster Review 每簇第一页总览' }).getAttribute('src'),
+      'topic-103',
+      'http://49.233.162.81:8788/public/cluster-review-first-pages-mosaic.png',
+    )
+    expectArcadeImageProxy(
+      view.getByRole('img', { name: '人工复核候选源示意图' }).getAttribute('src'),
+      'topic-103',
+      'http://49.233.162.81:8788/public/manual-recheck-science-candidates.png',
+    )
     expect(view.getByText('POST http://49.233.162.81:8788/api/claim')).toBeInTheDocument()
     expect(view.queryByText(/POST .*api\/submit/)).not.toBeInTheDocument()
     expect(view.getByText('提交在 TopicLab Arcade 分支内完成。')).toBeInTheDocument()

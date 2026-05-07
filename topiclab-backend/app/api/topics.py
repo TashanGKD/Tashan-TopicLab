@@ -110,6 +110,12 @@ _PREVIEW_CACHE_DIRNAME = ".generated_image_previews"
 _PREVIEW_DEFAULT_QUALITY = 72
 _PREVIEW_DEFAULT_FORMAT = "webp"
 _PREVIEW_MAX_DIMENSION = 2048
+_ARCADE_IMAGE_METADATA_FIELDS = (
+    "hero_image_url",
+    "route_image_url",
+    "cluster_overview_image_url",
+    "science_candidate_image_url",
+)
 _DISCUSSION_SYNC_INTERVAL_SECONDS = 2.0
 _STATUS_CACHE_TTL_SECONDS = float(os.getenv("DISCUSSION_STATUS_CACHE_TTL_SECONDS", "1.5"))
 _status_cache: dict[str, tuple[float, dict]] = {}
@@ -743,6 +749,38 @@ def _create_generated_image_preview_bytes(
     except UnidentifiedImageError as exc:
         raise HTTPException(status_code=415, detail="Unsupported image format") from exc
     return output.getvalue()
+
+
+def _get_declared_arcade_image_urls(topic: dict) -> set[str]:
+    metadata = topic.get("metadata")
+    if not isinstance(metadata, dict):
+        return set()
+    arcade = metadata.get("arcade")
+    if not isinstance(arcade, dict):
+        return set()
+    return {
+        value.strip()
+        for field in _ARCADE_IMAGE_METADATA_FIELDS
+        if isinstance(value := arcade.get(field), str) and value.strip()
+    }
+
+
+async def _fetch_arcade_topic_image(url: str) -> tuple[bytes, str]:
+    try:
+        async with httpx.AsyncClient(timeout=12.0, follow_redirects=True) as client:
+            response = await client.get(
+                url,
+                headers={"Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"},
+            )
+            response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code if exc.response is not None else 502
+        raise HTTPException(status_code=status_code, detail="Arcade image upstream request failed") from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="Arcade image upstream request failed") from exc
+
+    content_type = response.headers.get("content-type", "application/octet-stream").split(";", 1)[0].strip()
+    return response.content, content_type or "application/octet-stream"
 
 
 def _build_posts_context(posts: list[dict]) -> str:
@@ -2677,6 +2715,42 @@ def get_generated_image_endpoint(
             output_format=output_format,
         ),
         media_type=f"image/{output_format}",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
+@router.get("/topics/{topic_id}/arcade/image")
+async def get_arcade_topic_image_endpoint(
+    topic_id: str,
+    url: str = Query(..., min_length=1),
+    w: int | None = Query(default=None, ge=1, le=_PREVIEW_MAX_DIMENSION),
+    h: int | None = Query(default=None, ge=1, le=_PREVIEW_MAX_DIMENSION),
+    q: int = Query(default=_PREVIEW_DEFAULT_QUALITY, ge=30, le=95),
+    fm: str | None = Query(default=None, pattern="^webp$"),
+):
+    topic = get_topic(topic_id)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    if url.strip() not in _get_declared_arcade_image_urls(topic):
+        raise HTTPException(status_code=403, detail="Arcade image is not declared on this topic")
+
+    image_bytes, content_type = await _fetch_arcade_topic_image(url.strip())
+    if fm == "webp" and content_type.lower() != "image/svg+xml":
+        return Response(
+            content=_create_generated_image_preview_bytes(
+                image_bytes,
+                width=w,
+                height=h,
+                quality=q,
+                output_format="webp",
+            ),
+            media_type="image/webp",
+            headers={"Cache-Control": "public, max-age=300"},
+        )
+
+    return Response(
+        content=image_bytes,
+        media_type=content_type,
         headers={"Cache-Control": "public, max-age=300"},
     )
 
