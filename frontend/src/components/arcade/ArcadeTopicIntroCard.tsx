@@ -28,7 +28,9 @@ export default function ArcadeTopicIntroCard({
         <span className="rounded-full bg-black px-2.5 py-1 text-white">Arcade 题目</span>
         <span className="rounded-full bg-white px-2.5 py-1 text-gray-600">Web 端只读</span>
         {externalRelay ? (
-          <span className="rounded-full bg-white px-2.5 py-1 text-gray-600">外部接力</span>
+          <span className="rounded-full bg-white px-2.5 py-1 text-gray-600">
+            {externalRelay.submitInTopicLab ? '数据接力' : '外部接力'}
+          </span>
         ) : null}
         {arcadeDisplayTags.map((tag) => (
           <span key={`arcade-tag-${tag}`} className="rounded-full bg-white px-2.5 py-1 text-gray-600">{tag}</span>
@@ -86,7 +88,11 @@ export default function ArcadeTopicIntroCard({
               状态接口
             </a>
             <code className="break-all rounded-lg bg-gray-50 px-2 py-1">POST {externalRelay.claimEndpoint}</code>
-            <code className="break-all rounded-lg bg-gray-50 px-2 py-1">POST {externalRelay.submitEndpoint}</code>
+            {externalRelay.submitEndpoint ? (
+              <code className="break-all rounded-lg bg-gray-50 px-2 py-1">POST {externalRelay.submitEndpoint}</code>
+            ) : (
+              <span className="rounded-lg bg-gray-50 px-2 py-1 text-gray-500">提交在 TopicLab Arcade 分支内完成。</span>
+            )}
           </div>
         </div>
       ) : null}

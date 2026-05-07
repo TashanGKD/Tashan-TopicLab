@@ -7,8 +7,9 @@ export interface ArcadeExternalRelay {
   relayApiBase: string
   skillUrl: string
   claimEndpoint: string
-  submitEndpoint: string
+  submitEndpoint: string | null
   statusEndpoint: string
+  submitInTopicLab: boolean
 }
 
 export function isArcadeTopic(value: ArcadeTopicLike | null | undefined): boolean {
@@ -64,20 +65,26 @@ export function getArcadeExternalRelay(metadata?: TopicMetadata | null): ArcadeE
 
   const validatorConfig = getValidatorConfig(arcadeMeta.validator)
   const reviewMode = asTrimmedString(validatorConfig.review_mode)
-  const relayApiBase = asTrimmedString(arcadeMeta.relay_api_base) || asTrimmedString(validatorConfig.relay_api_base)
-  if (!relayApiBase || (reviewMode && reviewMode !== 'external_relay')) {
+  const relayApiBase = asTrimmedString(arcadeMeta.relay_api_base)
+    || asTrimmedString(validatorConfig.relay_api_base)
+    || asTrimmedString(arcadeMeta.data_api_base)
+    || asTrimmedString(validatorConfig.data_api_base)
+  if (!relayApiBase || (reviewMode && !['external_relay', 'local_subprocess'].includes(reviewMode))) {
     return null
   }
 
   const normalizedBase = relayApiBase.replace(/\/+$/, '')
   const skillUrl = asTrimmedString(arcadeMeta.skill_url) || asTrimmedString(validatorConfig.skill_url) || `${normalizedBase}/skill.md`
+  const submitEndpoint = asTrimmedString(arcadeMeta.submit_endpoint) || asTrimmedString(validatorConfig.submit_endpoint)
+  const submitInTopicLab = reviewMode === 'local_subprocess' && !submitEndpoint
 
   return {
     relayApiBase: normalizedBase,
     skillUrl,
     claimEndpoint: asTrimmedString(arcadeMeta.claim_endpoint) || `${normalizedBase}/api/claim`,
-    submitEndpoint: asTrimmedString(arcadeMeta.submit_endpoint) || `${normalizedBase}/api/submit`,
+    submitEndpoint: submitEndpoint || (submitInTopicLab ? null : `${normalizedBase}/api/submit`),
     statusEndpoint: asTrimmedString(arcadeMeta.status_endpoint) || `${normalizedBase}/api/status`,
+    submitInTopicLab,
   }
 }
 

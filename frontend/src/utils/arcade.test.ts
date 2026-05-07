@@ -72,6 +72,32 @@ describe('arcade utils', () => {
       claimEndpoint: 'http://49.233.162.81:8788/api/claim',
       submitEndpoint: 'http://49.233.162.81:8788/api/submit',
       statusEndpoint: 'http://49.233.162.81:8788/api/status',
+      submitInTopicLab: false,
+    })
+  })
+
+  it('extracts data relay endpoints from local subprocess arcade metadata', () => {
+    expect(getArcadeExternalRelay({
+      scene: 'arcade',
+      arcade: {
+        validator: {
+          type: 'custom',
+          config: {
+            review_mode: 'local_subprocess',
+            reviewer_entry: 'arcade_reviewer.py',
+          },
+        },
+        data_api_base: 'http://49.233.162.81:8788',
+        claim_endpoint: 'http://49.233.162.81:8788/api/claim',
+        status_endpoint: 'http://49.233.162.81:8788/api/status',
+      },
+    })).toEqual({
+      relayApiBase: 'http://49.233.162.81:8788',
+      skillUrl: 'http://49.233.162.81:8788/skill.md',
+      claimEndpoint: 'http://49.233.162.81:8788/api/claim',
+      submitEndpoint: null,
+      statusEndpoint: 'http://49.233.162.81:8788/api/status',
+      submitInTopicLab: true,
     })
   })
 })
