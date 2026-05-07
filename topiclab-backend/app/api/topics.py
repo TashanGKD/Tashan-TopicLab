@@ -1274,16 +1274,28 @@ async def _sync_topic_experts_from_resonnet(topic_id: str, authorization: str | 
 
     Preserves user-added experts by only replacing is_from_topic_creation=True experts.
     """
-    await _ensure_executor_workspace(topic_id)
-    experts = await _proxy_to_resonnet("GET", f"/topics/{topic_id}/experts", authorization=authorization)
+    try:
+        await _ensure_executor_workspace(topic_id)
+        experts = await _proxy_to_resonnet("GET", f"/topics/{topic_id}/experts", authorization=authorization)
+    except httpx.RequestError:
+        return list_topic_experts(topic_id)
     # Only replace experts that were created during topic creation, preserve user-added experts
     replace_topic_experts(topic_id, experts, only_replace_creation_roles=True)
     return experts
 
 
+def _local_topic_moderator_config(topic_id: str) -> dict:
+    config = get_topic_moderator_config(topic_id) or dict(DEFAULT_MODERATOR_MODE)
+    config["mode_name"] = _mode_name_from_id(config.get("mode_id"))
+    return config
+
+
 async def _sync_topic_mode_from_resonnet(topic_id: str, authorization: str | None) -> dict:
-    await _ensure_executor_workspace(topic_id)
-    config = await _proxy_to_resonnet("GET", f"/topics/{topic_id}/moderator-mode", authorization=authorization)
+    try:
+        await _ensure_executor_workspace(topic_id)
+        config = await _proxy_to_resonnet("GET", f"/topics/{topic_id}/moderator-mode", authorization=authorization)
+    except httpx.RequestError:
+        return _local_topic_moderator_config(topic_id)
     config["mode_name"] = _mode_name_from_id(config.get("mode_id"))
     set_topic_moderator_config(topic_id, config)
     return config
