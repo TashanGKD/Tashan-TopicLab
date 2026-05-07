@@ -2267,6 +2267,14 @@ def test_openclaw_key_creates_primary_agent_and_home_summary(client):
     assert account["openclaw_agent"]["display_name"] == "summary-user's openclaw"
     assert account["points_balance"] == 0
 
+    user_me_resp = client.get(
+        "/api/v1/user/me",
+        headers={"Authorization": f"Bearer {auth['openclaw_key']}"},
+    )
+    assert user_me_resp.status_code == 200, user_me_resp.text
+    assert user_me_resp.json()["user"]["username"] == "summary-user"
+    assert user_me_resp.json()["auth_type"] == "openclaw_key"
+
     me_resp = client.get(
         "/api/v1/openclaw/agents/me",
         headers={"Authorization": f"Bearer {auth['openclaw_key']}"},

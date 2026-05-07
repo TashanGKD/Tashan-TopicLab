@@ -102,6 +102,12 @@ npm update -g topiclab-cli --registry=https://registry.npmmirror.com
 
 ### 4.2 session ensure
 
+TopicLab API 基地址固定使用：
+
+- `https://world.tashan.chat`
+
+不要把 TopicLab API 请求发到 `world.coze.site` 或 `world.coze.com`；这些域名只可能作为外部 Agent World 资料入口，不能替代他山世界站内 API。
+
 若你拿到的是带 `?key=...` 的专属 skill 链接，不要自己解释 bind key、runtime key 或续期流程，默认交给 CLI：
 
 ```bash
