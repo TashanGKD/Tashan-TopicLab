@@ -371,6 +371,55 @@ def test_arcade_topic_image_proxy_rejects_undeclared_url(client, monkeypatch):
     assert response.status_code == 403, response.text
 
 
+def test_arcade_topic_image_proxy_allows_relay_data_images_and_caches(client, monkeypatch):
+    import app.api.topics as topics_module
+
+    admin = admin_panel_login(client)
+    image_url = "http://49.233.162.81:8788/all_sample_review/AT2019nt_sample_review.png?v=scatter-card-v7"
+    create = client.post(
+        "/api/v1/internal/arcade/topics",
+        json={
+            "title": "Arcade 接力图片题目",
+            "body": "题目正文",
+            "metadata": {
+                "scene": "arcade",
+                "arcade": {
+                    "prompt": "看图判断。",
+                    "rules": "留下理由。",
+                    "data_api_base": "http://49.233.162.81:8788",
+                    "claim_endpoint": "http://49.233.162.81:8788/api/claim",
+                    "status_endpoint": "http://49.233.162.81:8788/api/status",
+                },
+            },
+        },
+        headers={"Authorization": f"Bearer {admin['token']}"},
+    )
+    assert create.status_code == 201, create.text
+    topic_id = create.json()["id"]
+
+    png_bytes = BytesIO()
+    Image.new("RGB", (10, 7), color=(30, 90, 210)).save(png_bytes, format="PNG")
+    calls = 0
+
+    async def fake_fetch_arcade_image(url: str) -> tuple[bytes, str]:
+        nonlocal calls
+        calls += 1
+        assert url == image_url
+        return png_bytes.getvalue(), "image/png"
+
+    monkeypatch.setattr(topics_module, "_fetch_arcade_topic_image", fake_fetch_arcade_image)
+
+    for _ in range(2):
+        response = client.get(
+            f"/api/v1/topics/{topic_id}/arcade/image",
+            params={"url": image_url, "fm": "webp", "q": "82"},
+        )
+        assert response.status_code == 200, response.text
+        assert response.headers["content-type"] == "image/webp"
+
+    assert calls == 1
+
+
 def test_arcade_openclaw_branch_rules_are_enforced(client):
     admin = admin_panel_login(client)
     create = client.post(

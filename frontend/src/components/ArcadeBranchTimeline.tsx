@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import { Post } from '../api/client'
 import ReactionButton from './ReactionButton'
-import { isVideoMediaSrc, resolveTopicImageSrc } from '../utils/topicImage'
+import { isVideoMediaSrc, resolveArcadeTopicImageSrc, resolveTopicImageSrc } from '../utils/topicImage'
 import { getArcadeKind, getArcadeScore } from '../utils/arcade'
 
 function HeartIcon() {
@@ -399,7 +399,7 @@ function CompactArcadeEntry({
 
           <div className="rounded-[0.8rem] border border-gray-100 bg-white px-3 py-2.5">
             {relayRows.length > 0 ? (
-              <RelaySubmissionCards rows={relayRows} expanded={expanded} />
+              <RelaySubmissionCards rows={relayRows} expanded={expanded} topicId={post.topic_id} />
             ) : (
               <div className={`markdown-content markdown-content-compact arcade-post-body text-sm text-gray-700 ${
                 !expanded && needsClamp ? 'max-h-24 overflow-hidden' : ''
@@ -473,21 +473,27 @@ function CompactArcadeEntry({
 function RelaySubmissionCards({
   rows,
   expanded,
+  topicId,
 }: {
   rows: RelaySubmissionRow[]
   expanded: boolean
+  topicId: string
 }) {
   const visibleRows = expanded ? rows : rows.slice(0, 2)
   return (
     <div className="space-y-3">
       {visibleRows.map((row, index) => {
-        const imageSrc = reviewDisplayImageUrl(row.imageUrl)
+        const reviewUrl = reviewImageUrl(row.imageUrl)
+        const imageSrc = resolveArcadeTopicImageSrc(topicId, reviewDisplayImageUrl(row.imageUrl), { quality: 82, format: 'webp' })
+        const reviewHref = resolveArcadeTopicImageSrc(topicId, reviewUrl)
+        const scatterHref = resolveArcadeTopicImageSrc(topicId, scatterImageUrl(row.imageUrl))
+        const submittedHref = resolveArcadeTopicImageSrc(topicId, row.imageUrl)
         const roleLabel = ROLE_LABELS[row.role] ?? row.role
         const followupLabel = row.needsFollowup === 'yes' ? '建议回看' : '暂不追'
         return (
           <div key={`${row.imageUrl}-${index}`} className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50/70">
             <div className="grid items-start gap-4 p-3 lg:grid-cols-[minmax(34rem,1.32fr)_minmax(22rem,0.68fr)]">
-              <a href={reviewImageUrl(row.imageUrl)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-slate-200 bg-white">
+              <a href={reviewHref} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-slate-200 bg-white">
                 <img src={imageSrc} alt={`${row.sourceId} 复核图`} loading="lazy" className="h-auto w-full" />
               </a>
               <div className="space-y-2.5 rounded-xl bg-white/70 p-3 shadow-sm">
@@ -520,8 +526,8 @@ function RelaySubmissionCards({
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2 text-xs">
-                  <a href={scatterImageUrl(row.imageUrl)} target="_blank" rel="noreferrer" className="rounded-full bg-white px-2.5 py-1 text-slate-500 underline-offset-2 hover:text-black hover:underline">原始散点</a>
-                  <a href={row.imageUrl} target="_blank" rel="noreferrer" className="rounded-full bg-white px-2.5 py-1 text-slate-500 underline-offset-2 hover:text-black hover:underline">提交图</a>
+                  <a href={scatterHref} target="_blank" rel="noreferrer" className="rounded-full bg-white px-2.5 py-1 text-slate-500 underline-offset-2 hover:text-black hover:underline">原始散点</a>
+                  <a href={submittedHref} target="_blank" rel="noreferrer" className="rounded-full bg-white px-2.5 py-1 text-slate-500 underline-offset-2 hover:text-black hover:underline">提交图</a>
                 </div>
               </div>
             </div>

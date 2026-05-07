@@ -9,7 +9,7 @@ import os
 import secrets
 import time
 from hashlib import sha256
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 from io import BytesIO
 from pathlib import Path
 import tempfile
@@ -107,6 +107,7 @@ from app.storage.database.topic_store import (
 router = APIRouter()
 
 _PREVIEW_CACHE_DIRNAME = ".generated_image_previews"
+_ARCADE_IMAGE_CACHE_DIRNAME = ".arcade_image_cache"
 _PREVIEW_DEFAULT_QUALITY = 72
 _PREVIEW_DEFAULT_FORMAT = "webp"
 _PREVIEW_MAX_DIMENSION = 2048
@@ -115,6 +116,18 @@ _ARCADE_IMAGE_METADATA_FIELDS = (
     "route_image_url",
     "cluster_overview_image_url",
     "science_candidate_image_url",
+)
+_ARCADE_RELAY_IMAGE_BASE_FIELDS = (
+    "data_api_base",
+    "relay_api_base",
+    "claim_endpoint",
+    "status_endpoint",
+)
+_ARCADE_RELAY_IMAGE_PATH_PREFIXES = (
+    "/all_sample_review/",
+    "/all_sample_scatter/",
+    "/all_sample_gp/",
+    "/public/",
 )
 _DISCUSSION_SYNC_INTERVAL_SECONDS = 2.0
 _STATUS_CACHE_TTL_SECONDS = float(os.getenv("DISCUSSION_STATUS_CACHE_TTL_SECONDS", "1.5"))
@@ -613,6 +626,18 @@ def _preview_cache_dir(topic_id: str) -> Path:
     return cache_dir
 
 
+def _arcade_image_cache_dir(topic_id: str) -> Path:
+    cache_dir = _topic_workspace(topic_id) / "shared" / _ARCADE_IMAGE_CACHE_DIRNAME
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
+
+
+def _arcade_image_cache_paths(topic_id: str, url: str) -> tuple[Path, Path]:
+    cache_key = sha256(url.encode("utf-8")).hexdigest()
+    cache_dir = _arcade_image_cache_dir(topic_id)
+    return cache_dir / f"{cache_key}.bin", cache_dir / f"{cache_key}.json"
+
+
 def _resolve_generated_image_path(topic_id: str, asset_path: str) -> Path:
     generated_dir = (_topic_workspace(topic_id) / "shared" / "generated_images").resolve()
     target = (generated_dir / asset_path).resolve()
@@ -765,6 +790,45 @@ def _get_declared_arcade_image_urls(topic: dict) -> set[str]:
     }
 
 
+def _get_arcade_metadata(topic: dict) -> dict:
+    metadata = topic.get("metadata")
+    if not isinstance(metadata, dict):
+        return {}
+    arcade = metadata.get("arcade")
+    return arcade if isinstance(arcade, dict) else {}
+
+
+def _external_url_origin(value: str) -> str:
+    parsed = urlparse(value.strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return ""
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _get_arcade_relay_image_origins(topic: dict) -> set[str]:
+    arcade = _get_arcade_metadata(topic)
+    return {
+        origin
+        for field in _ARCADE_RELAY_IMAGE_BASE_FIELDS
+        if isinstance(value := arcade.get(field), str)
+        if (origin := _external_url_origin(value))
+    }
+
+
+def _is_arcade_relay_image_url(topic: dict, url: str) -> bool:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return False
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    if origin not in _get_arcade_relay_image_origins(topic):
+        return False
+    return any(parsed.path.startswith(prefix) for prefix in _ARCADE_RELAY_IMAGE_PATH_PREFIXES)
+
+
+def _is_allowed_arcade_image_url(topic: dict, url: str) -> bool:
+    return url in _get_declared_arcade_image_urls(topic) or _is_arcade_relay_image_url(topic, url)
+
+
 async def _fetch_arcade_topic_image(url: str) -> tuple[bytes, str]:
     try:
         async with httpx.AsyncClient(timeout=12.0, follow_redirects=True) as client:
@@ -781,6 +845,27 @@ async def _fetch_arcade_topic_image(url: str) -> tuple[bytes, str]:
 
     content_type = response.headers.get("content-type", "application/octet-stream").split(";", 1)[0].strip()
     return response.content, content_type or "application/octet-stream"
+
+
+async def _fetch_cached_arcade_topic_image(topic_id: str, url: str) -> tuple[bytes, str]:
+    data_path, meta_path = _arcade_image_cache_paths(topic_id, url)
+    if data_path.exists() and meta_path.exists():
+        try:
+            metadata = json.loads(meta_path.read_text(encoding="utf-8"))
+            content_type = metadata.get("content_type")
+            if isinstance(content_type, str) and content_type:
+                return data_path.read_bytes(), content_type
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    image_bytes, content_type = await _fetch_arcade_topic_image(url)
+    cache_dir = data_path.parent
+    with tempfile.NamedTemporaryFile(delete=False, dir=cache_dir) as tmp:
+        tmp.write(image_bytes)
+        tmp_path = Path(tmp.name)
+    os.replace(tmp_path, data_path)
+    meta_path.write_text(json.dumps({"url": url, "content_type": content_type}, ensure_ascii=False), encoding="utf-8")
+    return image_bytes, content_type
 
 
 def _build_posts_context(posts: list[dict]) -> str:
@@ -2738,10 +2823,11 @@ async def get_arcade_topic_image_endpoint(
     topic = get_topic(topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
-    if url.strip() not in _get_declared_arcade_image_urls(topic):
+    requested_url = url.strip()
+    if not _is_allowed_arcade_image_url(topic, requested_url):
         raise HTTPException(status_code=403, detail="Arcade image is not declared on this topic")
 
-    image_bytes, content_type = await _fetch_arcade_topic_image(url.strip())
+    image_bytes, content_type = await _fetch_cached_arcade_topic_image(topic_id, requested_url)
     if fm == "webp" and content_type.lower() != "image/svg+xml":
         return Response(
             content=_create_generated_image_preview_bytes(

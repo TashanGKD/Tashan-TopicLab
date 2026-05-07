@@ -9,6 +9,20 @@ interface ArcadeTopicIntroCardProps {
   renderMarkdown: (value: string, topicId: string) => ReactNode
 }
 
+const DATA_SAMPLE_RELAY_ASSET_BASE = '/media/arcade/103-data-sample-relay-review'
+const DATA_SAMPLE_RELAY_LOCAL_ASSETS: Record<string, string> = {
+  'aida-public-science.svg': `${DATA_SAMPLE_RELAY_ASSET_BASE}/aida-public-science.svg`,
+  'sample-level-route-cn.png': `${DATA_SAMPLE_RELAY_ASSET_BASE}/sample-level-route-cn.png`,
+  'cluster-review-first-pages-mosaic.png': `${DATA_SAMPLE_RELAY_ASSET_BASE}/cluster-review-first-pages-mosaic.png`,
+  'manual-recheck-science-candidates.png': `${DATA_SAMPLE_RELAY_ASSET_BASE}/manual-recheck-science-candidates.png`,
+}
+
+function resolveBundledArcadeReferenceImageUrl(src: string): string {
+  if (!src) return ''
+  const fileName = decodeURIComponent(src.split('?')[0].split('#')[0].split('/').pop() || '')
+  return DATA_SAMPLE_RELAY_LOCAL_ASSETS[fileName] ?? src
+}
+
 export default function ArcadeTopicIntroCard({
   topicId,
   metadata,
@@ -19,10 +33,10 @@ export default function ArcadeTopicIntroCard({
   const arcadePrompt = getArcadePrompt(metadata)
   const arcadeRules = getArcadeRules(metadata)
   const externalRelay = getArcadeExternalRelay(metadata)
-  const heroImageUrl = typeof arcadeMeta?.hero_image_url === 'string' ? arcadeMeta.hero_image_url : ''
-  const routeImageUrl = typeof arcadeMeta?.route_image_url === 'string' ? arcadeMeta.route_image_url : ''
-  const clusterOverviewImageUrl = typeof arcadeMeta?.cluster_overview_image_url === 'string' ? arcadeMeta.cluster_overview_image_url : ''
-  const scienceCandidateImageUrl = typeof arcadeMeta?.science_candidate_image_url === 'string' ? arcadeMeta.science_candidate_image_url : ''
+  const heroImageUrl = resolveBundledArcadeReferenceImageUrl(typeof arcadeMeta?.hero_image_url === 'string' ? arcadeMeta.hero_image_url : '')
+  const routeImageUrl = resolveBundledArcadeReferenceImageUrl(typeof arcadeMeta?.route_image_url === 'string' ? arcadeMeta.route_image_url : '')
+  const clusterOverviewImageUrl = resolveBundledArcadeReferenceImageUrl(typeof arcadeMeta?.cluster_overview_image_url === 'string' ? arcadeMeta.cluster_overview_image_url : '')
+  const scienceCandidateImageUrl = resolveBundledArcadeReferenceImageUrl(typeof arcadeMeta?.science_candidate_image_url === 'string' ? arcadeMeta.science_candidate_image_url : '')
   const arcadeImageOptions = { quality: 82, format: 'webp' as const }
   const heroImageSrc = resolveArcadeTopicImageSrc(topicId, heroImageUrl, arcadeImageOptions)
   const routeImageSrc = resolveArcadeTopicImageSrc(topicId, routeImageUrl, arcadeImageOptions)
@@ -106,23 +120,29 @@ export default function ArcadeTopicIntroCard({
         </div>
       ) : null}
       {routeImageUrl || clusterOverviewImageUrl || scienceCandidateImageUrl ? (
-        <div className="mt-4 space-y-3">
-          {routeImageUrl ? (
-            <a href={routeImageUrl} target="_blank" rel="noreferrer" className="block rounded-2xl border border-white bg-white p-2 shadow-sm">
-              <img src={routeImageSrc} alt="Sample 层级路线图" className="h-auto w-full rounded-xl" loading="lazy" />
-            </a>
-          ) : null}
-          {clusterOverviewImageUrl ? (
-            <a href={clusterOverviewImageUrl} target="_blank" rel="noreferrer" className="block rounded-2xl border border-white bg-white p-2 shadow-sm">
-              <img src={clusterOverviewImageSrc} alt="Cluster Review 每簇第一页总览" className="h-auto w-full rounded-xl" loading="lazy" />
-            </a>
-          ) : null}
-          {scienceCandidateImageUrl ? (
-            <a href={scienceCandidateImageUrl} target="_blank" rel="noreferrer" className="block rounded-2xl border border-white bg-white p-2 shadow-sm">
-              <img src={scienceCandidateImageSrc} alt="人工复核候选源示意图" className="h-auto w-full rounded-xl" loading="lazy" />
-            </a>
-          ) : null}
-        </div>
+        <details className="mt-4 rounded-2xl border border-gray-200 bg-white/80 p-4 text-sm text-slate-700">
+          <summary className="cursor-pointer font-semibold text-slate-950">展开样本池与复核参考图</summary>
+          <p className="mt-2 leading-7 text-slate-600">
+            这里放的是样本筛选路线、聚类总览和人工复核参考图，用来理解这批数据从哪里来、为什么值得接力看；本轮真正要提交的 5 张图会在领取后单独出现。
+          </p>
+          <div className="mt-3 space-y-3">
+            {routeImageUrl ? (
+              <a href={routeImageUrl} target="_blank" rel="noreferrer" className="block rounded-2xl border border-white bg-white p-2 shadow-sm">
+                <img src={routeImageSrc} alt="Sample 层级路线图" className="h-auto w-full rounded-xl" loading="lazy" />
+              </a>
+            ) : null}
+            {clusterOverviewImageUrl ? (
+              <a href={clusterOverviewImageUrl} target="_blank" rel="noreferrer" className="block rounded-2xl border border-white bg-white p-2 shadow-sm">
+                <img src={clusterOverviewImageSrc} alt="Cluster Review 每簇第一页总览" className="h-auto w-full rounded-xl" loading="lazy" />
+              </a>
+            ) : null}
+            {scienceCandidateImageUrl ? (
+              <a href={scienceCandidateImageUrl} target="_blank" rel="noreferrer" className="block rounded-2xl border border-white bg-white p-2 shadow-sm">
+                <img src={scienceCandidateImageSrc} alt="人工复核候选源示意图" className="h-auto w-full rounded-xl" loading="lazy" />
+              </a>
+            ) : null}
+          </div>
+        </details>
       ) : null}
       {arcadePrompt || arcadeRules ? (
         <details className="mt-4 rounded-2xl border border-gray-200 bg-white/80 p-4 text-sm text-gray-700">
