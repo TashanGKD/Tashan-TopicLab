@@ -407,12 +407,17 @@ def test_arcade_openclaw_branch_rules_are_enforced(client):
     assert branch_a_root["metadata"]["arcade"]["version"] == 1
     assert branch_a_root["metadata"]["arcade"]["branch_owner_openclaw_agent_id"] == branch_a_root["owner_openclaw_agent_id"]
 
-    duplicate_root = client.post(
+    implicit_append_resp = client.post(
         f"/api/v1/openclaw/topics/{topic_id}/posts",
-        json={"body": '["duplicate"]'},
+        json={"body": '["alpha", "beta", "gamma"]'},
         headers={"Authorization": f"Bearer {openclaw_a['openclaw_key']}"},
     )
-    assert duplicate_root.status_code == 409, duplicate_root.text
+    assert implicit_append_resp.status_code == 201, implicit_append_resp.text
+    implicit_append = implicit_append_resp.json()["post"]
+    assert implicit_append["in_reply_to_id"] == branch_a_root["id"]
+    assert implicit_append["root_post_id"] == branch_a_root["id"]
+    assert implicit_append["metadata"]["arcade"]["branch_root_post_id"] == branch_a_root["id"]
+    assert implicit_append["metadata"]["arcade"]["version"] == 2
 
     write_other_branch = client.post(
         f"/api/v1/openclaw/topics/{topic_id}/posts",
@@ -430,12 +435,12 @@ def test_arcade_openclaw_branch_rules_are_enforced(client):
 
     branch_a_second_resp = client.post(
         f"/api/v1/openclaw/topics/{topic_id}/posts",
-        json={"body": '["alpha", "beta", "gamma"]', "in_reply_to_id": branch_a_root["id"]},
+        json={"body": '["alpha", "beta", "gamma", "delta"]', "in_reply_to_id": implicit_append["id"]},
         headers={"Authorization": f"Bearer {openclaw_a['openclaw_key']}"},
     )
     assert branch_a_second_resp.status_code == 201, branch_a_second_resp.text
     branch_a_second = branch_a_second_resp.json()["post"]
-    assert branch_a_second["metadata"]["arcade"]["version"] == 2
+    assert branch_a_second["metadata"]["arcade"]["version"] == 3
 
     non_leaf_reply = client.post(
         f"/api/v1/openclaw/topics/{topic_id}/posts",
@@ -1028,6 +1033,27 @@ def test_arcade_evaluator_secret_can_list_pending_submissions_and_reply(client):
     )
     assert empty_queue.status_code == 200, empty_queue.text
     assert empty_queue.json()["items"] == []
+
+    revised_resp = client.post(
+        f"/api/v1/openclaw/topics/{topic_id}/posts",
+        json={"body": "根据评测意见提交第二轮答案"},
+        headers={"Authorization": f"Bearer {owner['openclaw_key']}"},
+    )
+    assert revised_resp.status_code == 201, revised_resp.text
+    revised_submission = revised_resp.json()["post"]
+    assert revised_submission["in_reply_to_id"] == evaluation_post["id"]
+    assert revised_submission["root_post_id"] == submission["id"]
+    assert revised_submission["metadata"]["arcade"]["version"] == 2
+
+    queue_after_revision = client.get(
+        "/api/v1/internal/arcade/review-queue",
+        headers={"X-Arcade-Secret-Key": "arcade-review-secret"},
+    )
+    assert queue_after_revision.status_code == 200, queue_after_revision.text
+    revised_items = queue_after_revision.json()["items"]
+    assert len(revised_items) == 1
+    assert revised_items[0]["branch_root_post_id"] == submission["id"]
+    assert revised_items[0]["submission_post"]["id"] == revised_submission["id"]
 
 
 def test_topic_list_uses_latest_post_oss_image_as_preview_fallback(client):

@@ -2193,7 +2193,14 @@ async def create_post_endpoint(topic_id: str, req: CreatePostRequest, user: dict
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
     if _is_arcade_topic(topic):
-        raise HTTPException(status_code=403, detail="Arcade topics are read-only on the web; use OpenClaw dedicated routes")
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Arcade topics are read-only on the standard posts API. "
+                "Use POST /api/v1/openclaw/topics/{topic_id}/posts with an OpenClaw key; "
+                "repeated Arcade submissions append to that agent's branch."
+            ),
+        )
     await _moderate_or_raise(req.body, scenario="topic_post")
     author_name = _resolve_author_name(req.author, user)
     owner_user_id, owner_auth_type = _resolve_owner_identity(user)
