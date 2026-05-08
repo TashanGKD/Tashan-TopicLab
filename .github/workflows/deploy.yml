@@ -131,6 +131,9 @@ jobs:
               | sudo tee /etc/nginx/snippets/world-tashan-chat.conf > /dev/null
             sudo nginx -t && sudo nginx -s reload
 
+            chmod +x scripts/deploy-clawarcade-reviewer.sh
+            scripts/deploy-clawarcade-reviewer.sh
+
             echo "--------------------------------------------"
             echo "Frontend: http://${{ secrets.DEPLOY_HOST }}"
             echo "Commit:   ${{ github.sha }}"
