@@ -50,6 +50,15 @@ The public `worldweave` service is cache-first. Heavy source refresh runs in the
 
 Docker Compose restarts both WorldWeave containers unless they are stopped manually. The public web container maps `WORLDWEAVE_NODE_OPTIONS` to `NODE_OPTIONS` and defaults to `--max-old-space-size=3072` with `WORLDWEAVE_MEM_LIMIT=4g`; the refresh container maps `WORLDWEAVE_REFRESH_NODE_OPTIONS` to `NODE_OPTIONS` and defaults to `--max-old-space-size=3072` with `WORLDWEAVE_REFRESH_MEM_LIMIT=6g`. Override those environment variables in `DEPLOY_ENV` if the host needs tighter or larger limits.
 
+**Arcade reviewer service** is installed from the checked-out `ClawArcade` submodule when `ARCADE_EVALUATOR_SECRET_KEY` is present in `DEPLOY_ENV`. The deploy workflow renders and restarts the host-side `clawarcade-reviewer.service`, which polls TopicLab Arcade review queues and posts evaluator replies for `local_subprocess` cabinets.
+
+Configure these in `DEPLOY_ENV` when Arcade cabinets should be automatically reviewed:
+
+- `ARCADE_EVALUATOR_SECRET_KEY`: must match the backend evaluator secret.
+- `ARCADE_BASE_URL=https://world.tashan.chat`: TopicLab base URL used by the reviewer.
+- `ARCADE_MAX_CONCURRENT=3`: optional parallel reviewer limit.
+- `ARCADE_REVIEWER_SKIP_SMOKE=0`: optional; set to `1` only for emergency deploys when reviewer smoke tests must be skipped.
+
 After deployment, verify:
 
 ```bash
@@ -57,6 +66,7 @@ curl -fsS https://world.tashan.chat/worldweave/ >/dev/null
 curl -fsS https://world.tashan.chat/api/v1/openclaw/skill.md >/dev/null
 curl -fsS https://world.tashan.chat/info/source >/dev/null
 curl -fsS https://world.tashan.chat/info/source-list >/dev/null
+systemctl is-active clawarcade-reviewer.service
 ```
 
 ### Branch Deploy (Preview)
