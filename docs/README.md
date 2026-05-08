@@ -2,6 +2,8 @@
 
 This directory contains product-level documentation for the integrated TopicLab stack. For Resonnet implementation details, see [../backend/docs/README.md](../backend/docs/README.md).
 
+Current release documented here: `1.10.0` (2026-05-09). Keep [../CHANGELOG.md](../CHANGELOG.md), root READMEs, and the nearest feature/config document in sync when the runtime surface changes.
+
 ## Directory Structure
 
 ```
@@ -16,6 +18,7 @@ docs/
 ## Documentation Conventions
 
 - Keep docs aligned with the current service boundary: `topiclab-backend` owns business state, Resonnet owns execution and workspace artifacts.
+- Treat `worldweave` and `ClawArcade` as submodule-owned runtimes: document TopicLab integration contracts here, and keep cabinet/runtime internals in the submodule docs.
 - When API paths, environment variables, or integration flows change, update `CHANGELOG.md` and the nearest README/doc entry together.
 - Prefer adding focused docs under the relevant subdirectory instead of expanding the root README with feature-specific detail.
 - `topiclab-cli` now lives as a git submodule in the repo root. Local OpenClaw/CLI protocol verification should use the Docker smoke wrapper instead of ad-hoc curl scripts.
@@ -38,6 +41,7 @@ docs/
 | [openclaw-cli-first.md](architecture/openclaw-cli-first.md) | CLI-first TopicLab local runtime, thin OpenClaw bridge, and agent-facing command contract |
 | [openclaw-digital-twin-runtime.md](architecture/openclaw-digital-twin-runtime.md) | Digital twin runtime, scene overlays, and V1 user-requirement event accumulation between TopicLab and OpenClaw |
 | [openclaw-topiclab-api-schema.md](architecture/openclaw-topiclab-api-schema.md) | Concrete API schema, table design, and migration draft for TopicLab-side OpenClaw CLI support |
+| [topiclab-skill-registry-integration.md](architecture/topiclab-skill-registry-integration.md) | SkillHub / Skill Registry integration across website, backend, and `topiclab-cli` |
 | [topic-service-boundary.md](architecture/topic-service-boundary.md) | Service boundary: TopicLab Backend vs Resonnet |
 | [topiclab-performance-optimization.md](architecture/topiclab-performance-optimization.md) | Pagination, optimistic UI, short-TTL cache, delayed rendering |
 
@@ -46,7 +50,7 @@ docs/
 | Document | Description |
 |----------|-------------|
 | [arcade-arena.md](features/arcade-arena.md) | Arcade task model, metadata contract, OpenClaw flow, evaluator APIs |
-| [community-operations-observability.md](features/community-operations-observability.md) | Community operations metrics, dashboard design, telemetry gaps, and implementation roadmap |
+| [community-operations-observability.md](features/community-operations-observability.md) | Community operations metrics, admin APIs, OpenClaw/user rollups, and operating notes |
 | [digital-twin-lifecycle.md](features/digital-twin-lifecycle.md) | Digital twin lifecycle: create, publish, share, history |
 | [points-system.md](features/points-system.md) | Points system: wallet, ledger, settlement rules, surfaces, and current mismatches |
 | [share-flow-sequence.md](features/share-flow-sequence.md) | Share flow sequence diagrams (expert / moderator mode library) |
@@ -80,6 +84,7 @@ docs/
 - **OpenClaw CLI proposal**: [openclaw-cli-first.md](architecture/openclaw-cli-first.md)
 - **Digital twin runtime and requirement events**: [openclaw-digital-twin-runtime.md](architecture/openclaw-digital-twin-runtime.md)
 - **API schema draft**: [openclaw-topiclab-api-schema.md](architecture/openclaw-topiclab-api-schema.md)
+- **SkillHub / Skill Registry**: [topiclab-skill-registry-integration.md](architecture/topiclab-skill-registry-integration.md)
 - **Performance**: [topiclab-performance-optimization.md](architecture/topiclab-performance-optimization.md)
 - **Arcade**: [arcade-arena.md](features/arcade-arena.md)
 - **Community ops and observability**: [community-operations-observability.md](features/community-operations-observability.md)

@@ -34,12 +34,20 @@ The deploy workflow (`.github/workflows/deploy.yml`) runs on push to `main`. It 
 
 **Note:** `.env.deploy.example` is the production template; its structure matches local `.env.example`. Use real API keys in production; do not use the `test` placeholder.
 
-**Frontend base path** must match the host nginx. For world.tashan.chat (root deployment), set `VITE_BASE_PATH=/` in `DEPLOY_ENV`. See [API 路径配置](api-path-config.md) for details.
+**Frontend base path** must match the host nginx. For world.tashan.chat (root deployment), set `VITE_BASE_PATH=/` in `DEPLOY_ENV`; for subpath deployments, set it to the mounted path such as `/topic-lab/`.
 
 **topiclab-backend (account service)** is built and started automatically during deployment. Configure these in `DEPLOY_ENV`:
 - `DATABASE_URL`: PostgreSQL connection string (required in production, otherwise in-memory storage is used)
 - `JWT_SECRET`: JWT signing secret (required in production)
+- `ADMIN_PANEL_PASSWORD`: admin-panel login password for `/admin/*`
 - `SMSBAO_USERNAME` / `SMSBAO_PASSWORD`: SMSBao credentials (optional; if omitted, verification codes are shown in page/logs)
+
+Admin observability uses optional tuning variables:
+
+- `ADMIN_OBSERVABILITY_TIMEZONE=Asia/Shanghai`: day boundary for community rollups.
+- `ADMIN_OBSERVABILITY_EVENT_LIMIT=5000`: recent event scan limit for rollup construction.
+
+OpenClaw ask-agent is optional. Configure `OPENCLAW_ASK_AGENT_URL`, `OPENCLAW_ASK_AGENT_TOKEN`, `OPENCLAW_ASK_PROJECT_ID`, and `OPENCLAW_ASK_SESSION_ID` only when production should return ask-agent settings during bootstrap/renew so `topiclab help ask` can call the advisory service directly.
 
 **WorldWeave source service** is built from the checked-out `worldweave` submodule and started by Docker Compose. Configure these in `DEPLOY_ENV`:
 - `MINIMAX_API_KEY`: required for WorldWeave model calls and Qwen3 embeddings
@@ -57,6 +65,7 @@ Configure these in `DEPLOY_ENV` when Arcade cabinets should be automatically rev
 - `ARCADE_EVALUATOR_SECRET_KEY`: must match the backend evaluator secret.
 - `ARCADE_BASE_URL=https://world.tashan.chat`: TopicLab base URL used by the reviewer.
 - `ARCADE_MAX_CONCURRENT=3`: optional parallel reviewer limit.
+- `ARCADE_REVIEWER_BASE_URL=https://world.tashan.chat`: optional explicit reviewer base URL; defaults should match the public TopicLab base.
 - `ARCADE_REVIEWER_SKIP_SMOKE=0`: optional; set to `1` only for emergency deploys when reviewer smoke tests must be skipped.
 
 After deployment, verify:
@@ -66,8 +75,11 @@ curl -fsS https://world.tashan.chat/worldweave/ >/dev/null
 curl -fsS https://world.tashan.chat/api/v1/openclaw/skill.md >/dev/null
 curl -fsS https://world.tashan.chat/info/source >/dev/null
 curl -fsS https://world.tashan.chat/info/source-list >/dev/null
+curl -fsS https://world.tashan.chat/api/v1/skill-hub/skills >/dev/null
 systemctl is-active clawarcade-reviewer.service
 ```
+
+The reviewer service is optional. If `ARCADE_EVALUATOR_SECRET_KEY` is intentionally absent, production deploy can still serve TopicLab and WorldWeave; Arcade `local_subprocess` tasks simply will not receive automatic evaluator replies.
 
 ### Branch Deploy (Preview)
 

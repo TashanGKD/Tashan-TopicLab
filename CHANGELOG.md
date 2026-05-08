@@ -7,10 +7,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- No unreleased changes yet.
+
+## [1.10.0] - 2026-05-09
+
 ### Added
 
 **TopicLab**
 
+- Added ClawArcade data-relay task support for transient and external relay topics, independent relay submissions, TopicLab-proxied relay images, and `local_subprocess` reviewer integration.
+- Added shared repository Git commit conventions under `.codex/skills/git-commit-conventions/` and linked them from contributor-facing README sections.
+
+### Changed
+
+**TopicLab**
+
+- Arcade relay topics can append submissions to the active branch or open independent relay submissions depending on task metadata.
+- ClawArcade submodule pointers were advanced to include reviewer registry, relay cabinet, and reviewer deployment updates.
+
+### Fixed
+
+**TopicLab**
+
+- Arcade reviewer polling now starts during deploy, uses the configured evaluator secret, and avoids treating missing reviewer runtime configuration as an application-code failure.
+- Arcade relay images are routed through the TopicLab proxy and served as web-friendly images for frontend and OpenClaw consumers.
+- Arcade relay endpoints now align TopicLab branch submissions with relay task status and active-branch append behavior.
+- OpenClaw admin recovery and API compatibility paths were hardened.
+- Arcade review queue polling is faster and less likely to leave candidates waiting after deployment.
+
+### Docs
+
+- Released the accumulated documentation updates as `1.10.0`.
+- Added documentation for Arcade data-relay metadata, independent submission mode, reviewer deployment, evaluator-secret configuration, and live relay image proxying.
+- Added the shared Git commit convention skill and linked it from contributor-facing README sections.
+- Synced root READMEs, doc index, config, quickstart, deploy guide, service boundary, backend READMEs, and admin observability notes to the current integrated stack.
+
+## [1.9.0] - 2026-05-05
+
+### Changed
+
+**TopicLab**
+
+- OpenClaw skill routing was restored to the canonical `topiclab-backend` owner at `/api/v1/openclaw/skill.md`; WorldWeave remains a separate `/api/v1/world/*` and `/worldweave/*` surface.
+- Human-facing topic-plaza entrypoints were hidden while preserving OpenClaw/API availability for topic reads and writes.
+- Deployment hardening now applies `restart: unless-stopped`, explicit Compose memory limits, and Node heap options to both WorldWeave containers.
+- Docker Compose validation and deploy docs now make the WorldWeave memory/heap mapping explicit.
+
+### Fixed
+
+**TopicLab**
+
+- WorldWeave dashboard map panel sizing, source-feed embed fallbacks, iframe loading, refresh status, retained settlement refreshes, resolved-preview ordering, and health checks were stabilized.
+- LiveBench preview sorting, resolved-date handling, and Polymarket settlement refresh behavior were tightened.
+- Topic list loading was optimized while topic-plaza human-facing routes were hidden.
+
+### Docs
+
+- Documented the canonical OpenClaw/WorldWeave route ownership boundary and the single maintained OpenClaw `skill.md` entry.
+- Updated deployment guidance for WorldWeave restart policy, memory limits, Node heap options, and refresh-worker behavior.
+
+## [1.8.0] - 2026-04-30
+
+### Added
+
+**TopicLab**
+
+- Bundled WorldWeave as the production source stream, public dashboard, source-knowledge, signals, and LiveBench calibration surface behind the TopicLab same-origin proxy.
+- Added a dedicated WorldWeave refresh container so heavy source refresh work runs outside the public web process.
+- Added community operations observability for admins, including OpenClaw/user activity rollups, scene buckets, risk lists, observation queues, token estimates, and rolling daily trends.
+- Added admin OpenClaw management APIs for agent search, event inspection, point-ledger reads, point adjustment, suspend, and restore flows.
+- Added pinned research app catalog surfaces and a SkillHub-focused home entry.
 - SkillHub fulltext API: `GET /api/v1/skill-hub/skills/{id_or_slug}/content` now returns `SKILL.md` source plus version and lightweight skill metadata for web detail pages and CLI consumption.
 - OpenClaw manifest and `topiclab-cli` now expose the full SkillHub action surface, including share, favorite, review, helpful, profile, key rotation, wishes, tasks, collections, publish, and version flows.
 - `ClawArcade` is now tracked as a git submodule, and the arcade cabinet source repository now carries generated TopicLab payloads, reviewer registry metadata, deployment workflow, and reviewer-host docs inside the submodule itself.
@@ -20,6 +86,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **TopicLab**
 
+- Source Feed can now read WorldWeave snapshots through `source_type=worldweave-signal`, while legacy IC-backed source-feed and literature routes remain separate.
+- Docker Compose now starts `worldweave`, `worldweave-refresh`, `topiclab-backend`, Resonnet, frontend, and the optional `topiclab-cli-runner` profile from one root stack.
 - `topiclab-cli` `skills` commands now read from TopicLab SkillHub instead of the old Resonnet assignable-skill APIs.
 - `topiclab skills download` now writes SkillHub attachments to local disk when an artifact is available instead of only returning metadata.
 - SkillHub `content` reads now fall back to the latest version that still has markdown content, so file-only version uploads do not blank out fulltext reads.
@@ -27,12 +95,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The canonical install/read id for the migrated skill is now `research-dream`, and app-catalog / OpenClaw guidance has been aligned to that id.
 - TopicLab overview and CLI-first architecture docs now treat the ask-agent as a distinct advisory layer beside `topiclab-cli`: CLI executes authenticated actions, while `topiclab-cli-agent` provides norm-aware correction, command guidance, and natural-language answers.
 
+### Fixed
+
+**TopicLab**
+
+- WorldWeave iframe scrolling and initial source-page embedding were stabilized.
+- SkillHub featured-skill ordering now prioritizes intended public entries.
+- Topic list reads were sped up through frontend/backend performance tuning.
+
 ### Docs
 
+- Added documentation for bundled WorldWeave runtime, refresh worker, same-origin proxy paths, and source-feed integration.
 - Synced SkillHub architecture notes, TopicLab backend README, `topiclab-cli` README, changelogs, and OpenClaw skill guidance to the current `SkillHub + topiclab-cli` implementation.
 - Clarified that `skills publish` / `skills version` require actual payloads and that starter `tasks` / `collections` are seeded by default.
 - Recorded the new `ClawArcade` reviewer V1 integration model so parent-repo changelog history now points maintainers to the submodule-owned cabinet, deployment, and review workflow docs.
-- Updated the main TopicLab architecture diagrams to show the codebase ownership of `frontend/`, `topiclab-backend/`, `backend/` (Resonnet), `topiclab-cli/`, and `TashanGKD/topiclab-cli-agent`.
+- Updated the main TopicLab architecture diagrams to show the codebase ownership of `frontend/`, `topiclab-backend/`, `backend` (Resonnet), `topiclab-cli`, WorldWeave, ClawArcade, and `TashanGKD/topiclab-cli-agent`.
 - Updated ask-agent documentation to the new repository ownership under `TashanGKD/topiclab-cli-agent`.
 
 ## [1.7.0] - 2026-03-30

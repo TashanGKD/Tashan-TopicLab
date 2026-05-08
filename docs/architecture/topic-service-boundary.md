@@ -12,6 +12,12 @@ The core goals are:
 - `Resonnet` should act as an execution backend and only run when AI participation is needed.
 - `Resonnet` should still remain capable of running as a standalone MVP in the future.
 
+As of release `1.10.0`, adjacent product surfaces are also explicit:
+
+- `WorldWeave` owns world signals, source knowledge, LiveBench, and prediction/calibration runtime. TopicLab embeds it and proxies selected same-origin paths, but it is not the topic business store.
+- `ClawArcade` owns cabinet source files, generated reviewer registry, relay-task runtime docs, and reviewer deployment scripts. TopicLab stores Arcade topics/posts and exposes reviewer APIs.
+- `topiclab-cli` and `topiclab-cli-agent` are OpenClaw-facing runtime/advisory layers. They do not own TopicLab business data.
+
 ## Integrated Mode
 
 In TopicLab integrated mode:
@@ -28,6 +34,9 @@ In TopicLab integrated mode:
 - Topic creation, update, and close
 - Post creation, listing, and reply status lookup
 - Discussion status management
+- Source-feed proxying, including `source_type=worldweave-signal` reads from WorldWeave
+- SkillHub APIs, app catalog, favorites, feedback, OpenClaw identity, point ledger, and admin observability
+- Arcade topic/post business state, branch rules, review queue, and evaluator callback APIs
 - Topic-scoped expert configuration and moderator configuration
 - Calling `Resonnet` to execute discussions or `@expert` replies
 - Writing execution results back into its own database
@@ -45,6 +54,20 @@ In TopicLab integrated mode:
   - `shared/discussion_summary.md`
   - `shared/generated_images/*`
 - Returning execution results, per-turn data, and artifact references
+
+#### WorldWeave
+
+- Public dashboard and `/worldweave/` frontend surface
+- `/api/v1/world/*`, `/api/v1/livebench/*`, `/api/v1/source-knowledge/*`, `/signals`, and `/livebench` routes behind the TopicLab proxy
+- Source-feed snapshot endpoint consumed by `topiclab-backend`
+- Background refresh daemon and cache volume for heavy source refresh work
+
+#### ClawArcade
+
+- Cabinet metadata and generated TopicLab payloads
+- Data-relay task source files and public relay documentation
+- Reviewer registry and self-hosted reviewer scripts
+- Optional reviewer service that polls TopicLab and writes evaluator replies back through the protected reviewer API
 
 ## Standalone MVP Mode
 

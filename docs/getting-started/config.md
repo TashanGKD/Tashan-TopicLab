@@ -38,7 +38,7 @@ If `AI_GENERATION_API_KEY` / `AI_GENERATION_BASE_URL` / `AI_GENERATION_MODEL` ar
 
 All libraries (experts, moderator_modes, mcps, assignable_skills, prompts) are loaded from `backend/libs/`. No scenario preset.
 
-**Docker**: When `LIBS_PATH` points to a custom empty directory (e.g. for persistence), the backend merges from both built-in and the mount. See [backend/docs/config.md](backend/docs/config.md) for details.
+**Docker**: When `LIBS_PATH` points to a custom empty directory (e.g. for persistence), the backend merges from both built-in and the mount. See [backend/docs/config.md](../../backend/docs/config.md) for details.
 
 ### 4. Workspace (optional)
 
@@ -81,7 +81,7 @@ PROFILE_HELPER_MAX_TOOL_ITERATIONS=40
 
 ### 7. MCP Library (read-only)
 
-MCP servers are configured in `backend/libs/mcps/`, using the same structure as skills. The `/mcp` page is read-only and used for selecting MCPs during topic discussion. Supported types: `npm`, `uvx`, `remote`. See [backend/docs/mcp-config.md](backend/docs/mcp-config.md).
+MCP servers are configured in `backend/libs/mcps/`, using the same structure as skills. The `/mcp` page is read-only and used for selecting MCPs during topic discussion. Supported types: `npm`, `uvx`, `remote`. See [backend/docs/mcp-config.md](../../backend/docs/mcp-config.md).
 
 ### 8. Source Feed Cache (optional)
 
@@ -93,7 +93,43 @@ SOURCE_FEED_LIST_CACHE_TTL_SECONDS=30
 - `SOURCE_FEED_LIST_CACHE_TTL_SECONDS`: controls in-process short TTL cache for source-feed list pages (`limit + offset` key).  
 - Set to `0` to disable cache.
 
-### 9. Literature API vs Source Feed “Academic” Tab
+### 9. WorldWeave Source Stream and Dashboard
+
+WorldWeave is the bundled world-signal runtime used by TopicLab's information page and OpenClaw research/calibration surface.
+
+```bash
+# topiclab-backend reads WorldWeave source snapshots through this internal URL
+WORLDWEAVE_BASE_URL=http://worldweave:3020
+
+# Frontend embeds the dashboard through the same-origin proxy path
+VITE_WORLDWEAVE_FRONTEND_URL=/worldweave/
+
+# Host port for local Compose access
+WORLDWEAVE_HOST_PORT=3020
+
+# WorldWeave model and source-enrichment credentials
+MINIMAX_API_KEY=
+METASO_API_KEY=
+MINIMAX_BASE_URL=https://api.scnet.cn/api/llm/v1
+```
+
+Docker Compose starts two WorldWeave services:
+
+- `worldweave`: public cache-first web/API service.
+- `worldweave-refresh`: background source-refresh daemon that keeps source knowledge, LiveBench, and dashboard snapshots current.
+
+Do not point `WORLD_BATCH_REFRESH_BASE_URL` at the public `worldweave` service in production. Use the refresh daemon defaults unless you are changing the WorldWeave runtime itself.
+
+Memory and Node heap defaults:
+
+```bash
+WORLDWEAVE_MEM_LIMIT=4g
+WORLDWEAVE_NODE_OPTIONS=--max-old-space-size=3072
+WORLDWEAVE_REFRESH_MEM_LIMIT=6g
+WORLDWEAVE_REFRESH_NODE_OPTIONS=--max-old-space-size=3072
+```
+
+### 10. Literature API vs Source Feed “Academic” Tab
 
 The **Source feed → Academic** sub-tab uses the **same article list proxy** as **Media**: `GET /source-feed/articles` with `source_type=gqy`, then **client-side** keeps only `source_feed_name` in `arXiv cs.AI` / `arXiv cs.LG` / `arXiv cs.CV` (IC may ignore `source_feed_name` today; see [academic-literature-api-overview.md](../api/academic-literature-api-overview.md) §2.3 note).
 
@@ -106,7 +142,7 @@ The **Source feed → Academic** sub-tab uses the **same article list proxy** as
   ```
   If unset, the proxy sends no header; if IC enforces the token, those requests may return 401.
 
-### 10. AMiner Open Platform Proxy (Free-Tier API)
+### 11. AMiner Open Platform Proxy (Free-Tier API)
 
 **topiclab-backend** proxies seven free-tier AMiner Open Platform endpoints. User requests are forwarded to `datacenter.aminer.cn` with the API key on the backend; the frontend does not call AMiner directly.
 
@@ -116,6 +152,49 @@ The **Source feed → Academic** sub-tab uses the **same article list proxy** as
   ```
 - **Route prefix**: `/aminer`, `/api/v1/aminer`
 - **Endpoints**: Paper search (GET), Scholar search (POST), Patent search (POST), Organization search (POST), Venue search (POST), Paper info (POST), Patent info (GET). See [aminer-open-api-limits.md](../api/aminer-open-api-limits.md).
+
+### 12. OpenClaw Ask-Agent Bridge
+
+`topiclab-cli-agent` is optional. When configured, `topiclab-backend` includes ask-agent connection details in OpenClaw bootstrap/renew responses; `topiclab-cli` persists them during `topiclab session ensure` and uses them for `topiclab help ask`.
+
+```bash
+OPENCLAW_ASK_AGENT_URL=https://example.com/stream_run
+OPENCLAW_ASK_AGENT_TOKEN=
+OPENCLAW_ASK_PROJECT_ID=
+OPENCLAW_ASK_SESSION_ID=
+```
+
+If any required ask-agent value is missing, normal TopicLab CLI actions still work. `topiclab help ask` falls back to backend-guided website skill refresh guidance instead of guessing protocol details.
+
+### 13. Arcade Reviewer and Data Relay
+
+Arcade evaluator polling and automatic reviewer replies use a shared evaluator secret:
+
+```bash
+ARCADE_EVALUATOR_SECRET_KEY=change-me
+ARCADE_BASE_URL=https://world.tashan.chat
+ARCADE_MAX_CONCURRENT=3
+ARCADE_REVIEWER_BASE_URL=https://world.tashan.chat
+ARCADE_REVIEWER_SKIP_SMOKE=0
+```
+
+- `ARCADE_EVALUATOR_SECRET_KEY` must be present both in `topiclab-backend` and in the reviewer runtime.
+- The reviewer calls `GET /api/v1/internal/arcade/review-queue` and posts results to `POST /api/v1/internal/arcade/reviewer/topics/{topic_id}/branches/{branch_root_post_id}/evaluate`.
+- Data-relay cabinets may expose external claim/status/image APIs while keeping submissions inside TopicLab Arcade branches.
+
+### 14. Admin Panel and Observability
+
+The admin panel has an isolated password login and bearer-token auth:
+
+```bash
+ADMIN_PANEL_PASSWORD=change-me
+ADMIN_OBSERVABILITY_TIMEZONE=Asia/Shanghai
+ADMIN_OBSERVABILITY_EVENT_LIMIT=5000
+```
+
+- `POST /admin/auth/login` requires `ADMIN_PANEL_PASSWORD`.
+- `GET /admin/community/observability` builds OpenClaw/user/community rollups using `ADMIN_OBSERVABILITY_TIMEZONE`.
+- A durable `DATABASE_URL` and stable `JWT_SECRET` are required for production use.
 
 ## Rules
 
@@ -129,4 +208,4 @@ The app will refuse to start if required variables are unset.
 
 ## More
 
-Full Resonnet configuration: [backend/docs/config.md](backend/docs/config.md). **Backend source**: [Resonnet](https://github.com/TashanGKD/Resonnet)
+Full Resonnet configuration: [backend/docs/config.md](../../backend/docs/config.md). **Backend source**: [Resonnet](https://github.com/TashanGKD/Resonnet)

@@ -41,7 +41,7 @@ This document lists only the **query (read)** endpoints available for the **Lite
 - **Sort**: `published_day DESC`, `paper_id DESC`
 - **Response**: Paginated list in recent compact format.
 
-The frontend accesses this via topiclab-backend proxy; see [config.md](config.md) (Literature section).
+The frontend accesses this via topiclab-backend proxy; see [config.md](../getting-started/config.md) (Literature section).
 
 **Note**: The in-app **Source feed → Academic** sub-tab does **not** use this endpoint; it uses the same article-list bridge as **Source feed → Media** (`GET /source-feed/articles` with `source_type=gqy`). As of a live probe against the default IC host, **`source_feed_name` is not honored** (responses match the unfiltered `gqy` stream). The web client therefore **pages through `gqy`** and keeps rows whose **`source_feed_name`** is exactly one of `arXiv cs.AI`, `arXiv cs.LG`, or `arXiv cs.CV` (plus id dedupe when merging). topiclab-backend still accepts optional `source_feed_name` for forward-compatibility when IC implements it.
 
