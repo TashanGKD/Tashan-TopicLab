@@ -2776,6 +2776,155 @@ def list_all_posts(
     return annotate_posts_with_interactions(posts, user_id=user_id, auth_type=auth_type)
 
 
+def list_arcade_pending_review_items(
+    *,
+    topic_id: str | None = None,
+    owner_openclaw_agent_id: int | None = None,
+    limit: int = 20,
+    include_thread: bool = False,
+) -> list[dict]:
+    page_limit = max(1, min(limit, 100))
+
+    with get_db_session() as session:
+        is_sqlite = session.bind.dialect.name == "sqlite"
+        if is_sqlite:
+            scene_expr = "json_extract({alias}.metadata, '$.scene')"
+            post_kind_expr = "json_extract({alias}.metadata, '$.arcade.post_kind')"
+            branch_owner_expr = "CAST(json_extract(br.metadata, '$.arcade.branch_owner_openclaw_agent_id') AS INTEGER)"
+        else:
+            scene_expr = "{alias}.metadata ->> 'scene'"
+            post_kind_expr = "{alias}.metadata -> 'arcade' ->> 'post_kind'"
+            branch_owner_expr = "CAST(NULLIF(br.metadata -> 'arcade' ->> 'branch_owner_openclaw_agent_id', '') AS INTEGER)"
+
+        filters = ["t.category = 'arcade'"]
+        params: dict[str, object] = {"limit": page_limit}
+        if topic_id:
+            filters.append("t.id = :topic_id")
+            params["topic_id"] = topic_id
+        if owner_openclaw_agent_id is not None:
+            filters.append(f"{branch_owner_expr} = :owner_openclaw_agent_id")
+            params["owner_openclaw_agent_id"] = owner_openclaw_agent_id
+        where_clause = " AND ".join(filters)
+
+        candidate_rows = session.execute(
+            text(f"""
+                WITH branch_roots AS (
+                    SELECT
+                        br.id AS branch_root_post_id,
+                        br.topic_id,
+                        {branch_owner_expr} AS branch_owner_openclaw_agent_id
+                    FROM posts br
+                    JOIN topics t ON t.id = br.topic_id
+                    WHERE {where_clause}
+                      AND br.in_reply_to_id IS NULL
+                      AND {scene_expr.format(alias="br")} = 'arcade'
+                      AND {post_kind_expr.format(alias="br")} = 'submission'
+                ),
+                leaf_submissions AS (
+                    SELECT
+                        lp.topic_id,
+                        br.branch_root_post_id,
+                        lp.id AS submission_post_id,
+                        br.branch_owner_openclaw_agent_id,
+                        lp.created_at AS submission_created_at
+                    FROM branch_roots br
+                    JOIN posts lp
+                      ON lp.topic_id = br.topic_id
+                     AND COALESCE(lp.root_post_id, lp.id) = br.branch_root_post_id
+                    WHERE {scene_expr.format(alias="lp")} = 'arcade'
+                      AND {post_kind_expr.format(alias="lp")} = 'submission'
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM posts child
+                          WHERE child.topic_id = lp.topic_id
+                            AND child.in_reply_to_id = lp.id
+                      )
+                )
+                SELECT *
+                FROM leaf_submissions
+                ORDER BY submission_created_at ASC, submission_post_id ASC
+                LIMIT :limit
+            """),
+            params,
+        ).fetchall()
+
+        if not candidate_rows:
+            return []
+
+        topic_ids = list(dict.fromkeys(str(row.topic_id) for row in candidate_rows))
+        post_ids = list(
+            dict.fromkeys(
+                str(post_id)
+                for row in candidate_rows
+                for post_id in (row.branch_root_post_id, row.submission_post_id)
+            )
+        )
+
+        topic_rows = session.execute(
+            text("""
+                SELECT
+                    t.*,
+                    r.status AS run_status,
+                    r.turns_count,
+                    r.cost_usd,
+                    r.completed_at,
+                    r.discussion_summary,
+                    r.discussion_history
+                FROM topics t
+                LEFT JOIN discussion_runs r ON r.topic_id = t.id
+                WHERE t.id IN :topic_ids
+            """).bindparams(bindparam("topic_ids", expanding=True)),
+            {"topic_ids": topic_ids},
+        ).fetchall()
+        post_rows = session.execute(
+            text("SELECT * FROM posts WHERE id IN :post_ids").bindparams(bindparam("post_ids", expanding=True)),
+            {"post_ids": post_ids},
+        ).fetchall()
+
+        thread_rows = []
+        if include_thread:
+            branch_root_ids = list(dict.fromkeys(str(row.branch_root_post_id) for row in candidate_rows))
+            thread_rows = session.execute(
+                text("""
+                    SELECT *
+                    FROM posts
+                    WHERE topic_id IN :topic_ids
+                      AND COALESCE(root_post_id, id) IN :branch_root_ids
+                    ORDER BY created_at ASC, id ASC
+                """).bindparams(
+                    bindparam("topic_ids", expanding=True),
+                    bindparam("branch_root_ids", expanding=True),
+                ),
+                {"topic_ids": topic_ids, "branch_root_ids": branch_root_ids},
+            ).fetchall()
+
+    topics_by_id = {str(row.id): topic_record_to_dict(_build_topic(row), lightweight=True) for row in topic_rows}
+    posts_by_id = {str(row.id): post_row_to_dict(row) for row in post_rows}
+    threads_by_root: dict[str, list[dict]] = {}
+    for row in thread_rows:
+        post = post_row_to_dict(row)
+        threads_by_root.setdefault(str(post.get("root_post_id") or post["id"]), []).append(post)
+
+    items: list[dict] = []
+    for row in candidate_rows:
+        topic = topics_by_id.get(str(row.topic_id))
+        branch_root_post = posts_by_id.get(str(row.branch_root_post_id))
+        submission_post = posts_by_id.get(str(row.submission_post_id))
+        if not topic or not branch_root_post or not submission_post:
+            continue
+        item = {
+            "topic": topic,
+            "branch_root_post": branch_root_post,
+            "submission_post": submission_post,
+            "branch_root_post_id": str(row.branch_root_post_id),
+            "branch_owner_openclaw_agent_id": row.branch_owner_openclaw_agent_id,
+        }
+        if include_thread:
+            item["thread"] = threads_by_root.get(str(row.branch_root_post_id), [])
+        items.append(item)
+    return items
+
+
 def _load_reply_previews(
     topic_id: str,
     parent_ids: list[str],

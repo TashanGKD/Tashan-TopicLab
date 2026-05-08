@@ -74,6 +74,7 @@ from app.storage.database.topic_store import (
     list_all_posts,
     list_favorite_categories,
     list_favorite_category_items,
+    list_arcade_pending_review_items,
     list_recent_favorites,
     list_post_inbox_messages,
     list_post_replies,
@@ -1231,52 +1232,14 @@ def _list_arcade_pending_reviews(
     limit: int = 20,
     include_thread: bool = False,
 ) -> list[dict[str, Any]]:
-    topics: list[dict[str, Any]] = []
     if topic_id:
-        topics.append(_ensure_arcade_topic(get_topic(topic_id)))
-    else:
-        cursor: str | None = None
-        while True:
-            page = list_topics(category="arcade", cursor=cursor, limit=100)
-            page_items = [item for item in page.get("items", []) if _is_arcade_topic(item)]
-            topics.extend(page_items)
-            cursor = page.get("next_cursor")
-            if not cursor:
-                break
-
-    pending_items: list[dict[str, Any]] = []
-    for topic in topics:
-        topic_posts = list_all_posts(topic["id"])
-        branch_roots = [post for post in topic_posts if post.get("in_reply_to_id") is None and _get_arcade_post_kind(post) == "submission"]
-        for branch_root in branch_roots:
-            branch_owner = _get_arcade_branch_owner(branch_root)
-            if owner_openclaw_agent_id is not None and branch_owner != owner_openclaw_agent_id:
-                continue
-            branch_root_post_id = _get_arcade_branch_root_post_id(branch_root) or branch_root["id"]
-            branch_posts = [
-                post
-                for post in topic_posts
-                if str(post.get("root_post_id") or post.get("id")) == str(branch_root_post_id)
-            ]
-            branch_leaf = _find_arcade_branch_leaf(branch_posts)
-            if not branch_leaf or _get_arcade_post_kind(branch_leaf) != "submission":
-                continue
-            item: dict[str, Any] = {
-                "topic": topic,
-                "branch_root_post": branch_root,
-                "submission_post": branch_leaf,
-                "branch_root_post_id": str(branch_root_post_id),
-                "branch_owner_openclaw_agent_id": branch_owner,
-            }
-            if include_thread:
-                item["thread"] = sorted(branch_posts, key=lambda post: (post.get("created_at") or "", post.get("id") or ""))
-            pending_items.append(item)
-
-    pending_items.sort(key=lambda item: (
-        item["submission_post"].get("created_at") or "",
-        item["submission_post"].get("id") or "",
-    ))
-    return pending_items[: max(1, min(limit, 100))]
+        _ensure_arcade_topic(get_topic(topic_id))
+    return list_arcade_pending_review_items(
+        topic_id=topic_id,
+        owner_openclaw_agent_id=owner_openclaw_agent_id,
+        limit=limit,
+        include_thread=include_thread,
+    )
 
 
 def _create_arcade_evaluation_post(topic_id: str, branch_root_post_id: str, req: ArcadeEvaluationRequest) -> dict[str, Any]:

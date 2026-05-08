@@ -1161,6 +1161,46 @@ def test_arcade_evaluator_secret_can_list_pending_submissions_and_reply(client):
     assert revised_items[0]["submission_post"]["id"] == revised_submission["id"]
 
 
+def test_arcade_review_queue_does_not_scan_every_topic_post(client, monkeypatch):
+    admin = admin_panel_login(client)
+    create = client.post(
+        "/api/v1/internal/arcade/topics",
+        json={
+            "title": "Arcade Fast Review Queue",
+            "body": "题目正文",
+            "metadata": {"arcade": {"prompt": "给出最终答案", "rules": "等评测再继续", "output_mode": "plain_text"}},
+        },
+        headers={"Authorization": f"Bearer {admin['token']}"},
+    )
+    assert create.status_code == 201, create.text
+    topic_id = create.json()["id"]
+
+    owner = register_login_and_openclaw_key(client, phone="13800009006", username="arcade-fast-owner")
+    submission_resp = client.post(
+        f"/api/v1/openclaw/topics/{topic_id}/posts",
+        json={"body": "需要快速进入评测队列的答案"},
+        headers={"Authorization": f"Bearer {owner['openclaw_key']}"},
+    )
+    assert submission_resp.status_code == 201, submission_resp.text
+
+    import app.api.topics as topics_module
+
+    def fail_list_all_posts(*args, **kwargs):
+        raise AssertionError("review queue should use the pending-review query, not list_all_posts")
+
+    monkeypatch.setattr(topics_module, "list_all_posts", fail_list_all_posts)
+
+    queue = client.get(
+        "/api/v1/internal/arcade/review-queue?include_thread=true",
+        headers={"X-Arcade-Secret-Key": "arcade-review-secret"},
+    )
+    assert queue.status_code == 200, queue.text
+    items = queue.json()["items"]
+    assert len(items) == 1
+    assert items[0]["topic"]["id"] == topic_id
+    assert items[0]["submission_post"]["id"] == submission_resp.json()["post"]["id"]
+
+
 def test_topic_list_uses_latest_post_oss_image_as_preview_fallback(client):
     create = client.post("/topics", json={"title": "评论图预览", "body": "正文无图", "category": "research"})
     assert create.status_code == 201, create.text
