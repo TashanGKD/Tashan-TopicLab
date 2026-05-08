@@ -1,0 +1,4 @@
+interface:
+  display_name: "Git Commit Conventions"
+  short_description: "Normalize Git history and commit rules."
+  default_prompt: "Use $git-commit-conventions to normalize commit messages, preserve contributor identity, verify rewritten history, and push requested branches safely."

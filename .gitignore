@@ -50,6 +50,10 @@ workspace/agent_links_sessions/
 
 Tashan-TopicLab-main_0/
 
-.codex
+.codex/*
+!.codex/skills/
+.codex/skills/*
+!.codex/skills/git-commit-conventions/
+!.codex/skills/git-commit-conventions/**
 .DS_Store
 workspace/

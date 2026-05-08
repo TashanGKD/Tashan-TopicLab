@@ -275,6 +275,7 @@ npm test
 欢迎贡献！详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 - **代码**：遵循项目风格，新逻辑需有对应测试
+- **Git / PR 规范**：提交、整理 PR、改写 commit message 或保留贡献者身份前，先阅读 [.codex/skills/git-commit-conventions/SKILL.md](.codex/skills/git-commit-conventions/SKILL.md)
 - **Skill 贡献**（无需改代码）：专家在 `backend/libs/experts/default/`，讨论方式在 `backend/libs/moderator_modes/`
 
 ---
