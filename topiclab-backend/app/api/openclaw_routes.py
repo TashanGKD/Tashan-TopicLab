@@ -32,6 +32,7 @@ from app.api.topics import (
     _find_arcade_branch_leaf,
     _find_arcade_root_post_for_owner,
     _get_arcade_branch_owner,
+    _get_arcade_post_kind,
     _get_arcade_branch_root_post_id,
     _is_arcade_topic,
     _moderate_or_raise,
@@ -57,6 +58,19 @@ from app.storage.database.topic_store import (
 router = APIRouter(prefix="/openclaw", tags=["openclaw-dedicated"])
 logger = logging.getLogger(__name__)
 TEST_TOPIC_PATTERN = re.compile(r"(?:^|[\s\-_])(test|testing|debug|qa|e2e|smoke)(?:$|[\s\-_])|测试|联调|验收|压测|回归|冒烟|调试", re.IGNORECASE)
+
+
+def _arcade_prefers_independent_openclaw_submissions(topic: dict) -> bool:
+    metadata = topic.get("metadata") if isinstance(topic.get("metadata"), dict) else {}
+    arcade = metadata.get("arcade") if isinstance(metadata.get("arcade"), dict) else {}
+    validator = arcade.get("validator") if isinstance(arcade.get("validator"), dict) else {}
+    config = validator.get("config") if isinstance(validator.get("config"), dict) else {}
+    review_mode = str(config.get("review_mode") or "").strip()
+    return bool(
+        arcade.get("independent_branches_per_submission")
+        or config.get("independent_branches_per_submission")
+        or review_mode in {"external_relay", "local_subprocess"}
+    )
 
 
 class OpenClawTopicCreateRequest(BaseModel):
@@ -215,22 +229,41 @@ async def create_post_openclaw(
         if not topic:
             raise HTTPException(status_code=404, detail="Topic not found")
         parent_post = None
+        effective_in_reply_to_id = req.in_reply_to_id
         metadata = None
         if req.in_reply_to_id:
             parent_post = get_post(topic_id, req.in_reply_to_id)
             if not parent_post:
                 raise HTTPException(status_code=404, detail="Parent post not found")
         if _is_arcade_topic(topic):
+            independent_submissions = _arcade_prefers_independent_openclaw_submissions(topic)
             if parent_post is None:
-                if _find_arcade_root_post_for_owner(topic_id, owner_openclaw_agent_id):
-                    raise HTTPException(status_code=409, detail="OpenClaw already has an Arcade branch in this topic")
-                metadata = _build_arcade_submission_metadata(
-                    topic,
-                    branch_owner_openclaw_agent_id=owner_openclaw_agent_id,
-                    branch_root_post_id="__pending__",
-                    version=1,
-                    body=req.body,
-                )
+                existing_root = _find_arcade_root_post_for_owner(topic_id, owner_openclaw_agent_id)
+                if existing_root and not independent_submissions:
+                    branch_root_post_id = _get_arcade_branch_root_post_id(existing_root)
+                    if not branch_root_post_id:
+                        raise HTTPException(status_code=409, detail="Arcade branch root is missing")
+                    branch_posts = _collect_arcade_branch_posts(topic_id, branch_root_post_id)
+                    branch_leaf = _find_arcade_branch_leaf(branch_posts)
+                    if not branch_leaf:
+                        raise HTTPException(status_code=409, detail="Arcade branch leaf is missing")
+                    parent_post = branch_leaf
+                    effective_in_reply_to_id = branch_leaf["id"]
+                    metadata = _build_arcade_submission_metadata(
+                        topic,
+                        branch_owner_openclaw_agent_id=owner_openclaw_agent_id,
+                        branch_root_post_id=branch_root_post_id,
+                        version=_count_arcade_submissions(branch_posts) + 1,
+                        body=req.body,
+                    )
+                else:
+                    metadata = _build_arcade_submission_metadata(
+                        topic,
+                        branch_owner_openclaw_agent_id=owner_openclaw_agent_id,
+                        branch_root_post_id="__pending__",
+                        version=1,
+                        body=req.body,
+                    )
             else:
                 branch_owner = _get_arcade_branch_owner(parent_post)
                 if branch_owner != owner_openclaw_agent_id:
@@ -240,15 +273,32 @@ async def create_post_openclaw(
                     raise HTTPException(status_code=409, detail="Arcade branch root is missing")
                 branch_posts = _collect_arcade_branch_posts(topic_id, branch_root_post_id)
                 branch_leaf = _find_arcade_branch_leaf(branch_posts)
-                if not branch_leaf or branch_leaf["id"] != parent_post["id"]:
-                    raise HTTPException(status_code=409, detail="OpenClaw can only reply to the current leaf in its Arcade branch")
-                metadata = _build_arcade_submission_metadata(
-                    topic,
-                    branch_owner_openclaw_agent_id=owner_openclaw_agent_id,
-                    branch_root_post_id=branch_root_post_id,
-                    version=_count_arcade_submissions(branch_posts) + 1,
-                    body=req.body,
+                parent_kind = _get_arcade_post_kind(parent_post)
+                should_start_independent_branch = independent_submissions and (
+                    not branch_leaf
+                    or branch_leaf["id"] != parent_post["id"]
+                    or parent_kind == "submission"
                 )
+                if should_start_independent_branch:
+                    parent_post = None
+                    effective_in_reply_to_id = None
+                    metadata = _build_arcade_submission_metadata(
+                        topic,
+                        branch_owner_openclaw_agent_id=owner_openclaw_agent_id,
+                        branch_root_post_id="__pending__",
+                        version=1,
+                        body=req.body,
+                    )
+                elif not branch_leaf or branch_leaf["id"] != parent_post["id"]:
+                    raise HTTPException(status_code=409, detail="OpenClaw can only reply to the current leaf in its Arcade branch")
+                else:
+                    metadata = _build_arcade_submission_metadata(
+                        topic,
+                        branch_owner_openclaw_agent_id=owner_openclaw_agent_id,
+                        branch_root_post_id=branch_root_post_id,
+                        version=_count_arcade_submissions(branch_posts) + 1,
+                        body=req.body,
+                    )
         await _moderate_or_raise(req.body, scenario="topic_post")
         raw_delete_token = generate_post_delete_token()
         draft_post = make_post(
@@ -256,7 +306,7 @@ async def create_post_openclaw(
             author=author_name,
             author_type="human",
             body=req.body,
-            in_reply_to_id=req.in_reply_to_id,
+            in_reply_to_id=effective_in_reply_to_id,
             status="completed",
             owner_user_id=owner_user_id,
             owner_auth_type=owner_auth_type,
@@ -278,7 +328,7 @@ async def create_post_openclaw(
         event = record_activity_event(
             openclaw_agent_id=owner_openclaw_agent_id,
             bound_user_id=owner_user_id,
-            event_type="post.replied" if req.in_reply_to_id else "post.created",
+            event_type="post.replied" if effective_in_reply_to_id else "post.created",
             action_name="openclaw_create_post",
             target_type="post",
             target_id=saved["id"],
@@ -300,7 +350,7 @@ async def create_post_openclaw(
         )
         return {
             "post": saved,
-            "parent_post": get_post(topic_id, req.in_reply_to_id) if req.in_reply_to_id else None,
+            "parent_post": get_post(topic_id, effective_in_reply_to_id) if effective_in_reply_to_id else None,
             "openclaw_agent": _openclaw_agent_summary(user),
         }
     except HTTPException as exc:

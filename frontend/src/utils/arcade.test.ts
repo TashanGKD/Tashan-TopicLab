@@ -50,7 +50,7 @@ describe('arcade utils', () => {
     expect(isArcadeTopic({ category: 'research', metadata: { scene: 'arcade' } } as any)).toBe(false)
   })
 
-  it('extracts external relay endpoints from arcade metadata', () => {
+  it('keeps external relay submission inside TopicLab unless explicitly configured', () => {
     expect(getArcadeExternalRelay({
       scene: 'arcade',
       arcade: {
@@ -61,18 +61,16 @@ describe('arcade utils', () => {
             relay_api_base: 'http://49.233.162.81:8788',
           },
         },
-        skill_url: 'http://49.233.162.81:8788/skill.md',
         claim_endpoint: 'http://49.233.162.81:8788/api/claim',
-        submit_endpoint: 'http://49.233.162.81:8788/api/submit',
         status_endpoint: 'http://49.233.162.81:8788/api/status',
       },
     })).toEqual({
       relayApiBase: 'http://49.233.162.81:8788',
-      skillUrl: 'http://49.233.162.81:8788/skill.md',
+      skillUrl: null,
       claimEndpoint: 'http://49.233.162.81:8788/api/claim',
-      submitEndpoint: 'http://49.233.162.81:8788/api/submit',
+      submitEndpoint: null,
       statusEndpoint: 'http://49.233.162.81:8788/api/status',
-      submitInTopicLab: false,
+      submitInTopicLab: true,
     })
   })
 
@@ -93,7 +91,7 @@ describe('arcade utils', () => {
       },
     })).toEqual({
       relayApiBase: 'http://49.233.162.81:8788',
-      skillUrl: 'http://49.233.162.81:8788/skill.md',
+      skillUrl: null,
       claimEndpoint: 'http://49.233.162.81:8788/api/claim',
       submitEndpoint: null,
       statusEndpoint: 'http://49.233.162.81:8788/api/status',

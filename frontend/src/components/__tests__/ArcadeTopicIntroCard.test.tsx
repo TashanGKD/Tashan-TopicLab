@@ -3,17 +3,12 @@ import { describe, expect, it } from 'vitest'
 
 import ArcadeTopicIntroCard from '../arcade/ArcadeTopicIntroCard'
 
-function expectArcadeImageProxy(src: string | null, topicId: string, originalUrl: string) {
-  expect(src).toBeTruthy()
-  const parsed = new URL(src ?? '', 'http://localhost')
-  expect(parsed.pathname).toBe(`/api/v1/topics/${topicId}/arcade/image`)
-  expect(parsed.searchParams.get('url')).toBe(originalUrl)
-  expect(parsed.searchParams.get('q')).toBe('82')
-  expect(parsed.searchParams.get('fm')).toBe('webp')
+function expectBundledArcadeImage(src: string | null, fileName: string) {
+  expect(src).toBe(`/media/arcade/103-data-sample-relay-review/${fileName}`)
 }
 
 describe('ArcadeTopicIntroCard', () => {
-  it('renders external relay endpoints as read-only task links', () => {
+  it('renders external relay endpoints as TopicLab-branch tasks by default', () => {
     render(
       <ArcadeTopicIntroCard
         topicId="topic-103"
@@ -30,9 +25,7 @@ describe('ArcadeTopicIntroCard', () => {
                 relay_api_base: 'http://49.233.162.81:8788',
               },
             },
-            skill_url: 'http://49.233.162.81:8788/skill.md',
             claim_endpoint: 'http://49.233.162.81:8788/api/claim',
-            submit_endpoint: 'http://49.233.162.81:8788/api/submit',
             status_endpoint: 'http://49.233.162.81:8788/api/status',
           },
         }}
@@ -40,7 +33,7 @@ describe('ArcadeTopicIntroCard', () => {
       />,
     )
 
-    expect(screen.getByText('外部接力')).toBeInTheDocument()
+    expect(screen.getByText('数据接力')).toBeInTheDocument()
     expect(screen.getByText('每轮只发 5 张瞬变源光变图。看完以后，请留下能被后来者复核的判断：图上哪里像真实变化，哪里可能只是采样、背景或低信噪在捣乱，哪些源值得继续回看。')).toBeInTheDocument()
     expect(screen.getByText('本轮样本')).toBeInTheDocument()
     expect(screen.getByText('判读要点')).toBeInTheDocument()
@@ -48,9 +41,10 @@ describe('ArcadeTopicIntroCard', () => {
     expect(screen.getByText('展开完整题面与规则')).toBeInTheDocument()
     expect(screen.getByText('先领取一批图。')).toBeInTheDocument()
     expect(screen.getByText('提交固定格式。')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '技能说明' })).toHaveAttribute('href', 'http://49.233.162.81:8788/skill.md')
+    expect(screen.queryByRole('link', { name: '技能说明' })).not.toBeInTheDocument()
     expect(screen.getByText('POST http://49.233.162.81:8788/api/claim')).toBeInTheDocument()
-    expect(screen.getByText('POST http://49.233.162.81:8788/api/submit')).toBeInTheDocument()
+    expect(screen.queryByText(/POST .*api\/submit/)).not.toBeInTheDocument()
+    expect(screen.getByText('提交在 TopicLab Arcade 分支内完成。')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '状态接口' })).toHaveAttribute('href', 'http://49.233.162.81:8788/api/status')
   })
 
@@ -87,25 +81,23 @@ describe('ArcadeTopicIntroCard', () => {
 
     expect(view.getByText('数据接力')).toBeInTheDocument()
     expect(view.getByText('每轮只发 5 张瞬变源光变图。看完以后，请留下能被后来者复核的判断：图上哪里像真实变化，哪里可能只是采样、背景或低信噪在捣乱，哪些源值得继续回看。')).toBeInTheDocument()
-    expectArcadeImageProxy(
+    expectBundledArcadeImage(
       view.getByRole('img', { name: '虾的公众科学参赛示意图' }).getAttribute('src'),
-      'topic-103',
-      'http://49.233.162.81:8788/public/aida-public-science.svg',
+      'aida-public-science.svg',
     )
-    expectArcadeImageProxy(
-      view.getByRole('img', { name: 'Sample 层级路线图' }).getAttribute('src'),
-      'topic-103',
-      'http://49.233.162.81:8788/public/sample-level-route-cn.png',
+    expect(view.getByText('展开样本池与复核参考图')).toBeInTheDocument()
+    expect(view.getByText('这里放的是样本筛选路线、聚类总览和人工复核参考图，用来理解这批数据从哪里来、为什么值得接力看；本轮真正要提交的 5 张图会在领取后单独出现。')).toBeInTheDocument()
+    expectBundledArcadeImage(
+      container.querySelector('img[alt="Sample 层级路线图"]')?.getAttribute('src') ?? '',
+      'sample-level-route-cn.png',
     )
-    expectArcadeImageProxy(
-      view.getByRole('img', { name: 'Cluster Review 每簇第一页总览' }).getAttribute('src'),
-      'topic-103',
-      'http://49.233.162.81:8788/public/cluster-review-first-pages-mosaic.png',
+    expectBundledArcadeImage(
+      container.querySelector('img[alt="Cluster Review 每簇第一页总览"]')?.getAttribute('src') ?? '',
+      'cluster-review-first-pages-mosaic.png',
     )
-    expectArcadeImageProxy(
-      view.getByRole('img', { name: '人工复核候选源示意图' }).getAttribute('src'),
-      'topic-103',
-      'http://49.233.162.81:8788/public/manual-recheck-science-candidates.png',
+    expectBundledArcadeImage(
+      container.querySelector('img[alt="人工复核候选源示意图"]')?.getAttribute('src') ?? '',
+      'manual-recheck-science-candidates.png',
     )
     expect(view.getByText('POST http://49.233.162.81:8788/api/claim')).toBeInTheDocument()
     expect(view.queryByText(/POST .*api\/submit/)).not.toBeInTheDocument()

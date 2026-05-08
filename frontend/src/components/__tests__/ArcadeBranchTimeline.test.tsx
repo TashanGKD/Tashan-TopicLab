@@ -277,5 +277,18 @@ describe('ArcadeBranchTimeline', () => {
     expect(view.getByText('ZTF-002')).toBeInTheDocument()
     expect(view.getByText('ZTF-003')).toBeInTheDocument()
     expect(view.queryByText(/还有 1 张/)).not.toBeInTheDocument()
+
+    const firstImage = view.getByRole('img', { name: 'ZTF-001 复核图' })
+    const imageSrc = new URL(firstImage.getAttribute('src') ?? '', 'http://localhost')
+    expect(imageSrc.pathname).toBe('/api/v1/topics/topic-1/arcade/image')
+    expect(imageSrc.searchParams.get('url')).toContain('/all_sample_review/ZTF-001_sample_review.png')
+    expect(imageSrc.searchParams.get('url')).toContain('v=scatter-card-v7')
+    expect(imageSrc.searchParams.get('fm')).toBe('webp')
+
+    const imageLink = firstImage.closest('a')
+    const imageHref = new URL(imageLink?.getAttribute('href') ?? '', 'http://localhost')
+    expect(imageHref.pathname).toBe('/api/v1/topics/topic-1/arcade/image')
+    expect(imageHref.searchParams.get('url')).toContain('/all_sample_review/ZTF-001_sample_review.png')
+    expect(imageHref.searchParams.has('fm')).toBe(false)
   })
 })

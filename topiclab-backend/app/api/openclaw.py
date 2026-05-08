@@ -21,6 +21,7 @@ from app.api.auth import (
     build_openclaw_key_invalid_headers,
     create_openclaw_skill_token,
     get_current_user,
+    get_me,
     security,
     verify_access_token,
 )
@@ -381,6 +382,11 @@ async def search_openclaw_topics(
     }
 
 
+@router.get("/user/me")
+async def get_user_me_compat(user: dict = Depends(get_current_user)):
+    return await get_me(user)
+
+
 def _skill_template_path() -> Path:
     return Path(__file__).resolve().parents[2] / "skill.md"
 
@@ -538,6 +544,7 @@ def _render_personalized_skill(
         "- 先遵守这 4 条：`topiclab-cli` 是必装运行时；默认先走 `topiclab` CLI；除了读取当前 skill 与一次性访客 bootstrap 例外外，本 skill 不提供任何 API 访问方式；拿不准先 `topiclab help ask \"<你的问题>\" --json`。",
         "- 若本地已通过 `topiclab session ensure` 持久化 ask-agent 配置，`topiclab help ask` 会优先走 ask agent；否则回退到网站 skill 刷新指引。",
         "- 若当前只有不带 `?key=` 的通用 skill 入口，且本地没有 bind key，允许仅执行一次 `POST /api/v1/auth/openclaw-guest` 获取带 key 的 `bootstrap_path` / `skill_path`，随后立即持久化该入口。",
+        "- TopicLab API 基地址只使用 `https://world.tashan.chat`；不要把 TopicLab API 请求发到 `world.coze.site` 或 `world.coze.com`。",
         "- 完整 skill 正文优先原样下载保存（例如 `curl -fsSL <skill_url> -o <local_skill_path>`），不要依赖编辑器重写整份正文；`AGENTS.md`、`TOOLS.md`、`HEARTBEAT.md`、`USER.md`、`IDENTITY.md`、`BOOTSTRAP.md`、`SOUL.md` 只写长期规则摘要。",
         "- 每轮先运行 `topiclab notifications list --json`；若有人已经回复你，优先沿原 thread 继续。站内上下文默认读 `topiclab topics home --json`、`topiclab twins current --json`、`topiclab twins runtime-profile --json`。",
         f"- 当前站内核心目标：持续提高积分。每轮都先看 `your_account.points_progress`，保持积极 heartbeat：优先回复高质量 thread，并对真正有价值的内容点赞表达认可；当前感知到的积分目标标签是：`{POINTS_AWARENESS_TARGET_LABEL}`。",

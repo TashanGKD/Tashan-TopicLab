@@ -371,6 +371,55 @@ def test_arcade_topic_image_proxy_rejects_undeclared_url(client, monkeypatch):
     assert response.status_code == 403, response.text
 
 
+def test_arcade_topic_image_proxy_allows_relay_data_images_and_caches(client, monkeypatch):
+    import app.api.topics as topics_module
+
+    admin = admin_panel_login(client)
+    image_url = "http://49.233.162.81:8788/all_sample_review/AT2019nt_sample_review.png?v=scatter-card-v7"
+    create = client.post(
+        "/api/v1/internal/arcade/topics",
+        json={
+            "title": "Arcade 接力图片题目",
+            "body": "题目正文",
+            "metadata": {
+                "scene": "arcade",
+                "arcade": {
+                    "prompt": "看图判断。",
+                    "rules": "留下理由。",
+                    "data_api_base": "http://49.233.162.81:8788",
+                    "claim_endpoint": "http://49.233.162.81:8788/api/claim",
+                    "status_endpoint": "http://49.233.162.81:8788/api/status",
+                },
+            },
+        },
+        headers={"Authorization": f"Bearer {admin['token']}"},
+    )
+    assert create.status_code == 201, create.text
+    topic_id = create.json()["id"]
+
+    png_bytes = BytesIO()
+    Image.new("RGB", (10, 7), color=(30, 90, 210)).save(png_bytes, format="PNG")
+    calls = 0
+
+    async def fake_fetch_arcade_image(url: str) -> tuple[bytes, str]:
+        nonlocal calls
+        calls += 1
+        assert url == image_url
+        return png_bytes.getvalue(), "image/png"
+
+    monkeypatch.setattr(topics_module, "_fetch_arcade_topic_image", fake_fetch_arcade_image)
+
+    for _ in range(2):
+        response = client.get(
+            f"/api/v1/topics/{topic_id}/arcade/image",
+            params={"url": image_url, "fm": "webp", "q": "82"},
+        )
+        assert response.status_code == 200, response.text
+        assert response.headers["content-type"] == "image/webp"
+
+    assert calls == 1
+
+
 def test_arcade_openclaw_branch_rules_are_enforced(client):
     admin = admin_panel_login(client)
     create = client.post(
@@ -407,12 +456,17 @@ def test_arcade_openclaw_branch_rules_are_enforced(client):
     assert branch_a_root["metadata"]["arcade"]["version"] == 1
     assert branch_a_root["metadata"]["arcade"]["branch_owner_openclaw_agent_id"] == branch_a_root["owner_openclaw_agent_id"]
 
-    duplicate_root = client.post(
+    implicit_append_resp = client.post(
         f"/api/v1/openclaw/topics/{topic_id}/posts",
-        json={"body": '["duplicate"]'},
+        json={"body": '["alpha", "beta", "gamma"]'},
         headers={"Authorization": f"Bearer {openclaw_a['openclaw_key']}"},
     )
-    assert duplicate_root.status_code == 409, duplicate_root.text
+    assert implicit_append_resp.status_code == 201, implicit_append_resp.text
+    implicit_append = implicit_append_resp.json()["post"]
+    assert implicit_append["in_reply_to_id"] == branch_a_root["id"]
+    assert implicit_append["root_post_id"] == branch_a_root["id"]
+    assert implicit_append["metadata"]["arcade"]["branch_root_post_id"] == branch_a_root["id"]
+    assert implicit_append["metadata"]["arcade"]["version"] == 2
 
     write_other_branch = client.post(
         f"/api/v1/openclaw/topics/{topic_id}/posts",
@@ -430,12 +484,12 @@ def test_arcade_openclaw_branch_rules_are_enforced(client):
 
     branch_a_second_resp = client.post(
         f"/api/v1/openclaw/topics/{topic_id}/posts",
-        json={"body": '["alpha", "beta", "gamma"]', "in_reply_to_id": branch_a_root["id"]},
+        json={"body": '["alpha", "beta", "gamma", "delta"]', "in_reply_to_id": implicit_append["id"]},
         headers={"Authorization": f"Bearer {openclaw_a['openclaw_key']}"},
     )
     assert branch_a_second_resp.status_code == 201, branch_a_second_resp.text
     branch_a_second = branch_a_second_resp.json()["post"]
-    assert branch_a_second["metadata"]["arcade"]["version"] == 2
+    assert branch_a_second["metadata"]["arcade"]["version"] == 3
 
     non_leaf_reply = client.post(
         f"/api/v1/openclaw/topics/{topic_id}/posts",
@@ -443,6 +497,62 @@ def test_arcade_openclaw_branch_rules_are_enforced(client):
         headers={"Authorization": f"Bearer {openclaw_a['openclaw_key']}"},
     )
     assert non_leaf_reply.status_code == 409, non_leaf_reply.text
+
+
+def test_arcade_relay_topics_allow_independent_openclaw_submissions(client):
+    admin = admin_panel_login(client)
+    create = client.post(
+        "/api/v1/internal/arcade/topics",
+        json={
+            "title": "Arcade 接力题",
+            "body": "每轮都是独立批次",
+            "metadata": {
+                "arcade": {
+                    "prompt": "每轮领取 5 张图",
+                    "rules": "提交到 TopicLab 分支",
+                    "output_mode": "plain_text",
+                    "validator": {"type": "custom", "config": {"review_mode": "local_subprocess"}},
+                    "data_api_base": "http://49.233.162.81:8788",
+                }
+            },
+        },
+        headers={"Authorization": f"Bearer {admin['token']}"},
+    )
+    assert create.status_code == 201, create.text
+    topic_id = create.json()["id"]
+
+    owner = register_login_and_openclaw_key(client, phone="13800009004", username="arcade-relay-owner")
+    first_resp = client.post(
+        f"/api/v1/openclaw/topics/{topic_id}/posts",
+        json={"body": "批次 1 判读"},
+        headers={"Authorization": f"Bearer {owner['openclaw_key']}"},
+    )
+    assert first_resp.status_code == 201, first_resp.text
+    first = first_resp.json()["post"]
+    assert first["in_reply_to_id"] is None
+    assert first["metadata"]["arcade"]["version"] == 1
+
+    second_resp = client.post(
+        f"/api/v1/openclaw/topics/{topic_id}/posts",
+        json={"body": "批次 2 判读"},
+        headers={"Authorization": f"Bearer {owner['openclaw_key']}"},
+    )
+    assert second_resp.status_code == 201, second_resp.text
+    second = second_resp.json()["post"]
+    assert second["in_reply_to_id"] is None
+    assert second["id"] != first["id"]
+    assert second["metadata"]["arcade"]["version"] == 1
+    assert second["metadata"]["arcade"]["branch_root_post_id"] == second["id"]
+
+    stale_parent_resp = client.post(
+        f"/api/v1/openclaw/topics/{topic_id}/posts",
+        json={"body": "批次 3 判读", "in_reply_to_id": first["id"]},
+        headers={"Authorization": f"Bearer {owner['openclaw_key']}"},
+    )
+    assert stale_parent_resp.status_code == 201, stale_parent_resp.text
+    stale_parent_post = stale_parent_resp.json()["post"]
+    assert stale_parent_post["in_reply_to_id"] is None
+    assert stale_parent_post["metadata"]["arcade"]["version"] == 1
 
 
 def test_admin_panel_can_list_twin_observations(client):
@@ -1028,6 +1138,27 @@ def test_arcade_evaluator_secret_can_list_pending_submissions_and_reply(client):
     )
     assert empty_queue.status_code == 200, empty_queue.text
     assert empty_queue.json()["items"] == []
+
+    revised_resp = client.post(
+        f"/api/v1/openclaw/topics/{topic_id}/posts",
+        json={"body": "根据评测意见提交第二轮答案"},
+        headers={"Authorization": f"Bearer {owner['openclaw_key']}"},
+    )
+    assert revised_resp.status_code == 201, revised_resp.text
+    revised_submission = revised_resp.json()["post"]
+    assert revised_submission["in_reply_to_id"] == evaluation_post["id"]
+    assert revised_submission["root_post_id"] == submission["id"]
+    assert revised_submission["metadata"]["arcade"]["version"] == 2
+
+    queue_after_revision = client.get(
+        "/api/v1/internal/arcade/review-queue",
+        headers={"X-Arcade-Secret-Key": "arcade-review-secret"},
+    )
+    assert queue_after_revision.status_code == 200, queue_after_revision.text
+    revised_items = queue_after_revision.json()["items"]
+    assert len(revised_items) == 1
+    assert revised_items[0]["branch_root_post_id"] == submission["id"]
+    assert revised_items[0]["submission_post"]["id"] == revised_submission["id"]
 
 
 def test_topic_list_uses_latest_post_oss_image_as_preview_fallback(client):
@@ -1992,7 +2123,7 @@ def test_openclaw_key_can_bind_user_identity_and_render_personal_skill(client):
 
     skill_resp = client.get(key_payload["skill_path"])
     assert skill_resp.status_code == 200, skill_resp.text
-    assert "除了读取当前 skill，本 skill 不提供任何 API 访问方式" in skill_resp.text
+    assert "本 skill 不提供任何 API 访问方式" in skill_resp.text
     assert "/api/v1/auth/openclaw-guest" in skill_resp.text
     assert "curl -fsSL" in skill_resp.text
     assert "## 二、核心文件只写摘要" in skill_resp.text
@@ -2240,6 +2371,14 @@ def test_openclaw_key_creates_primary_agent_and_home_summary(client):
     assert account["openclaw_agent"]["agent_uid"] == auth["agent_uid"]
     assert account["openclaw_agent"]["display_name"] == "summary-user's openclaw"
     assert account["points_balance"] == 0
+
+    user_me_resp = client.get(
+        "/api/v1/user/me",
+        headers={"Authorization": f"Bearer {auth['openclaw_key']}"},
+    )
+    assert user_me_resp.status_code == 200, user_me_resp.text
+    assert user_me_resp.json()["user"]["username"] == "summary-user"
+    assert user_me_resp.json()["auth_type"] == "openclaw_key"
 
     me_resp = client.get(
         "/api/v1/openclaw/agents/me",
@@ -2852,11 +2991,13 @@ def test_openclaw_skill_link_is_stable_and_reusable(client):
 
     first = client.get(skill_url)
     assert first.status_code == 200, first.text
-    assert auth["openclaw_key"] in first.text
+    assert auth["bind_key"] in first.text
+    assert auth["openclaw_key"] not in first.text
 
     second = client.get(skill_url)
     assert second.status_code == 200, second.text
-    assert auth["openclaw_key"] in second.text
+    assert auth["bind_key"] in second.text
+    assert auth["openclaw_key"] not in second.text
 
 
 def test_openclaw_personalized_skill_enforces_cli_first(client):

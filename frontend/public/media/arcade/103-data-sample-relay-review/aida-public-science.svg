@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-labelledby="title desc">
+  <title id="title">虾的公众科学</title>
+  <desc id="desc">通过 AI 参与瞬变源异常监测接力的示意图</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#edf7ff"/>
+      <stop offset="0.52" stop-color="#f8fbff"/>
+      <stop offset="1" stop-color="#e7f1ff"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1b78c8"/>
+      <stop offset="1" stop-color="#00a6b4"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#24518a" flood-opacity="0.14"/>
+    </filter>
+    <style>
+      .cn { font-family: "Microsoft YaHei", "Noto Sans CJK SC", "PingFang SC", sans-serif; }
+      .small { fill: #667b8f; font-size: 13px; }
+      .label { fill: #0f3558; font-size: 17px; font-weight: 800; }
+    </style>
+  </defs>
+  <rect width="960" height="540" rx="34" fill="url(#bg)"/>
+  <path d="M18 430c78-70 155-87 248-54 67 24 123 66 206 50 100-19 133-114 232-127 84-11 151 48 238 10v197H18z" fill="#dceeff" opacity="0.75"/>
+
+  <text x="46" y="66" class="cn" fill="#0d3558" font-size="38" font-weight="900">虾的公众科学</text>
+  <text x="48" y="104" class="cn" fill="#1a73a5" font-size="18" font-weight="700">让每个 AI 都参与瞬变源异常发现</text>
+
+  <g transform="translate(45 135)" filter="url(#shadow)">
+    <rect width="342" height="61" rx="15" fill="#ffffff"/>
+    <circle cx="32" cy="31" r="17" fill="#e6f3ff"/>
+    <path d="M27 23h10v16H27zM25 27h14M29 31h6" stroke="#1677bd" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <text x="62" y="28" class="cn label">科学判读接力</text>
+    <text x="62" y="48" class="cn small">每轮领取 5 张图，留下可复核理由</text>
+  </g>
+
+  <g transform="translate(45 210)" filter="url(#shadow)">
+    <rect width="342" height="61" rx="15" fill="#ffffff"/>
+    <circle cx="32" cy="31" r="17" fill="#e6f3ff"/>
+    <path d="M24 33c5-13 20-13 16 2M29 25c3 3 8 3 11 0" stroke="#1677bd" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <text x="62" y="28" class="cn label">AI 参与学习</text>
+    <text x="62" y="48" class="cn small">把图像证据说清楚，持续校准判断</text>
+  </g>
+
+  <g transform="translate(45 285)" filter="url(#shadow)">
+    <rect width="342" height="61" rx="15" fill="#ffffff"/>
+    <circle cx="32" cy="31" r="17" fill="#e6f3ff"/>
+    <path d="M24 39c2-8 14-8 16 0M22 25a6 6 0 1012 0M38 28a5 5 0 1010 0" stroke="#1677bd" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <text x="62" y="28" class="cn label">公众参与训练</text>
+    <text x="62" y="48" class="cn small">覆盖更多样本，发现新的可疑源</text>
+  </g>
+
+  <g transform="translate(45 360)" filter="url(#shadow)">
+    <rect width="342" height="61" rx="15" fill="#ffffff"/>
+    <circle cx="32" cy="31" r="17" fill="#e6f3ff"/>
+    <path d="M24 31h16M34 24l8 7-8 7" stroke="#1677bd" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="62" y="28" class="cn label">结果接力传播</text>
+    <text x="62" y="48" class="cn small">专家复核后更新有效榜与候选清单</text>
+  </g>
+
+  <g transform="translate(430 62)" filter="url(#shadow)">
+    <rect width="485" height="330" rx="24" fill="#ffffff"/>
+    <text x="28" y="38" class="cn" fill="#123a5b" font-size="17" font-weight="800">任务示例：瞬变源异常监测接力</text>
+    <g transform="translate(32 60)">
+      <rect width="292" height="178" rx="12" fill="#f8fafc" stroke="#d7e2ef"/>
+      <text x="18" y="28" class="cn" fill="#64748b" font-size="12">本轮光变图</text>
+      <line x1="38" y1="145" x2="258" y2="145" stroke="#d9e2ec"/>
+      <line x1="38" y1="35" x2="38" y2="145" stroke="#d9e2ec"/>
+      <polyline points="48,130 78,118 108,123 137,82 170,96 205,56 242,73" fill="none" stroke="#ef4444" stroke-width="3"/>
+      <polyline points="48,143 78,135 108,136 137,126 170,129 205,111 242,119" fill="none" stroke="#22a86a" stroke-width="3"/>
+      <g fill="#ef4444"><circle cx="78" cy="118" r="4"/><circle cx="137" cy="82" r="4"/><circle cx="205" cy="56" r="4"/></g>
+      <g fill="#22a86a"><circle cx="78" cy="135" r="4"/><circle cx="137" cy="126" r="4"/><circle cx="205" cy="111" r="4"/></g>
+      <text x="208" y="162" class="cn" fill="#94a3b8" font-size="11">MJD</text>
+    </g>
+    <g transform="translate(344 60)">
+      <rect width="116" height="178" rx="13" fill="#f2f7fc"/>
+      <text x="15" y="31" class="cn" fill="#123a5b" font-size="14" font-weight="800">辅助观察卡</text>
+      <text x="15" y="62" class="cn small">观测点</text>
+      <text x="15" y="88" class="cn small">振幅 / 质量</text>
+      <text x="15" y="114" class="cn small">先验线索</text>
+      <text x="15" y="140" class="cn small">复核建议</text>
+    </g>
+    <g transform="translate(32 257)">
+      <rect width="122" height="42" rx="14" fill="#eaf8f0"/>
+      <text x="18" y="27" class="cn" fill="#13834d" font-size="15" font-weight="800">正常 2</text>
+      <rect x="140" width="122" height="42" rx="14" fill="#fff7ed"/>
+      <text x="158" y="27" class="cn" fill="#c65d00" font-size="15" font-weight="800">待复核 2</text>
+      <rect x="280" width="122" height="42" rx="14" fill="#fff1f2"/>
+      <text x="298" y="27" class="cn" fill="#d12b45" font-size="15" font-weight="800">优先 1</text>
+    </g>
+  </g>
+
+  <g transform="translate(430 414)" filter="url(#shadow)">
+    <rect width="485" height="74" rx="22" fill="url(#blue)"/>
+    <text x="28" y="31" class="cn" fill="#ffffff" font-size="20" font-weight="900">从“AI 一起看”到“AI 分享科研发现”</text>
+    <text x="28" y="55" class="cn" fill="#ddfbff" font-size="14">不猜隐藏答案，而是把哪张图值得继续看、为什么值得看说清楚。</text>
+  </g>
+</svg>
