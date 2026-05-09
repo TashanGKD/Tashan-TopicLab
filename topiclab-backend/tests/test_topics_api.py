@@ -1201,6 +1201,82 @@ def test_arcade_review_queue_does_not_scan_every_topic_post(client, monkeypatch)
     assert items[0]["submission_post"]["id"] == submission_resp.json()["post"]["id"]
 
 
+def test_arcade_review_queue_can_filter_to_supported_sources(client):
+    admin = admin_panel_login(client)
+    unsupported = client.post(
+        "/api/v1/internal/arcade/topics",
+        json={
+            "title": "Community Arcade",
+            "body": "靠社区点赞评测",
+            "metadata": {
+                "arcade": {
+                    "prompt": "写一段话",
+                    "rules": "社区投票",
+                    "output_mode": "plain_text",
+                    "validator": {"type": "likes", "config": {"source": "cabinets/community/likes-only"}},
+                }
+            },
+        },
+        headers={"Authorization": f"Bearer {admin['token']}"},
+    )
+    assert unsupported.status_code == 201, unsupported.text
+    supported = client.post(
+        "/api/v1/internal/arcade/topics",
+        json={
+            "title": "Local Arcade",
+            "body": "本地评测题",
+            "metadata": {
+                "arcade": {
+                    "prompt": "提交答案",
+                    "rules": "等待评测员",
+                    "output_mode": "plain_text",
+                    "validator": {
+                        "type": "custom",
+                        "config": {
+                            "source": "cabinets/local/supported",
+                            "review_mode": "local_subprocess",
+                        },
+                    },
+                }
+            },
+        },
+        headers={"Authorization": f"Bearer {admin['token']}"},
+    )
+    assert supported.status_code == 201, supported.text
+
+    owner = register_login_and_openclaw_key(client, phone="13800009007", username="arcade-source-filter-owner")
+    unsupported_submission = client.post(
+        f"/api/v1/openclaw/topics/{unsupported.json()['id']}/posts",
+        json={"body": "社区题提交"},
+        headers={"Authorization": f"Bearer {owner['openclaw_key']}"},
+    )
+    assert unsupported_submission.status_code == 201, unsupported_submission.text
+    supported_submission = client.post(
+        f"/api/v1/openclaw/topics/{supported.json()['id']}/posts",
+        json={"body": "本地题提交"},
+        headers={"Authorization": f"Bearer {owner['openclaw_key']}"},
+    )
+    assert supported_submission.status_code == 201, supported_submission.text
+
+    unfiltered = client.get(
+        "/api/v1/internal/arcade/review-queue",
+        headers={"X-Arcade-Secret-Key": "arcade-review-secret"},
+    )
+    assert unfiltered.status_code == 200, unfiltered.text
+    unfiltered_topic_ids = {item["topic"]["id"] for item in unfiltered.json()["items"]}
+    assert unsupported.json()["id"] in unfiltered_topic_ids
+    assert supported.json()["id"] in unfiltered_topic_ids
+
+    filtered = client.get(
+        "/api/v1/internal/arcade/review-queue?source=cabinets/local/supported",
+        headers={"X-Arcade-Secret-Key": "arcade-review-secret"},
+    )
+    assert filtered.status_code == 200, filtered.text
+    items = filtered.json()["items"]
+    assert [item["topic"]["id"] for item in items] == [supported.json()["id"]]
+    assert items[0]["submission_post"]["id"] == supported_submission.json()["post"]["id"]
+
+
 def test_topic_list_uses_latest_post_oss_image_as_preview_fallback(client):
     create = client.post("/topics", json={"title": "评论图预览", "body": "正文无图", "category": "research"})
     assert create.status_code == 201, create.text

@@ -1229,6 +1229,7 @@ def _list_arcade_pending_reviews(
     *,
     topic_id: str | None = None,
     owner_openclaw_agent_id: int | None = None,
+    sources: list[str] | None = None,
     limit: int = 20,
     include_thread: bool = False,
 ) -> list[dict[str, Any]]:
@@ -1237,6 +1238,7 @@ def _list_arcade_pending_reviews(
     return list_arcade_pending_review_items(
         topic_id=topic_id,
         owner_openclaw_agent_id=owner_openclaw_agent_id,
+        sources=sources,
         limit=limit,
         include_thread=include_thread,
     )
@@ -2302,6 +2304,7 @@ async def create_post_endpoint(topic_id: str, req: CreatePostRequest, user: dict
 async def list_arcade_review_queue_endpoint(
     topic_id: str | None = Query(default=None),
     owner_openclaw_agent_id: int | None = Query(default=None),
+    source: list[str] | None = Query(default=None),
     include_thread: bool = Query(default=False),
     limit: int = Query(default=20, ge=1, le=100),
     _: dict[str, Any] = Depends(require_arcade_evaluator),
@@ -2310,6 +2313,7 @@ async def list_arcade_review_queue_endpoint(
         "items": _list_arcade_pending_reviews(
             topic_id=topic_id,
             owner_openclaw_agent_id=owner_openclaw_agent_id,
+            sources=source,
             limit=limit,
             include_thread=include_thread,
         ),

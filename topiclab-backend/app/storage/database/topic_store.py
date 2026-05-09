@@ -2780,20 +2780,24 @@ def list_arcade_pending_review_items(
     *,
     topic_id: str | None = None,
     owner_openclaw_agent_id: int | None = None,
+    sources: list[str] | None = None,
     limit: int = 20,
     include_thread: bool = False,
 ) -> list[dict]:
     page_limit = max(1, min(limit, 100))
+    source_filters = list(dict.fromkeys(str(source).strip() for source in (sources or []) if str(source).strip()))
 
     with get_db_session() as session:
         is_sqlite = session.bind.dialect.name == "sqlite"
         if is_sqlite:
             scene_expr = "json_extract({alias}.metadata, '$.scene')"
             post_kind_expr = "json_extract({alias}.metadata, '$.arcade.post_kind')"
+            validator_source_expr = "json_extract(t.metadata, '$.arcade.validator.config.source')"
             branch_owner_expr = "CAST(json_extract(br.metadata, '$.arcade.branch_owner_openclaw_agent_id') AS INTEGER)"
         else:
             scene_expr = "{alias}.metadata ->> 'scene'"
             post_kind_expr = "{alias}.metadata -> 'arcade' ->> 'post_kind'"
+            validator_source_expr = "t.metadata -> 'arcade' -> 'validator' -> 'config' ->> 'source'"
             branch_owner_expr = "CAST(NULLIF(br.metadata -> 'arcade' ->> 'branch_owner_openclaw_agent_id', '') AS INTEGER)"
 
         filters = ["t.category = 'arcade'"]
@@ -2804,49 +2808,53 @@ def list_arcade_pending_review_items(
         if owner_openclaw_agent_id is not None:
             filters.append(f"{branch_owner_expr} = :owner_openclaw_agent_id")
             params["owner_openclaw_agent_id"] = owner_openclaw_agent_id
+        if source_filters:
+            filters.append(f"{validator_source_expr} IN :sources")
+            params["sources"] = source_filters
         where_clause = " AND ".join(filters)
 
-        candidate_rows = session.execute(
-            text(f"""
-                WITH branch_roots AS (
-                    SELECT
-                        br.id AS branch_root_post_id,
-                        br.topic_id,
-                        {branch_owner_expr} AS branch_owner_openclaw_agent_id
-                    FROM posts br
-                    JOIN topics t ON t.id = br.topic_id
-                    WHERE {where_clause}
-                      AND br.in_reply_to_id IS NULL
-                      AND {scene_expr.format(alias="br")} = 'arcade'
-                      AND {post_kind_expr.format(alias="br")} = 'submission'
-                ),
-                leaf_submissions AS (
-                    SELECT
-                        lp.topic_id,
-                        br.branch_root_post_id,
-                        lp.id AS submission_post_id,
-                        br.branch_owner_openclaw_agent_id,
-                        lp.created_at AS submission_created_at
-                    FROM branch_roots br
-                    JOIN posts lp
-                      ON lp.topic_id = br.topic_id
-                     AND COALESCE(lp.root_post_id, lp.id) = br.branch_root_post_id
-                    WHERE {scene_expr.format(alias="lp")} = 'arcade'
-                      AND {post_kind_expr.format(alias="lp")} = 'submission'
-                      AND NOT EXISTS (
-                          SELECT 1
-                          FROM posts child
-                          WHERE child.topic_id = lp.topic_id
-                            AND child.in_reply_to_id = lp.id
-                      )
-                )
-                SELECT *
-                FROM leaf_submissions
-                ORDER BY submission_created_at ASC, submission_post_id ASC
-                LIMIT :limit
-            """),
-            params,
-        ).fetchall()
+        queue_query = text(f"""
+            WITH branch_roots AS (
+                SELECT
+                    br.id AS branch_root_post_id,
+                    br.topic_id,
+                    {branch_owner_expr} AS branch_owner_openclaw_agent_id
+                FROM posts br
+                JOIN topics t ON t.id = br.topic_id
+                WHERE {where_clause}
+                  AND br.in_reply_to_id IS NULL
+                  AND {scene_expr.format(alias="br")} = 'arcade'
+                  AND {post_kind_expr.format(alias="br")} = 'submission'
+            ),
+            leaf_submissions AS (
+                SELECT
+                    lp.topic_id,
+                    br.branch_root_post_id,
+                    lp.id AS submission_post_id,
+                    br.branch_owner_openclaw_agent_id,
+                    lp.created_at AS submission_created_at
+                FROM branch_roots br
+                JOIN posts lp
+                  ON lp.topic_id = br.topic_id
+                 AND COALESCE(lp.root_post_id, lp.id) = br.branch_root_post_id
+                WHERE {scene_expr.format(alias="lp")} = 'arcade'
+                  AND {post_kind_expr.format(alias="lp")} = 'submission'
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM posts child
+                      WHERE child.topic_id = lp.topic_id
+                        AND child.in_reply_to_id = lp.id
+                  )
+            )
+            SELECT *
+            FROM leaf_submissions
+            ORDER BY submission_created_at ASC, submission_post_id ASC
+            LIMIT :limit
+        """)
+        if source_filters:
+            queue_query = queue_query.bindparams(bindparam("sources", expanding=True))
+
+        candidate_rows = session.execute(queue_query, params).fetchall()
 
         if not candidate_rows:
             return []
