@@ -119,5 +119,6 @@ if [[ "$SKIP_SMOKE" != "1" ]]; then
 fi
 
 echo "[reviewer-deploy] starting $SERVICE_NAME container"
-compose up -d --no-deps "$SERVICE_NAME"
+compose rm -sf "$SERVICE_NAME" >/dev/null 2>&1 || true
+compose up -d --force-recreate --no-deps "$SERVICE_NAME"
 compose ps "$SERVICE_NAME"

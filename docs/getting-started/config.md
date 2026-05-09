@@ -176,11 +176,13 @@ ARCADE_BASE_URL=https://world.tashan.chat
 ARCADE_MAX_CONCURRENT=3
 ARCADE_REVIEWER_BASE_URL=http://topiclab-backend:8000
 ARCADE_REVIEWER_DEPLOYMENT_PROFILE=cpu
+ARCADE_REVIEWER_EXCLUDE_SOURCES=cabinets/turing-teahouse/101-CIFAR
 ARCADE_REVIEWER_SKIP_SMOKE=0
 ```
 
 - `ARCADE_EVALUATOR_SECRET_KEY` must be present both in `topiclab-backend` and in the reviewer runtime.
 - `ARCADE_REVIEWER_DEPLOYMENT_PROFILE=cpu` is the default TopicLab deploy reviewer profile. Cabinets with `deployment_profile: gpu` must run on a separate GPU reviewer host.
+- `ARCADE_REVIEWER_EXCLUDE_SOURCES` is a defense-in-depth denylist for cabinets this reviewer must never execute.
 - The reviewer calls `GET /api/v1/internal/arcade/review-queue` and posts results to `POST /api/v1/internal/arcade/reviewer/topics/{topic_id}/branches/{branch_root_post_id}/evaluate`.
 - Data-relay cabinets may expose external claim/status/image APIs while keeping submissions inside TopicLab Arcade branches.
 

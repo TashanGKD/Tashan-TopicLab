@@ -141,6 +141,7 @@ services:
     environment:
       - ARCADE_LOG_DIR=/app/logs
       - ARCADE_REVIEWER_DEPLOYMENT_PROFILE=${ARCADE_REVIEWER_DEPLOYMENT_PROFILE:-cpu}
+      - ARCADE_REVIEWER_EXCLUDE_SOURCES=${ARCADE_REVIEWER_EXCLUDE_SOURCES:-cabinets/turing-teahouse/101-CIFAR}
     command:
       - python
       - arcade_reviewer.py

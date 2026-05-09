@@ -69,6 +69,7 @@ Configure these in `DEPLOY_ENV` when Arcade cabinets should be automatically rev
 - `ARCADE_MAX_CONCURRENT=3`: optional parallel reviewer limit.
 - `ARCADE_REVIEWER_BASE_URL=http://topiclab-backend:8000`: reviewer container base URL; the default should use the internal Compose service.
 - `ARCADE_REVIEWER_DEPLOYMENT_PROFILE=cpu`: default deployment profile for the TopicLab deploy reviewer. Use `gpu` only on a GPU reviewer host.
+- `ARCADE_REVIEWER_EXCLUDE_SOURCES=cabinets/turing-teahouse/101-CIFAR`: defense-in-depth denylist for cabinets this deploy reviewer must never execute.
 - `ARCADE_REVIEWER_SKIP_SMOKE=0`: optional; set to `1` only for emergency deploys when reviewer smoke tests must be skipped.
 
 After deployment, verify:
