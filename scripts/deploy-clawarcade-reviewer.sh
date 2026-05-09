@@ -4,12 +4,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ARCADE_REVIEWER_SOURCE_ENV:-$ROOT_DIR/.env}"
 CLAWARCADE_DIR="${ARCADE_REVIEWER_CLAWARCADE_DIR:-$ROOT_DIR/ClawArcade}"
-SERVICE_NAME="${ARCADE_REVIEWER_SYSTEMD_SERVICE:-clawarcade-reviewer.service}"
-SERVICE_USER="${ARCADE_REVIEWER_SYSTEMD_USER:-$(id -un)}"
-RUNTIME_ENV_FILE="${ARCADE_REVIEWER_RUNTIME_ENV:-$ROOT_DIR/.arcade-reviewer.env}"
-BASE_URL_DEFAULT="${ARCADE_REVIEWER_BASE_URL:-https://world.tashan.chat}"
+SERVICE_NAME="${ARCADE_REVIEWER_COMPOSE_SERVICE:-clawarcade-reviewer}"
 SMOKE_TIMEOUT="${ARCADE_REVIEWER_SMOKE_TIMEOUT_SECONDS:-300}"
 SKIP_SMOKE="${ARCADE_REVIEWER_SKIP_SMOKE:-0}"
+DEPLOYMENT_PROFILE="${ARCADE_REVIEWER_DEPLOYMENT_PROFILE:-cpu}"
 
 warn() {
   echo "::warning::$*"
@@ -30,9 +28,16 @@ read_env_value() {
   grep -E "^${key}=" "$file" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '\r' || true
 }
 
+compose() {
+  ENV_FILE="$ENV_FILE" \
+  ARCADE_REVIEWER_DEPLOYMENT_PROFILE="$DEPLOYMENT_PROFILE" \
+  docker compose --env-file "$ENV_FILE" --profile reviewer "$@"
+}
+
 require_file "$ENV_FILE" "deploy env file"
+require_file "$ROOT_DIR/docker-compose.yml" "TopicLab docker-compose.yml"
 require_file "$CLAWARCADE_DIR/arcade_reviewer.py" "ClawArcade reviewer"
-require_file "$CLAWARCADE_DIR/deploy/systemd/clawarcade-reviewer.service" "ClawArcade systemd template"
+require_file "$CLAWARCADE_DIR/Dockerfile.reviewer" "ClawArcade reviewer Dockerfile"
 require_file "$CLAWARCADE_DIR/generated/reviewer_registry.json" "ClawArcade reviewer registry"
 
 SECRET_VALUE="$(read_env_value "ARCADE_EVALUATOR_SECRET_KEY" "$ENV_FILE")"
@@ -41,69 +46,34 @@ if [[ -z "$SECRET_VALUE" ]]; then
   exit 0
 fi
 
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "::error::python3 is required for the ClawArcade reviewer"
+if ! docker compose version >/dev/null 2>&1; then
+  echo "::error::docker compose is required for the ClawArcade reviewer"
   exit 1
 fi
 
-sudo -u "$SERVICE_USER" /bin/bash -lc '
-  export PATH="$HOME/.local/bin:$PATH"
-  if command -v uv >/dev/null 2>&1; then
-    exit 0
-  fi
-  python3 -m pip install --user uv >/dev/null 2>&1 && exit 0
-  if command -v curl >/dev/null 2>&1; then
-    curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null
-    exit 0
-  fi
-  echo "uv is required but could not be installed" >&2
-  exit 1
-'
-
-mkdir -p "$(dirname "$RUNTIME_ENV_FILE")"
-umask 077
-{
-  grep -E '^(ARCADE_|TOPICLAB_)' "$ENV_FILE" 2>/dev/null || true
-  if ! grep -q '^ARCADE_BASE_URL=' "$ENV_FILE" 2>/dev/null; then
-    printf 'ARCADE_BASE_URL=%s\n' "$BASE_URL_DEFAULT"
-  fi
-  if ! grep -q '^ARCADE_LOG_DIR=' "$ENV_FILE" 2>/dev/null; then
-    printf 'ARCADE_LOG_DIR=%s\n' "$CLAWARCADE_DIR/logs"
-  fi
-} > "$RUNTIME_ENV_FILE"
-
-mkdir -p "$CLAWARCADE_DIR/logs"
-sudo chown "$SERVICE_USER" "$RUNTIME_ENV_FILE"
-sudo chown -R "$SERVICE_USER" "$CLAWARCADE_DIR/logs"
+echo "[reviewer-deploy] building $SERVICE_NAME image profile=$DEPLOYMENT_PROFILE"
+compose build "$SERVICE_NAME"
 
 if [[ "$SKIP_SMOKE" != "1" ]]; then
-  sudo -u "$SERVICE_USER" /bin/bash -lc "
-    export PATH=\"\$HOME/.local/bin:\$PATH\"
-    cd '$CLAWARCADE_DIR'
-    python3 scripts/build_cabinets.py
-    python3 scripts/validate_cabinets.py
-    python3 scripts/reviewer_smoke_test.py \
-      --repo-root '$CLAWARCADE_DIR' \
-      --timeout '$SMOKE_TIMEOUT' \
+  echo "[reviewer-deploy] validating generated cabinet metadata in container"
+  compose run --rm --no-deps --entrypoint python "$SERVICE_NAME" scripts/build_cabinets.py --check
+  compose run --rm --no-deps --entrypoint python "$SERVICE_NAME" scripts/validate_cabinets.py
+
+  echo "[reviewer-deploy] running CPU reviewer smoke probes"
+  compose run --rm --no-deps --entrypoint python "$SERVICE_NAME" \
+    scripts/reviewer_smoke_test.py \
+      --repo-root /app \
+      --timeout "$SMOKE_TIMEOUT" \
       --probe 102-variable-star-evaluator
-    python3 scripts/reviewer_e2e_smoke.py \
-      --repo-root '$CLAWARCADE_DIR' \
+  compose run --rm --no-deps --entrypoint python "$SERVICE_NAME" \
+    scripts/reviewer_e2e_smoke.py \
+      --repo-root /app \
       --source cabinets/citizen-science-harbor/103-data-sample-relay-review \
       --submission-file forum_post_template.txt \
       --expected-min-score 1 \
-      --timeout '$SMOKE_TIMEOUT'
-  "
+      --timeout "$SMOKE_TIMEOUT"
 fi
 
-sed \
-  -e "s|__DEPLOY_DIR__|$CLAWARCADE_DIR|g" \
-  -e "s|__SERVICE_USER__|$SERVICE_USER|g" \
-  -e "s|__ENV_FILE__|$RUNTIME_ENV_FILE|g" \
-  "$CLAWARCADE_DIR/deploy/systemd/clawarcade-reviewer.service" \
-  | sudo tee "/etc/systemd/system/$SERVICE_NAME" >/dev/null
-
-sudo systemctl daemon-reload
-sudo systemctl enable "$SERVICE_NAME"
-sudo systemctl restart "$SERVICE_NAME"
-sudo systemctl is-active "$SERVICE_NAME"
-sudo systemctl --no-pager --full status "$SERVICE_NAME"
+echo "[reviewer-deploy] starting $SERVICE_NAME container"
+compose up -d --no-deps "$SERVICE_NAME"
+compose ps "$SERVICE_NAME"

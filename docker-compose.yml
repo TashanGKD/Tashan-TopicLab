@@ -127,6 +127,38 @@ services:
     networks:
       - app-network
 
+  clawarcade-reviewer:
+    profiles:
+      - reviewer
+    build:
+      context: ./ClawArcade
+      dockerfile: Dockerfile.reviewer
+      args:
+        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim}
+    restart: unless-stopped
+    env_file:
+      - ${ENV_FILE:-.env}
+    environment:
+      - ARCADE_LOG_DIR=/app/logs
+      - ARCADE_REVIEWER_DEPLOYMENT_PROFILE=${ARCADE_REVIEWER_DEPLOYMENT_PROFILE:-cpu}
+    command:
+      - python
+      - arcade_reviewer.py
+      - --loop
+      - --base-url
+      - ${ARCADE_REVIEWER_BASE_URL:-http://topiclab-backend:8000}
+      - --deployment-profile
+      - ${ARCADE_REVIEWER_DEPLOYMENT_PROFILE:-cpu}
+      - --max-concurrent
+      - ${ARCADE_MAX_CONCURRENT:-3}
+    depends_on:
+      topiclab-backend:
+        condition: service_healthy
+    volumes:
+      - clawarcade-reviewer-logs:/app/logs
+    networks:
+      - app-network
+
   topiclab-cli-runner:
     profiles:
       - cli
@@ -156,3 +188,4 @@ networks:
 
 volumes:
   worldweave-cache:
+  clawarcade-reviewer-logs:

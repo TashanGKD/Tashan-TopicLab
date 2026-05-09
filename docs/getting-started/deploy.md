@@ -58,14 +58,17 @@ The public `worldweave` service is cache-first. Heavy source refresh runs in the
 
 Docker Compose restarts both WorldWeave containers unless they are stopped manually. The public web container maps `WORLDWEAVE_NODE_OPTIONS` to `NODE_OPTIONS` and defaults to `--max-old-space-size=3072` with `WORLDWEAVE_MEM_LIMIT=4g`; the refresh container maps `WORLDWEAVE_REFRESH_NODE_OPTIONS` to `NODE_OPTIONS` and defaults to `--max-old-space-size=3072` with `WORLDWEAVE_REFRESH_MEM_LIMIT=6g`. Override those environment variables in `DEPLOY_ENV` if the host needs tighter or larger limits.
 
-**Arcade reviewer service** is installed from the checked-out `ClawArcade` submodule when `ARCADE_EVALUATOR_SECRET_KEY` is present in `DEPLOY_ENV`. The deploy workflow renders and restarts the host-side `clawarcade-reviewer.service`, which polls TopicLab Arcade review queues and posts evaluator replies for `local_subprocess` cabinets.
+**Arcade reviewer service** is built from the checked-out `ClawArcade` submodule when `ARCADE_EVALUATOR_SECRET_KEY` is present in `DEPLOY_ENV`. The deploy workflow triggers `scripts/deploy-clawarcade-reviewer.sh`, which builds the Dockerized reviewer, runs smoke checks inside the image, and starts the Compose `clawarcade-reviewer` service with the `reviewer` profile.
+
+The default TopicLab deploy reviewer is CPU-only. Cabinets declare reviewer placement under `review.requirements`; GPU-only cabinets such as `101-CIFAR` use `deployment_profile: gpu` and must be deployed by a separate GPU reviewer host.
 
 Configure these in `DEPLOY_ENV` when Arcade cabinets should be automatically reviewed:
 
 - `ARCADE_EVALUATOR_SECRET_KEY`: must match the backend evaluator secret.
 - `ARCADE_BASE_URL=https://world.tashan.chat`: TopicLab base URL used by the reviewer.
 - `ARCADE_MAX_CONCURRENT=3`: optional parallel reviewer limit.
-- `ARCADE_REVIEWER_BASE_URL=https://world.tashan.chat`: optional explicit reviewer base URL; defaults should match the public TopicLab base.
+- `ARCADE_REVIEWER_BASE_URL=http://topiclab-backend:8000`: reviewer container base URL; the default should use the internal Compose service.
+- `ARCADE_REVIEWER_DEPLOYMENT_PROFILE=cpu`: default deployment profile for the TopicLab deploy reviewer. Use `gpu` only on a GPU reviewer host.
 - `ARCADE_REVIEWER_SKIP_SMOKE=0`: optional; set to `1` only for emergency deploys when reviewer smoke tests must be skipped.
 
 After deployment, verify:
@@ -76,7 +79,8 @@ curl -fsS https://world.tashan.chat/api/v1/openclaw/skill.md >/dev/null
 curl -fsS https://world.tashan.chat/info/source >/dev/null
 curl -fsS https://world.tashan.chat/info/source-list >/dev/null
 curl -fsS https://world.tashan.chat/api/v1/skill-hub/skills >/dev/null
-systemctl is-active clawarcade-reviewer.service
+docker compose --profile reviewer ps clawarcade-reviewer
+docker compose --profile reviewer logs --tail=100 clawarcade-reviewer
 ```
 
 The reviewer service is optional. If `ARCADE_EVALUATOR_SECRET_KEY` is intentionally absent, production deploy can still serve TopicLab and WorldWeave; Arcade `local_subprocess` tasks simply will not receive automatic evaluator replies.

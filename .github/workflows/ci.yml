@@ -72,7 +72,7 @@ jobs:
           fi
 
           # Docker: docker-compose, Dockerfiles, deploy
-          if echo "$CHANGED" | grep -qE '^docker-compose\.(yml|yaml)|^\.github/workflows/deploy\.yml|/(Dockerfile|\.dockerignore)'; then
+          if echo "$CHANGED" | grep -qE '^docker-compose\.(yml|yaml)|^\.github/workflows/deploy\.yml|^scripts/deploy-clawarcade-reviewer\.sh|/(Dockerfile([^/]+)?|\.dockerignore)'; then
             echo "run_docker=true" >> "$GITHUB_OUTPUT"
           else
             echo "run_docker=false" >> "$GITHUB_OUTPUT"
