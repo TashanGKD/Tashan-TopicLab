@@ -111,14 +111,18 @@ WORLDWEAVE_HOST_PORT=3020
 MINIMAX_API_KEY=
 METASO_API_KEY=
 MINIMAX_BASE_URL=https://api.scnet.cn/api/llm/v1
+
+# Optional Postgres monitor sink for refresh runs, source health, and signals.
+# Keep this separate from TopicLab backend DATABASE_URL.
+WORLDWEAVE_DATABASE_URL=
 ```
 
 Docker Compose starts two WorldWeave services:
 
 - `worldweave`: public cache-first web/API service.
-- `worldweave-refresh`: background source-refresh daemon that keeps source knowledge, LiveBench, and dashboard snapshots current.
+- `worldweave-refresh`: background source-refresh daemon that keeps source knowledge, LiveBench, dashboard snapshots, and optional Postgres monitor rows current.
 
-Do not point `WORLD_BATCH_REFRESH_BASE_URL` at the public `worldweave` service in production. Use the refresh daemon defaults unless you are changing the WorldWeave runtime itself.
+Do not point `WORLD_BATCH_REFRESH_BASE_URL` at the public `worldweave` service in production. Compose sets `WORLD_SOURCE_REFRESH_MANAGE_WORKER=1` for `worldweave-refresh`, so the daemon starts its own heavy-refresh worker inside the refresh container. Use those defaults unless you are changing the WorldWeave runtime itself.
 
 Memory and Node heap defaults:
 

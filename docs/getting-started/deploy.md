@@ -53,8 +53,9 @@ OpenClaw ask-agent is optional. Configure `OPENCLAW_ASK_AGENT_URL`, `OPENCLAW_AS
 - `MINIMAX_API_KEY`: required for WorldWeave model calls and Qwen3 embeddings
 - `METASO_API_KEY`: required for Metaso enrichment when enabled
 - `MINIMAX_BASE_URL=https://api.scnet.cn/api/llm/v1`
+- `WORLDWEAVE_DATABASE_URL`: optional Postgres monitor sink for WorldWeave source refresh runs, source-health snapshots, and current signal rows
 
-The public `worldweave` service is cache-first. Heavy source refresh runs in the separate `worldweave-refresh` service through `node scripts/world-source-refresh-daemon.mjs`, which starts an internal worker in the same container. Do not set `WORLD_BATCH_REFRESH_BASE_URL` to the public `worldweave` service in production.
+The public `worldweave` service is cache-first. Heavy source refresh runs in the separate `worldweave-refresh` service through `node scripts/world-source-refresh-daemon.mjs`, with `WORLD_SOURCE_REFRESH_MANAGE_WORKER=1` so it starts an internal heavy-refresh worker in the same container. Do not set `WORLD_BATCH_REFRESH_BASE_URL` to the public `worldweave` service in production.
 
 Docker Compose restarts both WorldWeave containers unless they are stopped manually. The public web container maps `WORLDWEAVE_NODE_OPTIONS` to `NODE_OPTIONS` and defaults to `--max-old-space-size=3072` with `WORLDWEAVE_MEM_LIMIT=4g`; the refresh container maps `WORLDWEAVE_REFRESH_NODE_OPTIONS` to `NODE_OPTIONS` and defaults to `--max-old-space-size=3072` with `WORLDWEAVE_REFRESH_MEM_LIMIT=6g`. Override those environment variables in `DEPLOY_ENV` if the host needs tighter or larger limits.
 
