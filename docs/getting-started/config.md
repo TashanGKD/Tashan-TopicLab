@@ -112,8 +112,9 @@ MINIMAX_API_KEY=
 METASO_API_KEY=
 MINIMAX_BASE_URL=https://api.scnet.cn/api/llm/v1
 
-# Optional Postgres monitor sink for refresh runs, source health, and signals
-DATABASE_URL=
+# Optional Postgres monitor sink for refresh runs, source health, and signals.
+# Keep this separate from TopicLab backend DATABASE_URL.
+WORLDWEAVE_DATABASE_URL=
 ```
 
 Docker Compose starts two WorldWeave services:
