@@ -24,6 +24,7 @@ type HomeEntryControl = {
   label: string
   entryId?: string
   to?: string
+  externalUrl?: string
   disabled?: boolean
 }
 
@@ -91,6 +92,12 @@ export default function HomePage() {
       id: 'info-column',
       label: '信息专栏',
       controls: [
+        { id: 'world-context', label: '世界脉络', to: '/info/source' },
+        {
+          id: 'academic-heatmap',
+          label: '学术热力图',
+          externalUrl: 'https://daiduo2.github.io/academic-trend-monitor/openalex-field-heat',
+        },
         { id: 'spring-campus', label: '春招季', disabled: true },
       ],
     },
@@ -130,6 +137,10 @@ export default function HomePage() {
     }
 
     if (control.entryId == null) {
+      if (control.externalUrl) {
+        window.open(control.externalUrl, '_blank', 'noopener,noreferrer')
+        return
+      }
       if (control.to) {
         navigate(control.to)
       }
@@ -254,7 +265,7 @@ export default function HomePage() {
                             ? -1
                             : homeEntryItems.findIndex((item) => item.id === control.entryId)
                           const isActive = targetIndex === activeIndex && targetIndex >= 0
-                          const isDisabled = control.disabled ?? (!control.to && targetIndex < 0)
+                          const isDisabled = control.disabled ?? (!control.to && !control.externalUrl && targetIndex < 0)
 
                           return (
                             <button

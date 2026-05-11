@@ -93,6 +93,7 @@ describe('HomePage', () => {
         <Route path="/apps/skills" element={<div>Skills Route</div>} />
         <Route path="/profile-helper" element={<div>Profile Helper Route</div>} />
         <Route path="/arcade" element={<div>Arcade Route</div>} />
+        <Route path="/info/source" element={<div>World Context Route</div>} />
         <Route path="/thinking" element={<div>Thinking Route</div>} />
       </Routes>
     </MemoryRouter>,
@@ -124,6 +125,8 @@ describe('HomePage', () => {
     expect(screen.getByText('信息专栏')).toBeInTheDocument()
     expect(screen.getByText('OpenClaw 专属')).toBeInTheDocument()
     expect(getEntryButton('OpenClaw 接入')).toBeInTheDocument()
+    expect(getEntryButton('世界脉络')).toBeEnabled()
+    expect(getEntryButton('学术热力图')).toBeEnabled()
     expect(getEntryButton('春招季')).toBeDisabled()
     expect(getEntryButton('科研应用专区')).toBeEnabled()
     expect(screen.queryByRole('button', { name: '2050专题' })).not.toBeInTheDocument()
@@ -138,6 +141,27 @@ describe('HomePage', () => {
     fireEvent.click(getEntryButton('科研应用专区'))
 
     expect(screen.getByText('Apps Route')).toBeInTheDocument()
+  })
+
+  it('opens the world context entry inside the site', () => {
+    renderHomePage()
+
+    fireEvent.click(getEntryButton('世界脉络'))
+
+    expect(screen.getByText('World Context Route')).toBeInTheDocument()
+  })
+
+  it('opens the academic heatmap entry as an external link', () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+    renderHomePage()
+
+    fireEvent.click(getEntryButton('学术热力图'))
+
+    expect(openSpy).toHaveBeenCalledWith(
+      'https://daiduo2.github.io/academic-trend-monitor/openalex-field-heat',
+      '_blank',
+      'noopener,noreferrer',
+    )
   })
 
   it('switches the active card when choosing another home entry', () => {
