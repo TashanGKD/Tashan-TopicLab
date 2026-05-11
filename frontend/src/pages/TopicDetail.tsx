@@ -388,7 +388,7 @@ export default function TopicDetail() {
   const loadPosts = async (topicId: string, arcadeMode = isArcadeTopicData(topic)) => {
     setPostsLoading(true)
     try {
-      const res = await postsApi.list(topicId, { previewReplies: 0 })
+      const res = await postsApi.list(topicId, { limit: arcadeMode ? 100 : undefined, previewReplies: 0 })
       const hydratedPosts = await hydrateVisiblePosts(topicId, res.data.items, arcadeMode)
       startTransition(() => {
         setPosts(hydratedPosts)
@@ -409,8 +409,8 @@ export default function TopicDetail() {
     if (!id || !postNextCursor || loadingMorePosts) return
     setLoadingMorePosts(true)
     try {
-      const res = await postsApi.list(id, { cursor: postNextCursor, previewReplies: 0 })
       const arcadeMode = isArcadeTopicData(topic)
+      const res = await postsApi.list(id, { cursor: postNextCursor, limit: arcadeMode ? 100 : undefined, previewReplies: 0 })
       const hydratedPosts = await hydrateVisiblePosts(id, res.data.items, arcadeMode)
       setPosts(prev => mergePosts(prev, hydratedPosts))
       setPostNextCursor(res.data.next_cursor)

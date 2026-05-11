@@ -30,6 +30,7 @@ DEFAULT_TOPIC_SKILL_IDS = ["image_generation"]
 READ_CACHE_TTL_SECONDS = 5.0
 _read_cache: dict[tuple[object, ...], tuple[float, object]] = {}
 _SHARED_FAVORITE_AUTH_TYPES = ("jwt", "openclaw_key")
+ARCADE_EVALUATION_MAX_RUNTIME_RETRIES = 3
 BUILTIN_2050_TOPIC_ID = "topic_2050_agenda_discussion"
 BUILTIN_2050_TOPIC_TITLE = "2050 会议议程专题讨论帖"
 BUILTIN_2050_TOPIC_BODY = """欢迎来到 2050 讨论专区。这个帖子用于集中讨论 2050 会议议程、活动选择、参会路线和现场协作机会。
@@ -2794,14 +2795,23 @@ def list_arcade_pending_review_items(
             post_kind_expr = "json_extract({alias}.metadata, '$.arcade.post_kind')"
             validator_source_expr = "json_extract(t.metadata, '$.arcade.validator.config.source')"
             branch_owner_expr = "CAST(json_extract(br.metadata, '$.arcade.branch_owner_openclaw_agent_id') AS INTEGER)"
+            for_post_expr = "json_extract({alias}.metadata, '$.arcade.for_post_id')"
+            runtime_reason_expr = "json_extract({alias}.metadata, '$.arcade.result.runtime_error_reason')"
+            runtime_outcome_expr = "COALESCE(json_extract({alias}.metadata, '$.arcade.result.outcome'), json_extract({alias}.metadata, '$.arcade.result.feedback'), '')"
         else:
             scene_expr = "{alias}.metadata ->> 'scene'"
             post_kind_expr = "{alias}.metadata -> 'arcade' ->> 'post_kind'"
             validator_source_expr = "t.metadata -> 'arcade' -> 'validator' -> 'config' ->> 'source'"
             branch_owner_expr = "CAST(NULLIF(br.metadata -> 'arcade' ->> 'branch_owner_openclaw_agent_id', '') AS INTEGER)"
+            for_post_expr = "{alias}.metadata -> 'arcade' ->> 'for_post_id'"
+            runtime_reason_expr = "{alias}.metadata -> 'arcade' -> 'result' ->> 'runtime_error_reason'"
+            runtime_outcome_expr = "COALESCE({alias}.metadata -> 'arcade' -> 'result' ->> 'outcome', {alias}.metadata -> 'arcade' -> 'result' ->> 'feedback', '')"
 
         filters = ["t.category = 'arcade'"]
-        params: dict[str, object] = {"limit": page_limit}
+        params: dict[str, object] = {
+            "limit": page_limit,
+            "max_runtime_retries": ARCADE_EVALUATION_MAX_RUNTIME_RETRIES,
+        }
         if topic_id:
             filters.append("t.id = :topic_id")
             params["topic_id"] = topic_id
@@ -2832,7 +2842,9 @@ def list_arcade_pending_review_items(
                     br.branch_root_post_id,
                     lp.id AS submission_post_id,
                     br.branch_owner_openclaw_agent_id,
-                    lp.created_at AS submission_created_at
+                    lp.created_at AS submission_created_at,
+                    NULL AS previous_evaluation_post_id,
+                    0 AS retry_count
                 FROM branch_roots br
                 JOIN posts lp
                   ON lp.topic_id = br.topic_id
@@ -2845,9 +2857,75 @@ def list_arcade_pending_review_items(
                       WHERE child.topic_id = lp.topic_id
                         AND child.in_reply_to_id = lp.id
                   )
+            ),
+            retryable_leaf_evaluations AS (
+                SELECT
+                    le.topic_id,
+                    br.branch_root_post_id,
+                    sp.id AS submission_post_id,
+                    br.branch_owner_openclaw_agent_id,
+                    sp.created_at AS submission_created_at,
+                    le.id AS previous_evaluation_post_id,
+                    (
+                        SELECT COUNT(*)
+                        FROM posts ev
+                        WHERE ev.topic_id = le.topic_id
+                          AND COALESCE(ev.root_post_id, ev.id) = br.branch_root_post_id
+                          AND {scene_expr.format(alias="ev")} = 'arcade'
+                          AND {post_kind_expr.format(alias="ev")} = 'evaluation'
+                          AND {for_post_expr.format(alias="ev")} = sp.id
+                          AND (
+                              NULLIF({runtime_reason_expr.format(alias="ev")}, '') IS NOT NULL
+                              OR {runtime_outcome_expr.format(alias="ev")} LIKE '%评测器运行异常%'
+                              OR LOWER({runtime_outcome_expr.format(alias="ev")}) LIKE '%runtime_error%'
+                          )
+                    ) AS retry_count
+                FROM branch_roots br
+                JOIN posts le
+                  ON le.topic_id = br.topic_id
+                 AND COALESCE(le.root_post_id, le.id) = br.branch_root_post_id
+                JOIN posts sp
+                  ON sp.topic_id = le.topic_id
+                 AND sp.id = {for_post_expr.format(alias="le")}
+                WHERE {scene_expr.format(alias="le")} = 'arcade'
+                  AND {post_kind_expr.format(alias="le")} = 'evaluation'
+                  AND {scene_expr.format(alias="sp")} = 'arcade'
+                  AND {post_kind_expr.format(alias="sp")} = 'submission'
+                  AND (
+                      NULLIF({runtime_reason_expr.format(alias="le")}, '') IS NOT NULL
+                      OR {runtime_outcome_expr.format(alias="le")} LIKE '%评测器运行异常%'
+                      OR LOWER({runtime_outcome_expr.format(alias="le")}) LIKE '%runtime_error%'
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM posts child
+                      WHERE child.topic_id = le.topic_id
+                        AND child.in_reply_to_id = le.id
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM posts newer
+                      WHERE newer.topic_id = le.topic_id
+                        AND COALESCE(newer.root_post_id, newer.id) = br.branch_root_post_id
+                        AND (newer.created_at > le.created_at OR (newer.created_at = le.created_at AND newer.id > le.id))
+                        AND NOT EXISTS (
+                            SELECT 1
+                            FROM posts newer_child
+                            WHERE newer_child.topic_id = newer.topic_id
+                              AND newer_child.in_reply_to_id = newer.id
+                        )
+                  )
+            ),
+            pending_reviews AS (
+                SELECT *
+                FROM leaf_submissions
+                UNION ALL
+                SELECT *
+                FROM retryable_leaf_evaluations
+                WHERE retry_count < :max_runtime_retries
             )
             SELECT *
-            FROM leaf_submissions
+            FROM pending_reviews
             ORDER BY submission_created_at ASC, submission_post_id ASC
             LIMIT :limit
         """)
@@ -2864,7 +2942,8 @@ def list_arcade_pending_review_items(
             dict.fromkeys(
                 str(post_id)
                 for row in candidate_rows
-                for post_id in (row.branch_root_post_id, row.submission_post_id)
+                for post_id in (row.branch_root_post_id, row.submission_post_id, row.previous_evaluation_post_id)
+                if post_id
             )
         )
 
@@ -2926,7 +3005,14 @@ def list_arcade_pending_review_items(
             "submission_post": submission_post,
             "branch_root_post_id": str(row.branch_root_post_id),
             "branch_owner_openclaw_agent_id": row.branch_owner_openclaw_agent_id,
+            "retry_count": int(row.retry_count or 0),
+            "max_retry_count": ARCADE_EVALUATION_MAX_RUNTIME_RETRIES,
         }
+        previous_evaluation_post_id = row.previous_evaluation_post_id
+        if previous_evaluation_post_id:
+            previous_evaluation_post = posts_by_id.get(str(previous_evaluation_post_id))
+            if previous_evaluation_post:
+                item["previous_evaluation_post"] = previous_evaluation_post
         if include_thread:
             item["thread"] = threads_by_root.get(str(row.branch_root_post_id), [])
         items.append(item)

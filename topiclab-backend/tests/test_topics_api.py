@@ -1277,6 +1277,125 @@ def test_arcade_review_queue_can_filter_to_supported_sources(client):
     assert items[0]["submission_post"]["id"] == supported_submission.json()["post"]["id"]
 
 
+def test_arcade_review_queue_retries_runtime_error_evaluations(client):
+    admin = admin_panel_login(client)
+    create = client.post(
+        "/api/v1/internal/arcade/topics",
+        json={
+            "title": "Arcade Retry Review",
+            "body": "题目正文",
+            "metadata": {"arcade": {"prompt": "给出最终答案", "rules": "等评测再继续", "output_mode": "plain_text"}},
+        },
+        headers={"Authorization": f"Bearer {admin['token']}"},
+    )
+    assert create.status_code == 201, create.text
+    topic_id = create.json()["id"]
+
+    owner = register_login_and_openclaw_key(client, phone="13800009006", username="arcade-retry-owner")
+    submission_resp = client.post(
+        f"/api/v1/openclaw/topics/{topic_id}/posts",
+        json={"body": "需要评测的答案"},
+        headers={"Authorization": f"Bearer {owner['openclaw_key']}"},
+    )
+    assert submission_resp.status_code == 201, submission_resp.text
+    submission = submission_resp.json()["post"]
+
+    runtime_error_result = {
+        "passed": False,
+        "score": None,
+        "outcome": "评测器运行异常，请稍后重试。",
+        "runtime_error_reason": "validator process timed out",
+    }
+    first_error = client.post(
+        f"/api/v1/internal/arcade/reviewer/topics/{topic_id}/branches/{submission['id']}/evaluate",
+        json={
+            "for_post_id": submission["id"],
+            "body": "评测器运行异常，请稍后重试。",
+            "result": runtime_error_result,
+        },
+        headers={"X-Arcade-Secret-Key": "arcade-review-secret"},
+    )
+    assert first_error.status_code == 201, first_error.text
+    first_error_post = first_error.json()["post"]
+
+    retry_queue = client.get(
+        "/api/v1/internal/arcade/review-queue?include_thread=true",
+        headers={"X-Arcade-Secret-Key": "arcade-review-secret"},
+    )
+    assert retry_queue.status_code == 200, retry_queue.text
+    retry_items = retry_queue.json()["items"]
+    assert len(retry_items) == 1
+    assert retry_items[0]["submission_post"]["id"] == submission["id"]
+    assert retry_items[0]["retry_count"] == 1
+    assert retry_items[0]["previous_evaluation_post"]["id"] == first_error_post["id"]
+
+    success = client.post(
+        f"/api/v1/internal/arcade/reviewer/topics/{topic_id}/branches/{submission['id']}/evaluate",
+        json={
+            "for_post_id": submission["id"],
+            "body": "重试后通过。",
+            "result": {"passed": True, "score": 1.0, "feedback": "答案可接受"},
+        },
+        headers={"X-Arcade-Secret-Key": "arcade-review-secret"},
+    )
+    assert success.status_code == 201, success.text
+
+    empty_queue = client.get(
+        "/api/v1/internal/arcade/review-queue",
+        headers={"X-Arcade-Secret-Key": "arcade-review-secret"},
+    )
+    assert empty_queue.status_code == 200, empty_queue.text
+    assert empty_queue.json()["items"] == []
+
+
+def test_arcade_review_queue_stops_runtime_error_retry_after_max_attempts(client):
+    admin = admin_panel_login(client)
+    create = client.post(
+        "/api/v1/internal/arcade/topics",
+        json={
+            "title": "Arcade Retry Exhausted",
+            "body": "题目正文",
+            "metadata": {"arcade": {"prompt": "给出最终答案", "rules": "等评测再继续", "output_mode": "plain_text"}},
+        },
+        headers={"Authorization": f"Bearer {admin['token']}"},
+    )
+    assert create.status_code == 201, create.text
+    topic_id = create.json()["id"]
+
+    owner = register_login_and_openclaw_key(client, phone="13800009007", username="arcade-retry-exhausted-owner")
+    submission_resp = client.post(
+        f"/api/v1/openclaw/topics/{topic_id}/posts",
+        json={"body": "需要评测的答案"},
+        headers={"Authorization": f"Bearer {owner['openclaw_key']}"},
+    )
+    assert submission_resp.status_code == 201, submission_resp.text
+    submission = submission_resp.json()["post"]
+
+    for attempt in range(3):
+        runtime_error = client.post(
+            f"/api/v1/internal/arcade/reviewer/topics/{topic_id}/branches/{submission['id']}/evaluate",
+            json={
+                "for_post_id": submission["id"],
+                "body": "评测器运行异常，请稍后重试。",
+                "result": {
+                    "passed": False,
+                    "score": None,
+                    "outcome": "评测器运行异常，请稍后重试。",
+                    "runtime_error_reason": f"validator process failed {attempt}",
+                },
+            },
+            headers={"X-Arcade-Secret-Key": "arcade-review-secret"},
+        )
+        assert runtime_error.status_code == 201, runtime_error.text
+
+    exhausted_queue = client.get(
+        "/api/v1/internal/arcade/review-queue",
+        headers={"X-Arcade-Secret-Key": "arcade-review-secret"},
+    )
+    assert exhausted_queue.status_code == 200, exhausted_queue.text
+    assert exhausted_queue.json()["items"] == []
+
+
 def test_topic_list_uses_latest_post_oss_image_as_preview_fallback(client):
     create = client.post("/topics", json={"title": "评论图预览", "body": "正文无图", "category": "research"})
     assert create.status_code == 201, create.text

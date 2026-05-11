@@ -558,6 +558,9 @@ class ArcadeEvaluationRequest(BaseModel):
     result: dict[str, Any] = Field(default_factory=dict)
 
 
+ARCADE_EVALUATION_MAX_RUNTIME_RETRIES = 3
+
+
 def _get_arcade_evaluator_secret_key() -> str | None:
     configured = (os.getenv("ARCADE_EVALUATOR_SECRET_KEY") or "").strip()
     return configured or None
@@ -1108,6 +1111,28 @@ def _get_arcade_post_kind(post: dict | None) -> str | None:
     return str(kind) if kind else None
 
 
+def _get_arcade_result(post: dict | None) -> dict[str, Any]:
+    arcade_payload = _get_arcade_post_payload(post)
+    result = arcade_payload.get("result") if arcade_payload else None
+    return result if isinstance(result, dict) else {}
+
+
+def _get_arcade_for_post_id(post: dict | None) -> str | None:
+    arcade_payload = _get_arcade_post_payload(post)
+    for_post_id = arcade_payload.get("for_post_id") if arcade_payload else None
+    return str(for_post_id) if for_post_id else None
+
+
+def _is_retryable_arcade_evaluation(post: dict | None) -> bool:
+    if _get_arcade_post_kind(post) != "evaluation":
+        return False
+    result = _get_arcade_result(post)
+    if result.get("runtime_error_reason"):
+        return True
+    outcome = str(result.get("outcome") or result.get("feedback") or "")
+    return "评测器运行异常" in outcome or "runtime_error" in outcome.lower()
+
+
 def _get_arcade_branch_owner(post: dict | None) -> int | None:
     arcade_payload = _get_arcade_post_payload(post)
     owner = arcade_payload.get("branch_owner_openclaw_agent_id") if arcade_payload else None
@@ -1225,6 +1250,38 @@ def _count_arcade_submissions(branch_posts: list[dict]) -> int:
     return sum(1 for post in branch_posts if _get_arcade_post_kind(post) == "submission")
 
 
+def _count_retryable_arcade_evaluations(branch_posts: list[dict], submission_post_id: str) -> int:
+    return sum(
+        1
+        for post in branch_posts
+        if _is_retryable_arcade_evaluation(post) and _get_arcade_for_post_id(post) == submission_post_id
+    )
+
+
+def _find_arcade_reviewable_submission(branch_posts: list[dict]) -> tuple[dict | None, dict[str, Any]]:
+    branch_leaf = _find_arcade_branch_leaf(branch_posts)
+    if not branch_leaf:
+        return None, {}
+    if _get_arcade_post_kind(branch_leaf) == "submission":
+        return branch_leaf, {"retry_count": 0, "previous_evaluation_post": None}
+    if not _is_retryable_arcade_evaluation(branch_leaf):
+        return None, {}
+    submission_post_id = _get_arcade_for_post_id(branch_leaf)
+    if not submission_post_id:
+        return None, {}
+    retry_count = _count_retryable_arcade_evaluations(branch_posts, submission_post_id)
+    if retry_count >= ARCADE_EVALUATION_MAX_RUNTIME_RETRIES:
+        return None, {}
+    submission_post = next((post for post in branch_posts if str(post.get("id")) == submission_post_id), None)
+    if not submission_post or _get_arcade_post_kind(submission_post) != "submission":
+        return None, {}
+    return submission_post, {
+        "retry_count": retry_count,
+        "max_retry_count": ARCADE_EVALUATION_MAX_RUNTIME_RETRIES,
+        "previous_evaluation_post": branch_leaf,
+    }
+
+
 def _list_arcade_pending_reviews(
     *,
     topic_id: str | None = None,
@@ -1258,7 +1315,13 @@ def _create_arcade_evaluation_post(topic_id: str, branch_root_post_id: str, req:
     if not branch_posts:
         raise HTTPException(status_code=404, detail="Arcade branch not found")
     branch_leaf = _find_arcade_branch_leaf(branch_posts)
-    if not branch_leaf or branch_leaf["id"] != target_post["id"]:
+    can_retry_runtime_error = (
+        branch_leaf
+        and _is_retryable_arcade_evaluation(branch_leaf)
+        and _get_arcade_for_post_id(branch_leaf) == target_post["id"]
+        and _count_retryable_arcade_evaluations(branch_posts, target_post["id"]) < ARCADE_EVALUATION_MAX_RUNTIME_RETRIES
+    )
+    if not branch_leaf or (branch_leaf["id"] != target_post["id"] and not can_retry_runtime_error):
         raise HTTPException(status_code=409, detail="Only the current leaf submission can be evaluated")
 
     branch_owner_openclaw_agent_id = _get_arcade_branch_owner(target_post)
