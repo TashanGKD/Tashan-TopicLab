@@ -1,5 +1,6 @@
 export type HomeCardThemeName =
   | 'mistBlue'
+  | 'deepAzure'
   | 'sageFog'
   | 'paperSand'
   | 'slateMist'
@@ -73,6 +74,36 @@ export const HOME_CARD_THEMES: Record<HomeCardThemeName, HomeCardTheme> = {
     surfaceBorder: 'rgba(183,198,214,0.3)',
     surfaceShadow: 'rgba(171,186,205,0.12)',
     statLabel: '#93a2b5',
+  },
+  deepAzure: {
+    ...SHARED_THEME_TOKENS,
+    pageBase: '#E8F0F8',
+    ambientPrimary: 'rgba(54, 94, 142, 0.26)',
+    ambientSecondary: 'rgba(122, 154, 190, 0.18)',
+    ambientTertiary: 'rgba(248, 251, 255, 0.58)',
+    activeGlow: 'rgba(47, 83, 128, 0.24)',
+    activeEdge: 'rgba(238, 246, 255, 0.82)',
+    activeShadow: 'rgba(22, 50, 88, 0.2)',
+    cardGradient: 'linear-gradient(135deg, rgba(230,238,248,0.99) 0%, rgba(218,231,245,0.98) 46%, rgba(203,220,239,0.99) 100%)',
+    borderColor: 'rgba(67,101,140,0.36)',
+    shadowColor: 'rgba(31,65,105,0.2)',
+    orbPrimary: 'radial-gradient(circle, rgba(52,94,145,0.24) 0%, rgba(52,94,145,0) 70%)',
+    orbSecondary: 'radial-gradient(circle, rgba(112,143,181,0.2) 0%, rgba(112,143,181,0) 72%)',
+    shimmer: 'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(238,245,252,0.23) 48%, rgba(255,255,255,0) 100%)',
+    topLine: 'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(245,250,255,0.74) 50%, rgba(255,255,255,0) 100%)',
+    eyebrowText: 'rgba(37,75,122,0.9)',
+    titleColor: '#183B66',
+    titleShadow: 'rgba(255,255,255,0.72)',
+    bodyColor: '#4F6683',
+    mutedText: '#7B8FA8',
+    actionBorder: 'rgba(45,86,132,0.36)',
+    actionBackground: 'rgba(255,255,255,0.64)',
+    actionText: '#183B66',
+    surfaceBorder: 'rgba(64,101,145,0.26)',
+    surfaceBackground: 'rgba(255,255,255,0.72)',
+    surfaceShadow: 'rgba(31,65,105,0.11)',
+    statLabel: '#7B8FA8',
+    statValue: '#183B66',
   },
   sageFog: {
     ...SHARED_THEME_TOKENS,

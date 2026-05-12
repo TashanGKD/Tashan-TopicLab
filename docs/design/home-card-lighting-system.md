@@ -24,7 +24,7 @@ The result should read as a single light environment whose dominant source is th
 
 ## 2. Base UI Tokens
 
-These values define the neutral baseline that all six families build on.
+These values define the neutral baseline that all seven families build on.
 
 | Token | Value | Usage |
 |------|------|------|
@@ -42,7 +42,7 @@ These values define the neutral baseline that all six families build on.
 
 ## 3. Expandable Color Families
 
-The homepage uses six soft, expandable card families. Each family includes:
+The homepage uses seven soft, expandable card families. Each family includes:
 
 - a base card color
 - a glow color for ambient lighting
@@ -67,7 +67,16 @@ The homepage uses six soft, expandable card families. Each family includes:
 | Emphasis | `#314139` |
 | Best for | Research, knowledge, method, and academic cards |
 
-### 3.3 Paper Sand
+### 3.3 Deep Azure
+
+| Property | Value |
+|------|------|
+| Base | `#E8F0F8` |
+| Glow | `rgba(47, 83, 128, 0.24)` |
+| Emphasis | `#183B66` |
+| Best for | Youth TED, salons, discussion programs, and event-driven community cards |
+
+### 3.4 Paper Sand
 
 | Property | Value |
 |------|------|
@@ -76,7 +85,7 @@ The homepage uses six soft, expandable card families. Each family includes:
 | Emphasis | `#433A31` |
 | Best for | Tools, directories, app libraries, and catalog cards |
 
-### 3.4 Slate Mist
+### 3.5 Slate Mist
 
 | Property | Value |
 |------|------|
@@ -85,7 +94,7 @@ The homepage uses six soft, expandable card families. Each family includes:
 | Emphasis | `#31384D` |
 | Best for | Arena, topic, ranking, and competitive cards |
 
-### 3.5 Aqua Haze
+### 3.6 Aqua Haze
 
 | Property | Value |
 |------|------|
@@ -94,7 +103,7 @@ The homepage uses six soft, expandable card families. Each family includes:
 | Emphasis | `#2D4344` |
 | Best for | Collaboration, connection, network, and digital twin cards |
 
-### 3.6 Moon Silver
+### 3.7 Moon Silver
 
 | Property | Value |
 |------|------|
@@ -216,11 +225,13 @@ The breakpoint should follow layout logic, not device labels. If the card stack 
 |------|------|
 | OpenClaw integration | Mist Blue |
 | Research skills | Sage Fog |
+| Youth TED | Deep Azure |
 | Digital twin | Aqua Haze |
 | Apps and skills | Paper Sand |
+| World context | Moon Silver |
 | Arena | Slate Mist |
 
-Moon Silver is reserved for future neutral cards.
+Moon Silver is the neutral family for quiet information surfaces.
 
 ---
 
