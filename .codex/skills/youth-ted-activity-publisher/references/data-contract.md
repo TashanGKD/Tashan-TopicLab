@@ -61,7 +61,14 @@ Use this shape for `content`. Keep it compact enough for activity-card/detail re
   "topics": [
     {
       "question": "AI对话记忆该归谁？",
-      "icon": "记",
+      "icon": {
+        "paths": [
+          "M7 4h8a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3Z",
+          "M8 8h6",
+          "M8 12h5",
+          "M8 16h3"
+        ]
+      },
       "title": "AI对话记忆的数据归属",
       "hook": "从本地优先、跨平台捕获和个人知识库讨论AI对话数据是否应该由用户真正拥有。",
       "tags": ["本地记忆", "数据自有"],
@@ -76,7 +83,14 @@ Use this shape for `content`. Keep it compact enough for activity-card/detail re
     "AI对话记忆该归谁？"
   ],
   "icons": [
-    "记"
+    {
+      "paths": [
+        "M7 4h8a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3Z",
+        "M8 8h6",
+        "M8 12h5",
+        "M8 16h3"
+      ]
+    }
   ],
   "interest_points": [
     {
@@ -118,7 +132,7 @@ Rules:
 - Prefer 3-6 `interest_points`.
 - Prefer 8-12 `topics` for public-facing discovery. Each item should be a structured object with `question`, `icon`, `title`, `hook`, `tags`, `source`, and `confidence`.
 - `topics[].question` is the primary display text. It should be a concise question or topic sentence, usually within 18 Chinese characters, not a loose keyword.
-- `topics[].icon` is the primary decorative marker for the question bubble. Store a short display glyph or single Chinese character in the database so icon changes do not require a frontend deploy. Keep the optional top-level `icons` compatibility array aligned to `topics[].icon`.
+- `topics[].icon` is the primary decorative marker for the question bubble. Store SVG line-icon data in the database so icon changes do not require a frontend deploy. Supported fields are `viewBox`, `strokeWidth`, `paths`, `rects`, `circles`, `lines`, and `polylines`. Keep the optional top-level `icons` compatibility array aligned to `topics[].icon`.
 - Use `tags` and `keywords` only as compatibility JSON string arrays. When present, mirror the `topics[].question` values so older frontends do not keep showing stale short keywords.
 - Public-facing topics must be extracted from local transcript artifacts, be meaning-distinct, and be specific enough to invite opening the activity.
 - Avoid unfamiliar all-English acronyms such as `OPC` in public topic questions unless the user explicitly requests them or the term is defined in adjacent UI copy.

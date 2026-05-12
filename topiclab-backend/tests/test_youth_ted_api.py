@@ -1,7 +1,9 @@
 import importlib
+import json
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
 
 @pytest.fixture
@@ -81,6 +83,59 @@ def test_youth_ted_activity_list_uses_ttl_cache(client, monkeypatch):
     first[0]["title"] = "mutated by caller"
     third = youth_ted_store.list_youth_ted_activities()
     assert third[0]["title"] == "前沿 AI 进展专场讨论"
+
+
+def test_youth_ted_list_hides_seed_when_formal_activity_exists(client):
+    from app.storage.database.postgres_client import get_db_session
+    from app.storage.database import youth_ted_store
+
+    youth_ted_store.clear_youth_ted_cache()
+    with get_db_session() as session:
+        session.execute(
+            text(
+                """
+                INSERT INTO youth_ted_activities (
+                    id, slug, status, sort_order, payload_json, poster_webp, poster_mime_type
+                )
+                SELECT
+                    :id, :slug, 'published', 20, :payload_json, poster_webp, poster_mime_type
+                FROM youth_ted_activities
+                WHERE slug = :seed_slug
+                LIMIT 1
+                """
+            ),
+            {
+                "id": "youth-ted-2026-04-29",
+                "slug": "youth-ted-2026-04-29",
+                "seed_slug": youth_ted_store.SEED_ACTIVITY_SLUG,
+                "payload_json": json.dumps(
+                    {
+                        "label": "往期回顾",
+                        "title": "他山青年 TED：前沿 AI 进展专场讨论",
+                        "meta": "2026-04-29 周三 20:00-23:00",
+                        "summary": "",
+                        "content": {
+                            "topics": [
+                                {
+                                    "question": "AI记忆该归谁？",
+                                    "icon": {"paths": ["M5 6c0-1.7 3.1-3 7-3s7 1.3 7 3"]},
+                                    "title": "AI 记忆",
+                                }
+                            ],
+                            "tags": ["AI记忆该归谁？"],
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+        )
+
+    response = client.get("/api/v1/youth-ted/activities")
+    assert response.status_code == 200, response.text
+    activities = response.json()["list"]
+    slugs = [item["slug"] for item in activities]
+    assert slugs == ["youth-ted-2026-04-29"]
+    assert activities[0]["content"]["topics"][0]["icon"]["paths"] == ["M5 6c0-1.7 3.1-3 7-3s7 1.3 7 3"]
 
 
 def test_youth_ted_poster_uses_ttl_cache(client, monkeypatch):

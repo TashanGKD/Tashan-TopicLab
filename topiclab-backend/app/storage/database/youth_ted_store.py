@@ -125,11 +125,10 @@ def _seed_youth_ted_activity(session) -> None:
     if not _SEED_POSTER_PATH.exists():
         raise FileNotFoundError(f"Youth TED seed poster missing: {_SEED_POSTER_PATH}")
 
-    exists = session.execute(
-        text("SELECT 1 FROM youth_ted_activities WHERE slug = :slug LIMIT 1"),
-        {"slug": SEED_ACTIVITY_SLUG},
+    existing_activity = session.execute(
+        text("SELECT 1 FROM youth_ted_activities LIMIT 1"),
     ).first()
-    if exists:
+    if existing_activity:
         return
 
     payload_json = _json_dumps(_SEED_PAYLOAD)
@@ -210,9 +209,19 @@ def list_youth_ted_activities() -> list[dict[str, Any]]:
                     SELECT id, slug, status, sort_order, payload_json
                     FROM youth_ted_activities
                     WHERE status = 'published'
+                      AND NOT (
+                          slug = :seed_slug
+                          AND EXISTS (
+                              SELECT 1
+                              FROM youth_ted_activities AS formal_activity
+                              WHERE formal_activity.status = 'published'
+                                AND formal_activity.slug != :seed_slug
+                          )
+                      )
                     ORDER BY sort_order ASC, created_at DESC
                     """
-                )
+                ),
+                {"seed_slug": SEED_ACTIVITY_SLUG},
             ).fetchall()
             activities = [_serialize_activity(row) for row in rows]
 
