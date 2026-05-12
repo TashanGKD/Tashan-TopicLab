@@ -27,6 +27,7 @@ import AppsSkillWishesPage from './pages/AppsSkillWishesPage'
 import ArcadePage from './pages/ArcadePage'
 import TopicDetail from './pages/TopicDetail'
 import ThinkingPage from './pages/ThinkingPage'
+import YouthTedPage from './pages/YouthTedPage'
 import AdminLoginPage from './pages/AdminLoginPage'
 import AdminDashboardPage from './pages/AdminDashboardPage'
 import AppErrorBoundary from './components/AppErrorBoundary'
@@ -60,6 +61,7 @@ function App() {
             <Route path="/info/:section" element={<SourceFeedPage />} />
             <Route path="/source-feed" element={<Navigate to="/info/source" replace />} />
             <Route path="/source-feed/:section" element={<SourceFeedPage />} />
+            <Route path="/youth-ted" element={<YouthTedPage />} />
             <Route path="/register" element={<Register />} />
             <Route path="/login" element={<Login />} />
             <Route path="/auth/watcha/callback" element={<WatchaAuthCallback />} />

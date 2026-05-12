@@ -10,6 +10,7 @@ vi.mock('../components/FloatingActions', () => ({ default: () => <div data-testi
 vi.mock('../pages/HomePage', () => ({ default: () => <div>Home Route</div> }))
 vi.mock('../pages/TopicDetail', () => ({ default: () => <div>Topic Detail Route</div> }))
 vi.mock('../pages/ArcadePage', () => ({ default: () => <div>Arcade Route</div> }))
+vi.mock('../pages/YouthTedPage', () => ({ default: () => <div>Youth TED Route</div> }))
 vi.mock('../pages/ExpertEdit', () => ({ default: () => <div /> }))
 vi.mock('../pages/ProfileHelperPage', () => ({ default: () => <div /> }))
 vi.mock('../pages/AgentLinkLibraryPage', () => ({ default: () => <div /> }))
@@ -60,5 +61,15 @@ describe('App arcade topic route', () => {
 
     expect(screen.getByText('Home Route')).toBeInTheDocument()
     expect(screen.queryByText('Topic Detail Route')).not.toBeInTheDocument()
+  })
+
+  it('routes the youth TED page', () => {
+    render(
+      <MemoryRouter initialEntries={['/youth-ted']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Youth TED Route')).toBeInTheDocument()
   })
 })

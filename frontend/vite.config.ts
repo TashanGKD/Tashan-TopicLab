@@ -14,6 +14,7 @@ export default defineConfig(({ mode }) => {
   const worldWeaveTarget =
     env.VITE_WORLDWEAVE_PROXY_TARGET ||
     `http://127.0.0.1:${env.WORLDWEAVE_PORT || '5000'}`
+  const topicLabTarget = env.VITE_TOPICLAB_PROXY_TARGET || 'http://127.0.0.1:8001'
   const adminPrefixRe = new RegExp(
     `^${adminPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
   )
@@ -64,6 +65,10 @@ export default defineConfig(({ mode }) => {
         },
         '/api/v1/openclaw': {
           target: 'http://127.0.0.1:8001',
+          changeOrigin: true,
+        },
+        '/api/v1/youth-ted': {
+          target: topicLabTarget,
           changeOrigin: true,
         },
         '/api/v1/livebench': {

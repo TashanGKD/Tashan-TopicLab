@@ -11,6 +11,7 @@ const WATCHA_LOGO_URL = 'https://watcha.tos-cn-beijing.volces.com/products/logo/
 const navLinks = [
   { to: '/', label: '首页', match: (path: string) => path === '/' },
   { to: '/info', label: '信息', match: (path: string) => path.startsWith('/info') || path.startsWith('/source-feed') },
+  { to: '/youth-ted', label: '青年TED', match: (path: string) => path.startsWith('/youth-ted') },
 ] as const
 
 const mobileTabs = [
@@ -34,6 +35,18 @@ const mobileTabs = [
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M5.75 6.5A1.75 1.75 0 017.5 4.75h8.25A1.75 1.75 0 0117.5 6.5v11.25A1.5 1.5 0 0019 19.25h-10.5A2.75 2.75 0 015.75 16.5v-10z" />
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8.5 8.25h6M8.5 11.5h6M8.5 14.75h3.25" />
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 19.25a1.5 1.5 0 001.5-1.5V9.5h-3" />
+      </svg>
+    ),
+  },
+  {
+    to: '/youth-ted',
+    label: 'TED',
+    match: (path: string) => path.startsWith('/youth-ted'),
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M5 7.75h14M8.5 4.75v6M15.5 4.75v6" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M6.75 10.75h10.5A1.75 1.75 0 0119 12.5v4.75A1.75 1.75 0 0117.25 19H6.75A1.75 1.75 0 015 17.25V12.5a1.75 1.75 0 011.75-1.75Z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8.5 15h7" />
       </svg>
     ),
   },

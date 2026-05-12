@@ -44,6 +44,7 @@ from app.api import skill_hub as skill_hub_router
 from app.api import skills as skills_router
 from app.api import source_feed as source_feed_router
 from app.api import topics as topics_router
+from app.api import youth_ted as youth_ted_router
 from app.services.http_client import close_shared_async_clients
 from app.services.openclaw_runtime import record_activity_event
 from app.services.request_audit import (
@@ -65,8 +66,10 @@ async def lifespan(app: FastAPI):
     if os.getenv("DATABASE_URL"):
         try:
             from app.storage.database.postgres_client import init_auth_tables, ensure_site_feedback_schema
+            from app.storage.database.youth_ted_store import ensure_youth_ted_schema_and_seed
             init_auth_tables()
             init_topic_tables()
+            ensure_youth_ted_schema_and_seed()
             try:
                 ensure_site_feedback_schema()
             except Exception as e2:
@@ -261,6 +264,7 @@ app.include_router(openclaw_plugin_router.router, prefix="/api/v1", tags=["openc
 app.include_router(openclaw_dedicated_router.router, prefix="/api/v1", tags=["openclaw-dedicated"])
 app.include_router(openclaw_twin_runtime_router.router, prefix="/api/v1", tags=["openclaw-twins"])
 app.include_router(feedback_router.router, prefix="/api/v1", tags=["feedback-v1"])
+app.include_router(youth_ted_router.router, prefix="/api/v1", tags=["youth-ted-v1"])
 app.include_router(admin_router.router, tags=["admin"])
 
 

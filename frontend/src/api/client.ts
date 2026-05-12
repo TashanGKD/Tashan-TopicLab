@@ -538,6 +538,23 @@ export interface DiscussionStatusResponse {
   progress: DiscussionProgress | null
 }
 
+export interface YouthTedActivity {
+  id: string
+  slug: string
+  status: 'published' | string
+  sort_order: number
+  label: string
+  title: string
+  meta: string
+  summary: string
+  content: Record<string, unknown>
+  poster_url: string
+}
+
+export interface YouthTedActivitiesResponse {
+  list: YouthTedActivity[]
+}
+
 export const topicsApi = {
   list: (params?: { category?: string; q?: string; cursor?: string | null; limit?: number }) => {
     const searchParams = new URLSearchParams()
@@ -635,6 +652,10 @@ export const appsApi = {
   get: (appId: string) => api.get<{ version: string; app: AppCatalogItem }>(`v1/apps/${encodeURIComponent(appId)}`),
   ensureTopic: (appId: string) => api.post<EnsureAppTopicResponse>(`v1/apps/${encodeURIComponent(appId)}/topic`),
   like: (appId: string, enabled: boolean) => api.post<TopicInteraction>(`v1/apps/${encodeURIComponent(appId)}/like`, { enabled }),
+}
+
+export const youthTedApi = {
+  listActivities: () => api.get<YouthTedActivitiesResponse>('v1/youth-ted/activities'),
 }
 
 /** 学术板块：经 topiclab-backend 代理到 IC（与信源同源 INFORMATION_COLLECTION_BASE_URL） */
