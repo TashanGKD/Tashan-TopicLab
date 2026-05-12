@@ -16,6 +16,10 @@ vi.mock('../../components/ResearchSkillZoneCard', () => ({
   default: () => <section><h2>科研技能专区</h2></section>,
 }))
 
+vi.mock('../../components/WorldWeaveHomeCard', () => ({
+  default: () => <section><h2>世界脉络卡片</h2></section>,
+}))
+
 function createMockOpenClawController(onCopyAction?: () => void) {
   return {
     loading: false,
@@ -146,6 +150,17 @@ describe('HomePage', () => {
   it('opens the world context entry inside the site', () => {
     renderHomePage()
 
+    fireEvent.click(getEntryButton('世界脉络'))
+
+    expect(getEntryButton('世界脉络')).toHaveAttribute('aria-pressed', 'true')
+    expect(within(getStage()).getByText('世界脉络')).toBeInTheDocument()
+    expect(within(getStage()).getByText('世界脉络卡片')).toBeInTheDocument()
+  })
+
+  it('navigates to world context when clicking the active world context entry again', () => {
+    renderHomePage()
+
+    fireEvent.click(getEntryButton('世界脉络'))
     fireEvent.click(getEntryButton('世界脉络'))
 
     expect(screen.getByText('World Context Route')).toBeInTheDocument()

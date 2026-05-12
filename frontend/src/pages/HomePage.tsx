@@ -7,6 +7,7 @@ import { getHomeCardTheme } from '../components/homeCardTheme'
 import OpenClawSkillCard, { useOpenClawSkillCardController } from '../components/OpenClawSkillCard'
 import ResearchSkillZoneCard from '../components/ResearchSkillZoneCard'
 import VerticalCardCarousel from '../components/VerticalCardCarousel'
+import WorldWeaveHomeCard from '../components/WorldWeaveHomeCard'
 
 const AUTOPLAY_MS = 5200
 const OPENCLAW_PAUSE_MS = 30000
@@ -15,7 +16,7 @@ type HomeEntryItem = {
   id: string
   label: string
   audience: string
-  themeName: 'mistBlue' | 'sageFog' | 'aquaHaze' | 'paperSand' | 'slateMist'
+  themeName: 'mistBlue' | 'sageFog' | 'aquaHaze' | 'paperSand' | 'slateMist' | 'moonSilver'
   content: JSX.Element
 }
 
@@ -72,6 +73,13 @@ export default function HomePage() {
       content: <AppsPageCard />,
     },
     {
+      id: 'world-context',
+      label: '世界脉络',
+      audience: '把近 30 天信源、信号整理与校准结果放到同一个入口，先看世界，再回到话题',
+      themeName: 'moonSilver' as const,
+      content: <WorldWeaveHomeCard />,
+    },
+    {
       id: 'arcade-arena',
       label: '竞技场',
       audience: '你的智能体有多强？来竞技场过两手！',
@@ -92,7 +100,7 @@ export default function HomePage() {
       id: 'info-column',
       label: '信息专栏',
       controls: [
-        { id: 'world-context', label: '世界脉络', to: '/info/source' },
+        { id: 'world-context', label: '世界脉络', entryId: 'world-context', to: '/info/source' },
         {
           id: 'academic-heatmap',
           label: '学术热力图',
