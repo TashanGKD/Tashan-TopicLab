@@ -9,11 +9,69 @@ description: Publish or update 他山青年 TED activity records in TopicLab. Us
 
 Use this skill to turn a Youth TED meeting package into a website activity card: poster image -> WebP blob, Tencent Meeting transcript -> local transcript artifact -> compact structured JSON, and both -> `topiclab-backend` database.
 
+The default user request may contain only one poster image. In that case, do not ask for meeting IDs first. Assume the activity is the latest completed Wednesday 20:00 Asia/Shanghai Tencent Meeting, discover the transcript from Tencent Meeting, generate question-style topics with icons, and upsert the activity into `topiclab.youth_ted_activities`.
+
 The canonical backend is `topiclab-backend`, not `backend`. The frontend activity list reads `GET /api/v1/youth-ted/activities`; do not edit the frontend fallback poster or fallback activity unless the user explicitly asks.
 
 ## Workflow
 
-1. Confirm the event identity:
+### Poster-Only Default Path
+
+When the user only gives a poster image and asks to publish/update Youth TED:
+
+1. Plan the event from the latest completed Wednesday 20:00 slot:
+
+```bash
+topiclab-backend/.venv/bin/python .codex/skills/youth-ted-activity-publisher/scripts/plan_latest_wednesday_activity.py \
+  --poster /absolute/path/to/poster.png
+```
+
+Use the script output as the run plan:
+
+- `slug`: default public identity, for example `youth-ted-2026-05-06`
+- `event.query_start` / `event.query_end`: Tencent Meeting search window
+- `event.meeting_code`: default recurring meeting code, `49237646949`
+- `meta`: default list text, for example `2026-05-06 周三 20:00-23:00`
+- `artifacts.content_json`: where to write generated content JSON
+
+2. Discover the Tencent Meeting transcript:
+
+- Use `tencent-meeting-mcp`.
+- Call `convert_timestamp` first if using relative time in prose; the planning script already emits absolute ISO times.
+- Query `get_user_ended_meetings` for the planned window.
+- Query `get_records_list` using the planned `meeting_code` or discovered `meeting_id`.
+- Pick the record whose meeting starts closest to Wednesday 20:00 and whose transcript can be fetched.
+- Use the transcript `record_file_id`, not the cloud recording video file ID. If multiple IDs are present, validate by calling `get_transcripts_paragraphs` or `get_transcripts_details`; the valid transcript ID returns paragraphs/text.
+- Preserve and report `X-Tc-Trace` / `rpcUuid` from Tencent responses.
+
+3. Save transcript data locally using `save_tencent_transcript.py`.
+
+4. Generate `content.json` from the local transcript artifact:
+
+- Produce 8-10 public-facing `topics`, unless the user asks for another count.
+- Each `topics[]` item must include `question`, `icon`, `title`, `hook`, `tags`, `source`, and `confidence`.
+- The visible question should be concrete and problem-shaped, not a loose keyword list.
+- Store the icon in `topics[].icon` and mirror icons into the top-level `icons` compatibility array so future frontend display changes do not require redeploying code.
+- Mirror `topics[].question` into top-level `tags` and `keywords` for compatibility.
+- Keep `transcript` trace fields and local artifact paths. Do not store full transcript text in DB.
+
+5. Upsert with `upsert_youth_ted_activity.py`.
+
+- Use the poster path supplied by the user.
+- Use the script-planned slug and meta unless the poster clearly contains a different date/time.
+- Prefer `label=往期回顾` for completed meetings.
+- Write to DB unless the user explicitly asks for dry-run.
+- Keep newest activities first. Use `sort_order=10` for the newest item and increment older activities by 10 if reordering is needed.
+
+6. Verify the API and image endpoint:
+
+- `GET /api/v1/youth-ted/activities` includes the slug.
+- `poster_url` returns `image/webp` and starts with `RIFF....WEBP`.
+- The running backend may cache results for `YOUTH_TED_CACHE_TTL_SECONDS` seconds, default `60`; wait, restart the backend, or set TTL to `0` for immediate local verification.
+
+### Full Manual Path
+
+1. Confirm the event identity when the user provides explicit details:
    - Date and time.
    - Poster image path.
    - Tencent Meeting `meeting_id`, `meeting_code`, cloud recording record/file IDs, and transcript record/file IDs when available.
@@ -84,7 +142,13 @@ Read `references/data-contract.md` before creating or reviewing `content` JSON. 
 
 Use `topiclab-backend/.venv/bin/python` so Pillow, SQLAlchemy, and psycopg2 are available.
 
-The script:
+Planner script:
+
+- `scripts/plan_latest_wednesday_activity.py` computes the latest completed Wednesday 20:00 activity from the current Asia/Shanghai time.
+- It prints slug, meta, Tencent Meeting search window, artifact paths, and command templates.
+- Use `--allow-in-progress` only when intentionally publishing before the expected 23:00 end time.
+
+Upsert script:
 
 - Loads `DATABASE_URL` from repo root `.env` unless `--database-url` is passed.
 - Converts any supported image to WebP.

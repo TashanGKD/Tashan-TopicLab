@@ -62,7 +62,7 @@ export default function HomePage() {
     {
       id: 'youth-ted',
       label: '他山青年 TED',
-      audience: '青年同频、问题讨论与 AI 前沿复盘，连接持续交流和早期项目发现',
+      audience: '面向 AI 时代青年行动者的公益交流与共创计划',
       themeName: 'deepAzure' as const,
       content: <YouthTedHomeCard />,
     },

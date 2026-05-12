@@ -3,6 +3,7 @@ import { youthTedApi, type YouthTedActivity } from '../api/client'
 
 const DETAILS_URL = 'https://mp.weixin.qq.com/s/KcXyglqEuaJ5PKMDLN1n1A'
 const PAST_ACTIVITIES_URL = 'https://tashan.ac.cn/homepage/activities'
+const SUBMISSION_FORM_URL = 'https://scnnpwzbl7rs.feishu.cn/share/base/form/shrcnE5psFwLSQMuixE6pxZ0NgR'
 
 const builderTypes = [
   '青年科研者',
@@ -268,8 +269,7 @@ function ActivityScheduleItem({ item }: { item: YouthTedActivity }) {
         </div>
         {questions.length > 0 ? (
           <div className="relative mt-7 max-w-3xl">
-            <p className="text-xs font-semibold tracking-[0.22em] text-slate-400">DISCUSSION QUESTIONS</p>
-            <div className="mt-5 flex flex-wrap items-start gap-3 sm:gap-4">
+            <div className="flex flex-wrap items-start gap-3 sm:gap-4">
               {questions.map((question, index) => (
                 <span
                   key={`${item.id}-${question.text}-${index}`}
@@ -343,7 +343,11 @@ export default function YouthTedPage() {
           <div className="max-w-3xl">
             <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
               <h1 className="text-4xl font-semibold leading-tight text-slate-950 sm:text-5xl">
-                他山青年 TED
+                他山青年
+                <span className="ml-1 inline-block -translate-y-[0.9em] text-[0.42em] font-semibold leading-none text-slate-500">
+                  ®
+                </span>
+                <span className="ml-3">TED</span>
               </h1>
               <a
                 href={DETAILS_URL}
@@ -355,9 +359,23 @@ export default function YouthTedPage() {
                 <span aria-hidden="true" className="text-base leading-none">›</span>
               </a>
             </div>
-            <p className="mt-5 max-w-xl text-base leading-8 text-slate-600">
-              面向人工智能原生青年建设者的持续交流、早期项目发现与共创机制。
+            <p className="mt-5 max-w-2xl font-serif text-xl italic leading-9 text-slate-800 sm:text-2xl">
+              面向 AI 时代青年行动者的公益交流与共创计划。
             </p>
+            <p className="mt-4 max-w-xl text-base leading-8 text-slate-600">
+              让正在行动的青年人被看见。让真实问题、早期项目和可复用方法在持续交流中被连接、验证、放大。
+            </p>
+            <div className="mt-7 flex flex-wrap items-center gap-3">
+              <a
+                href={SUBMISSION_FORM_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex min-h-11 items-center justify-center rounded-full bg-sky-700 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_16px_34px_rgba(2,132,199,0.22)] transition hover:-translate-y-0.5 hover:bg-sky-800"
+              >
+                提交真实问题 / 申请成为分享者
+                <span aria-hidden="true" className="ml-2 text-base leading-none">›</span>
+              </a>
+            </div>
           </div>
           <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             {builderTypes.map((type) => (
@@ -387,7 +405,9 @@ export default function YouthTedPage() {
               </a>
             }
           >
-            {null}
+            <span className="font-semibold text-slate-800">每周三晚八点线上持续交流</span>
+            <span className="mx-2 text-slate-300">/</span>
+            <span className="font-semibold text-slate-800">不定时北京线下活动</span>
           </SectionHeading>
           <div className="mt-10 space-y-8">
             {activities.map((item) => (

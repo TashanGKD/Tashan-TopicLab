@@ -35,6 +35,15 @@ Public API:
 }
 ```
 
+For poster-only publishing, derive these fields as follows:
+
+- `slug`: `youth-ted-YYYY-MM-DD`, where the date is the latest completed Wednesday 20:00 Asia/Shanghai event.
+- `label`: `往期回顾` after the meeting has ended.
+- `title`: prefer poster text; otherwise use `他山青年 TED：前沿 AI 进展专场讨论`.
+- `meta`: `YYYY-MM-DD 周三 20:00-23:00`.
+- `summary`: one sentence extracted from the local transcript artifact, not generic AI copy.
+- `sort_order`: newest first. Use `10` for the newest activity and increase older rows by `10` when reordering is needed.
+
 ## Content JSON
 
 Use this shape for `content`. Keep it compact enough for activity-card/detail rendering.
@@ -130,7 +139,7 @@ Use this shape for `content`. Keep it compact enough for activity-card/detail re
 Rules:
 
 - Prefer 3-6 `interest_points`.
-- Prefer 8-12 `topics` for public-facing discovery. Each item should be a structured object with `question`, `icon`, `title`, `hook`, `tags`, `source`, and `confidence`.
+- Prefer 8-10 `topics` for poster-only publishing, or 8-12 when manually curating a longer transcript. Each item should be a structured object with `question`, `icon`, `title`, `hook`, `tags`, `source`, and `confidence`.
 - `topics[].question` is the primary display text. It should be a concise question or topic sentence, usually within 18 Chinese characters, not a loose keyword.
 - `topics[].icon` is the primary decorative marker for the question bubble. Store SVG line-icon data in the database so icon changes do not require a frontend deploy. Supported fields are `viewBox`, `strokeWidth`, `paths`, `rects`, `circles`, `lines`, and `polylines`. Keep the optional top-level `icons` compatibility array aligned to `topics[].icon`.
 - Use `tags` and `keywords` only as compatibility JSON string arrays. When present, mirror the `topics[].question` values so older frontends do not keep showing stale short keywords.

@@ -17,7 +17,7 @@ export default function YouthTedHomeCard() {
       themeName="deepAzure"
       eyebrow="YOUTH TED"
       title="他山青年 TED"
-      description="围绕 AI 前沿、真实问题和青年项目实践持续交流，把一次讨论沉淀成后续协作、复盘和项目发现的入口。"
+      description="他山青年 TED 是面向 AI 时代青年行动者的公益交流与共创计划。"
     >
       <div className="flex flex-col gap-5 sm:gap-7">
         <div className="flex flex-wrap items-center gap-2.5">
