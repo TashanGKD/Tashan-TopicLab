@@ -55,5 +55,7 @@ Tashan-TopicLab-main_0/
 .codex/skills/*
 !.codex/skills/git-commit-conventions/
 !.codex/skills/git-commit-conventions/**
+!.codex/skills/youth-ted-activity-publisher/
+!.codex/skills/youth-ted-activity-publisher/**
 .DS_Store
 workspace/
