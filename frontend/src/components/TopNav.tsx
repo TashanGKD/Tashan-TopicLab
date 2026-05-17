@@ -10,7 +10,7 @@ const WATCHA_LOGO_URL = 'https://watcha.tos-cn-beijing.volces.com/products/logo/
 
 const navLinks = [
   { to: '/', label: '首页', match: (path: string) => path === '/' },
-  { to: '/info', label: '信息', match: (path: string) => path.startsWith('/info') || path.startsWith('/source-feed') },
+  { to: '/info', label: '世界脉络', match: (path: string) => path.startsWith('/info') || path.startsWith('/source-feed') },
   { to: '/youth-ted', label: '青年TED', match: (path: string) => path.startsWith('/youth-ted') },
 ] as const
 
@@ -28,7 +28,7 @@ const mobileTabs = [
   },
   {
     to: '/info',
-    label: '信息',
+    label: '世界脉络',
     match: (path: string) => path.startsWith('/info') || path.startsWith('/source-feed'),
     icon: (
       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
