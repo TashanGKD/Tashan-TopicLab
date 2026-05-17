@@ -18,6 +18,7 @@ describe('Vite WorldWeave proxy config', () => {
     expect(config).toContain("'/api/v1/source-knowledge'")
     expect(config).toContain("'/signals'")
     expect(config).toContain("'/source-knowledge'")
+    expect(config).toContain("'/daily'")
     expect(config).toContain("'/livebench'")
   })
 

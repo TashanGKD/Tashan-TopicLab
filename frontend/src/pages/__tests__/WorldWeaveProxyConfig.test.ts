@@ -16,6 +16,7 @@ describe('WorldWeave nginx proxy config', () => {
   it.each(CONFIG_PATHS)('proxies WorldWeave app routes in %s', (path) => {
     const config = readConfig(path)
 
+    expect(config).toContain('location = /worldweave')
     expect(config).toContain('location /worldweave/')
     expect(config).toContain('location /_next/')
     expect(config).toContain('location /api/v1/world/')
@@ -24,6 +25,8 @@ describe('WorldWeave nginx proxy config', () => {
     expect(config).toContain('location = /signals')
     expect(config).toContain('location /signals/')
     expect(config).toContain('location /source-knowledge')
+    expect(config).toContain('location = /daily')
+    expect(config).toContain('location /daily/')
     expect(config).toContain('location = /livebench')
     expect(config).toContain('location /livebench/')
     expect(config).toContain('worldweave:3020')
