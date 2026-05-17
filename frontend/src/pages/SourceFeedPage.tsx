@@ -24,7 +24,6 @@ const QUICK_LINKS = [
   { label: '开源代码库', href: 'https://home.gqy20.top/TrendPluse/' },
   { label: 'AI 技术', href: 'https://info.gqy20.top/' },
 ]
-
 const SOURCE_FEED_SECTIONS = [
   { id: 'source' as const, label: '世界脉络' },
   { id: 'media' as const, label: '媒体' },
@@ -151,78 +150,34 @@ function WorldWeaveSourceFrame() {
   }, [worldWeaveStatus])
 
   return (
-    <div className="min-h-[calc(100vh-64px)] bg-[#f3f7fb] px-2 py-3 sm:px-4 sm:py-4">
-      <div className="mx-auto mb-4 max-w-[1280px]">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div
-            className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-serif font-semibold text-slate-600 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition hover:text-slate-950"
-          >
-            <span>Trends</span>
-            <span className="text-xs font-normal text-slate-400">外部导航</span>
-          </div>
-          {QUICK_LINKS.map((link) => (
-            <a
-              key={link.href}
-              href={link.href}
-              target="_blank"
-              rel="noreferrer"
-              aria-label={link.label}
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-serif font-semibold text-slate-600 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition hover:text-slate-950"
-            >
-              <span>{link.label}</span>
-            </a>
-          ))}
-        </div>
-        <div className="-mx-1 mb-4 mt-8 px-1">
-          <div className="flex gap-1 border-b border-gray-200">
-            {SOURCE_FEED_SECTIONS.map((item) => {
-              const active = item.id === 'source'
-              return (
-                <Link
-                  key={item.id}
-                  to={`/info/${item.id}`}
-                  className={`-mb-px flex-shrink-0 px-3 py-2.5 text-sm font-serif transition-colors border-b-2 ${
-                    active
-                      ? 'border-[var(--color-dark)] text-[var(--color-dark)] font-medium'
-                      : 'border-transparent text-gray-500 hover:text-gray-900'
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              )
-            })}
+    <div className="min-h-[calc(100vh-64px)] bg-[#f3f7fb]">
+      {worldWeaveStatus === 'ready' ? (
+        <iframe
+          ref={frameRef}
+          title="世界脉络"
+          src={WORLDWEAVE_FRAME_URL}
+          className="block w-full border-0"
+          scrolling="no"
+          style={{ height: `${worldWeaveFrameHeight}px` }}
+          loading="eager"
+          onError={() => setWorldWeaveStatus('unavailable')}
+        />
+      ) : (
+        <div className="flex h-[calc(100vh-110px)] min-h-[760px] items-center justify-center bg-slate-50 px-6 text-center">
+          <div className="max-w-md">
+            <h2 className="font-serif text-xl font-semibold text-slate-900">
+              {worldWeaveStatus === 'checking'
+                ? '正在连接世界脉络'
+                : '世界脉络服务未连接'}
+            </h2>
+            {worldWeaveStatus === 'unavailable' && (
+              <p className="mt-3 text-sm leading-6 text-slate-500">
+                请确认 WorldWeave 已在本机 {WORLDWEAVE_LOCAL_PORT} 端口启动，并重新刷新页面。
+              </p>
+            )}
           </div>
         </div>
-      </div>
-      <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
-        {worldWeaveStatus === 'ready' ? (
-          <iframe
-            ref={frameRef}
-            title="世界脉络"
-            src={WORLDWEAVE_FRAME_URL}
-            className="block w-full border-0"
-            scrolling="no"
-            style={{ height: `${worldWeaveFrameHeight}px` }}
-            loading="eager"
-            onError={() => setWorldWeaveStatus('unavailable')}
-          />
-        ) : (
-          <div className="flex h-[calc(100vh-110px)] min-h-[760px] items-center justify-center bg-slate-50 px-6 text-center">
-            <div className="max-w-md">
-              <h2 className="font-serif text-xl font-semibold text-slate-900">
-                {worldWeaveStatus === 'checking'
-                  ? '正在连接世界脉络'
-                  : '世界脉络服务未连接'}
-              </h2>
-              {worldWeaveStatus === 'unavailable' && (
-                <p className="mt-3 text-sm leading-6 text-slate-500">
-                  请确认 WorldWeave 已在本机 {WORLDWEAVE_LOCAL_PORT} 端口启动，并重新刷新页面。
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   )
 }
