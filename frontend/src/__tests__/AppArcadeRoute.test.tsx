@@ -11,6 +11,7 @@ vi.mock('../pages/HomePage', () => ({ default: () => <div>Home Route</div> }))
 vi.mock('../pages/TopicDetail', () => ({ default: () => <div>Topic Detail Route</div> }))
 vi.mock('../pages/ArcadePage', () => ({ default: () => <div>Arcade Route</div> }))
 vi.mock('../pages/YouthTedPage', () => ({ default: () => <div>Youth TED Route</div> }))
+vi.mock('../pages/InspirationCoCreationPage', () => ({ default: () => <div>Inspiration Co Creation Route</div> }))
 vi.mock('../pages/ExpertEdit', () => ({ default: () => <div /> }))
 vi.mock('../pages/ProfileHelperPage', () => ({ default: () => <div /> }))
 vi.mock('../pages/AgentLinkLibraryPage', () => ({ default: () => <div /> }))
@@ -71,5 +72,15 @@ describe('App arcade topic route', () => {
     )
 
     expect(screen.getByText('Youth TED Route')).toBeInTheDocument()
+  })
+
+  it('routes the inspiration co-creation page', () => {
+    render(
+      <MemoryRouter initialEntries={['/inspiration-co-creation']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Inspiration Co Creation Route')).toBeInTheDocument()
   })
 })

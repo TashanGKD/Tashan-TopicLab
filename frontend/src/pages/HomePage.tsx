@@ -9,6 +9,7 @@ import ResearchSkillZoneCard from '../components/ResearchSkillZoneCard'
 import VerticalCardCarousel from '../components/VerticalCardCarousel'
 import WorldWeaveHomeCard from '../components/WorldWeaveHomeCard'
 import YouthTedHomeCard from '../components/YouthTedHomeCard'
+import InspirationCoCreationHomeCard from '../components/InspirationCoCreationHomeCard'
 
 const AUTOPLAY_MS = 5200
 const OPENCLAW_PAUSE_MS = 30000
@@ -67,6 +68,13 @@ export default function HomePage() {
       content: <YouthTedHomeCard />,
     },
     {
+      id: 'inspiration-co-creation',
+      label: '灵感共创队',
+      audience: '提出一个真实问题，把 AI+X 想法拆成可验证的小项目',
+      themeName: 'aquaHaze' as const,
+      content: <InspirationCoCreationHomeCard />,
+    },
+    {
       id: 'digital-twin',
       label: '数字分身',
       audience: '通过对话采集、量表校对与画像沉淀，逐步建立一个更懂你的长期代理',
@@ -102,6 +110,7 @@ export default function HomePage() {
       controls: [
         { id: 'research-skill-zone', label: '科研 Skills 专区', entryId: 'research-skill-zone', to: '/apps/skills' },
         { id: 'youth-ted', label: '他山青年 TED', entryId: 'youth-ted', to: '/youth-ted' },
+        { id: 'inspiration-co-creation', label: '灵感共创队', entryId: 'inspiration-co-creation', to: '/inspiration-co-creation' },
         { id: 'research-apps-zone', label: '科研应用专区', to: '/apps' },
       ],
     },

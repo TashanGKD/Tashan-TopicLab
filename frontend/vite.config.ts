@@ -71,6 +71,10 @@ export default defineConfig(({ mode }) => {
           target: topicLabTarget,
           changeOrigin: true,
         },
+        '/api/v1/inspiration': {
+          target: topicLabTarget,
+          changeOrigin: true,
+        },
         '/api/v1/livebench': {
           target: worldWeaveTarget,
           changeOrigin: true,

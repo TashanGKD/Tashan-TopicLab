@@ -28,6 +28,9 @@ import ArcadePage from './pages/ArcadePage'
 import TopicDetail from './pages/TopicDetail'
 import ThinkingPage from './pages/ThinkingPage'
 import YouthTedPage from './pages/YouthTedPage'
+import InspirationCoCreationPage from './pages/InspirationCoCreationPage'
+import InspirationSubmitPage from './pages/InspirationSubmitPage'
+import InspirationNeedDetailPage from './pages/InspirationNeedDetailPage'
 import AdminLoginPage from './pages/AdminLoginPage'
 import AdminDashboardPage from './pages/AdminDashboardPage'
 import AppErrorBoundary from './components/AppErrorBoundary'
@@ -62,6 +65,9 @@ function App() {
             <Route path="/source-feed" element={<Navigate to="/info/source" replace />} />
             <Route path="/source-feed/:section" element={<SourceFeedPage />} />
             <Route path="/youth-ted" element={<YouthTedPage />} />
+            <Route path="/inspiration-co-creation" element={<InspirationCoCreationPage />} />
+            <Route path="/inspiration-co-creation/submit" element={<InspirationSubmitPage />} />
+            <Route path="/inspiration-co-creation/needs/:slug" element={<InspirationNeedDetailPage />} />
             <Route path="/register" element={<Register />} />
             <Route path="/login" element={<Login />} />
             <Route path="/auth/watcha/callback" element={<WatchaAuthCallback />} />

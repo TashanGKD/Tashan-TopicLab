@@ -555,6 +555,91 @@ export interface YouthTedActivitiesResponse {
   list: YouthTedActivity[]
 }
 
+export interface InspirationDemand {
+  id: string
+  slug: string
+  status: string
+  stage: string
+  title: string
+  summary: string
+  tags: string[]
+  stuck: string
+  created_at: string
+  updated_at: string
+  updates?: InspirationDemandUpdate[]
+  path_progress?: InspirationPathStage[]
+  can_view_private?: boolean
+  can_update?: boolean
+  private?: Record<string, string>
+  redaction?: {
+    method: string
+    status: string
+    notes: string[]
+  }
+  llm_review?: InspirationDemandReview
+}
+
+export interface InspirationPathStage {
+  key: string
+  label: string
+  status: 'done' | 'current' | 'pending' | string
+  summary: string
+  emotion_note?: string
+}
+
+export interface InspirationDemandReview {
+  source?: string
+  clarity?: string
+  verifiability?: string
+  suggested_stage?: string
+  suggested_roles?: string[]
+  recommended_tools?: string[]
+  follow_up_questions?: string[]
+  next_step?: string
+  risk_notes?: string[]
+  [key: string]: unknown
+}
+
+export interface InspirationDemandUpdate {
+  id: string
+  week_label: string
+  summary: string
+  progress: string
+  blockers: string
+  next_steps: string
+  stage_key: string
+  stage_status: string
+  emotion_note: string
+  artifacts: Array<{ label?: string; url?: string }>
+  visibility: 'public' | 'admin_only' | string
+  created_at: string
+}
+
+export interface InspirationDemandSubmitRequest {
+  submitter_name: string
+  participation_mode: string
+  contact: string
+  problem: string
+  category: string
+  category_extra: string
+  current_blockers: string
+  note: string
+  allow_public: boolean
+}
+
+export interface InspirationDemandUpdateRequest {
+  week_label: string
+  stage_key: string
+  stage_status: string
+  summary: string
+  progress: string
+  blockers: string
+  next_steps: string
+  emotion_note: string
+  artifacts: Array<{ label?: string; url?: string }>
+  visibility: 'public' | 'admin_only'
+}
+
 export const topicsApi = {
   list: (params?: { category?: string; q?: string; cursor?: string | null; limit?: number }) => {
     const searchParams = new URLSearchParams()
@@ -656,6 +741,20 @@ export const appsApi = {
 
 export const youthTedApi = {
   listActivities: () => api.get<YouthTedActivitiesResponse>('v1/youth-ted/activities'),
+}
+
+export const inspirationApi = {
+  listDemands: () => api.get<{ list: InspirationDemand[] }>('v1/inspiration/demands'),
+  submitDemand: (payload: InspirationDemandSubmitRequest) =>
+    api.post<{ demand: InspirationDemand; claim_token?: string | null; llm_review: InspirationDemandReview; redaction: InspirationDemand['redaction'] }>('v1/inspiration/demands', payload),
+  getDemand: (slug: string, options?: { includePrivate?: boolean }) => {
+    const qs = options?.includePrivate ? '?include_private=true' : ''
+    return api.get<{ demand: InspirationDemand }>(`v1/inspiration/demands/${encodeURIComponent(slug)}${qs}`)
+  },
+  claimDemand: (slug: string, claimToken: string) =>
+    api.post<{ demand: InspirationDemand }>(`v1/inspiration/demands/${encodeURIComponent(slug)}/claim`, { claim_token: claimToken }),
+  createUpdate: (slug: string, payload: InspirationDemandUpdateRequest) =>
+    api.post<{ update: InspirationDemandUpdate }>(`v1/inspiration/demands/${encodeURIComponent(slug)}/updates`, payload),
 }
 
 /** 学术板块：经 topiclab-backend 代理到 IC（与信源同源 INFORMATION_COLLECTION_BASE_URL） */

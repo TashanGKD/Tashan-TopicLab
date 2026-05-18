@@ -12,6 +12,7 @@ const navLinks = [
   { to: '/', label: '首页', match: (path: string) => path === '/' },
   { to: '/info', label: '世界脉络', match: (path: string) => path.startsWith('/info') || path.startsWith('/source-feed') },
   { to: '/youth-ted', label: '青年TED', match: (path: string) => path.startsWith('/youth-ted') },
+  { to: '/inspiration-co-creation', label: '灵感共创队', match: (path: string) => path.startsWith('/inspiration-co-creation') },
 ] as const
 
 const mobileTabs = [
@@ -47,6 +48,17 @@ const mobileTabs = [
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M5 7.75h14M8.5 4.75v6M15.5 4.75v6" />
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M6.75 10.75h10.5A1.75 1.75 0 0119 12.5v4.75A1.75 1.75 0 0117.25 19H6.75A1.75 1.75 0 015 17.25V12.5a1.75 1.75 0 011.75-1.75Z" />
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8.5 15h7" />
+      </svg>
+    ),
+  },
+  {
+    to: '/inspiration-co-creation',
+    label: '灵感共创',
+    match: (path: string) => path.startsWith('/inspiration-co-creation'),
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7.25 8.75h9.5M7.25 12h6.5M6.75 19.25l2.5-3h7A2.75 2.75 0 0019 13.5v-6A2.75 2.75 0 0016.25 4.75H7.75A2.75 2.75 0 005 7.5v6a2.75 2.75 0 002.75 2.75" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15.75 10.75l1.25 1.25 2.25-2.5" />
       </svg>
     ),
   },

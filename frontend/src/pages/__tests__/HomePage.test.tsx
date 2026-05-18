@@ -24,6 +24,10 @@ vi.mock('../../components/YouthTedHomeCard', () => ({
   default: () => <section><h2>青年 TED 卡片</h2></section>,
 }))
 
+vi.mock('../../components/InspirationCoCreationHomeCard', () => ({
+  default: () => <section><h2>灵感共创队卡片</h2></section>,
+}))
+
 function createMockOpenClawController(onCopyAction?: () => void) {
   return {
     loading: false,
@@ -103,6 +107,7 @@ describe('HomePage', () => {
         <Route path="/arcade" element={<div>Arcade Route</div>} />
         <Route path="/info/source" element={<div>World Context Route</div>} />
         <Route path="/youth-ted" element={<div>Youth TED Route</div>} />
+        <Route path="/inspiration-co-creation" element={<div>Inspiration Co Creation Route</div>} />
         <Route path="/thinking" element={<div>Thinking Route</div>} />
       </Routes>
     </MemoryRouter>,
@@ -138,6 +143,7 @@ describe('HomePage', () => {
     expect(getEntryButton('学术热力图')).toBeEnabled()
     expect(getEntryButton('春招季')).toBeDisabled()
     expect(getEntryButton('他山青年 TED')).toBeEnabled()
+    expect(getEntryButton('灵感共创队')).toBeEnabled()
     expect(getEntryButton('科研应用专区')).toBeEnabled()
     expect(screen.queryByRole('button', { name: '2050专题' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /了解更多/i })).toHaveAttribute('href', '/thinking')
@@ -170,6 +176,25 @@ describe('HomePage', () => {
     fireEvent.click(getEntryButton('他山青年 TED'))
 
     expect(screen.getByText('Youth TED Route')).toBeInTheDocument()
+  })
+
+  it('opens the inspiration co-creation card from the education ecosystem group', () => {
+    renderHomePage()
+
+    fireEvent.click(getEntryButton('灵感共创队'))
+
+    expect(getEntryButton('灵感共创队')).toHaveAttribute('aria-pressed', 'true')
+    expect(within(getStage()).getByText('灵感共创队')).toBeInTheDocument()
+    expect(within(getStage()).getByText('灵感共创队卡片')).toBeInTheDocument()
+  })
+
+  it('navigates to inspiration co-creation when clicking the active entry again', () => {
+    renderHomePage()
+
+    fireEvent.click(getEntryButton('灵感共创队'))
+    fireEvent.click(getEntryButton('灵感共创队'))
+
+    expect(screen.getByText('Inspiration Co Creation Route')).toBeInTheDocument()
   })
 
   it('opens the world context entry inside the site', () => {
