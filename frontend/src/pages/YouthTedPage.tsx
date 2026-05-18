@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { youthTedApi, type YouthTedActivity } from '../api/client'
 
 const DETAILS_URL = 'https://mp.weixin.qq.com/s/KcXyglqEuaJ5PKMDLN1n1A'
@@ -219,6 +219,21 @@ function splitActivityDate(date: string): { year: string; day: string } {
   return { year: match[1], day: `${match[2]}.${match[3]}` }
 }
 
+function getActivityTimestamp(item: YouthTedActivity): number {
+  const normalized = getActivityDate(item).replace(/\./g, '-')
+  const match = normalized.match(/^(20\d{2})-(\d{2})-(\d{2})/)
+  if (!match) return Number.NEGATIVE_INFINITY
+  return new Date(`${match[1]}-${match[2]}-${match[3]}T00:00:00+08:00`).getTime()
+}
+
+function sortActivitiesNewestFirst(items: YouthTedActivity[]): YouthTedActivity[] {
+  return [...items].sort((a, b) => {
+    const timeDiff = getActivityTimestamp(b) - getActivityTimestamp(a)
+    if (timeDiff !== 0) return timeDiff
+    return a.sort_order - b.sort_order
+  })
+}
+
 function SectionHeading({
   eyebrow,
   title,
@@ -296,9 +311,71 @@ function ActivityScheduleItem({ item }: { item: YouthTedActivity }) {
   )
 }
 
+function ActivityHeroCarousel({
+  activities,
+  status,
+}: {
+  activities: YouthTedActivity[]
+  status: 'loading' | 'ready' | 'error'
+}) {
+  const [activeIndex, setActiveIndex] = useState(0)
+
+  useEffect(() => {
+    setActiveIndex(0)
+  }, [activities.length])
+
+  useEffect(() => {
+    if (activities.length <= 1) return undefined
+    const timer = window.setInterval(() => {
+      setActiveIndex((index) => (index + 1) % activities.length)
+    }, 3600)
+    return () => window.clearInterval(timer)
+  }, [activities.length])
+
+  if (activities.length === 0) {
+    return (
+      <div
+        className="mx-auto grid aspect-[3/4] w-full max-w-[23rem] place-items-center rounded-[var(--radius-md)] border border-white/80 bg-white/70 px-8 text-center text-sm leading-7 text-slate-500 shadow-[0_28px_80px_rgba(2,132,199,0.14)] lg:max-w-none"
+        aria-label="往期活动图片"
+      >
+        {status === 'error' ? '往期活动图片暂未连接' : '往期活动图片加载中'}
+      </div>
+    )
+  }
+
+  const activeActivity = activities[Math.min(activeIndex, activities.length - 1)]
+
+  return (
+    <figure
+      className="mx-auto w-full max-w-[23rem] overflow-hidden rounded-[var(--radius-md)] border border-white/80 bg-white shadow-[0_28px_80px_rgba(2,132,199,0.16)] lg:max-w-none"
+      aria-label="往期活动图片"
+    >
+      <div className="relative aspect-[2/3] bg-slate-950">
+        {activities.map((item, index) => (
+          <img
+            key={item.id}
+            src={item.poster_url}
+            alt={`${item.title}活动海报`}
+            className={`absolute inset-0 h-full w-full object-contain transition-opacity duration-700 ${
+              index === activeIndex ? 'opacity-100' : 'opacity-0'
+            }`}
+            data-current={index === activeIndex ? 'true' : 'false'}
+            loading={index === 0 ? 'eager' : 'lazy'}
+          />
+        ))}
+      </div>
+      <figcaption className="flex items-center justify-between gap-4 bg-white/88 px-4 py-3 text-sm text-slate-600">
+        <span className="min-w-0 truncate font-medium text-slate-900">{activeActivity.title}</span>
+        <span className="shrink-0 text-slate-400">{splitActivityDate(getActivityDate(activeActivity)).day}</span>
+      </figcaption>
+    </figure>
+  )
+}
+
 export default function YouthTedPage() {
   const [activities, setActivities] = useState<YouthTedActivity[]>([])
   const [activityStatus, setActivityStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+  const sortedActivities = useMemo(() => sortActivitiesNewestFirst(activities), [activities])
 
   useEffect(() => {
     let cancelled = false
@@ -339,7 +416,7 @@ export default function YouthTedPage() {
           aria-hidden="true"
           className="pointer-events-none absolute bottom-0 left-0 right-0 -z-10 h-40 bg-[linear-gradient(160deg,transparent_0_18%,rgba(2,132,199,0.10)_18.4%,transparent_19.2%_42%,rgba(15,118,110,0.08)_42.4%,transparent_43.2%_100%)] opacity-80"
         />
-        <div className="relative mx-auto w-full max-w-6xl">
+        <div className="relative mx-auto grid w-full max-w-6xl gap-10 lg:grid-cols-[minmax(0,0.92fr)_minmax(18rem,0.58fr)] lg:items-center lg:gap-16">
           <div className="max-w-3xl">
             <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
               <h1 className="text-4xl font-semibold leading-tight text-slate-950 sm:text-5xl">
@@ -375,16 +452,29 @@ export default function YouthTedPage() {
                 提交真实问题 / 申请成为分享者
                 <span aria-hidden="true" className="ml-2 text-base leading-none">›</span>
               </a>
+              <a
+                href={DETAILS_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex min-h-11 items-center justify-center rounded-full border border-sky-200 bg-white/70 px-5 py-2.5 text-sm font-semibold text-sky-800 backdrop-blur transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-white"
+              >
+                查看详情介绍
+              </a>
+            </div>
+            <div
+              className="mt-4 max-w-xl text-sm font-medium leading-7 text-slate-500"
+              aria-label="适合参与的人群"
+            >
+              {builderTypes.map((type, index) => (
+                <span key={type}>
+                  <span className="text-slate-700">{type}</span>
+                  {index < builderTypes.length - 1 ? <span className="mx-2 text-sky-500/70">/</span> : null}
+                </span>
+              ))}
             </div>
           </div>
-          <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-            {builderTypes.map((type) => (
-              <div key={type} className="border-l-2 border-sky-500 pl-4">
-                <p className="text-base font-semibold text-slate-950">{type}</p>
-                <p className="mt-2 text-sm leading-7 text-slate-600">围绕 AI 前沿、真实问题和项目实践持续交流。</p>
-              </div>
-            ))}
-          </div>
+
+          <ActivityHeroCarousel activities={sortedActivities} status={activityStatus} />
         </div>
       </section>
 
@@ -410,7 +500,7 @@ export default function YouthTedPage() {
             <span className="font-semibold text-slate-800">不定时北京线下活动</span>
           </SectionHeading>
           <div className="mt-10 space-y-8">
-            {activities.map((item) => (
+            {sortedActivities.map((item) => (
               <ActivityScheduleItem key={item.id} item={item} />
             ))}
             {activityStatus === 'loading' ? (
