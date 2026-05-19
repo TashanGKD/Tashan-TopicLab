@@ -468,9 +468,6 @@ function DemandCard({ need, index }: DemandCardProps) {
           <span className="shrink-0 text-xs font-semibold text-teal-700">
             线索 {String(clueNumber).padStart(2, '0')}
           </span>
-          <span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-700">
-            {pathStage.label}
-          </span>
         </div>
         <h3 className="mt-4 text-xl font-semibold leading-tight text-slate-950">
           {need.title}
@@ -495,7 +492,7 @@ function DemandCard({ need, index }: DemandCardProps) {
               />
             ))}
           </div>
-          <p className="mt-3 text-xs font-semibold text-teal-700">{pathStage.label}</p>
+          <p className="mt-3 text-xs font-semibold text-teal-700">所处阶段：{pathStage.label}</p>
         </div>
       </div>
     </article>

@@ -103,8 +103,8 @@ async def test_assistant_run_completion_writes_ready_snapshot(client, monkeypatc
     assert demand["assistant"]["status"] == "ready"
     assert demand["assistant"]["version"] == 1
     assert demand["assistant"]["latest_run_id"] == run_id
-    assert demand["title"] == "特别长的学习反馈助手标题"[:10]
-    assert len(demand["title"]) <= 10
+    assert demand["title"] == "特别长的学习反馈助手标题"[:12]
+    assert len(demand["title"]) <= 12
     assert demand["summary"] == "面向课堂阅读训练的反馈助手。"
     assert demand["stuck"] == "需要先确认试用对象。"
     assert "社群成员把模糊想法" not in str(demand)

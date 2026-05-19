@@ -11,9 +11,14 @@ from pydantic import BaseModel, Field
 
 from app.api.auth import get_current_user, security, verify_access_token
 from app.services.inspiration_assistant import run_inspiration_assistant_once
-from app.services.inspiration_review import build_initial_inspiration_review, build_initial_public_redaction
+from app.services.inspiration_review import (
+    build_initial_inspiration_review,
+    build_initial_public_redaction,
+    generate_public_fuzzy_title,
+)
 from app.storage.database.inspiration_store import (
     add_demand_update,
+    build_fuzzy_public_payload,
     claim_demand,
     create_assistant_run,
     create_demand,
@@ -155,8 +160,20 @@ def update_private_info(slug: str, req: InspirationDemandPrivateUpdateRequest, u
 
 
 @router.patch("/demands/{slug}/public-mode")
-def update_public_mode(slug: str, req: InspirationDemandPublicModeRequest, user: dict = Depends(get_current_user)):
-    demand = update_demand_public_mode(slug=slug, raw_public=req.raw_public, user=user)
+async def update_public_mode(slug: str, req: InspirationDemandPublicModeRequest, user: dict = Depends(get_current_user)):
+    public_payload_override = None
+    if not req.raw_public:
+        current = get_demand_by_slug(slug, user=user, include_private=True)
+        if current is None:
+            raise HTTPException(status_code=404, detail="需求不存在")
+        if not current.get("can_update"):
+            raise HTTPException(status_code=403, detail="没有更新权限")
+        private_payload = current.get("private") if isinstance(current.get("private"), dict) else {}
+        fallback_payload = build_fuzzy_public_payload(private_payload)
+        title = await generate_public_fuzzy_title(private_payload, fallback_title=str(fallback_payload.get("title") or "共创线索"))
+        public_payload_override = {**fallback_payload, "title": title}
+
+    demand = update_demand_public_mode(slug=slug, raw_public=req.raw_public, user=user, public_payload_override=public_payload_override)
     if demand is None:
         raise HTTPException(status_code=404, detail="需求不存在")
     if demand.get("error") == "forbidden":

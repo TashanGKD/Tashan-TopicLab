@@ -283,6 +283,11 @@ def test_inspiration_owner_can_toggle_raw_public_mode(client, monkeypatch):
     slug = "need-01-ai-english-reading-assistant"
     raw_problem = "我想把英语阅读课堂拆成可以验证的 AI 助教需求。"
 
+    async def fake_request(messages, **kwargs):
+        return '{"title":"阅读课堂共创"}'
+
+    monkeypatch.setattr("app.services.inspiration_review.request_inspiration_llm", fake_request)
+
     denied = test_client.patch(
         f"/api/v1/inspiration/demands/{slug}/public-mode",
         headers=user_headers,
@@ -314,7 +319,7 @@ def test_inspiration_owner_can_toggle_raw_public_mode(client, monkeypatch):
     raw_demand = raw.json()["demand"]
     assert raw_demand["redaction"]["method"] == "raw_public"
     assert raw_demand["redaction"]["status"] == "raw_public"
-    assert len(raw_demand["title"]) <= 10
+    assert len(raw_demand["title"]) <= 12
     assert raw_problem in raw_demand["summary"]
 
     public_detail = test_client.get(f"/api/v1/inspiration/demands/{slug}")
@@ -333,10 +338,86 @@ def test_inspiration_owner_can_toggle_raw_public_mode(client, monkeypatch):
     fuzzy_demand = fuzzy.json()["demand"]
     assert fuzzy_demand["redaction"]["method"] == "spreadsheet_fuzzy_rule"
     assert "公开摘要仅保留方向层级" in fuzzy_demand["summary"]
+    assert fuzzy_demand["title"] == "阅读课堂共创"
+    assert 4 <= len(fuzzy_demand["title"]) <= 12
+    assert "英语阅读训练" in fuzzy_demand["summary"]
+    assert "问题拆解" in fuzzy_demand["stuck"]
 
     fuzzy_public_detail = test_client.get(f"/api/v1/inspiration/demands/{slug}")
     assert fuzzy_public_detail.status_code == 200
     assert raw_problem not in str(fuzzy_public_detail.json()["demand"])
+
+
+def test_inspiration_fuzzy_public_mode_uses_llm_title(client, monkeypatch):
+    test_client, auth_module = client
+    monkeypatch.setenv("ADMIN_USER_IDS", "1")
+    token = auth_module.create_jwt_token(1, "13800138000", is_admin=True)
+    headers = {"Authorization": f"Bearer {token}"}
+    slug = "need-01-ai-english-reading-assistant"
+
+    async def fake_request(messages, **kwargs):
+        return '{"title":"课堂阅读反馈"}'
+
+    monkeypatch.setattr("app.services.inspiration_review.request_inspiration_llm", fake_request)
+
+    private_update = test_client.patch(
+        f"/api/v1/inspiration/demands/{slug}/private",
+        headers=headers,
+        json={
+            "private": {
+                "problem": "我想把英语阅读课堂拆成可以验证的 AI 助教需求。",
+                "note": "已有课程材料，希望公开找同伴。",
+                "category": "学习 / 教育",
+                "current_blockers": "想找人一起拆解",
+            }
+        },
+    )
+    assert private_update.status_code == 200
+
+    fuzzy = test_client.patch(
+        f"/api/v1/inspiration/demands/{slug}/public-mode",
+        headers=headers,
+        json={"raw_public": False},
+    )
+
+    assert fuzzy.status_code == 200
+    demand = fuzzy.json()["demand"]
+    assert demand["title"] == "课堂阅读反馈"
+    assert demand["redaction"]["method"] == "spreadsheet_fuzzy_rule"
+    assert "公开摘要仅保留方向层级" in demand["summary"]
+
+
+def test_inspiration_fuzzy_title_rules_distinguish_specific_domains(client):
+    from app.storage.database.inspiration_store import _fuzzy_public_payload_from_private
+
+    industrial = _fuzzy_public_payload_from_private(
+        {
+            "problem": "面向工业领域的 AI 行业翻译软件，针对质量、工艺、工人、设备、管理层改写同一段内容。",
+            "category": "生活效率 / 个人工作流",
+            "current_blockers": "不知道技术上能不能实现",
+            "participation_mode": "围观围观～",
+        }
+    )
+    ansys = _fuzzy_public_payload_from_private(
+        {
+            "problem": "使用 Codex 完成 ANSYS 中子弹穿透钢板的动力学仿真、静力分析和模态分析。",
+            "category": "科研 / AI for Science",
+            "current_blockers": "不知道技术上能不能实现",
+            "participation_mode": "我有一个真实问题，需要拆解初步方案",
+        }
+    )
+    json_dict = _fuzzy_public_payload_from_private(
+        {
+            "problem": "历史遗留项目，需要通过大模型自动解析很大的 JSON 输入，得到数据字典，并通过 diff patch 稳定输出。",
+            "category": "生活效率 / 个人工作流",
+            "current_blockers": "不知道怎么把问题拆成项目",
+            "participation_mode": "我有一个真实问题，需要拆解初步方案",
+        }
+    )
+
+    assert industrial["title"] == "工业岗位翻译"
+    assert ansys["title"] == "ANSYS仿真"
+    assert json_dict["title"] == "JSON字典生成"
 
 
 def test_inspiration_public_list_reflects_latest_path_stage(client, monkeypatch):

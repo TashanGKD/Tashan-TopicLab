@@ -102,10 +102,10 @@ def _truncate(value: str, max_length: int) -> str:
     return f"{text[: max_length - 1]}…"
 
 
-def _short_title(value: Any, fallback: str = "") -> str:
+def _short_title(value: Any, fallback: str = "", max_length: int = 12) -> str:
     text = re.sub(r"\s+", "", str(value or ""))
     text = text.strip("《》“”\"'：:，,。.!！?？、；;（）()[]【】")
-    return (text or fallback)[:10]
+    return (text or fallback)[:max_length]
 
 
 def _load_prompt(filename: str) -> str:
@@ -249,7 +249,7 @@ async def run_initial_submission_agent(context: dict[str, Any]) -> dict[str, Any
         if not parsed:
             return fallback
         parsed["source"] = "llm"
-        parsed["title"] = _short_title(_redact_text(str(parsed.get("title") or ""), private_payload), str(public_payload.get("title") or ""))
+        parsed["title"] = _short_title(_redact_text(str(parsed.get("title") or ""), private_payload), str(public_payload.get("title") or ""), 12)
         parsed["summary"] = _truncate(_redact_text(str(parsed.get("summary") or ""), private_payload), 180)
         parsed["public_stuck"] = _truncate(_redact_text(str(parsed.get("public_stuck") or ""), private_payload), 120)
         result = {**fallback, **parsed}
@@ -274,6 +274,46 @@ async def run_initial_submission_agent(context: dict[str, Any]) -> dict[str, Any
             }
         }
         return fallback
+
+
+async def generate_public_fuzzy_title(private_payload: dict[str, Any], *, fallback_title: str) -> str:
+    """Generate one public-safe fuzzy title through the shared Inspiration LLM endpoint."""
+
+    prompt = {
+        "problem": private_payload.get("problem") or "",
+        "category": private_payload.get("category") or "",
+        "category_extra": private_payload.get("category_extra") or "",
+        "current_blockers": private_payload.get("current_blockers") or "",
+        "participation_mode": private_payload.get("participation_mode") or "",
+        "note": private_payload.get("note") or "",
+        "fallback_title": fallback_title,
+    }
+    try:
+        raw = await request_inspiration_llm(
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "你是灵感共创队的公开线索标题生成器。请仅输出 JSON，不要 Markdown。"
+                        "任务：根据用户表单生成一个脱敏公开标题。"
+                        "要求：title 必须 4-12 个中文/英文字符混合单位，短、具体、自然；"
+                        "不要统一成固定字数；不要泄露姓名、联系方式、单位、账号、私人链接；"
+                        "不要直接复述完整原文；优先保留可公开的领域主题和用途。"
+                        "不得输出超过 12 字后等待系统截断，必须主动改写成完整短语；"
+                        "不要把“仿真”“助手”“Agent”等词截成半个词。"
+                        "只输出字段：title。"
+                    ),
+                },
+                {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
+            ],
+            temperature=0.35,
+            extra_payload={"max_tokens": 120},
+        )
+        parsed = _parse_json_object(raw)
+        title = _short_title(_redact_text(str(parsed.get("title") or ""), private_payload), fallback_title, 12)
+        return title if len(title) >= 4 else fallback_title[:12]
+    except (InspirationLLMNotConfigured, InspirationLLMRequestError, json.JSONDecodeError):
+        return fallback_title[:12]
 
 
 async def _run_stage_agent(context: dict[str, Any], *, stage_key: str, prompt_filename: str) -> dict[str, Any]:
@@ -389,7 +429,7 @@ async def generate_public_redaction(payload: dict[str, Any], review: dict[str, A
                         "你是灵感共创队的需求脱敏改写助手。请仅输出 JSON，不要 Markdown。"
                         "目标是把需求、想法或参与意愿改写成公开可读但不可识别个人身份的共创线索。"
                         "必须保留真实场景、问题、卡点、参与方式和需要的伙伴，删除姓名、联系方式、账号、可识别单位或私人链接。"
-                        "字段必须包含 title, summary, tags, stuck, notes。title 必须在 10 个汉字以内。tags/notes 为字符串数组。"
+                        "字段必须包含 title, summary, tags, stuck, notes。title 必须在 4-12 个中文/英文字符混合单位内。tags/notes 为字符串数组。"
                     ),
                 },
                 {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},

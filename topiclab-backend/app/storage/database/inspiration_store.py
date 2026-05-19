@@ -539,10 +539,10 @@ def _assistant_follow_up_questions(row) -> list[str]:
     return [str(question).strip() for question in questions if str(question).strip()][:3]
 
 
-def _short_public_title(value: Any, fallback: str = "") -> str:
+def _short_public_title(value: Any, fallback: str = "", max_length: int = 12) -> str:
     text_value = re.sub(r"\s+", "", str(value or ""))
     text_value = text_value.strip("《》“”\"'：:，,。.!！?？、；;（）()[]【】")
-    return (text_value or fallback)[:10]
+    return (text_value or fallback)[:max_length]
 
 
 def _public_text(value: Any, *, fallback: str, max_length: int) -> str:
@@ -552,6 +552,76 @@ def _public_text(value: Any, *, fallback: str, max_length: int) -> str:
     if len(text_value) <= max_length:
         return text_value
     return f"{text_value[: max_length - 1]}…"
+
+
+def _public_category_from_private(private_payload: dict[str, Any]) -> str:
+    category_text = f"{private_payload.get('category') or ''},{private_payload.get('category_extra') or ''}"
+    if "教育" in category_text or "学习" in category_text:
+        return "教育学习"
+    if "科研" in category_text or "Science" in category_text or "数据" in category_text:
+        return "科研数据"
+    if "内容创作" in category_text or "新媒体" in category_text:
+        return "内容创作"
+    if "生活效率" in category_text or "个人工作流" in category_text:
+        return "效率工具"
+    return "跨域探索"
+
+
+_FUZZY_THEME_RULES = [
+    (("ANSYS", "仿真", "动力学", "模态"), "ANSYS仿真", "工程仿真协作", "自动化可靠性判断"),
+    (("JSON", "数据字典", "diff patch"), "JSON字典生成", "数据字典解析", "稳态输出流程"),
+    (("工业", "质量", "工艺", "设备", "管理层"), "工业岗位翻译", "工业岗位沟通", "跨角色表达转换"),
+    (("英语阅读", "阅读课", "词汇", "语法", "写作"), "英语阅读AI助教", "英语阅读训练", "课堂练习拆解"),
+    (("就业", "职业规划", "简历", "面试", "实习"), "就业服务台", "就业规划服务", "服务入口验证"),
+    (("辅导员", "宿舍", "自习", "班级", "学生基础信息"), "辅导员低代码", "校园管理流程", "低代码模块验证"),
+    (("非遗", "草图", "设计稿", "填色", "排版"), "非遗草图Demo", "非遗设计转化", "创意到 Demo 的路径"),
+    (("博弈论", "均衡", "比较静态"), "博弈模型检索", "研究模型生成", "文献和模型匹配"),
+    (("旅游规划", "旅游规划智能体", "旅行规划", "微信小程序"), "旅游规划助手", "旅游规划服务", "真实行程反馈"),
+    (("景区", "文旅", "讲解"), "景区AI讲解", "景区讲解服务", "现场体验验证"),
+    (("AI 工具的大脑", "Cursor", "方法库", "评估体系"), "AI工具大脑", "AI 工作方法沉淀", "评估体系搭建"),
+    (("冷泉", "甲烷", "温盐深", "溶解氧"), "冷泉预测", "观测数据关系发现", "数据建模路径"),
+    (("资讯", "信息聚合", "筛选", "信息整理"), "资讯整理反馈", "资讯整理平台", "真实用户反馈"),
+    (("网安", "安全运营", "Agent 与网安"), "Agent网安实战", "网安运营实践", "真实项目入口"),
+    (("自我认知", "认知 Demo"), "自我认知Demo", "自我认知工具", "内容结构反馈"),
+    (("老系统", "代码迁移", "Controller", "二代规范"), "代码迁移助手", "遗留系统迁移", "规范化生成链路"),
+    (("在线文档", "文档权限", "数据导入"), "在线文档导入", "在线文档接入", "权限和导入链路"),
+    (("企业管理", "管理培训", "培训方案"), "管理培训生成", "管理培训方案", "诊断到交付组织"),
+    (("技能蒸馏", "驾驶舱", "专家", "可复用技能"), "技能蒸馏系统", "业务技能沉淀", "能力抽取验证"),
+    (("个人笔记", "关键词", "搜索", "定位"), "笔记检索工具", "个人笔记检索", "复盘查找效率"),
+    (("GitHub", "知识库", "工作流"), "GitHub知识库", "知识管理流程", "可追踪迭代"),
+    (("化工", "高分子", "商业化", "产业应用"), "科产线索观察", "AI for Science 产业线索", "信息渠道确认"),
+]
+
+
+def _fuzzy_theme_from_private(private_payload: dict[str, Any], category: str) -> dict[str, str]:
+    text = " ".join(
+        str(private_payload.get(key) or "")
+        for key in ("problem", "note", "category", "category_extra", "current_blockers", "participation_mode")
+    )
+    for keywords, title, theme, action in _FUZZY_THEME_RULES:
+        if any(keyword.lower() in text.lower() for keyword in keywords):
+            return {"title": title[:10], "theme": theme, "action": action}
+    participation = str(private_payload.get("participation_mode") or "")
+    if "围观" in participation:
+        return {"title": f"{category}观察"[:12], "theme": f"{category}观察", "action": "先找到可参与方向"}
+    if "练手" in participation or "真实项目" in participation:
+        return {"title": f"{category}练手"[:12], "theme": f"{category}共创", "action": "进入真实项目练手"}
+    if "Demo" in participation or "小工具" in participation:
+        return {"title": f"{category}Demo"[:12], "theme": f"{category}Demo", "action": "获得真实反馈"}
+    return {"title": f"{category}问题"[:12], "theme": f"{category}问题", "action": "拆成可验证的一步"}
+
+
+def _fuzzy_needs_from_text(text: str) -> list[str]:
+    needs: list[str] = []
+    if re.search(r"拆|模糊|边界|说清楚|方向|入口|路径", text):
+        needs.append("问题拆解")
+    if re.search(r"技术|实现|模型|Agent|工具|自动化|权限|可靠|方案", text):
+        needs.append("技术可行性判断")
+    if re.search(r"伙伴|一起|协作|找人|项目入口", text):
+        needs.append("协作伙伴")
+    if re.search(r"反馈|用户|试用|验证|Demo", text):
+        needs.append("真实反馈")
+    return list(dict.fromkeys(needs or ["下一步澄清"]))
 
 
 def _raw_public_payload_from_private(private_payload: dict[str, Any]) -> dict[str, Any]:
@@ -575,51 +645,33 @@ def _raw_public_payload_from_private(private_payload: dict[str, Any]) -> dict[st
 
 
 def _fuzzy_public_payload_from_private(private_payload: dict[str, Any]) -> dict[str, Any]:
-    category_text = f"{private_payload.get('category') or ''},{private_payload.get('category_extra') or ''}"
+    category = _public_category_from_private(private_payload)
+    theme = _fuzzy_theme_from_private(private_payload, category)
     participation = str(private_payload.get("participation_mode") or "")
-    blockers = str(private_payload.get("current_blockers") or "")
-    if "教育" in category_text or "学习" in category_text:
-        category = "教育学习"
-    elif "科研" in category_text or "Science" in category_text or "数据" in category_text:
-        category = "科研数据"
-    elif "内容创作" in category_text or "新媒体" in category_text:
-        category = "内容创作"
-    elif "生活效率" in category_text or "个人工作流" in category_text:
-        category = "效率工具"
-    else:
-        category = "跨域探索"
+    text = " ".join(str(private_payload.get(key) or "") for key in ("problem", "note", "current_blockers"))
+    needs = _fuzzy_needs_from_text(text)
     if "围观" in participation:
-        title = "共创观察线索"
-        summary = f"希望先观察共创队的真实问题和讨论方向。公开摘要仅保留方向层级：{category}。具体场景、身份信息和原始描述仅在完整表单信息中查看。"
+        summary = f"围绕{theme['theme']}先观察真实问题和讨论方向，重点是{theme['action']}。公开摘要仅保留方向层级和主题词；具体身份、联系方式和原始描述仅在完整表单信息中查看。"
     elif "练手" in participation or "真实项目" in participation:
-        title = "参与共创线索"
-        summary = f"希望加入真实项目，在讨论、调研、开发或反馈中练手。公开摘要仅保留方向层级：{category}。具体场景、身份信息和原始描述仅在完整表单信息中查看。"
+        summary = f"希望参与{theme['theme']}相关真实项目，在讨论、调研、开发或反馈中练手，当前更需要{theme['action']}。公开摘要仅保留方向层级和主题词；具体身份、联系方式和原始描述仅在完整表单信息中查看。"
     elif "Demo" in participation or "小工具" in participation:
-        title = f"{category}Demo"[:10]
-        summary = f"已有初步想法或 Demo，希望获得真实反馈并寻找协作伙伴。公开摘要仅保留方向层级：{category}。具体场景、身份信息和原始描述仅在完整表单信息中查看。"
+        summary = f"已有{theme['theme']}方向的初步想法或 Demo，希望通过{theme['action']}判断下一步。公开摘要仅保留方向层级和主题词；具体身份、联系方式和原始描述仅在完整表单信息中查看。"
     else:
-        title = f"{category}线索"[:10]
-        summary = f"希望围绕一个真实问题开展 AI + X 共创。公开摘要仅保留方向层级：{category}。具体场景、身份信息和原始描述仅在完整表单信息中查看。"
-    needs = []
-    if "怎么把问题拆成项目" in blockers or "模糊" in blockers:
-        needs.append("问题拆解")
-    if "技术" in blockers or "实现" in blockers:
-        needs.append("技术可行性判断")
-    if "缺一个能一起做的人" in blockers or "伙伴" in blockers:
-        needs.append("协作伙伴")
-    if "真实用户反馈" in blockers or "反馈" in blockers:
-        needs.append("真实反馈")
-    if not needs:
-        needs.append("下一步澄清")
-    tags = [category]
+        summary = f"围绕{theme['theme']}开展 AI + X 共创，目标是把{theme['action']}推进到可验证的一步。公开摘要仅保留方向层级和主题词；具体身份、联系方式和原始描述仅在完整表单信息中查看。"
+    tags = [category, theme["theme"]]
     if participation:
         tags.append(participation)
     return {
-        "title": title,
+        "title": theme["title"],
         "summary": summary,
-        "stuck": f"当前需要：{'、'.join(dict.fromkeys(needs))}。",
+        "stuck": f"当前需要：{'、'.join(needs)}。",
         "tags": tags[:4],
     }
+
+
+def build_fuzzy_public_payload(private_payload: dict[str, Any]) -> dict[str, Any]:
+    """Build the deterministic public-safe payload used as an LLM fallback."""
+    return _fuzzy_public_payload_from_private(private_payload)
 
 
 def _can_view_private(row, user: dict[str, Any] | None) -> bool:
@@ -943,7 +995,13 @@ def update_demand_private(*, slug: str, private_payload: dict[str, Any], user: d
     return get_demand_by_slug(slug, user=user, include_private=True)
 
 
-def update_demand_public_mode(*, slug: str, raw_public: bool, user: dict[str, Any]) -> dict[str, Any] | None:
+def update_demand_public_mode(
+    *,
+    slug: str,
+    raw_public: bool,
+    user: dict[str, Any],
+    public_payload_override: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
     with get_db_session() as session:
         ensure_inspiration_schema_and_seed_for_session(session)
         row = session.execute(
@@ -962,7 +1020,11 @@ def update_demand_public_mode(*, slug: str, raw_public: bool, user: dict[str, An
         if not _can_update(row, user):
             return {"error": "forbidden"}
         private_payload = _json_loads(row.private_json, {})
-        public_payload = _raw_public_payload_from_private(private_payload) if raw_public else _fuzzy_public_payload_from_private(private_payload)
+        public_payload = (
+            _raw_public_payload_from_private(private_payload)
+            if raw_public
+            else (public_payload_override or _fuzzy_public_payload_from_private(private_payload))
+        )
         method = "raw_public" if raw_public else "spreadsheet_fuzzy_rule"
         notes = [
             "提出者选择公开完整问题描述，公开标题和摘要不做模糊化处理。"

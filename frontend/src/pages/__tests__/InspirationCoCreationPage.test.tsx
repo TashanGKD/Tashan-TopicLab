@@ -116,7 +116,8 @@ describe('InspirationCoCreationPage', () => {
 
     const waterfall = screen.getByLabelText('共创线索瀑布流')
     expect(within(waterfall).getByText('英语阅读课堂的 AI 助教')).toBeInTheDocument()
-    expect(within(waterfall).getAllByText('问题定义').length).toBeGreaterThanOrEqual(1)
+    expect(within(waterfall).getAllByText('所处阶段：问题定义').length).toBeGreaterThanOrEqual(1)
+    expect(within(waterfall).queryByText('问题定义')).not.toBeInTheDocument()
     expect(within(waterfall).queryByText('一个需求、想法或参与意愿已经被放到这里。')).not.toBeInTheDocument()
     expect(within(waterfall).queryByText('请补充：最小验证对象是谁？')).not.toBeInTheDocument()
     expect(within(waterfall).queryByText('已脱敏')).not.toBeInTheDocument()
