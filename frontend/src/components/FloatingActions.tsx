@@ -1,6 +1,5 @@
 import { ReactNode, useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import FeedbackBubble from './FeedbackBubble'
 import { useMobileChromeHidden } from '../hooks/useMobileChromeHidden'
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
@@ -224,20 +223,6 @@ export default function FloatingActions() {
         bottom: 'calc(6rem + env(safe-area-inset-bottom))',
       }}
     >
-      <FeedbackBubble
-        renderTrigger={(open) => (
-          <FloatingActionButton ariaLabel="打开反馈" onClick={open}>
-            <svg className="relative h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden>
-              <path
-                strokeWidth={1.75}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.77 9.77 0 01-4-.8L3 20l1.2-3.6A7.96 7.96 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-              />
-            </svg>
-          </FloatingActionButton>
-        )}
-      />
       <ScrollToBottomButton />
     </div>
   )

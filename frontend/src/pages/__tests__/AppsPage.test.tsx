@@ -139,6 +139,7 @@ describe('AppsPage', () => {
     expect(screen.getAllByText('CLI Install').length).toBeGreaterThan(0)
     expect(screen.getAllByText('PRISMA 文献筛选助手').length).toBeGreaterThan(0)
     expect(screen.getAllByRole('link', { name: '进入应用' }).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: '评价应用' })).not.toBeInTheDocument()
     expect(screen.getByText('一级学科')).toBeInTheDocument()
     expect(screen.getByText('研究领域（Cluster）')).toBeInTheDocument()
     expect(screen.getByText('集中收录可安装的科研 Skill：按一级学科与研究领域（Cluster）筛选，查看说明、售价与 CLI 安装命令，并参与评测、许愿与发布。')).toBeInTheDocument()

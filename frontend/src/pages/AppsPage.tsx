@@ -138,15 +138,6 @@ function AppIcon({ kind }: { kind?: string }) {
   )
 }
 
-function openFeedbackDraft(app: AppDisplayItem) {
-  window.dispatchEvent(new CustomEvent('open-feedback-draft', {
-    detail: {
-      scenario: app.openclaw?.review_feedback?.scenario ?? `apps:${app.id}`,
-      body: app.openclaw?.review_feedback?.body_template ?? `我要评价应用 ${app.name}。\n`,
-    },
-  }))
-}
-
 function estimateTextBlockHeight(text: string, charsPerLine: number, lineHeight: number) {
   if (!text.trim()) return 0
   return Math.ceil(text.trim().length / charsPerLine) * lineHeight
@@ -413,7 +404,6 @@ export default function AppsPage() {
                   icon={<AppIcon kind={app.icon} />}
                   pendingLike={pendingLikeIds.has(app.id)}
                   onToggleLike={() => void toggleLike(app)}
-                  onOpenFeedback={() => openFeedbackDraft(app)}
                   links={getAppLinks(app)}
                 />
               ))}
@@ -427,7 +417,6 @@ export default function AppsPage() {
                     icon={<AppIcon kind={app.icon} />}
                     pendingLike={pendingLikeIds.has(app.id)}
                     onToggleLike={() => void toggleLike(app)}
-                    onOpenFeedback={() => openFeedbackDraft(app)}
                     links={getAppLinks(app)}
                   />
                 ))}
@@ -440,7 +429,6 @@ export default function AppsPage() {
                     icon={<AppIcon kind={app.icon} />}
                     pendingLike={pendingLikeIds.has(app.id)}
                     onToggleLike={() => void toggleLike(app)}
-                    onOpenFeedback={() => openFeedbackDraft(app)}
                     links={getAppLinks(app)}
                   />
                 ))}

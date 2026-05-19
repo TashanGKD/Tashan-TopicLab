@@ -23,7 +23,6 @@ interface AppCatalogCardProps {
   icon: ReactNode
   pendingLike: boolean
   onToggleLike: () => void
-  onOpenFeedback: () => void
   links: Array<{ href: string; label: string; primary: boolean }>
 }
 
@@ -32,7 +31,6 @@ export default function AppCatalogCard({
   icon,
   pendingLike,
   onToggleLike,
-  onOpenFeedback,
   links,
 }: AppCatalogCardProps) {
   const ia = app.interaction
@@ -160,14 +158,6 @@ export default function AppCatalogCard({
               {link.label}
             </a>
           ))}
-          <button
-            type="button"
-            onClick={onOpenFeedback}
-            className="inline-flex items-center rounded-[var(--radius-md)] border px-3 py-2 text-sm font-medium transition-colors"
-            style={{ borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}
-          >
-            评价应用
-          </button>
         </div>
         <p
           className="shrink-0 whitespace-nowrap text-left text-xs tabular-nums leading-5 sm:ml-auto sm:text-right"
