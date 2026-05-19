@@ -123,7 +123,7 @@ services:
       args:
         NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-docker.m.daocloud.io/library/node:20-slim}
         NGINX_BASE_IMAGE: ${NGINX_BASE_IMAGE:-docker.m.daocloud.io/library/nginx:alpine}
-        VITE_BASE_PATH: ${VITE_BASE_PATH:-/topic-lab/}
+        VITE_BASE_PATH: ${VITE_BASE_PATH:-/}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:

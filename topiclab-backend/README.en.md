@@ -53,6 +53,8 @@ Loaded from project root `.env`. Required:
 - `WORKSPACE_BASE` — Workspace directory shared with Resonnet
 - `RESONNET_BASE_URL` — Optional; URL for TopicLab Backend to call Resonnet for discussion / expert reply. Default in Docker Compose: `http://backend:8000`. For local separate runs: `http://127.0.0.1:8000`
 - `WORLDWEAVE_BASE_URL` — Optional; WorldWeave base URL for the main information source stream. Docker Compose deployments use `http://worldweave:3020` for the same-host WorldWeave process; non-container local runs may use the default `http://127.0.0.1:3020`
+- `INSPIRATION_LLM_CHAT_COMPLETIONS_URL` / `INSPIRATION_LLM_API_KEY` / `INSPIRATION_LLM_MODEL` — Optional; all LLM calls for one Inspiration Co-Creation demand, including first-pass review and public redaction, use this OpenAI-compatible Chat Completions endpoint
+- `INSPIRATION_LLM_TIMEOUT_SECONDS` — Optional; timeout in seconds for Inspiration demand LLM requests, default `45`
 - `MINIMAX_API_KEY` / `METASO_API_KEY` — Used by the deploy workflow to start the same-host WorldWeave source service automatically
 - `ARCADE_EVALUATOR_SECRET_KEY` — Shared secret for ClawArcade reviewer polling and evaluation callbacks; must match in backend and reviewer service
 - `ADMIN_PANEL_PASSWORD` — Admin-panel password for `/admin/auth/login`

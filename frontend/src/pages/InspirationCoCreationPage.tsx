@@ -170,6 +170,7 @@ const needCards = [
 const fallbackDemands: InspirationDemand[] = needCards.map((need, index) => ({
   id: `fallback-${index + 1}`,
   slug: `need-${String(index + 1).padStart(2, '0')}`,
+  clue_number: index + 1,
   status: 'published',
   stage: '模糊想法',
   title: need.title,
@@ -177,18 +178,53 @@ const fallbackDemands: InspirationDemand[] = needCards.map((need, index) => ({
   tags: need.tags,
   stuck: need.stuck,
   path_progress: [
-    { key: 'submitted', label: '留下线索', status: 'done', summary: '一个需求、想法或参与意愿已经被放到这里。', emotion_note: '先被看见，就是共创的第一步。' },
-    { key: 'defined', label: '问题定义', status: 'current', summary: '等待下一次共创更新。', emotion_note: '有人愿意把这件事继续往前推。' },
+    { key: 'submitted', label: '留下线索', status: 'done', summary: '', emotion_note: '' },
+    { key: 'defined', label: '问题定义', status: 'current', summary: '', emotion_note: '' },
   ],
   created_at: '',
   updated_at: '',
+  latest_update_at: '',
 }))
+
+function getClueNumber(need: InspirationDemand, fallbackIndex = 0) {
+  if (typeof need.clue_number === 'number' && Number.isFinite(need.clue_number)) {
+    return need.clue_number
+  }
+  const match = /^need-(\d+)/.exec(need.slug)
+  return match ? Number(match[1]) : fallbackIndex + 1
+}
+
+function getDemandSortTime(need: InspirationDemand) {
+  const timestamp = need.latest_update_at || need.updated_at || need.created_at
+  const parsed = Date.parse(timestamp || '')
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function sortDemandsByLatestUpdate(items: InspirationDemand[]) {
+  return [...items].sort((a, b) => {
+    const timeDelta = getDemandSortTime(b) - getDemandSortTime(a)
+    if (timeDelta !== 0) return timeDelta
+    return getClueNumber(a) - getClueNumber(b)
+  })
+}
+
+function cleanStageSummary(summary?: string) {
+  const text = (summary ?? '').trim()
+  if (!text) return ''
+  const legacyPatterns = [
+    '等待下一次共创更新。',
+    '等待下一步共创更新。',
+    '一个需求、想法或参与意愿已经被放到这里。',
+  ]
+  return legacyPatterns.includes(text) ? '' : text
+}
 
 function currentPathStage(need: InspirationDemand) {
   const pathProgress = normalizePathProgress(need.path_progress)
-  return pathProgress.find((stage) => stage.status === 'current')
+  const stage = pathProgress.find((item) => item.status === 'current')
     ?? pathProgress.find((stage) => stage.status === 'done')
-    ?? { label: need.stage || '留下线索', summary: need.stuck || '等待下一步共创更新。' }
+    ?? { label: need.stage || '留下线索', summary: need.stuck || '' }
+  return { ...stage, summary: cleanStageSummary(stage.summary) }
 }
 
 function normalizePathProgress(pathProgress?: InspirationDemand['path_progress']) {
@@ -198,8 +234,8 @@ function normalizePathProgress(pathProgress?: InspirationDemand['path_progress']
       ...stage,
       key: 'defined',
       label: '问题定义',
-      summary: stage.summary?.replace('等待下一次访谈或共创更新。', '等待下一次共创更新。') || '等待下一次共创更新。',
-      emotion_note: stage.emotion_note?.replace('有人愿意把问题留在这里。', '有人愿意把这件事继续往前推。') || stage.emotion_note,
+      summary: cleanStageSummary(stage.summary),
+      emotion_note: stage.emotion_note,
     }
   })
 }
@@ -273,9 +309,10 @@ interface DemandCardProps {
 
 function DemandCard({ need, index }: DemandCardProps) {
   const pathStage = currentPathStage(need)
+  const clueNumber = getClueNumber(need, index)
   const normalizedProgress = normalizePathProgress(need.path_progress)
   const pathProgress = normalizedProgress.length ? normalizedProgress : [
-    { key: 'submitted', label: '留下线索', status: 'current', summary: need.stuck || '等待下一步共创更新。' },
+    { key: 'submitted', label: '留下线索', status: 'current', summary: need.stuck || '' },
   ]
 
   return (
@@ -284,13 +321,13 @@ function DemandCard({ need, index }: DemandCardProps) {
     >
       <Link
         to={`/inspiration-co-creation/needs/${need.slug}`}
-        aria-label={`打开线索 ${String(index + 1).padStart(2, '0')}：${need.title}`}
+        aria-label={`打开线索 ${String(clueNumber).padStart(2, '0')}：${need.title}`}
         className="absolute inset-0 z-10 rounded-[var(--radius-md)] focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40"
       />
       <div className="pointer-events-none relative z-20">
         <div className="flex items-start justify-between gap-4">
           <span className="shrink-0 text-xs font-semibold text-teal-700">
-            线索 {String(index + 1).padStart(2, '0')}
+            线索 {String(clueNumber).padStart(2, '0')}
           </span>
           <span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-700">
             {pathStage.label}
@@ -320,7 +357,9 @@ function DemandCard({ need, index }: DemandCardProps) {
             ))}
           </div>
           <p className="mt-3 text-xs font-semibold text-teal-700">{pathStage.label}</p>
-          <p className="mt-3 text-xs leading-6 text-slate-500">{pathStage.summary}</p>
+          {pathStage.summary ? (
+            <p className="mt-3 text-xs leading-6 text-slate-500">{pathStage.summary}</p>
+          ) : null}
         </div>
       </div>
     </article>
@@ -332,7 +371,7 @@ export default function InspirationCoCreationPage() {
   const [demandStatus, setDemandStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const { containerRef: masonryRef, columnCount: masonryColumnCount } = useMasonryColumnCount()
   const demandColumns = useMemo(
-    () => distributeIntoMasonryColumns(demands, masonryColumnCount),
+    () => distributeIntoMasonryColumns(sortDemandsByLatestUpdate(demands), masonryColumnCount),
     [demands, masonryColumnCount],
   )
 

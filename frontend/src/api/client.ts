@@ -558,6 +558,7 @@ export interface YouthTedActivitiesResponse {
 export interface InspirationDemand {
   id: string
   slug: string
+  clue_number?: number | null
   status: string
   stage: string
   title: string
@@ -566,11 +567,12 @@ export interface InspirationDemand {
   stuck: string
   created_at: string
   updated_at: string
+  latest_update_at?: string
   updates?: InspirationDemandUpdate[]
   path_progress?: InspirationPathStage[]
   can_view_private?: boolean
   can_update?: boolean
-  private?: Record<string, string>
+  private?: Record<string, string | boolean | number | null>
   redaction?: {
     method: string
     status: string
@@ -610,9 +612,10 @@ export interface InspirationDemandUpdate {
   stage_key: string
   stage_status: string
   emotion_note: string
-  artifacts: Array<{ label?: string; url?: string }>
+  artifacts: Array<{ type?: string; label?: string; url?: string }>
   visibility: 'public' | 'admin_only' | string
   created_at: string
+  updated_at?: string
 }
 
 export interface InspirationDemandSubmitRequest {
@@ -636,7 +639,7 @@ export interface InspirationDemandUpdateRequest {
   blockers: string
   next_steps: string
   emotion_note: string
-  artifacts: Array<{ label?: string; url?: string }>
+  artifacts: Array<{ type?: string; label?: string; url?: string }>
   visibility: 'public' | 'admin_only'
 }
 
@@ -753,8 +756,12 @@ export const inspirationApi = {
   },
   claimDemand: (slug: string, claimToken: string) =>
     api.post<{ demand: InspirationDemand }>(`v1/inspiration/demands/${encodeURIComponent(slug)}/claim`, { claim_token: claimToken }),
+  updateDemandPrivate: (slug: string, privateData: Record<string, string | boolean | number | null | undefined>) =>
+    api.patch<{ demand: InspirationDemand }>(`v1/inspiration/demands/${encodeURIComponent(slug)}/private`, { private: privateData }),
   createUpdate: (slug: string, payload: InspirationDemandUpdateRequest) =>
     api.post<{ update: InspirationDemandUpdate }>(`v1/inspiration/demands/${encodeURIComponent(slug)}/updates`, payload),
+  updateUpdate: (slug: string, updateId: string, payload: InspirationDemandUpdateRequest) =>
+    api.patch<{ update: InspirationDemandUpdate }>(`v1/inspiration/demands/${encodeURIComponent(slug)}/updates/${encodeURIComponent(updateId)}`, payload),
 }
 
 /** 学术板块：经 topiclab-backend 代理到 IC（与信源同源 INFORMATION_COLLECTION_BASE_URL） */

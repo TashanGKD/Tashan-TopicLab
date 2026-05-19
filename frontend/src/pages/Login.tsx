@@ -5,8 +5,9 @@ import { authApi, tokenManager } from '../api/auth';
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as { from?: string } | null)?.from || '/';
-  const claimToken = new URLSearchParams(location.search).get('openclaw_claim');
+  const searchParams = new URLSearchParams(location.search);
+  const from = searchParams.get('next') || (location.state as { from?: string } | null)?.from || '/';
+  const claimToken = searchParams.get('openclaw_claim');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);

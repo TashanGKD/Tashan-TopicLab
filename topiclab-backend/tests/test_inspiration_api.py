@@ -2,6 +2,7 @@ import importlib
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
 
 @pytest.fixture
@@ -13,6 +14,10 @@ def client(tmp_path, monkeypatch):
     monkeypatch.delenv("AI_GENERATION_BASE_URL", raising=False)
     monkeypatch.delenv("AI_GENERATION_API_KEY", raising=False)
     monkeypatch.delenv("AI_GENERATION_MODEL", raising=False)
+    monkeypatch.delenv("INSPIRATION_LLM_CHAT_COMPLETIONS_URL", raising=False)
+    monkeypatch.delenv("INSPIRATION_LLM_API_KEY", raising=False)
+    monkeypatch.delenv("INSPIRATION_LLM_MODEL", raising=False)
+    monkeypatch.delenv("INSPIRATION_LLM_TIMEOUT_SECONDS", raising=False)
 
     from app.storage.database import inspiration_store, postgres_client
     import app.api.auth as auth_module
@@ -201,3 +206,177 @@ def test_inspiration_admin_can_view_private_and_create_update(client, monkeypatc
     defined = next(item for item in path if item["key"] == "defined")
     assert defined["status"] == "done"
     assert all(item["key"] != "interview" for item in path)
+
+
+def test_inspiration_admin_can_edit_private_info_and_existing_update(client, monkeypatch):
+    test_client, auth_module = client
+    monkeypatch.setenv("ADMIN_USER_IDS", "1")
+    token = auth_module.create_jwt_token(1, "13800138000", is_admin=True)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    private_update = test_client.patch(
+        "/api/v1/inspiration/demands/need-01-ai-english-reading-assistant/private",
+        headers=headers,
+        json={"private": {"contact": "new-contact@example.com", "problem": "更新后的完整问题描述"}},
+    )
+    assert private_update.status_code == 200
+    assert private_update.json()["demand"]["private"]["contact"] == "new-contact@example.com"
+
+    created = test_client.post(
+        "/api/v1/inspiration/demands/need-01-ai-english-reading-assistant/updates",
+        headers=headers,
+        json={
+            "week_label": "2026-W22",
+            "stage_key": "demo",
+            "stage_status": "current",
+            "summary": "准备 Demo",
+            "progress": "先做一个课堂反馈表单。",
+            "blockers": "",
+            "next_steps": "找学生试填。",
+            "emotion_note": "已经进入可验证阶段。",
+            "artifacts": [],
+            "visibility": "public",
+        },
+    )
+    assert created.status_code == 200
+    update_id = created.json()["update"]["id"]
+
+    edited = test_client.patch(
+        f"/api/v1/inspiration/demands/need-01-ai-english-reading-assistant/updates/{update_id}",
+        headers=headers,
+        json={
+            "week_label": "2026-W23",
+            "stage_key": "demo",
+            "stage_status": "done",
+            "summary": "Demo 已跑通",
+            "progress": "完成课堂反馈表单并收集 3 条试用反馈。",
+            "blockers": "",
+            "next_steps": "整理成 MVP 页面。",
+            "emotion_note": "这一步已经从想法进入真实反馈。",
+            "artifacts": [],
+            "visibility": "public",
+        },
+    )
+    assert edited.status_code == 200
+    assert edited.json()["update"]["summary"] == "Demo 已跑通"
+
+    refreshed = test_client.get("/api/v1/inspiration/demands/need-01-ai-english-reading-assistant")
+    demo_stage = next(item for item in refreshed.json()["demand"]["path_progress"] if item["key"] == "demo")
+    assert demo_stage["status"] == "done"
+    assert demo_stage["summary"] == "Demo 已跑通"
+
+
+def test_inspiration_public_list_reflects_latest_path_stage(client, monkeypatch):
+    test_client, auth_module = client
+    monkeypatch.setenv("ADMIN_USER_IDS", "1")
+    token = auth_module.create_jwt_token(1, "13800138000", is_admin=True)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    update = test_client.post(
+        "/api/v1/inspiration/demands/need-25-ai-for-science/updates",
+        headers=headers,
+        json={
+            "week_label": "2026-05-19 16:30",
+            "stage_key": "tooling",
+            "stage_status": "current",
+            "summary": "正在确定信息渠道和可用工具。",
+            "progress": "",
+            "blockers": "",
+            "next_steps": "",
+            "emotion_note": "",
+            "artifacts": [],
+            "visibility": "public",
+        },
+    )
+    assert update.status_code == 200
+
+    listed = test_client.get("/api/v1/inspiration/demands")
+
+    assert listed.status_code == 200
+    demand = next(item for item in listed.json()["list"] if item["slug"] == "need-25-ai-for-science")
+    tooling_stage = next(item for item in demand["path_progress"] if item["key"] == "tooling")
+    assert tooling_stage["status"] == "current"
+    assert tooling_stage["summary"] == "正在确定信息渠道和可用工具。"
+
+
+def test_inspiration_public_list_sorts_by_latest_update_then_clue_number(client, monkeypatch):
+    test_client, auth_module = client
+    monkeypatch.setenv("ADMIN_USER_IDS", "1")
+    token = auth_module.create_jwt_token(1, "13800138000", is_admin=True)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    update_05 = test_client.post(
+        "/api/v1/inspiration/demands/need-05-game-theory-model-agent/updates",
+        headers=headers,
+        json={
+            "week_label": "2026-W21",
+            "stage_key": "defined",
+            "stage_status": "done",
+            "summary": "完成模型边界确认",
+            "progress": "",
+            "blockers": "",
+            "next_steps": "",
+            "emotion_note": "",
+            "artifacts": [],
+            "visibility": "public",
+        },
+    )
+    update_01 = test_client.post(
+        "/api/v1/inspiration/demands/need-01-ai-english-reading-assistant/updates",
+        headers=headers,
+        json={
+            "week_label": "2026-W21",
+            "stage_key": "defined",
+            "stage_status": "done",
+            "summary": "完成课堂对象确认",
+            "progress": "",
+            "blockers": "",
+            "next_steps": "",
+            "emotion_note": "",
+            "artifacts": [],
+            "visibility": "public",
+        },
+    )
+    assert update_05.status_code == 200
+    assert update_01.status_code == 200
+    assert update_05.json()["update"]["created_at"]
+    assert update_05.json()["update"]["updated_at"]
+
+    from app.storage.database.postgres_client import get_db_session
+
+    update_05_id = update_05.json()["update"]["id"]
+    update_01_id = update_01.json()["update"]["id"]
+    with get_db_session() as session:
+        session.execute(
+            text("UPDATE inspiration_demand_updates SET updated_at = :updated_at WHERE id = :id"),
+            {"updated_at": "2099-05-02T00:00:00+00:00", "id": update_05_id},
+        )
+        session.execute(
+            text("UPDATE inspiration_demand_updates SET updated_at = :updated_at WHERE id = :id"),
+            {"updated_at": "2099-05-01T00:00:00+00:00", "id": update_01_id},
+        )
+
+    listed = test_client.get("/api/v1/inspiration/demands")
+    assert listed.status_code == 200
+    items = listed.json()["list"]
+    assert items[0]["slug"] == "need-05-game-theory-model-agent"
+    assert items[0]["clue_number"] == 5
+    assert items[0]["latest_update_at"] == "2099-05-02T00:00:00+00:00"
+
+    with get_db_session() as session:
+        session.execute(
+            text("UPDATE inspiration_demand_updates SET updated_at = :updated_at WHERE id IN (:update_01_id, :update_05_id)"),
+            {
+                "updated_at": "2099-06-01T00:00:00+00:00",
+                "update_01_id": update_01_id,
+                "update_05_id": update_05_id,
+            },
+        )
+
+    tied = test_client.get("/api/v1/inspiration/demands")
+    assert tied.status_code == 200
+    tied_items = tied.json()["list"]
+    assert [item["slug"] for item in tied_items[:2]] == [
+        "need-01-ai-english-reading-assistant",
+        "need-05-game-theory-model-agent",
+    ]

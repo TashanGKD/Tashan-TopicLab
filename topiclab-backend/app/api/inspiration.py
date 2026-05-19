@@ -16,6 +16,8 @@ from app.storage.database.inspiration_store import (
     create_demand,
     get_demand_by_slug,
     list_public_demands,
+    update_demand_private,
+    update_demand_update,
 )
 
 router = APIRouter(prefix="/inspiration", tags=["inspiration"])
@@ -48,6 +50,10 @@ class InspirationDemandUpdateRequest(BaseModel):
 
 class InspirationDemandClaimRequest(BaseModel):
     claim_token: str = Field(..., min_length=8, max_length=128)
+
+
+class InspirationDemandPrivateUpdateRequest(BaseModel):
+    private: dict[str, Any] = Field(default_factory=dict)
 
 
 def _build_public_payload(req: InspirationDemandSubmitRequest, redaction: dict[str, Any]) -> dict[str, Any]:
@@ -121,6 +127,16 @@ def claim_submitted_demand(slug: str, req: InspirationDemandClaimRequest, user: 
     return {"demand": demand}
 
 
+@router.patch("/demands/{slug}/private")
+def update_private_info(slug: str, req: InspirationDemandPrivateUpdateRequest, user: dict = Depends(get_current_user)):
+    demand = update_demand_private(slug=slug, private_payload=req.private, user=user)
+    if demand is None:
+        raise HTTPException(status_code=404, detail="需求不存在")
+    if demand.get("error") == "forbidden":
+        raise HTTPException(status_code=403, detail="没有更新权限")
+    return {"demand": demand}
+
+
 @router.post("/demands/{slug}/updates")
 def create_update(slug: str, req: InspirationDemandUpdateRequest, user: dict = Depends(get_current_user)):
     demand = get_demand_by_slug(slug, user=user)
@@ -132,4 +148,14 @@ def create_update(slug: str, req: InspirationDemandUpdateRequest, user: dict = D
     update = add_demand_update(slug=slug, payload=req.model_dump(), created_by_user_id=created_by)
     if update is None:
         raise HTTPException(status_code=404, detail="需求不存在")
+    return {"update": update}
+
+
+@router.patch("/demands/{slug}/updates/{update_id}")
+def update_existing_update(slug: str, update_id: str, req: InspirationDemandUpdateRequest, user: dict = Depends(get_current_user)):
+    update = update_demand_update(slug=slug, update_id=update_id, payload=req.model_dump(), user=user)
+    if update is None:
+        raise HTTPException(status_code=404, detail="进展不存在")
+    if update.get("error") == "forbidden":
+        raise HTTPException(status_code=403, detail="没有更新权限")
     return {"update": update}

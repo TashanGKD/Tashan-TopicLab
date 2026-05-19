@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 from typing import Any
 
-import httpx
+from app.services.inspiration_llm import InspirationLLMNotConfigured, InspirationLLMRequestError, request_inspiration_llm
 
 
 def _fallback_review(payload: dict[str, Any]) -> dict[str, Any]:
@@ -141,12 +140,6 @@ def _strip_fenced_json(text: str) -> str:
 async def generate_inspiration_review(payload: dict[str, Any]) -> dict[str, Any]:
     """Return a structured review. Falls back locally if LLM env is not configured."""
     fallback = _fallback_review(payload)
-    base_url = os.getenv("AI_GENERATION_BASE_URL", "").strip()
-    api_key = os.getenv("AI_GENERATION_API_KEY", "").strip()
-    model = os.getenv("AI_GENERATION_MODEL", "").strip()
-    if not base_url or not api_key or not model:
-        return fallback
-
     prompt = {
         "problem": payload.get("problem") or "",
         "category": payload.get("category") or "",
@@ -155,51 +148,35 @@ async def generate_inspiration_review(payload: dict[str, Any]) -> dict[str, Any]
         "participation_mode": payload.get("participation_mode") or "",
         "note": payload.get("note") or "",
     }
-    request_payload = {
-        "model": model,
-        "messages": [
-            {
-                "role": "system",
-                "content": (
-                    "你是灵感共创队的需求预诊断助手。"
-                    "请仅输出 JSON，不要 Markdown。字段必须包含："
-                    "clarity, verifiability, suggested_stage, suggested_roles, recommended_tools, "
-                    "follow_up_questions, next_step, risk_notes。"
-                    "suggested_roles/recommended_tools/follow_up_questions/risk_notes 均为字符串数组。"
-                ),
-            },
-            {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
-        ],
-        "temperature": 0.2,
-    }
     try:
-        async with httpx.AsyncClient(timeout=45.0) as client:
-            response = await client.post(
-                f"{base_url.rstrip('/')}/chat/completions",
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json=request_payload,
-            )
-        response.raise_for_status()
-        data = response.json()
-        raw = str(data["choices"][0]["message"]["content"])
+        raw = await request_inspiration_llm(
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "你是灵感共创队的需求预诊断助手。"
+                        "请仅输出 JSON，不要 Markdown。字段必须包含："
+                        "clarity, verifiability, suggested_stage, suggested_roles, recommended_tools, "
+                        "follow_up_questions, next_step, risk_notes。"
+                        "suggested_roles/recommended_tools/follow_up_questions/risk_notes 均为字符串数组。"
+                    ),
+                },
+                {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
+            ],
+            temperature=0.2,
+        )
         parsed = json.loads(_strip_fenced_json(raw))
         if not isinstance(parsed, dict):
             return fallback
         parsed["source"] = "llm"
         return {**fallback, **parsed}
-    except Exception:
+    except (InspirationLLMNotConfigured, InspirationLLMRequestError, json.JSONDecodeError):
         return fallback
 
 
 async def generate_public_redaction(payload: dict[str, Any], review: dict[str, Any]) -> dict[str, Any]:
     """Return a public-safe rewrite for the demand. Falls back to deterministic redaction."""
     fallback = _fallback_redaction(payload, review)
-    base_url = os.getenv("AI_GENERATION_BASE_URL", "").strip()
-    api_key = os.getenv("AI_GENERATION_API_KEY", "").strip()
-    model = os.getenv("AI_GENERATION_MODEL", "").strip()
-    if not base_url or not api_key or not model:
-        return fallback
-
     prompt = {
         "raw": {
             "problem": payload.get("problem") or "",
@@ -211,32 +188,22 @@ async def generate_public_redaction(payload: dict[str, Any], review: dict[str, A
         },
         "review": review,
     }
-    request_payload = {
-        "model": model,
-        "messages": [
-            {
-                "role": "system",
-                "content": (
-                    "你是灵感共创队的需求脱敏改写助手。请仅输出 JSON，不要 Markdown。"
-                    "目标是把需求、想法或参与意愿改写成公开可读但不可识别个人身份的共创线索。"
-                    "必须保留真实场景、问题、卡点、参与方式和需要的伙伴，删除姓名、联系方式、账号、可识别单位或私人链接。"
-                    "字段必须包含 title, summary, tags, stuck, notes。tags/notes 为字符串数组。"
-                ),
-            },
-            {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
-        ],
-        "temperature": 0.2,
-    }
     try:
-        async with httpx.AsyncClient(timeout=45.0) as client:
-            response = await client.post(
-                f"{base_url.rstrip('/')}/chat/completions",
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json=request_payload,
-            )
-        response.raise_for_status()
-        data = response.json()
-        raw = str(data["choices"][0]["message"]["content"])
+        raw = await request_inspiration_llm(
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "你是灵感共创队的需求脱敏改写助手。请仅输出 JSON，不要 Markdown。"
+                        "目标是把需求、想法或参与意愿改写成公开可读但不可识别个人身份的共创线索。"
+                        "必须保留真实场景、问题、卡点、参与方式和需要的伙伴，删除姓名、联系方式、账号、可识别单位或私人链接。"
+                        "字段必须包含 title, summary, tags, stuck, notes。tags/notes 为字符串数组。"
+                    ),
+                },
+                {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
+            ],
+            temperature=0.2,
+        )
         parsed = json.loads(_strip_fenced_json(raw))
         if not isinstance(parsed, dict):
             return fallback
@@ -251,5 +218,5 @@ async def generate_public_redaction(payload: dict[str, Any], review: dict[str, A
         redacted["stuck"] = _redact_text(str(redacted.get("stuck") or fallback["stuck"]), payload)
         redacted["tags"] = [_redact_text(str(tag), payload) for tag in (redacted.get("tags") or fallback["tags"])][:4]
         return redacted
-    except Exception:
+    except (InspirationLLMNotConfigured, InspirationLLMRequestError, json.JSONDecodeError):
         return fallback

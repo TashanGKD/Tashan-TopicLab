@@ -37,7 +37,7 @@ vi.mock('../../api/client', async () => {
 
 function LocationProbe() {
   const location = useLocation()
-  return <div data-testid="location-path">{location.pathname}</div>
+  return <div data-testid="location-path">{location.pathname}{location.search}</div>
 }
 
 function renderPage() {
@@ -47,6 +47,7 @@ function renderPage() {
       <Routes>
         <Route path="/inspiration-co-creation/submit" element={<InspirationSubmitPage />} />
         <Route path="/inspiration-co-creation" element={<div>灵感共创队主页</div>} />
+        <Route path="/inspiration-co-creation/needs/:slug" element={<div>线索详情页</div>} />
       </Routes>
     </MemoryRouter>,
   )
@@ -55,11 +56,12 @@ function renderPage() {
 describe('InspirationSubmitPage', () => {
   afterEach(() => {
     cleanup()
+    localStorage.clear()
     vi.clearAllMocks()
     vi.useRealTimers()
   })
 
-  it('submits a clear demand, shows success motion, and returns to the main page', async () => {
+  it('submits a clear demand, shows success motion, and opens the claimable detail page', async () => {
     renderPage()
 
     expect(screen.getByText('说说你在琢磨的事儿')).toBeInTheDocument()
@@ -87,11 +89,12 @@ describe('InspirationSubmitPage', () => {
         participation_mode: '我有一个明确需求',
       }))
       expect(screen.getByText('提交成功')).toBeInTheDocument()
+      expect(screen.getByText('正在打开这条线索，登录后可以绑定并持续更新。')).toBeInTheDocument()
+      expect(localStorage.getItem('inspiration_claim_test-demand-1234')).toBe('claim-token-123')
     })
 
     await waitFor(() => {
-      expect(screen.getByTestId('location-path')).toHaveTextContent('/inspiration-co-creation')
-      expect(screen.getByText('灵感共创队主页')).toBeInTheDocument()
+      expect(screen.getByTestId('location-path')).toHaveTextContent('/inspiration-co-creation/needs/test-demand-1234?claim_token=claim-token-123')
     }, { timeout: 2500 })
   })
 

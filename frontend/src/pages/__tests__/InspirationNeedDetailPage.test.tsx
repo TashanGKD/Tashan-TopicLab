@@ -1,9 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import InspirationNeedDetailPage from '../InspirationNeedDetailPage'
 import { inspirationApi } from '../../api/client'
+import { refreshCurrentUserProfile } from '../../api/auth'
 
 vi.mock('../../api/client', async () => {
   const actual = await vi.importActual<typeof import('../../api/client')>('../../api/client')
@@ -26,8 +27,8 @@ vi.mock('../../api/client', async () => {
       follow_up_questions: ['目标用户是谁？'],
     },
     path_progress: [
-      { key: 'submitted', label: '留下线索', status: 'done', summary: '一个需求、想法或参与意愿已经被放到这里。', emotion_note: '先被看见，就是共创的第一步。' },
-      { key: 'defined', label: '问题定义', status: 'current', summary: '等待下一次共创更新。', emotion_note: '有人愿意把这件事继续往前推。' },
+      { key: 'submitted', label: '留下线索', status: 'done', summary: '', emotion_note: '' },
+      { key: 'defined', label: '问题定义', status: 'current', summary: '', emotion_note: '' },
       { key: 'demo', label: 'Demo 验证', status: 'pending', summary: '尚未开始。', emotion_note: '' },
     ],
     updates: [],
@@ -37,7 +38,21 @@ vi.mock('../../api/client', async () => {
     inspirationApi: {
       getDemand: vi.fn((_slug: string, options?: { includePrivate?: boolean }) => Promise.resolve({
         data: {
-          demand: options?.includePrivate ? { ...demand, private: { 联系方式: '18773233131' } } : demand,
+          demand: options?.includePrivate ? {
+            ...demand,
+            private: {
+              participation_mode: '我有一个明确需求',
+              problem: '我想把英语阅读课堂拆成可以验证的 AI 助教需求。',
+              category: '学习 / 教育',
+              current_blockers: '想找人一起拆解',
+              note: '已有课程材料。',
+              allow_public: false,
+              contact: '18773233131',
+              submitter_name: '测试同学',
+              account_user_id: 1,
+              account_phone: 'admin',
+            },
+          } : demand,
         },
       })),
       claimDemand: vi.fn(() => Promise.resolve({
@@ -63,7 +78,32 @@ vi.mock('../../api/client', async () => {
           },
         },
       })),
+      updateDemandPrivate: vi.fn((_slug: string, privateData: Record<string, string | boolean | number | null | undefined>) => Promise.resolve({
+        data: {
+          demand: {
+            ...demand,
+            private: privateData,
+          },
+        },
+      })),
+      updateUpdate: vi.fn((_slug: string, _updateId: string, payload: any) => Promise.resolve({
+        data: {
+          update: {
+            id: 'upd-1',
+            created_at: '2026-05-18T00:00:00Z',
+            ...payload,
+          },
+        },
+      })),
     },
+  }
+})
+
+vi.mock('../../api/auth', async () => {
+  const actual = await vi.importActual<typeof import('../../api/auth')>('../../api/auth')
+  return {
+    ...actual,
+    refreshCurrentUserProfile: vi.fn(() => Promise.resolve(actual.tokenManager.getUser())),
   }
 })
 
@@ -92,25 +132,54 @@ describe('InspirationNeedDetailPage', () => {
     renderDetail()
 
     expect(await screen.findByText('英语阅读课堂的 AI 助教')).toBeInTheDocument()
-    expect(screen.getByText('留下线索')).toBeInTheDocument()
+    expect(screen.getAllByText('留下线索').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('问题定义').length).toBeGreaterThanOrEqual(1)
     expect(screen.queryByText('人工访谈')).not.toBeInTheDocument()
     expect(screen.queryByText('18773233131')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('路径时间轴')).toBeInTheDocument()
+    expect(screen.getByLabelText('路径进展列表')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /显示完整信息/ }))
     await waitFor(() => {
       expect(inspirationApi.getDemand).toHaveBeenCalledWith('need-01-ai-english-reading-assistant', { includePrivate: true })
       expect(screen.getByText('18773233131')).toBeInTheDocument()
+      expect(screen.getByText('怎么联系你')).toBeInTheDocument()
+      expect(screen.getByText('是否愿意把它匿名展示出来')).toBeInTheDocument()
+      expect(screen.getByText('先不公开，只提交给共创队')).toBeInTheDocument()
+      expect(screen.queryByText('contact')).not.toBeInTheDocument()
+      expect(screen.queryByText('allow_public')).not.toBeInTheDocument()
+      expect(screen.queryByText('account_phone')).not.toBeInTheDocument()
     })
 
-    fireEvent.change(screen.getByPlaceholderText('2026-W21'), { target: { value: '2026-W21' } })
-    fireEvent.change(screen.getByLabelText('路径阶段'), { target: { value: 'defined' } })
-    fireEvent.change(screen.getByPlaceholderText('本次进展摘要'), { target: { value: '完成问题定义' } })
+    fireEvent.click(screen.getByRole('button', { name: '收起完整信息' }))
+    expect(screen.queryByText('18773233131')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /显示完整信息/ })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /显示完整信息/ }))
+    expect(await screen.findByText('18773233131')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑完整信息' }))
+    fireEvent.change(screen.getByLabelText('怎么联系你'), { target: { value: 'new-contact@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存完整信息' }))
+
+    await waitFor(() => {
+      expect(inspirationApi.updateDemandPrivate).toHaveBeenCalledWith(
+        'need-01-ai-english-reading-assistant',
+        expect.objectContaining({ contact: 'new-contact@example.com' }),
+      )
+    })
+
+    const definedStage = screen.getByLabelText('问题定义阶段')
+    fireEvent.click(within(definedStage).getByRole('button', { name: '更新' }))
+    fireEvent.change(within(definedStage).getByPlaceholderText('比如：问题说清楚了 / 找到了一个可试的工具 / 做了一个小 Demo / 暂时卡住了。'), { target: { value: '完成问题定义' } })
     fireEvent.click(screen.getByRole('button', { name: /保存进展/ }))
 
     await waitFor(() => {
-      expect(inspirationApi.createUpdate).toHaveBeenCalled()
-      expect(screen.getByText('完成问题定义')).toBeInTheDocument()
+      expect(inspirationApi.createUpdate).toHaveBeenCalledWith(
+        'need-01-ai-english-reading-assistant',
+        expect.objectContaining({ stage_key: 'defined', summary: '完成问题定义', week_label: expect.stringMatching(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/) }),
+      )
+      expect(screen.getAllByText('完成问题定义').length).toBeGreaterThanOrEqual(1)
     })
   })
 
@@ -119,7 +188,6 @@ describe('InspirationNeedDetailPage', () => {
       'auth_user',
       JSON.stringify({ id: 2, phone: '13800138002', username: '提出者', is_admin: false, created_at: '2026-05-18T00:00:00Z' }),
     )
-    vi.mocked(inspirationApi.getDemand).mockRejectedValueOnce(new Error('hidden'))
 
     renderDetail('/inspiration-co-creation/needs/need-01-ai-english-reading-assistant?claim_token=claim-token-123')
 
@@ -127,5 +195,83 @@ describe('InspirationNeedDetailPage', () => {
       expect(inspirationApi.claimDemand).toHaveBeenCalledWith('need-01-ai-english-reading-assistant', 'claim-token-123')
       expect(screen.getByText('已绑定这条线索，后续可以持续更新路径进展。')).toBeInTheDocument()
     })
+  })
+
+  it('syncs the logged-in user from token before claiming a demand', async () => {
+    localStorage.setItem('auth_token', 'fresh-token')
+    vi.mocked(refreshCurrentUserProfile).mockResolvedValueOnce({
+      id: 3,
+      phone: '13800138003',
+      username: '刚登录的用户',
+      is_admin: false,
+      created_at: '2026-05-18T00:00:00Z',
+    })
+
+    renderDetail('/inspiration-co-creation/needs/need-01-ai-english-reading-assistant?claim_token=claim-token-123')
+
+    await waitFor(() => {
+      expect(refreshCurrentUserProfile).toHaveBeenCalled()
+      expect(inspirationApi.claimDemand).toHaveBeenCalledWith('need-01-ai-english-reading-assistant', 'claim-token-123')
+      expect(screen.getByText('已绑定这条线索，后续可以持续更新路径进展。')).toBeInTheDocument()
+    })
+  })
+
+  it('guides anonymous submitters to log in before updating their demand', async () => {
+    vi.mocked(inspirationApi.getDemand).mockResolvedValueOnce({
+      data: {
+        demand: {
+          id: 'demand-1',
+          slug: 'need-01-ai-english-reading-assistant',
+          status: 'published',
+          stage: '问题定义中',
+          title: '英语阅读课堂的 AI 助教',
+          summary: '把一套大学英语阅读课拆成词汇、语法、阅读、翻译和写作训练。',
+          tags: ['教育 / 学习'],
+          stuck: '问题太大，需要拆成可先验证的一步。',
+          created_at: '2026-05-15T00:00:00Z',
+          updated_at: '2026-05-18T00:00:00Z',
+          can_view_private: false,
+          can_update: false,
+          path_progress: [
+            { key: 'submitted', label: '留下线索', status: 'done', summary: '', emotion_note: '' },
+          ],
+          updates: [],
+        },
+      },
+    } as any)
+
+    renderDetail('/inspiration-co-creation/needs/need-01-ai-english-reading-assistant?claim_token=claim-token-123')
+
+    expect(await screen.findByText('这条线索可以绑定到你的账号')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '登录并绑定' })).toHaveAttribute(
+      'href',
+      '/login?next=%2Finspiration-co-creation%2Fneeds%2Fneed-01-ai-english-reading-assistant%3Fclaim_token%3Dclaim-token-123',
+    )
+    expect(screen.queryByRole('link', { name: '注册并绑定' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('完整表单信息')).toBeInTheDocument()
+    expect(screen.getByText('登录并绑定这条线索，或使用管理员账号查看完整表单信息。')).toBeInTheDocument()
+    expect(screen.getByText('登录并绑定后，就可以在这里持续更新这条线索。')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '更新' })).not.toBeInTheDocument()
+  })
+
+  it('treats unauthorized claim attempts as expired login state instead of broken links', async () => {
+    localStorage.setItem('auth_token', 'expired-token')
+    localStorage.setItem(
+      'auth_user',
+      JSON.stringify({ id: 2, phone: '13800138002', username: '提出者', is_admin: false, created_at: '2026-05-18T00:00:00Z' }),
+    )
+    vi.mocked(inspirationApi.claimDemand).mockRejectedValue({ response: { status: 401 } })
+
+    renderDetail('/inspiration-co-creation/needs/need-01-ai-english-reading-assistant?claim_token=claim-token-123')
+
+    expect(await screen.findByText('登录状态已过期')).toBeInTheDocument()
+    expect(screen.getByText('重新登录后就可以把这条线索绑定到你的账号，之后继续补充进展、复盘和下一步。')).toBeInTheDocument()
+    expect(screen.queryByText('绑定链接已失效或不匹配。')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '登录并绑定' })).toHaveAttribute(
+      'href',
+      '/login?next=%2Finspiration-co-creation%2Fneeds%2Fneed-01-ai-english-reading-assistant%3Fclaim_token%3Dclaim-token-123',
+    )
+    expect(localStorage.getItem('auth_token')).toBeNull()
+    expect(localStorage.getItem('auth_user')).toBeNull()
   })
 })

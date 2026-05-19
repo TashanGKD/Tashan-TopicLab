@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 
 from app.storage.database.postgres_client import _is_sqlite_session, get_db_session
 
@@ -49,6 +49,26 @@ def _slugify(value: str, *, fallback: str) -> str:
     ascii_slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
     ascii_slug = re.sub(r"-+", "-", ascii_slug)
     return (ascii_slug or fallback)[:80].strip("-") or fallback
+
+
+def _clue_number(slug: str) -> int:
+    match = re.match(r"^need-(\d+)", slug or "")
+    return int(match.group(1)) if match else 10**9
+
+
+def _time_sort_value(value: Any) -> datetime:
+    if isinstance(value, datetime):
+        return value
+    if value in (None, ""):
+        return datetime.min.replace(tzinfo=timezone.utc)
+    normalized = str(value).replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _next_seed_slug(index: int, title: str) -> str:
@@ -110,6 +130,7 @@ def _apply_inspiration_ddl(session) -> None:
             CREATE TABLE IF NOT EXISTS inspiration_demands (
                 id TEXT PRIMARY KEY,
                 slug TEXT NOT NULL UNIQUE,
+                clue_number INTEGER,
                 status TEXT NOT NULL DEFAULT 'published',
                 stage TEXT NOT NULL DEFAULT '模糊想法',
                 owner_user_id INTEGER,
@@ -135,6 +156,7 @@ def _apply_inspiration_ddl(session) -> None:
             CREATE TABLE IF NOT EXISTS inspiration_demands (
                 id VARCHAR(255) PRIMARY KEY,
                 slug VARCHAR(255) NOT NULL UNIQUE,
+                clue_number INTEGER,
                 status VARCHAR(32) NOT NULL DEFAULT 'published',
                 stage VARCHAR(64) NOT NULL DEFAULT '模糊想法',
                 owner_user_id INTEGER,
@@ -156,7 +178,9 @@ def _apply_inspiration_ddl(session) -> None:
             """
         )
     )
+    _ensure_column(session, "inspiration_demands", "clue_number", "INTEGER", "INTEGER")
     session.execute(text("CREATE INDEX IF NOT EXISTS idx_inspiration_demands_status_created ON inspiration_demands(status, created_at DESC)"))
+    session.execute(text("CREATE INDEX IF NOT EXISTS idx_inspiration_demands_clue_number ON inspiration_demands(clue_number)"))
     session.execute(text("CREATE INDEX IF NOT EXISTS idx_inspiration_demands_owner ON inspiration_demands(owner_user_id)"))
     session.execute(
         text(
@@ -175,7 +199,8 @@ def _apply_inspiration_ddl(session) -> None:
                 artifacts_json TEXT NOT NULL DEFAULT '[]',
                 visibility TEXT NOT NULL DEFAULT 'public',
                 created_by_user_id INTEGER,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             """
             if is_sqlite
@@ -195,7 +220,8 @@ def _apply_inspiration_ddl(session) -> None:
                 artifacts_json JSONB NOT NULL DEFAULT '[]'::jsonb,
                 visibility VARCHAR(32) NOT NULL DEFAULT 'public',
                 created_by_user_id INTEGER,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
@@ -208,7 +234,48 @@ def _apply_inspiration_ddl(session) -> None:
     _ensure_column(session, "inspiration_demand_updates", "stage_key", "TEXT NOT NULL DEFAULT ''", "VARCHAR(64) NOT NULL DEFAULT ''")
     _ensure_column(session, "inspiration_demand_updates", "stage_status", "TEXT NOT NULL DEFAULT ''", "VARCHAR(32) NOT NULL DEFAULT ''")
     _ensure_column(session, "inspiration_demand_updates", "emotion_note", "TEXT NOT NULL DEFAULT ''", "TEXT NOT NULL DEFAULT ''")
+    if not _column_exists(session, "inspiration_demand_updates", "updated_at"):
+        if is_sqlite:
+            session.execute(text("ALTER TABLE inspiration_demand_updates ADD COLUMN updated_at TEXT"))
+            session.execute(text("UPDATE inspiration_demand_updates SET updated_at = created_at WHERE updated_at IS NULL"))
+        else:
+            session.execute(text("ALTER TABLE inspiration_demand_updates ADD COLUMN updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP"))
     session.execute(text("CREATE INDEX IF NOT EXISTS idx_inspiration_updates_demand_created ON inspiration_demand_updates(demand_id, created_at DESC)"))
+    session.execute(text("CREATE INDEX IF NOT EXISTS idx_inspiration_updates_demand_updated ON inspiration_demand_updates(demand_id, updated_at DESC)"))
+
+
+def _backfill_clue_numbers(session) -> None:
+    rows = session.execute(
+        text(
+            """
+            SELECT id, slug, clue_number
+            FROM inspiration_demands
+            ORDER BY created_at ASC, slug ASC
+            """
+        )
+    ).fetchall()
+    used = {int(row.clue_number) for row in rows if row.clue_number is not None}
+    next_number = max(used or {0}) + 1
+    for row in rows:
+        if row.clue_number is not None:
+            continue
+        parsed = _clue_number(row.slug)
+        if parsed == 10**9 or parsed in used:
+            while next_number in used:
+                next_number += 1
+            clue_number = next_number
+        else:
+            clue_number = parsed
+        used.add(clue_number)
+        session.execute(
+            text("UPDATE inspiration_demands SET clue_number = :clue_number WHERE id = :id"),
+            {"clue_number": clue_number, "id": row.id},
+        )
+
+
+def _next_clue_number(session) -> int:
+    row = session.execute(text("SELECT COALESCE(MAX(clue_number), 0) AS max_clue_number FROM inspiration_demands")).first()
+    return int(row.max_clue_number or 0) + 1
 
 
 def _seed_inspiration_demands(session) -> None:
@@ -220,12 +287,12 @@ def _seed_inspiration_demands(session) -> None:
     insert_sql = (
         """
         INSERT OR IGNORE INTO inspiration_demands (
-            id, slug, status, stage, owner_user_id, public_title, public_summary,
+            id, slug, clue_number, status, stage, owner_user_id, public_title, public_summary,
             public_tags, public_stuck, allow_public, private_json, llm_review_json,
             claim_token, claimed_at, redaction_method, redaction_status, redaction_notes, created_at, updated_at
         )
         VALUES (
-            :id, :slug, :status, :stage, :owner_user_id, :public_title, :public_summary,
+            :id, :slug, :clue_number, :status, :stage, :owner_user_id, :public_title, :public_summary,
             :public_tags, :public_stuck, :allow_public, :private_json, :llm_review_json,
             :claim_token, :claimed_at, :redaction_method, :redaction_status, :redaction_notes, :created_at, :updated_at
         )
@@ -234,12 +301,12 @@ def _seed_inspiration_demands(session) -> None:
         else
         """
         INSERT INTO inspiration_demands (
-            id, slug, status, stage, owner_user_id, public_title, public_summary,
+            id, slug, clue_number, status, stage, owner_user_id, public_title, public_summary,
             public_tags, public_stuck, allow_public, private_json, llm_review_json,
             claim_token, claimed_at, redaction_method, redaction_status, redaction_notes, created_at, updated_at
         )
         VALUES (
-            :id, :slug, :status, :stage, :owner_user_id, :public_title, :public_summary,
+            :id, :slug, :clue_number, :status, :stage, :owner_user_id, :public_title, :public_summary,
             CAST(:public_tags AS JSONB), :public_stuck, :allow_public, CAST(:private_json AS JSONB),
             CAST(:llm_review_json AS JSONB), :claim_token, :claimed_at, :redaction_method,
             :redaction_status, CAST(:redaction_notes AS JSONB), :created_at, :updated_at
@@ -266,6 +333,7 @@ def _seed_inspiration_demands(session) -> None:
             {
                 "id": f"seed-{index:02d}",
                 "slug": _next_seed_slug(index, str(item.get("title") or "")),
+                "clue_number": index,
                 "status": "published",
                 "stage": DEFAULT_STAGE,
                 "owner_user_id": None,
@@ -290,6 +358,7 @@ def _seed_inspiration_demands(session) -> None:
 def ensure_inspiration_schema_and_seed_for_session(session) -> None:
     _apply_inspiration_ddl(session)
     _seed_inspiration_demands(session)
+    _backfill_clue_numbers(session)
 
 
 def ensure_inspiration_schema_and_seed() -> None:
@@ -301,6 +370,7 @@ def _serialize_public(row) -> dict[str, Any]:
     return {
         "id": row.id,
         "slug": row.slug,
+        "clue_number": getattr(row, "clue_number", None) or _clue_number(row.slug),
         "status": row.status,
         "stage": row.stage,
         "title": row.public_title,
@@ -314,6 +384,7 @@ def _serialize_public(row) -> dict[str, Any]:
         },
         "created_at": str(row.created_at),
         "updated_at": str(row.updated_at),
+        "latest_update_at": str(getattr(row, "latest_update_at", row.created_at)),
     }
 
 
@@ -331,6 +402,7 @@ def _serialize_update(row) -> dict[str, Any]:
         "artifacts": _json_loads(row.artifacts_json, []),
         "visibility": row.visibility,
         "created_at": str(row.created_at),
+        "updated_at": str(getattr(row, "updated_at", row.created_at)),
     }
 
 
@@ -360,16 +432,16 @@ def _build_path_progress(row, updates: list[dict[str, Any]]) -> list[dict[str, A
         update = latest_by_stage.get(stage["key"])
         if stage["key"] == "submitted":
             status = "done"
-            summary = "一个需求、想法或参与意愿已经被放到这里。"
-            emotion = "先被看见，就是共创的第一步。"
+            summary = ""
+            emotion = ""
         elif update:
             status = update.get("stage_status") or "done"
             summary = update.get("summary") or update.get("progress") or "这一阶段已有进展。"
-            emotion = update.get("emotion_note") or "这个需求正在被继续推进。"
+            emotion = update.get("emotion_note") or ""
         elif not current_seen and index > 0:
             status = "current"
-            summary = "等待下一次共创更新。"
-            emotion = "有人愿意把这件事继续往前推。"
+            summary = ""
+            emotion = ""
             current_seen = True
         else:
             status = "pending"
@@ -385,16 +457,51 @@ def list_public_demands() -> list[dict[str, Any]]:
         rows = session.execute(
             text(
                 """
-                SELECT id, slug, status, stage, public_title, public_summary, public_tags, public_stuck,
-                       redaction_method, redaction_status, redaction_notes, created_at, updated_at
+                SELECT id, slug, clue_number, status, stage, public_title, public_summary, public_tags, public_stuck,
+                       redaction_method, redaction_status, redaction_notes, created_at, updated_at,
+                       COALESCE(
+                           (
+                               SELECT MAX(updated_at)
+                               FROM inspiration_demand_updates
+                               WHERE demand_id = inspiration_demands.id AND visibility = 'public'
+                           ),
+                           created_at
+                       ) AS latest_update_at
                 FROM inspiration_demands
                 WHERE status = 'published' AND allow_public = :allow_public
-                ORDER BY created_at DESC, slug ASC
                 """
             ),
             {"allow_public": True},
         ).fetchall()
-        return [{**_serialize_public(row), "path_progress": _build_path_progress(row, [])} for row in rows]
+        demand_ids = [row.id for row in rows]
+        updates_by_demand: dict[str, list[dict[str, Any]]] = {}
+        if demand_ids:
+            update_rows = session.execute(
+                text(
+                    """
+                    SELECT id, demand_id, week_label, summary, progress, blockers, next_steps,
+                           stage_key, stage_status, emotion_note, artifacts_json, visibility, created_at, updated_at
+                    FROM inspiration_demand_updates
+                    WHERE visibility = 'public' AND demand_id IN :demand_ids
+                    ORDER BY updated_at DESC, created_at DESC
+                    """
+                ).bindparams(bindparam("demand_ids", expanding=True)),
+                {"demand_ids": demand_ids},
+            ).fetchall()
+            for update in update_rows:
+                updates_by_demand.setdefault(update.demand_id, []).append(_serialize_update(update))
+        items = [
+            {**_serialize_public(row), "path_progress": _build_path_progress(row, updates_by_demand.get(row.id, []))}
+            for row in rows
+        ]
+        items.sort(
+            key=lambda item: (
+                _time_sort_value(item.get("latest_update_at")),
+                -int(item.get("clue_number") or _clue_number(item.get("slug", ""))),
+            ),
+            reverse=True,
+        )
+        return items
 
 
 def get_demand_by_slug(slug: str, *, user: dict[str, Any] | None = None, include_private: bool = False) -> dict[str, Any] | None:
@@ -403,7 +510,7 @@ def get_demand_by_slug(slug: str, *, user: dict[str, Any] | None = None, include
         row = session.execute(
             text(
                 """
-                SELECT id, slug, status, stage, owner_user_id, public_title, public_summary, public_tags,
+                SELECT id, slug, clue_number, status, stage, owner_user_id, public_title, public_summary, public_tags,
                        public_stuck, private_json, llm_review_json, claim_token, claimed_at,
                        redaction_method, redaction_status, redaction_notes, created_at, updated_at
                 FROM inspiration_demands
@@ -420,11 +527,11 @@ def get_demand_by_slug(slug: str, *, user: dict[str, Any] | None = None, include
             text(
                 """
                 SELECT id, week_label, summary, progress, blockers, next_steps, stage_key, stage_status,
-                       emotion_note, artifacts_json, visibility, created_at
+                       emotion_note, artifacts_json, visibility, created_at, updated_at
                 FROM inspiration_demand_updates
                 WHERE demand_id = :demand_id
                   AND (:include_private = 1 OR visibility = 'public')
-                ORDER BY created_at DESC
+                ORDER BY updated_at DESC, created_at DESC
                 """
             ),
             {"demand_id": row.id, "include_private": 1 if can_view_private else 0},
@@ -452,12 +559,12 @@ def create_demand(*, payload: dict[str, Any], public_payload: dict[str, Any], ll
         insert_sql = (
             """
             INSERT INTO inspiration_demands (
-                id, slug, status, stage, owner_user_id, public_title, public_summary,
+                id, slug, clue_number, status, stage, owner_user_id, public_title, public_summary,
                 public_tags, public_stuck, allow_public, private_json, llm_review_json,
                 claim_token, claimed_at, redaction_method, redaction_status, redaction_notes, created_at, updated_at
             )
             VALUES (
-                :id, :slug, :status, :stage, :owner_user_id, :public_title, :public_summary,
+                :id, :slug, :clue_number, :status, :stage, :owner_user_id, :public_title, :public_summary,
                 :public_tags, :public_stuck, :allow_public, :private_json, :llm_review_json,
                 :claim_token, :claimed_at, :redaction_method, :redaction_status, :redaction_notes, :created_at, :updated_at
             )
@@ -466,12 +573,12 @@ def create_demand(*, payload: dict[str, Any], public_payload: dict[str, Any], ll
             else
             """
             INSERT INTO inspiration_demands (
-                id, slug, status, stage, owner_user_id, public_title, public_summary,
+                id, slug, clue_number, status, stage, owner_user_id, public_title, public_summary,
                 public_tags, public_stuck, allow_public, private_json, llm_review_json,
                 claim_token, claimed_at, redaction_method, redaction_status, redaction_notes, created_at, updated_at
             )
             VALUES (
-                :id, :slug, :status, :stage, :owner_user_id, :public_title, :public_summary,
+                :id, :slug, :clue_number, :status, :stage, :owner_user_id, :public_title, :public_summary,
                 CAST(:public_tags AS JSONB), :public_stuck, :allow_public, CAST(:private_json AS JSONB),
                 CAST(:llm_review_json AS JSONB), :claim_token, :claimed_at, :redaction_method,
                 :redaction_status, CAST(:redaction_notes AS JSONB), :created_at, :updated_at
@@ -483,6 +590,7 @@ def create_demand(*, payload: dict[str, Any], public_payload: dict[str, Any], ll
             {
                 "id": demand_id,
                 "slug": slug,
+                "clue_number": _next_clue_number(session),
                 "status": "published" if public_payload.get("allow_public") else "private",
                 "stage": str(llm_review.get("suggested_stage") or DEFAULT_STAGE),
                 "owner_user_id": owner_user_id,
@@ -505,7 +613,7 @@ def create_demand(*, payload: dict[str, Any], public_payload: dict[str, Any], ll
         row = session.execute(
             text(
                 """
-                SELECT id, slug, status, stage, public_title, public_summary, public_tags, public_stuck,
+                SELECT id, slug, clue_number, status, stage, public_title, public_summary, public_tags, public_stuck,
                        redaction_method, redaction_status, redaction_notes, created_at, updated_at
                 FROM inspiration_demands
                 WHERE id = :id
@@ -552,6 +660,48 @@ def claim_demand(*, slug: str, claim_token: str, user_id: int) -> dict[str, Any]
     return get_demand_by_slug(slug, user={"sub": str(user_id)}, include_private=False)
 
 
+def update_demand_private(*, slug: str, private_payload: dict[str, Any], user: dict[str, Any]) -> dict[str, Any] | None:
+    with get_db_session() as session:
+        ensure_inspiration_schema_and_seed_for_session(session)
+        row = session.execute(
+            text(
+                """
+                SELECT id, owner_user_id, private_json
+                FROM inspiration_demands
+                WHERE slug = :slug
+                LIMIT 1
+                """
+            ),
+            {"slug": slug},
+        ).first()
+        if not row:
+            return None
+        if not _can_update(row, user):
+            return {"error": "forbidden"}
+        current_private = _json_loads(row.private_json, {})
+        current_private.update(private_payload)
+        now = _now_iso()
+        is_sqlite = _is_sqlite_session(session)
+        session.execute(
+            text(
+                """
+                UPDATE inspiration_demands
+                SET private_json = :private_json, updated_at = :updated_at
+                WHERE id = :id
+                """
+                if is_sqlite
+                else
+                """
+                UPDATE inspiration_demands
+                SET private_json = CAST(:private_json AS JSONB), updated_at = :updated_at
+                WHERE id = :id
+                """
+            ),
+            {"private_json": _json_dumps(current_private), "updated_at": now, "id": row.id},
+        )
+    return get_demand_by_slug(slug, user=user, include_private=True)
+
+
 def add_demand_update(*, slug: str, payload: dict[str, Any], created_by_user_id: int | None) -> dict[str, Any] | None:
     with get_db_session() as session:
         ensure_inspiration_schema_and_seed_for_session(session)
@@ -565,11 +715,11 @@ def add_demand_update(*, slug: str, payload: dict[str, Any], created_by_user_id:
             """
             INSERT INTO inspiration_demand_updates (
                 id, demand_id, week_label, summary, progress, blockers, next_steps,
-                stage_key, stage_status, emotion_note, artifacts_json, visibility, created_by_user_id, created_at
+                stage_key, stage_status, emotion_note, artifacts_json, visibility, created_by_user_id, created_at, updated_at
             )
             VALUES (
                 :id, :demand_id, :week_label, :summary, :progress, :blockers, :next_steps,
-                :stage_key, :stage_status, :emotion_note, :artifacts_json, :visibility, :created_by_user_id, :created_at
+                :stage_key, :stage_status, :emotion_note, :artifacts_json, :visibility, :created_by_user_id, :created_at, :updated_at
             )
             """
             if is_sqlite
@@ -577,11 +727,11 @@ def add_demand_update(*, slug: str, payload: dict[str, Any], created_by_user_id:
             """
             INSERT INTO inspiration_demand_updates (
                 id, demand_id, week_label, summary, progress, blockers, next_steps,
-                stage_key, stage_status, emotion_note, artifacts_json, visibility, created_by_user_id, created_at
+                stage_key, stage_status, emotion_note, artifacts_json, visibility, created_by_user_id, created_at, updated_at
             )
             VALUES (
                 :id, :demand_id, :week_label, :summary, :progress, :blockers, :next_steps,
-                :stage_key, :stage_status, :emotion_note, CAST(:artifacts_json AS JSONB), :visibility, :created_by_user_id, :created_at
+                :stage_key, :stage_status, :emotion_note, CAST(:artifacts_json AS JSONB), :visibility, :created_by_user_id, :created_at, :updated_at
             )
             """
         )
@@ -600,6 +750,7 @@ def add_demand_update(*, slug: str, payload: dict[str, Any], created_by_user_id:
             "visibility": payload.get("visibility") or "public",
             "created_by_user_id": created_by_user_id,
             "created_at": now,
+            "updated_at": now,
         }
         session.execute(text(insert_sql), params)
         session.execute(
@@ -610,7 +761,109 @@ def add_demand_update(*, slug: str, payload: dict[str, Any], created_by_user_id:
             text(
                 """
                 SELECT id, week_label, summary, progress, blockers, next_steps, stage_key, stage_status,
-                       emotion_note, artifacts_json, visibility, created_at
+                       emotion_note, artifacts_json, visibility, created_at, updated_at
+                FROM inspiration_demand_updates
+                WHERE id = :id
+                """
+            ),
+            {"id": update_id},
+        ).first()
+        return _serialize_update(row)
+
+
+def update_demand_update(*, slug: str, update_id: str, payload: dict[str, Any], user: dict[str, Any]) -> dict[str, Any] | None:
+    with get_db_session() as session:
+        ensure_inspiration_schema_and_seed_for_session(session)
+        demand = session.execute(
+            text(
+                """
+                SELECT id, owner_user_id
+                FROM inspiration_demands
+                WHERE slug = :slug
+                LIMIT 1
+                """
+            ),
+            {"slug": slug},
+        ).first()
+        if not demand:
+            return None
+        if not _can_update(demand, user):
+            return {"error": "forbidden"}
+        existing = session.execute(
+            text(
+                """
+                SELECT id
+                FROM inspiration_demand_updates
+                WHERE id = :id AND demand_id = :demand_id
+                LIMIT 1
+                """
+            ),
+            {"id": update_id, "demand_id": demand.id},
+        ).first()
+        if not existing:
+            return None
+        is_sqlite = _is_sqlite_session(session)
+        now = _now_iso()
+        session.execute(
+            text(
+                """
+                UPDATE inspiration_demand_updates
+                SET week_label = :week_label,
+                    summary = :summary,
+                    progress = :progress,
+                    blockers = :blockers,
+                    next_steps = :next_steps,
+                    stage_key = :stage_key,
+                    stage_status = :stage_status,
+                    emotion_note = :emotion_note,
+                    artifacts_json = :artifacts_json,
+                    visibility = :visibility,
+                    updated_at = :updated_at
+                WHERE id = :id AND demand_id = :demand_id
+                """
+                if is_sqlite
+                else
+                """
+                UPDATE inspiration_demand_updates
+                SET week_label = :week_label,
+                    summary = :summary,
+                    progress = :progress,
+                    blockers = :blockers,
+                    next_steps = :next_steps,
+                    stage_key = :stage_key,
+                    stage_status = :stage_status,
+                    emotion_note = :emotion_note,
+                    artifacts_json = CAST(:artifacts_json AS JSONB),
+                    visibility = :visibility,
+                    updated_at = :updated_at
+                WHERE id = :id AND demand_id = :demand_id
+                """
+            ),
+            {
+                "id": update_id,
+                "demand_id": demand.id,
+                "week_label": payload.get("week_label") or "",
+                "summary": payload.get("summary") or "",
+                "progress": payload.get("progress") or "",
+                "blockers": payload.get("blockers") or "",
+                "next_steps": payload.get("next_steps") or "",
+                "stage_key": payload.get("stage_key") or "",
+                "stage_status": payload.get("stage_status") or "",
+                "emotion_note": payload.get("emotion_note") or "",
+                "artifacts_json": _json_dumps(payload.get("artifacts") or []),
+                "visibility": payload.get("visibility") or "public",
+                "updated_at": now,
+            },
+        )
+        session.execute(
+            text("UPDATE inspiration_demands SET updated_at = :updated_at WHERE id = :id"),
+            {"updated_at": now, "id": demand.id},
+        )
+        row = session.execute(
+            text(
+                """
+                SELECT id, week_label, summary, progress, blockers, next_steps, stage_key, stage_status,
+                       emotion_note, artifacts_json, visibility, created_at, updated_at
                 FROM inspiration_demand_updates
                 WHERE id = :id
                 """

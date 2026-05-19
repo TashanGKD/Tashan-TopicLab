@@ -22,8 +22,8 @@ vi.mock('../../api/client', async () => {
               tags: ['教育 / 学习', '需求拆解'],
               stuck: '问题太大，需要拆成可先验证的一步。',
               path_progress: [
-                { key: 'submitted', label: '留下线索', status: 'done', summary: '一个需求、想法或参与意愿已经被放到这里。', emotion_note: '先被看见，就是共创的第一步。' },
-                { key: 'defined', label: '问题定义', status: 'current', summary: '等待下一次共创更新。', emotion_note: '有人愿意把这件事继续往前推。' },
+                { key: 'submitted', label: '留下线索', status: 'done', summary: '', emotion_note: '' },
+                { key: 'defined', label: '问题定义', status: 'current', summary: '', emotion_note: '' },
               ],
               created_at: '2026-05-15 15:32:05',
               updated_at: '2026-05-18T00:00:00Z',
@@ -99,7 +99,7 @@ describe('InspirationCoCreationPage', () => {
     const waterfall = screen.getByLabelText('共创线索瀑布流')
     expect(within(waterfall).getByText('英语阅读课堂的 AI 助教')).toBeInTheDocument()
     expect(within(waterfall).getAllByText('问题定义').length).toBeGreaterThanOrEqual(1)
-    expect(within(waterfall).getAllByText('等待下一次共创更新。').length).toBeGreaterThanOrEqual(1)
+    expect(within(waterfall).queryByText('一个需求、想法或参与意愿已经被放到这里。')).not.toBeInTheDocument()
     expect(within(waterfall).queryByText('已脱敏')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /显示需求 01 完整信息/ })).not.toBeInTheDocument()
     expect(within(waterfall).queryByText('人工访谈')).not.toBeInTheDocument()

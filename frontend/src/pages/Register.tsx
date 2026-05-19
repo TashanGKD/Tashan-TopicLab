@@ -5,8 +5,9 @@ import { authApi, tokenManager } from '../api/auth';
 export default function Register() {
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as { from?: string } | null)?.from || '/';
-  const claimToken = new URLSearchParams(location.search).get('openclaw_claim');
+  const searchParams = new URLSearchParams(location.search);
+  const from = searchParams.get('next') || (location.state as { from?: string } | null)?.from || '/';
+  const claimToken = searchParams.get('openclaw_claim');
   const [requiresSms, setRequiresSms] = useState(true);
   const [configLoaded, setConfigLoaded] = useState(false);
   const [phone, setPhone] = useState('');
