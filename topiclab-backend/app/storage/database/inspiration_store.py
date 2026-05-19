@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import secrets
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -24,6 +26,8 @@ PATH_STAGES = [
     {"key": "demo", "label": "Demo 验证"},
     {"key": "mvp", "label": "MVP/复盘"},
 ]
+_SCHEMA_READY_KEYS: set[str] = set()
+_SCHEMA_READY_LOCK = threading.Lock()
 
 
 def _now_iso() -> str:
@@ -69,6 +73,19 @@ def _time_sort_value(value: Any) -> datetime:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def _session_schema_cache_key(session) -> str:
+    return str(session.bind.url)
+
+
+def _context_update_limit() -> int:
+    raw = os.getenv("INSPIRATION_ASSISTANT_CONTEXT_UPDATE_LIMIT", "12").strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        value = 12
+    return max(3, min(value, 50))
 
 
 def _next_seed_slug(index: int, title: str) -> str:
@@ -192,6 +209,12 @@ def _apply_inspiration_ddl(session) -> None:
     )
     _ensure_column(session, "inspiration_demands", "clue_number", "INTEGER", "INTEGER")
     session.execute(text("CREATE INDEX IF NOT EXISTS idx_inspiration_demands_status_created ON inspiration_demands(status, created_at DESC)"))
+    session.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS idx_inspiration_demands_public_updated "
+            "ON inspiration_demands(status, allow_public, updated_at DESC, created_at DESC)"
+        )
+    )
     session.execute(text("CREATE INDEX IF NOT EXISTS idx_inspiration_demands_clue_number ON inspiration_demands(clue_number)"))
     session.execute(text("CREATE INDEX IF NOT EXISTS idx_inspiration_demands_owner ON inspiration_demands(owner_user_id)"))
     session.execute(
@@ -262,6 +285,12 @@ def _apply_inspiration_ddl(session) -> None:
     session.execute(text("CREATE INDEX IF NOT EXISTS idx_inspiration_updates_demand_updated ON inspiration_demand_updates(demand_id, updated_at DESC)"))
     session.execute(
         text(
+            "CREATE INDEX IF NOT EXISTS idx_inspiration_updates_public_stage_latest "
+            "ON inspiration_demand_updates(visibility, demand_id, stage_key, updated_at DESC, created_at DESC)"
+        )
+    )
+    session.execute(
+        text(
             """
             CREATE TABLE IF NOT EXISTS inspiration_assistant_runs (
                 id TEXT PRIMARY KEY,
@@ -297,6 +326,7 @@ def _apply_inspiration_ddl(session) -> None:
         )
     )
     session.execute(text("CREATE INDEX IF NOT EXISTS idx_inspiration_assistant_runs_demand_created ON inspiration_assistant_runs(demand_id, created_at DESC)"))
+    session.execute(text("CREATE INDEX IF NOT EXISTS idx_inspiration_assistant_runs_status_created ON inspiration_assistant_runs(status, created_at DESC)"))
 
 
 def _backfill_clue_numbers(session) -> None:
@@ -411,9 +441,16 @@ def _seed_inspiration_demands(session) -> None:
 
 
 def ensure_inspiration_schema_and_seed_for_session(session) -> None:
-    _apply_inspiration_ddl(session)
-    _seed_inspiration_demands(session)
-    _backfill_clue_numbers(session)
+    cache_key = _session_schema_cache_key(session)
+    if cache_key in _SCHEMA_READY_KEYS:
+        return
+    with _SCHEMA_READY_LOCK:
+        if cache_key in _SCHEMA_READY_KEYS:
+            return
+        _apply_inspiration_ddl(session)
+        _seed_inspiration_demands(session)
+        _backfill_clue_numbers(session)
+        _SCHEMA_READY_KEYS.add(cache_key)
 
 
 def ensure_inspiration_schema_and_seed() -> None:
@@ -605,8 +642,17 @@ def list_public_demands() -> list[dict[str, Any]]:
                     """
                     SELECT id, demand_id, week_label, summary, progress, blockers, next_steps,
                            stage_key, stage_status, emotion_note, artifacts_json, visibility, created_at, updated_at
-                    FROM inspiration_demand_updates
-                    WHERE visibility = 'public' AND demand_id IN :demand_ids
+                    FROM (
+                        SELECT id, demand_id, week_label, summary, progress, blockers, next_steps,
+                               stage_key, stage_status, emotion_note, artifacts_json, visibility, created_at, updated_at,
+                               ROW_NUMBER() OVER (
+                                   PARTITION BY demand_id, stage_key
+                                   ORDER BY updated_at DESC, created_at DESC
+                               ) AS rn
+                        FROM inspiration_demand_updates
+                        WHERE visibility = 'public' AND demand_id IN :demand_ids
+                    ) latest_updates
+                    WHERE rn = 1
                     ORDER BY updated_at DESC, created_at DESC
                     """
                 ).bindparams(bindparam("demand_ids", expanding=True)),
@@ -1001,6 +1047,7 @@ def update_demand_update(*, slug: str, update_id: str, payload: dict[str, Any], 
 
 
 def _build_assistant_input_snapshot(session, demand_id: str, trigger_type: str, trigger_update_id: str | None) -> dict[str, Any]:
+    update_limit = _context_update_limit()
     demand = session.execute(
         text(
             """
@@ -1026,9 +1073,10 @@ def _build_assistant_input_snapshot(session, demand_id: str, trigger_type: str, 
             FROM inspiration_demand_updates
             WHERE demand_id = :demand_id
             ORDER BY updated_at DESC, created_at DESC
+            LIMIT :limit
             """
         ),
-        {"demand_id": demand_id},
+        {"demand_id": demand_id, "limit": update_limit},
     ).fetchall()
     updates = [_serialize_update(row) for row in update_rows]
     trigger_update = next((item for item in updates if item["id"] == trigger_update_id), None)

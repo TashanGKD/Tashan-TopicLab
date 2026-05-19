@@ -8,6 +8,8 @@ from typing import Any
 
 import httpx
 
+from app.services.http_client import get_shared_async_client
+
 
 class InspirationLLMNotConfigured(RuntimeError):
     """Raised when the dedicated inspiration LLM env vars are incomplete."""
@@ -23,6 +25,8 @@ class InspirationLLMConfig:
     api_key: str
     model: str
     timeout_seconds: float = 45.0
+    max_tokens: int = 900
+    response_format_json: bool = True
 
     @classmethod
     def from_env(cls) -> "InspirationLLMConfig":
@@ -30,6 +34,8 @@ class InspirationLLMConfig:
         api_key = os.getenv("INSPIRATION_LLM_API_KEY", "").strip()
         model = os.getenv("INSPIRATION_LLM_MODEL", "").strip()
         timeout_raw = os.getenv("INSPIRATION_LLM_TIMEOUT_SECONDS", "45").strip()
+        max_tokens_raw = os.getenv("INSPIRATION_LLM_MAX_TOKENS", "900").strip()
+        response_format_json = os.getenv("INSPIRATION_LLM_RESPONSE_FORMAT_JSON", "1").strip().lower() not in {"0", "false", "no"}
         if not url or not api_key or not model:
             raise InspirationLLMNotConfigured(
                 "INSPIRATION_LLM_CHAT_COMPLETIONS_URL, INSPIRATION_LLM_API_KEY, and INSPIRATION_LLM_MODEL are required"
@@ -38,7 +44,18 @@ class InspirationLLMConfig:
             timeout_seconds = float(timeout_raw)
         except ValueError:
             timeout_seconds = 45.0
-        return cls(chat_completions_url=url, api_key=api_key, model=model, timeout_seconds=max(timeout_seconds, 1.0))
+        try:
+            max_tokens = int(max_tokens_raw)
+        except ValueError:
+            max_tokens = 900
+        return cls(
+            chat_completions_url=url,
+            api_key=api_key,
+            model=model,
+            timeout_seconds=max(timeout_seconds, 1.0),
+            max_tokens=max(128, min(max_tokens, 4096)),
+            response_format_json=response_format_json,
+        )
 
 
 async def request_inspiration_llm(
@@ -56,7 +73,10 @@ async def request_inspiration_llm(
         "model": resolved.model,
         "messages": messages,
         "temperature": temperature,
+        "max_tokens": resolved.max_tokens,
     }
+    if resolved.response_format_json:
+        request_payload["response_format"] = {"type": "json_object"}
     if extra_payload:
         request_payload.update(extra_payload)
 
@@ -65,12 +85,12 @@ async def request_inspiration_llm(
             resolved.chat_completions_url,
             headers={"Authorization": f"Bearer {resolved.api_key}", "Content-Type": "application/json"},
             json=request_payload,
+            timeout=resolved.timeout_seconds,
         )
 
     try:
         if client is None:
-            async with httpx.AsyncClient(timeout=resolved.timeout_seconds) as active_client:
-                response = await _post(active_client)
+            response = await _post(get_shared_async_client("inspiration-llm"))
         else:
             response = await _post(client)
         response.raise_for_status()

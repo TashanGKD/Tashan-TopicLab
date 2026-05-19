@@ -33,6 +33,39 @@ async def test_request_inspiration_llm_uses_configured_chat_completions_url(monk
     assert captured["authorization"] == "Bearer test-key"
     assert b'"model":"DeepSeek-V4-Flash"' in captured["payload"]
     assert b'"temperature":0.1' in captured["payload"]
+    assert b'"max_tokens":900' in captured["payload"]
+    assert b'"response_format":{"type":"json_object"}' in captured["payload"]
+
+
+@pytest.mark.asyncio
+async def test_request_inspiration_llm_reuses_shared_client(monkeypatch):
+    import app.services.inspiration_llm as llm_module
+
+    calls = []
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"choices": [{"message": {"content": "{\"ok\":true}"}}]}
+
+    class FakeClient:
+        async def post(self, *args, **kwargs):
+            calls.append((args, kwargs))
+            return FakeResponse()
+
+    shared_client = FakeClient()
+    monkeypatch.setattr(llm_module, "get_shared_async_client", lambda name: shared_client)
+    monkeypatch.setenv("INSPIRATION_LLM_CHAT_COMPLETIONS_URL", "https://newapi.tashan.chat/v1/chat/completions")
+    monkeypatch.setenv("INSPIRATION_LLM_API_KEY", "test-key")
+    monkeypatch.setenv("INSPIRATION_LLM_MODEL", "DeepSeek-V4-Flash")
+
+    await llm_module.request_inspiration_llm([{"role": "user", "content": "hi"}])
+    await llm_module.request_inspiration_llm([{"role": "user", "content": "hi again"}])
+
+    assert len(calls) == 2
+    assert calls[0][1]["timeout"] == 45.0
 
 
 @pytest.mark.asyncio
