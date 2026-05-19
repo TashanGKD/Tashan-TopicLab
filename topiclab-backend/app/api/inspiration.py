@@ -9,7 +9,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 
 from app.api.auth import get_current_user, security, verify_access_token
-from app.services.inspiration_review import generate_inspiration_review, generate_public_redaction
+from app.services.inspiration_review import build_initial_inspiration_review, build_initial_public_redaction
 from app.storage.database.inspiration_store import (
     add_demand_update,
     claim_demand,
@@ -81,14 +81,14 @@ def list_demands():
 
 
 @router.post("/demands")
-async def submit_demand(req: InspirationDemandSubmitRequest, user: dict | None = Depends(_optional_current_user)):
+def submit_demand(req: InspirationDemandSubmitRequest, user: dict | None = Depends(_optional_current_user)):
     private_payload = req.model_dump()
     if user:
         private_payload["account_user_id"] = user.get("sub")
         private_payload["account_username"] = user.get("username")
         private_payload["account_phone"] = user.get("phone")
-    llm_review = await generate_inspiration_review(private_payload)
-    redaction = await generate_public_redaction(private_payload, llm_review)
+    llm_review = build_initial_inspiration_review(private_payload)
+    redaction = build_initial_public_redaction(private_payload, llm_review)
     public_payload = _build_public_payload(req, redaction)
     owner_user_id = int(user["sub"]) if user and user.get("sub") is not None else None
     created = create_demand(

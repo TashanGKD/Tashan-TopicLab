@@ -116,6 +116,16 @@ def _fallback_redaction(payload: dict[str, Any], review: dict[str, Any]) -> dict
     }
 
 
+def build_initial_inspiration_review(payload: dict[str, Any]) -> dict[str, Any]:
+    """Build a local first-pass review without waiting for model calls."""
+    return _fallback_review(payload)
+
+
+def build_initial_public_redaction(payload: dict[str, Any], review: dict[str, Any]) -> dict[str, Any]:
+    """Build a local public-safe rewrite without waiting for model calls."""
+    return _fallback_redaction(payload, review)
+
+
 def _strip_fenced_json(text: str) -> str:
     value = text.strip()
     if not value.startswith("```"):
