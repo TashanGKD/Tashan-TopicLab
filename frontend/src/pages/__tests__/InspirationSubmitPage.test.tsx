@@ -61,7 +61,7 @@ describe('InspirationSubmitPage', () => {
     vi.useRealTimers()
   })
 
-  it('submits a clear demand, shows success motion, and opens the claimable detail page', async () => {
+  it('submits a clear demand and immediately opens the claimable detail page', async () => {
     renderPage()
 
     expect(screen.getByText('说说你在琢磨的事儿')).toBeInTheDocument()
@@ -88,14 +88,13 @@ describe('InspirationSubmitPage', () => {
         current_blockers: '想把需求边界说清楚',
         participation_mode: '我有一个明确需求',
       }))
-      expect(screen.getByText('提交成功')).toBeInTheDocument()
-      expect(screen.getByText('正在打开这条线索，登录后可以绑定并持续更新。')).toBeInTheDocument()
       expect(localStorage.getItem('inspiration_claim_test-demand-1234')).toBe('claim-token-123')
     })
 
     await waitFor(() => {
       expect(screen.getByTestId('location-path')).toHaveTextContent('/inspiration-co-creation/needs/test-demand-1234?claim_token=claim-token-123')
-    }, { timeout: 2500 })
+      expect(screen.queryByText('提交成功')).not.toBeInTheDocument()
+    })
   })
 
   it('lets participants submit intent without writing a demand body', async () => {
@@ -119,7 +118,7 @@ describe('InspirationSubmitPage', () => {
         current_blockers: '找资料 / 调研',
         participation_mode: '我想参与别人的项目',
       }))
-      expect(screen.getByText('提交成功')).toBeInTheDocument()
+      expect(screen.getByTestId('location-path')).toHaveTextContent('/inspiration-co-creation/needs/test-demand-1234?claim_token=claim-token-123')
     })
   })
 
@@ -143,7 +142,7 @@ describe('InspirationSubmitPage', () => {
         current_blockers: '先加入看看',
         participation_mode: '我想先加入看看',
       }))
-      expect(screen.getByText('提交成功')).toBeInTheDocument()
+      expect(screen.getByTestId('location-path')).toHaveTextContent('/inspiration-co-creation/needs/test-demand-1234?claim_token=claim-token-123')
     })
   })
 

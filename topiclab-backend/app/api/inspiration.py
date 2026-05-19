@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,10 +10,12 @@ from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 
 from app.api.auth import get_current_user, security, verify_access_token
+from app.services.inspiration_assistant import run_inspiration_assistant_once
 from app.services.inspiration_review import build_initial_inspiration_review, build_initial_public_redaction
 from app.storage.database.inspiration_store import (
     add_demand_update,
     claim_demand,
+    create_assistant_run,
     create_demand,
     get_demand_by_slug,
     list_public_demands,
@@ -81,13 +84,19 @@ def _require_admin(user: dict = Depends(get_current_user)) -> dict:
     return user
 
 
+def _enqueue_assistant_run(*, slug: str, trigger_type: str, trigger_update_id: str | None = None) -> dict[str, Any]:
+    run = create_assistant_run(slug=slug, trigger_type=trigger_type, trigger_update_id=trigger_update_id)
+    asyncio.create_task(run_inspiration_assistant_once(run["id"]))
+    return run
+
+
 @router.get("/demands")
 def list_demands():
     return {"list": list_public_demands()}
 
 
 @router.post("/demands")
-def submit_demand(req: InspirationDemandSubmitRequest, user: dict | None = Depends(_optional_current_user)):
+async def submit_demand(req: InspirationDemandSubmitRequest, user: dict | None = Depends(_optional_current_user)):
     private_payload = req.model_dump()
     if user:
         private_payload["account_user_id"] = user.get("sub")
@@ -103,7 +112,10 @@ def submit_demand(req: InspirationDemandSubmitRequest, user: dict | None = Depen
         llm_review=llm_review,
         owner_user_id=owner_user_id,
     )
-    return {"demand": created["demand"], "claim_token": created["claim_token"], "llm_review": llm_review, "redaction": redaction}
+    slug = created["demand"]["slug"]
+    _enqueue_assistant_run(slug=slug, trigger_type="initial_submission")
+    demand = get_demand_by_slug(slug, user=user)
+    return {"demand": demand or created["demand"], "claim_token": created["claim_token"], "llm_review": llm_review, "redaction": redaction}
 
 
 @router.get("/demands/{slug}")
@@ -138,7 +150,7 @@ def update_private_info(slug: str, req: InspirationDemandPrivateUpdateRequest, u
 
 
 @router.post("/demands/{slug}/updates")
-def create_update(slug: str, req: InspirationDemandUpdateRequest, user: dict = Depends(get_current_user)):
+async def create_update(slug: str, req: InspirationDemandUpdateRequest, user: dict = Depends(get_current_user)):
     demand = get_demand_by_slug(slug, user=user)
     if demand is None:
         raise HTTPException(status_code=404, detail="需求不存在")
@@ -148,14 +160,16 @@ def create_update(slug: str, req: InspirationDemandUpdateRequest, user: dict = D
     update = add_demand_update(slug=slug, payload=req.model_dump(), created_by_user_id=created_by)
     if update is None:
         raise HTTPException(status_code=404, detail="需求不存在")
+    _enqueue_assistant_run(slug=slug, trigger_type="path_update", trigger_update_id=update["id"])
     return {"update": update}
 
 
 @router.patch("/demands/{slug}/updates/{update_id}")
-def update_existing_update(slug: str, update_id: str, req: InspirationDemandUpdateRequest, user: dict = Depends(get_current_user)):
+async def update_existing_update(slug: str, update_id: str, req: InspirationDemandUpdateRequest, user: dict = Depends(get_current_user)):
     update = update_demand_update(slug=slug, update_id=update_id, payload=req.model_dump(), user=user)
     if update is None:
         raise HTTPException(status_code=404, detail="进展不存在")
     if update.get("error") == "forbidden":
         raise HTTPException(status_code=403, detail="没有更新权限")
+    _enqueue_assistant_run(slug=slug, trigger_type="path_update_edit", trigger_update_id=update["id"])
     return {"update": update}

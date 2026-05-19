@@ -4,9 +4,20 @@ from __future__ import annotations
 
 import json
 import re
+from copy import deepcopy
+from pathlib import Path
 from typing import Any
 
 from app.services.inspiration_llm import InspirationLLMNotConfigured, InspirationLLMRequestError, request_inspiration_llm
+
+PROMPT_DIR = Path(__file__).resolve().parents[1] / "prompts" / "inspiration"
+STAGE_PROMPTS = {
+    "submitted": "stage_submitted.md",
+    "defined": "stage_defined.md",
+    "tooling": "stage_tooling.md",
+    "demo": "stage_demo.md",
+    "mvp": "stage_mvp.md",
+}
 
 
 def _fallback_review(payload: dict[str, Any]) -> dict[str, Any]:
@@ -90,6 +101,39 @@ def _truncate(value: str, max_length: int) -> str:
     return f"{text[: max_length - 1]}…"
 
 
+def _short_title(value: Any, fallback: str = "") -> str:
+    text = re.sub(r"\s+", "", str(value or ""))
+    text = text.strip("《》“”\"'：:，,。.!！?？、；;（）()[]【】")
+    return (text or fallback)[:10]
+
+
+def _load_prompt(filename: str) -> str:
+    return (PROMPT_DIR / filename).read_text(encoding="utf-8")
+
+
+def _previous_snapshot(context: dict[str, Any]) -> dict[str, Any]:
+    previous = context.get("previous_assistant") if isinstance(context.get("previous_assistant"), dict) else {}
+    snapshot = previous.get("snapshot") if isinstance(previous.get("snapshot"), dict) else {}
+    return deepcopy(snapshot) if isinstance(snapshot, dict) else {}
+
+
+def _parse_json_object(raw: str) -> dict[str, Any]:
+    parsed = json.loads(_strip_fenced_json(raw))
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _string_list(value: Any, fallback: list[str] | None = None, limit: int = 6) -> list[str]:
+    if not isinstance(value, list):
+        return (fallback or [])[:limit]
+    return [str(item).strip() for item in value if str(item).strip()][:limit]
+
+
+def _stage_key_from_context(context: dict[str, Any]) -> str:
+    trigger_update = context.get("trigger_update") if isinstance(context.get("trigger_update"), dict) else {}
+    stage_key = str(trigger_update.get("stage_key") or context.get("stage_key") or "").strip()
+    return stage_key if stage_key in STAGE_PROMPTS else "submitted"
+
+
 def _fallback_redaction(payload: dict[str, Any], review: dict[str, Any]) -> dict[str, Any]:
     problem = _redact_text(str(payload.get("problem") or ""), payload)
     category = _redact_text(str(payload.get("category") or ""), payload)
@@ -98,19 +142,16 @@ def _fallback_redaction(payload: dict[str, Any], review: dict[str, Any]) -> dict
         tags = [_redact_text(str(payload.get("category_extra") or ""), payload)]
     if str(payload.get("participation_mode") or "").strip():
         tags.append(_redact_text(str(payload.get("participation_mode") or ""), payload))
-    title = _truncate(problem, 28)
-    if tags:
-        title = _truncate(f"{tags[0]}：{title}", 34)
     return {
-        "method": "rule_only",
-        "status": "published" if payload.get("allow_public", True) else "draft",
-        "title": title or "未命名共创线索",
-        "summary": _truncate(problem, 180),
+        "method": "pending_llm",
+        "status": "needs_review" if payload.get("allow_public", True) else "draft",
+        "title": "生成中",
+        "summary": "智能助手正在生成脱敏摘要。",
         "tags": tags[:4],
-        "stuck": _redact_text(str(payload.get("current_blockers") or review.get("next_step") or ""), payload),
+        "stuck": "等待智能助手生成公开描述。",
         "notes": [
-            "已隐藏称呼、联系方式、账号等可识别信息。",
-            "公开版保留场景、问题、卡点和可参与方向。",
+            "公开标题和摘要会由智能助手完成脱敏改写。",
+            "完整原文仅在有权限查看完整表单信息时展示。",
         ],
     }
 
@@ -174,6 +215,151 @@ async def generate_inspiration_review(payload: dict[str, Any]) -> dict[str, Any]
         return fallback
 
 
+async def run_initial_submission_agent(context: dict[str, Any]) -> dict[str, Any]:
+    """Generate the first assistant snapshot and public redaction fields."""
+    private_payload = context.get("private") if isinstance(context.get("private"), dict) else {}
+    public_payload = context.get("public") if isinstance(context.get("public"), dict) else {}
+    fallback = _fallback_review(private_payload)
+    prompt = {
+        "trigger_update": context.get("trigger_update"),
+        "public": public_payload,
+        "private": private_payload,
+        "path_progress": context.get("path_progress") or [],
+        "updates": context.get("updates") or [],
+        "previous_assistant": context.get("previous_assistant") or {},
+    }
+    try:
+        raw = await request_inspiration_llm(
+            [
+                {
+                    "role": "system",
+                    "content": _load_prompt("initial_submission.md"),
+                },
+                {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
+            ],
+            temperature=0.2,
+        )
+        parsed = _parse_json_object(raw)
+        if not parsed:
+            return fallback
+        parsed["source"] = "llm"
+        parsed["title"] = _short_title(_redact_text(str(parsed.get("title") or ""), private_payload), str(public_payload.get("title") or ""))
+        parsed["summary"] = _truncate(_redact_text(str(parsed.get("summary") or ""), private_payload), 180)
+        parsed["public_stuck"] = _truncate(_redact_text(str(parsed.get("public_stuck") or ""), private_payload), 120)
+        result = {**fallback, **parsed}
+        result["stages"] = {
+            "submitted": {
+                "status": "needs_input" if result.get("follow_up_questions") else "ready",
+                "ai_draft_answer": str(parsed.get("ai_draft_answer") or ""),
+                "follow_up_questions": _string_list(result.get("follow_up_questions")),
+                "next_step": str(result.get("next_step") or ""),
+                "confidence": str(parsed.get("confidence") or "medium"),
+            }
+        }
+        return result
+    except (InspirationLLMNotConfigured, InspirationLLMRequestError, json.JSONDecodeError):
+        fallback["stages"] = {
+            "submitted": {
+                "status": "needs_input",
+                "ai_draft_answer": "",
+                "follow_up_questions": _string_list(fallback.get("follow_up_questions")),
+                "next_step": str(fallback.get("next_step") or ""),
+                "confidence": "fallback",
+            }
+        }
+        return fallback
+
+
+async def _run_stage_agent(context: dict[str, Any], *, stage_key: str, prompt_filename: str) -> dict[str, Any]:
+    private_payload = context.get("private") if isinstance(context.get("private"), dict) else {}
+    previous = _previous_snapshot(context)
+    trigger_update = context.get("trigger_update") if isinstance(context.get("trigger_update"), dict) else {}
+    fallback_questions = _string_list(previous.get("follow_up_questions"), _fallback_review(private_payload).get("follow_up_questions"))
+    prompt = {
+        "stage_key": stage_key,
+        "trigger_update": trigger_update,
+        "public": context.get("public"),
+        "private": private_payload,
+        "path_progress": context.get("path_progress") or [],
+        "updates": context.get("updates") or [],
+        "previous_assistant": context.get("previous_assistant") or {},
+    }
+    try:
+        raw = await request_inspiration_llm(
+            [
+                {"role": "system", "content": _load_prompt(prompt_filename)},
+                {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
+            ],
+            temperature=0.2,
+        )
+        parsed = _parse_json_object(raw)
+        if not parsed:
+            raise json.JSONDecodeError("LLM did not return a JSON object", raw, 0)
+        questions = _string_list(parsed.get("follow_up_questions"), fallback_questions)
+        stage_snapshot = {
+            "status": "needs_input" if questions else "ready",
+            "ai_draft_answer": _truncate(_redact_text(str(parsed.get("ai_draft_answer") or ""), private_payload), 1000),
+            "follow_up_questions": questions,
+            "next_step": _truncate(_redact_text(str(parsed.get("next_step") or ""), private_payload), 300),
+            "confidence": str(parsed.get("confidence") or "medium"),
+        }
+    except (InspirationLLMNotConfigured, InspirationLLMRequestError, json.JSONDecodeError):
+        questions = fallback_questions[:3]
+        stage_snapshot = {
+            "status": "needs_input" if questions else "ready",
+            "ai_draft_answer": _truncate(str(trigger_update.get("summary") or trigger_update.get("progress") or ""), 1000),
+            "follow_up_questions": questions,
+            "next_step": str(previous.get("next_step") or _fallback_review(private_payload).get("next_step") or ""),
+            "confidence": "fallback",
+        }
+
+    result = previous or _fallback_review(private_payload)
+    result = {**result}
+    stages = result.get("stages") if isinstance(result.get("stages"), dict) else {}
+    result["stages"] = {**stages, stage_key: stage_snapshot}
+    result["source"] = "llm" if stage_snapshot.get("confidence") != "fallback" else "fallback"
+    result["stage_key"] = stage_key
+    result["follow_up_questions"] = stage_snapshot["follow_up_questions"]
+    result["next_step"] = stage_snapshot["next_step"] or result.get("next_step") or ""
+    return result
+
+
+async def run_submitted_stage_agent(context: dict[str, Any]) -> dict[str, Any]:
+    return await _run_stage_agent(context, stage_key="submitted", prompt_filename=STAGE_PROMPTS["submitted"])
+
+
+async def run_defined_stage_agent(context: dict[str, Any]) -> dict[str, Any]:
+    return await _run_stage_agent(context, stage_key="defined", prompt_filename=STAGE_PROMPTS["defined"])
+
+
+async def run_tooling_stage_agent(context: dict[str, Any]) -> dict[str, Any]:
+    return await _run_stage_agent(context, stage_key="tooling", prompt_filename=STAGE_PROMPTS["tooling"])
+
+
+async def run_demo_stage_agent(context: dict[str, Any]) -> dict[str, Any]:
+    return await _run_stage_agent(context, stage_key="demo", prompt_filename=STAGE_PROMPTS["demo"])
+
+
+async def run_mvp_stage_agent(context: dict[str, Any]) -> dict[str, Any]:
+    return await _run_stage_agent(context, stage_key="mvp", prompt_filename=STAGE_PROMPTS["mvp"])
+
+
+async def generate_inspiration_assistant_snapshot(context: dict[str, Any]) -> dict[str, Any]:
+    """Return the current intelligent assistant snapshot for an inspiration demand."""
+    if context.get("trigger_type") == "initial_submission":
+        return await run_initial_submission_agent(context)
+    stage_key = _stage_key_from_context(context)
+    if stage_key == "defined":
+        return await run_defined_stage_agent(context)
+    if stage_key == "tooling":
+        return await run_tooling_stage_agent(context)
+    if stage_key == "demo":
+        return await run_demo_stage_agent(context)
+    if stage_key == "mvp":
+        return await run_mvp_stage_agent(context)
+    return await run_submitted_stage_agent(context)
+
+
 async def generate_public_redaction(payload: dict[str, Any], review: dict[str, Any]) -> dict[str, Any]:
     """Return a public-safe rewrite for the demand. Falls back to deterministic redaction."""
     fallback = _fallback_redaction(payload, review)
@@ -197,7 +383,7 @@ async def generate_public_redaction(payload: dict[str, Any], review: dict[str, A
                         "你是灵感共创队的需求脱敏改写助手。请仅输出 JSON，不要 Markdown。"
                         "目标是把需求、想法或参与意愿改写成公开可读但不可识别个人身份的共创线索。"
                         "必须保留真实场景、问题、卡点、参与方式和需要的伙伴，删除姓名、联系方式、账号、可识别单位或私人链接。"
-                        "字段必须包含 title, summary, tags, stuck, notes。tags/notes 为字符串数组。"
+                        "字段必须包含 title, summary, tags, stuck, notes。title 必须在 10 个汉字以内。tags/notes 为字符串数组。"
                     ),
                 },
                 {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
@@ -213,7 +399,7 @@ async def generate_public_redaction(payload: dict[str, Any], review: dict[str, A
             "method": "llm_rewrite",
             "status": "published" if payload.get("allow_public", True) else "draft",
         }
-        redacted["title"] = _redact_text(str(redacted.get("title") or fallback["title"]), payload)
+        redacted["title"] = _short_title(_redact_text(str(redacted.get("title") or fallback["title"]), payload), fallback["title"])
         redacted["summary"] = _redact_text(str(redacted.get("summary") or fallback["summary"]), payload)
         redacted["stuck"] = _redact_text(str(redacted.get("stuck") or fallback["stuck"]), payload)
         redacted["tags"] = [_redact_text(str(tag), payload) for tag in (redacted.get("tags") or fallback["tags"])][:4]

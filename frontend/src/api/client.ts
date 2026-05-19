@@ -578,6 +578,7 @@ export interface InspirationDemand {
     status: string
     notes: string[]
   }
+  assistant?: InspirationDemandAssistant
   llm_review?: InspirationDemandReview
 }
 
@@ -599,7 +600,26 @@ export interface InspirationDemandReview {
   follow_up_questions?: string[]
   next_step?: string
   risk_notes?: string[]
+  stages?: Record<string, InspirationStageAssistantSnapshot>
   [key: string]: unknown
+}
+
+export interface InspirationStageAssistantSnapshot {
+  status?: string
+  ai_draft_answer?: string
+  follow_up_questions?: string[]
+  next_step?: string
+  confidence?: string
+  [key: string]: unknown
+}
+
+export interface InspirationDemandAssistant {
+  status: 'pending' | 'running' | 'ready' | 'failed' | string
+  snapshot?: InspirationDemandReview
+  version?: number
+  latest_run_id?: string | null
+  updated_at?: string | null
+  error_message?: string | null
 }
 
 export interface InspirationDemandUpdate {

@@ -19,6 +19,7 @@ const initialUpdate: InspirationDemandUpdateRequest = {
 const statusOptions: Array<{ key: InspirationDemandUpdateRequest['stage_status']; label: string }> = [
   { key: 'done', label: '已完成' },
   { key: 'current', label: '进行中' },
+  { key: 'needs_input', label: '待补充' },
   { key: 'pending', label: '待开始' },
 ]
 
@@ -126,6 +127,7 @@ function normalizePathProgress(pathProgress?: InspirationDemand['path_progress']
 function statusLabel(status: string) {
   if (status === 'done') return '已完成'
   if (status === 'current') return '进行中'
+  if (status === 'needs_input') return '待补充'
   return '待开始'
 }
 
@@ -195,28 +197,82 @@ function getOpenSectionsFromUpdate(update: InspirationDemandUpdate): UpdateOptio
   return sections
 }
 
-function ReviewPanel({
-  review,
+function getDemandAssistant(demand: InspirationDemand | null) {
+  if (!demand) return null
+  return demand.assistant ?? {
+    status: 'ready',
+    snapshot: demand.llm_review,
+    version: 0,
+    latest_run_id: null,
+    updated_at: demand.updated_at,
+    error_message: null,
+  }
+}
+
+function markAssistantPending(demand: InspirationDemand): InspirationDemand {
+  const assistant = getDemandAssistant(demand)
+  return {
+    ...demand,
+    assistant: {
+      ...(assistant ?? {}),
+      status: 'pending',
+      error_message: null,
+    },
+  }
+}
+
+function getStageAssistant(
+  assistant: NonNullable<ReturnType<typeof getDemandAssistant>> | null,
+  stageKey: string,
+) {
+  const stages = assistant?.snapshot?.stages
+  return stages && typeof stages === 'object' ? stages[stageKey] : undefined
+}
+
+function AssistantPanel({
+  assistant,
   className = '',
 }: {
-  review: NonNullable<InspirationDemand['llm_review']>
+  assistant: NonNullable<ReturnType<typeof getDemandAssistant>>
   className?: string
 }) {
+  const review = assistant.snapshot
+  const isUpdating = assistant.status === 'pending' || assistant.status === 'running'
   return (
     <section className={`rounded-[var(--radius-md)] border border-slate-200 bg-white p-5 ${className}`}>
-      <h2 className="text-lg font-semibold text-slate-950">预分析</h2>
-      <dl className="mt-4 space-y-4 text-sm leading-7">
-        {review.clarity ? <div><dt className="font-semibold text-slate-500">清晰度</dt><dd>{review.clarity}</dd></div> : null}
-        {review.next_step ? <div><dt className="font-semibold text-slate-500">建议下一步</dt><dd>{review.next_step}</dd></div> : null}
-        {review.follow_up_questions?.length ? (
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold text-slate-950">智能助手</h2>
+        {isUpdating ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-700">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-teal-600" />
+            分析中
+          </span>
+        ) : null}
+      </div>
+      {isUpdating ? (
+        <p className="mt-3 rounded-[var(--radius-sm)] bg-teal-50 px-3 py-2 text-sm leading-6 text-teal-800">
+          智能助手正在基于最新信息更新建议…
+        </p>
+      ) : null}
+      {assistant.status === 'failed' ? (
+        <p className="mt-3 rounded-[var(--radius-sm)] bg-red-50 px-3 py-2 text-sm leading-6 text-red-700">
+          本次分析暂未完成，稍后刷新可以再看。
+        </p>
+      ) : null}
+      {review ? (
+        <dl className="mt-4 space-y-4 text-sm leading-7">
+          {review.clarity ? <div><dt className="font-semibold text-slate-500">清晰度</dt><dd>{review.clarity}</dd></div> : null}
+          {review.next_step ? <div><dt className="font-semibold text-slate-500">建议下一步</dt><dd>{review.next_step}</dd></div> : null}
+          {review.follow_up_questions?.length ? (
           <div>
             <dt className="font-semibold text-slate-500">建议追问</dt>
             <dd className="mt-2 space-y-1">
               {review.follow_up_questions.map((question) => <p key={question}>{question}</p>)}
             </dd>
           </div>
-        ) : null}
-      </dl>
+          ) : null}
+        </dl>
+      ) : null}
     </section>
   )
 }
@@ -317,6 +373,36 @@ export default function InspirationNeedDetailPage() {
     }
   }, [demand, status])
 
+  useEffect(() => {
+    const assistant = getDemandAssistant(demand)
+    if (!demand || !assistant || !['pending', 'running'].includes(String(assistant.status))) {
+      return
+    }
+    let cancelled = false
+    let attempts = 0
+    const timer = window.setInterval(() => {
+      attempts += 1
+      inspirationApi.getDemand(demand.slug)
+        .then((response) => {
+          if (cancelled) return
+          setDemand((current) => ({
+            ...response.data.demand,
+            private: current?.private ?? response.data.demand.private,
+          }))
+        })
+        .catch(() => {
+          if (attempts >= 30) window.clearInterval(timer)
+        })
+      if (attempts >= 30) {
+        window.clearInterval(timer)
+      }
+    }, 2000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [demand?.assistant?.status, demand?.slug])
+
   async function revealPrivate() {
     if (!demand) return
     setPrivateOpen(true)
@@ -401,13 +487,16 @@ export default function InspirationNeedDetailPage() {
       const response = currentEditingUpdateId
         ? await inspirationApi.updateUpdate(demand.slug, currentEditingUpdateId, submitDraft)
         : await inspirationApi.createUpdate(demand.slug, submitDraft)
-      setDemand((current) => current ? {
-        ...current,
-        updates: currentEditingUpdateId
-          ? (current.updates ?? []).map((update) => update.id === pendingUpdate.id || update.id === response.data.update.id ? response.data.update : update)
-          : (current.updates ?? []).map((update) => update.id === pendingUpdate.id ? response.data.update : update),
-        path_progress: updatePathProgressWithUpdate(current.path_progress, response.data.update),
-      } : current)
+      setDemand((current) => {
+        if (!current) return current
+        return markAssistantPending({
+          ...current,
+          updates: currentEditingUpdateId
+            ? (current.updates ?? []).map((update) => update.id === pendingUpdate.id || update.id === response.data.update.id ? response.data.update : update)
+            : (current.updates ?? []).map((update) => update.id === pendingUpdate.id ? response.data.update : update),
+          path_progress: updatePathProgressWithUpdate(current.path_progress, response.data.update),
+        })
+      })
       setUpdateStatus('idle')
     } catch {
       setDemand(previousDemand)
@@ -432,7 +521,7 @@ export default function InspirationNeedDetailPage() {
     )
   }
 
-  const review = demand.llm_review
+  const assistant = getDemandAssistant(demand)
   const canRevealPrivate = Boolean(demand.can_view_private)
   const canUpdate = Boolean(demand.can_update)
   const pathProgress = normalizePathProgress(demand.path_progress)
@@ -452,13 +541,17 @@ export default function InspirationNeedDetailPage() {
   const privateDraftEntries = getVisiblePrivateEntries(privateDraft)
   const linkArtifact = getUpdateArtifactsByType(updateDraft, 'link')[0] ?? {}
   const toolArtifact = getUpdateArtifactsByType(updateDraft, 'tool')[0] ?? {}
+  const activeStage = pathProgress.find((stage) => stage.key === activeComposerStage)
+  const isAnsweringAssistantQuestions = activeStage?.key === 'submitted' && activeStage?.status === 'needs_input'
 
   const progressForm = (
     <form onSubmit={handleUpdateSubmit} className="mt-5 space-y-4 rounded-[var(--radius-md)] border border-teal-100 bg-teal-50/50 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-base font-semibold text-slate-950">更新这一步</p>
-          <p className="mt-1 text-sm leading-6 text-slate-500">先写一句话就可以，时间会自动记录到当前分钟。</p>
+          <p className="text-base font-semibold text-slate-950">{isAnsweringAssistantQuestions ? '补充追问回答' : '更新这一步'}</p>
+          <p className="mt-1 text-sm leading-6 text-slate-500">
+            {isAnsweringAssistantQuestions ? '直接回答智能助手提出的问题，保存后会重新触发分析。' : '先写一句话就可以，时间会自动记录到当前分钟。'}
+          </p>
         </div>
         <span className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-500 ring-1 ring-slate-200">
           {getCurrentMinuteLabel()}
@@ -548,7 +641,7 @@ export default function InspirationNeedDetailPage() {
           disabled={updateStatus === 'saving'}
           className="inline-flex min-h-10 items-center rounded-full bg-slate-950 px-4 text-sm font-semibold text-white disabled:opacity-60"
         >
-          {updateStatus === 'saving' ? '保存中…' : editingUpdateId ? '保存修改' : '保存进展'}
+          {updateStatus === 'saving' ? '保存中…' : editingUpdateId ? '保存修改' : isAnsweringAssistantQuestions ? '保存回答' : '保存进展'}
         </button>
         <button
           type="button"
@@ -732,7 +825,7 @@ export default function InspirationNeedDetailPage() {
             </ol>
           </div>
 
-          {review ? <ReviewPanel review={review} className="mt-6 lg:hidden" /> : null}
+          {assistant ? <AssistantPanel assistant={assistant} className="mt-6 lg:hidden" /> : null}
 
           {!canUpdate ? (
             <section className="mt-6 rounded-[var(--radius-md)] border border-slate-200 bg-white p-5">
@@ -748,6 +841,7 @@ export default function InspirationNeedDetailPage() {
           <div aria-label="路径进展列表" className="mt-7 space-y-5">
             {pathProgress.map((stage, stageIndex) => {
               const stageUpdates = updatesByStage[stage.key] ?? []
+              const stageAssistant = getStageAssistant(assistant, stage.key)
               return (
                 <article
                   key={`${stage.key}-${stageIndex}`}
@@ -765,7 +859,7 @@ export default function InspirationNeedDetailPage() {
                         onClick={() => startStageComposer(stage.key)}
                         className="inline-flex min-h-10 items-center rounded-full bg-teal-700 px-4 text-sm font-semibold text-white"
                       >
-                        更新
+                        {stage.key === 'submitted' && stage.status === 'needs_input' ? '补充回答' : '更新'}
                       </button>
                     ) : null}
                   </div>
@@ -773,6 +867,25 @@ export default function InspirationNeedDetailPage() {
                     <p className="mt-4 text-sm leading-7 text-slate-600">{stage.summary}</p>
                   ) : null}
                   {stage.emotion_note ? <p className="mt-2 text-sm leading-7 text-slate-700">{stage.emotion_note}</p> : null}
+                  {stageAssistant?.ai_draft_answer || stageAssistant?.follow_up_questions?.length || stageAssistant?.next_step ? (
+                    <section className="mt-5 rounded-[var(--radius-sm)] border border-teal-100 bg-teal-50/60 p-4">
+                      <p className="text-xs font-semibold text-teal-700">AI 生成参考</p>
+                      {stageAssistant.ai_draft_answer ? (
+                        <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-slate-700">{stageAssistant.ai_draft_answer}</p>
+                      ) : null}
+                      {stageAssistant.follow_up_questions?.length ? (
+                        <div className="mt-3">
+                          <p className="text-xs font-semibold text-slate-500">继续追问</p>
+                          <div className="mt-1 space-y-1 text-sm leading-6 text-slate-600">
+                            {stageAssistant.follow_up_questions.map((question) => <p key={question}>{question}</p>)}
+                          </div>
+                        </div>
+                      ) : null}
+                      {stageAssistant.next_step ? (
+                        <p className="mt-3 text-sm leading-6 text-teal-800">下一步：{stageAssistant.next_step}</p>
+                      ) : null}
+                    </section>
+                  ) : null}
 
                   {stageUpdates.length ? (
                     <div className="mt-5 space-y-3">
@@ -842,9 +955,9 @@ export default function InspirationNeedDetailPage() {
         </section>
         </div>
 
-        {review ? (
-          <aside className="hidden lg:sticky lg:top-24 lg:block" aria-label="右侧预分析">
-            <ReviewPanel review={review} />
+        {assistant ? (
+          <aside className="hidden lg:sticky lg:top-24 lg:block" aria-label="右侧智能助手">
+            <AssistantPanel assistant={assistant} />
           </aside>
         ) : null}
       </main>

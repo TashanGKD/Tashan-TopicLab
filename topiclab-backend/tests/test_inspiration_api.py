@@ -67,6 +67,9 @@ def test_inspiration_submission_creates_path_and_public_detail(client):
     body = created.json()
     slug = body["demand"]["slug"]
     assert body["demand"]["stage"]
+    assert body["demand"]["title"] == "生成中"
+    assert body["demand"]["summary"] == "智能助手正在生成脱敏摘要。"
+    assert "模糊想法拆成一周内" not in str(body["demand"])
     assert body["llm_review"]["follow_up_questions"]
     assert body["claim_token"]
 
@@ -79,9 +82,12 @@ def test_inspiration_submission_creates_path_and_public_detail(client):
     assert demand["can_update"] is False
     assert demand["llm_review"]["next_step"]
     assert demand["redaction"]["status"] in {"published", "needs_review"}
-    assert demand["redaction"]["method"] in {"rule_only", "llm_rewrite", "manual_review"}
+    assert demand["redaction"]["method"] in {"pending_llm", "rule_only", "llm_rewrite", "manual_review"}
+    assert demand["summary"] == "智能助手正在生成脱敏摘要。"
+    assert "模糊想法拆成一周内" not in str(demand)
     assert demand["path_progress"][0]["key"] == "submitted"
-    assert demand["path_progress"][0]["status"] == "done"
+    assert demand["path_progress"][0]["status"] == "needs_input"
+    assert "这个问题最真实的使用对象是谁？" in demand["path_progress"][0]["summary"]
     assert "private" not in demand
     assert "test@example.com" not in str(demand)
 
@@ -104,7 +110,8 @@ def test_inspiration_submission_accepts_very_short_problem(client):
     assert created.status_code == 200
     body = created.json()
     assert body["demand"]["slug"]
-    assert body["demand"]["summary"] == "1"
+    assert body["demand"]["summary"] == "智能助手正在生成脱敏摘要。"
+    assert body["demand"]["stuck"] == "等待智能助手生成公开描述。"
     assert body["demand"]["path_progress"][0]["key"] == "submitted"
     assert body["claim_token"]
 

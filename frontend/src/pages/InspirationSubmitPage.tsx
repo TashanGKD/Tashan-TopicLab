@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState, type CSSProperties } from 'react'
+import { FormEvent, useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { inspirationApi, type InspirationDemandSubmitRequest } from '../api/client'
 
@@ -206,16 +206,6 @@ export default function InspirationSubmitPage() {
   const [form, setForm] = useState<InspirationDemandSubmitRequest>(initialForm)
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle')
   const [error, setError] = useState('')
-  const [submittedPath, setSubmittedPath] = useState('/inspiration-co-creation')
-  const [submittedClaimToken, setSubmittedClaimToken] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (status !== 'success') return undefined
-    const timer = window.setTimeout(() => {
-      navigate(submittedPath, { replace: true })
-    }, 1500)
-    return () => window.clearTimeout(timer)
-  }, [navigate, status, submittedPath])
 
   function updateField<K extends keyof InspirationDemandSubmitRequest>(key: K, value: InspirationDemandSubmitRequest[K]) {
     setForm((current) => ({ ...current, [key]: value }))
@@ -285,9 +275,7 @@ export default function InspirationSubmitPage() {
       if (claimToken) {
         localStorage.setItem(`inspiration_claim_${slug}`, claimToken)
       }
-      setSubmittedPath(path)
-      setSubmittedClaimToken(claimToken)
-      setStatus('success')
+      navigate(path, { replace: true })
     } catch {
       setStatus('error')
       setError('提交失败，请稍后再试。')
@@ -337,7 +325,7 @@ export default function InspirationSubmitPage() {
             </div>
             <h2 className="mt-6 text-3xl font-semibold tracking-normal text-slate-950">提交成功</h2>
             <p className="mt-3 text-sm leading-6 text-slate-600">
-              {submittedClaimToken ? '正在打开这条线索，登录后可以绑定并持续更新。' : '正在打开这条线索，你可以继续更新它。'}
+              正在打开这条线索，你可以继续更新它。
             </p>
           </div>
         </div>

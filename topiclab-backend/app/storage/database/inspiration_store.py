@@ -141,6 +141,12 @@ def _apply_inspiration_ddl(session) -> None:
                 allow_public INTEGER NOT NULL DEFAULT 1,
                 private_json TEXT NOT NULL,
                 llm_review_json TEXT NOT NULL DEFAULT '{}',
+                assistant_status TEXT NOT NULL DEFAULT 'ready',
+                assistant_snapshot_json TEXT NOT NULL DEFAULT '{}',
+                assistant_version INTEGER NOT NULL DEFAULT 0,
+                assistant_latest_run_id TEXT,
+                assistant_updated_at TEXT,
+                assistant_error_message TEXT,
                 claim_token TEXT,
                 claimed_at TEXT,
                 redaction_method TEXT NOT NULL DEFAULT 'rule_only',
@@ -167,6 +173,12 @@ def _apply_inspiration_ddl(session) -> None:
                 allow_public BOOLEAN NOT NULL DEFAULT TRUE,
                 private_json JSONB NOT NULL,
                 llm_review_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+                assistant_status VARCHAR(32) NOT NULL DEFAULT 'ready',
+                assistant_snapshot_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+                assistant_version INTEGER NOT NULL DEFAULT 0,
+                assistant_latest_run_id VARCHAR(255),
+                assistant_updated_at TIMESTAMPTZ,
+                assistant_error_message TEXT,
                 claim_token VARCHAR(128),
                 claimed_at TIMESTAMPTZ,
                 redaction_method VARCHAR(32) NOT NULL DEFAULT 'rule_only',
@@ -231,6 +243,12 @@ def _apply_inspiration_ddl(session) -> None:
     _ensure_column(session, "inspiration_demands", "redaction_method", "TEXT NOT NULL DEFAULT 'rule_only'", "VARCHAR(32) NOT NULL DEFAULT 'rule_only'")
     _ensure_column(session, "inspiration_demands", "redaction_status", "TEXT NOT NULL DEFAULT 'published'", "VARCHAR(32) NOT NULL DEFAULT 'published'")
     _ensure_column(session, "inspiration_demands", "redaction_notes", "TEXT NOT NULL DEFAULT '[]'", "JSONB NOT NULL DEFAULT '[]'::jsonb")
+    _ensure_column(session, "inspiration_demands", "assistant_status", "TEXT NOT NULL DEFAULT 'ready'", "VARCHAR(32) NOT NULL DEFAULT 'ready'")
+    _ensure_column(session, "inspiration_demands", "assistant_snapshot_json", "TEXT NOT NULL DEFAULT '{}'", "JSONB NOT NULL DEFAULT '{}'::jsonb")
+    _ensure_column(session, "inspiration_demands", "assistant_version", "INTEGER NOT NULL DEFAULT 0", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(session, "inspiration_demands", "assistant_latest_run_id", "TEXT", "VARCHAR(255)")
+    _ensure_column(session, "inspiration_demands", "assistant_updated_at", "TEXT", "TIMESTAMPTZ")
+    _ensure_column(session, "inspiration_demands", "assistant_error_message", "TEXT", "TEXT")
     _ensure_column(session, "inspiration_demand_updates", "stage_key", "TEXT NOT NULL DEFAULT ''", "VARCHAR(64) NOT NULL DEFAULT ''")
     _ensure_column(session, "inspiration_demand_updates", "stage_status", "TEXT NOT NULL DEFAULT ''", "VARCHAR(32) NOT NULL DEFAULT ''")
     _ensure_column(session, "inspiration_demand_updates", "emotion_note", "TEXT NOT NULL DEFAULT ''", "TEXT NOT NULL DEFAULT ''")
@@ -242,6 +260,43 @@ def _apply_inspiration_ddl(session) -> None:
             session.execute(text("ALTER TABLE inspiration_demand_updates ADD COLUMN updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP"))
     session.execute(text("CREATE INDEX IF NOT EXISTS idx_inspiration_updates_demand_created ON inspiration_demand_updates(demand_id, created_at DESC)"))
     session.execute(text("CREATE INDEX IF NOT EXISTS idx_inspiration_updates_demand_updated ON inspiration_demand_updates(demand_id, updated_at DESC)"))
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS inspiration_assistant_runs (
+                id TEXT PRIMARY KEY,
+                demand_id TEXT NOT NULL REFERENCES inspiration_demands(id) ON DELETE CASCADE,
+                trigger_type TEXT NOT NULL,
+                trigger_update_id TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                input_snapshot_json TEXT NOT NULL DEFAULT '{}',
+                output_json TEXT NOT NULL DEFAULT '{}',
+                error_message TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                started_at TEXT,
+                completed_at TEXT
+            )
+            """
+            if is_sqlite
+            else
+            """
+            CREATE TABLE IF NOT EXISTS inspiration_assistant_runs (
+                id VARCHAR(255) PRIMARY KEY,
+                demand_id VARCHAR(255) NOT NULL REFERENCES inspiration_demands(id) ON DELETE CASCADE,
+                trigger_type VARCHAR(64) NOT NULL,
+                trigger_update_id VARCHAR(255),
+                status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                input_snapshot_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+                output_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+                error_message TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                started_at TIMESTAMPTZ,
+                completed_at TIMESTAMPTZ
+            )
+            """
+        )
+    )
+    session.execute(text("CREATE INDEX IF NOT EXISTS idx_inspiration_assistant_runs_demand_created ON inspiration_assistant_runs(demand_id, created_at DESC)"))
 
 
 def _backfill_clue_numbers(session) -> None:
@@ -406,6 +461,62 @@ def _serialize_update(row) -> dict[str, Any]:
     }
 
 
+def _serialize_assistant(row) -> dict[str, Any]:
+    fallback_snapshot = _json_loads(getattr(row, "llm_review_json", "{}"), {})
+    snapshot = _json_loads(getattr(row, "assistant_snapshot_json", "{}"), {})
+    if not snapshot:
+        snapshot = fallback_snapshot
+    status = getattr(row, "assistant_status", None) or ("ready" if snapshot else "pending")
+    return {
+        "status": status,
+        "snapshot": snapshot,
+        "version": int(getattr(row, "assistant_version", 0) or 0),
+        "latest_run_id": getattr(row, "assistant_latest_run_id", None),
+        "updated_at": str(getattr(row, "assistant_updated_at", "") or getattr(row, "updated_at", "")),
+        "error_message": getattr(row, "assistant_error_message", None),
+    }
+
+
+def _serialize_run(row) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "demand_id": row.demand_id,
+        "trigger_type": row.trigger_type,
+        "trigger_update_id": row.trigger_update_id,
+        "status": row.status,
+        "input_snapshot": _json_loads(row.input_snapshot_json, {}),
+        "output": _json_loads(row.output_json, {}),
+        "error_message": row.error_message,
+        "created_at": str(row.created_at),
+        "started_at": str(row.started_at) if row.started_at is not None else None,
+        "completed_at": str(row.completed_at) if row.completed_at is not None else None,
+    }
+
+
+def _assistant_follow_up_questions(row) -> list[str]:
+    assistant = _serialize_assistant(row)
+    snapshot = assistant.get("snapshot") if isinstance(assistant.get("snapshot"), dict) else {}
+    questions = snapshot.get("follow_up_questions") if isinstance(snapshot, dict) else []
+    if not isinstance(questions, list):
+        return []
+    return [str(question).strip() for question in questions if str(question).strip()][:3]
+
+
+def _short_public_title(value: Any, fallback: str = "") -> str:
+    text_value = re.sub(r"\s+", "", str(value or ""))
+    text_value = text_value.strip("《》“”\"'：:，,。.!！?？、；;（）()[]【】")
+    return (text_value or fallback)[:10]
+
+
+def _public_text(value: Any, *, fallback: str, max_length: int) -> str:
+    text_value = " ".join(str(value or "").split())
+    if not text_value:
+        return fallback
+    if len(text_value) <= max_length:
+        return text_value
+    return f"{text_value[: max_length - 1]}…"
+
+
 def _can_view_private(row, user: dict[str, Any] | None) -> bool:
     if not user:
         return False
@@ -431,9 +542,20 @@ def _build_path_progress(row, updates: list[dict[str, Any]]) -> list[dict[str, A
     for index, stage in enumerate(PATH_STAGES):
         update = latest_by_stage.get(stage["key"])
         if stage["key"] == "submitted":
-            status = "done"
-            summary = ""
-            emotion = ""
+            if update:
+                status = update.get("stage_status") or "done"
+                summary = update.get("summary") or update.get("progress") or ""
+                emotion = update.get("emotion_note") or ""
+            else:
+                questions = _assistant_follow_up_questions(row)
+                if questions:
+                    status = "needs_input"
+                    summary = f"请补充：{' / '.join(questions)}"
+                    current_seen = True
+                else:
+                    status = "done"
+                    summary = ""
+                emotion = ""
         elif update:
             status = update.get("stage_status") or "done"
             summary = update.get("summary") or update.get("progress") or "这一阶段已有进展。"
@@ -458,6 +580,8 @@ def list_public_demands() -> list[dict[str, Any]]:
             text(
                 """
                 SELECT id, slug, clue_number, status, stage, public_title, public_summary, public_tags, public_stuck,
+                       llm_review_json, assistant_status, assistant_snapshot_json, assistant_version,
+                       assistant_latest_run_id, assistant_updated_at, assistant_error_message,
                        redaction_method, redaction_status, redaction_notes, created_at, updated_at,
                        COALESCE(
                            (
@@ -511,7 +635,9 @@ def get_demand_by_slug(slug: str, *, user: dict[str, Any] | None = None, include
             text(
                 """
                 SELECT id, slug, clue_number, status, stage, owner_user_id, public_title, public_summary, public_tags,
-                       public_stuck, private_json, llm_review_json, claim_token, claimed_at,
+                       public_stuck, private_json, llm_review_json, assistant_status, assistant_snapshot_json,
+                       assistant_version, assistant_latest_run_id, assistant_updated_at, assistant_error_message,
+                       claim_token, claimed_at,
                        redaction_method, redaction_status, redaction_notes, created_at, updated_at
                 FROM inspiration_demands
                 WHERE slug = :slug
@@ -542,7 +668,8 @@ def get_demand_by_slug(slug: str, *, user: dict[str, Any] | None = None, include
         payload["path_progress"] = _build_path_progress(row, updates)
         payload["can_view_private"] = can_view_private
         payload["can_update"] = _can_update(row, user)
-        payload["llm_review"] = _json_loads(row.llm_review_json, {})
+        payload["assistant"] = _serialize_assistant(row)
+        payload["llm_review"] = payload["assistant"]["snapshot"] or _json_loads(row.llm_review_json, {})
         if include_private and can_view_private:
             payload["private"] = _json_loads(row.private_json, {})
         return payload
@@ -871,3 +998,316 @@ def update_demand_update(*, slug: str, update_id: str, payload: dict[str, Any], 
             {"id": update_id},
         ).first()
         return _serialize_update(row)
+
+
+def _build_assistant_input_snapshot(session, demand_id: str, trigger_type: str, trigger_update_id: str | None) -> dict[str, Any]:
+    demand = session.execute(
+        text(
+            """
+            SELECT id, slug, clue_number, status, stage, owner_user_id, public_title, public_summary,
+                   public_tags, public_stuck, private_json, llm_review_json, assistant_status,
+                   assistant_snapshot_json, assistant_version, assistant_latest_run_id,
+                   assistant_updated_at, assistant_error_message, redaction_method,
+                   redaction_status, redaction_notes, created_at, updated_at
+            FROM inspiration_demands
+            WHERE id = :id
+            LIMIT 1
+            """
+        ),
+        {"id": demand_id},
+    ).first()
+    if not demand:
+        return {}
+    update_rows = session.execute(
+        text(
+            """
+            SELECT id, week_label, summary, progress, blockers, next_steps, stage_key, stage_status,
+                   emotion_note, artifacts_json, visibility, created_at, updated_at
+            FROM inspiration_demand_updates
+            WHERE demand_id = :demand_id
+            ORDER BY updated_at DESC, created_at DESC
+            """
+        ),
+        {"demand_id": demand_id},
+    ).fetchall()
+    updates = [_serialize_update(row) for row in update_rows]
+    trigger_update = next((item for item in updates if item["id"] == trigger_update_id), None)
+    public_payload = _serialize_public(demand)
+    stage_key = str((trigger_update or {}).get("stage_key") or "submitted")
+    return {
+        "demand_id": demand.id,
+        "slug": demand.slug,
+        "trigger_type": trigger_type,
+        "stage_key": stage_key,
+        "public": public_payload,
+        "private": _json_loads(demand.private_json, {}),
+        "updates": updates,
+        "path_progress": _build_path_progress(demand, updates),
+        "trigger_update": trigger_update,
+        "previous_assistant": _serialize_assistant(demand),
+    }
+
+
+def create_assistant_run(*, slug: str, trigger_type: str, trigger_update_id: str | None = None) -> dict[str, Any]:
+    with get_db_session() as session:
+        ensure_inspiration_schema_and_seed_for_session(session)
+        demand = session.execute(
+            text("SELECT id FROM inspiration_demands WHERE slug = :slug LIMIT 1"),
+            {"slug": slug},
+        ).first()
+        if not demand:
+            raise ValueError(f"Inspiration demand not found: {slug}")
+        run_id = f"iar_{uuid4().hex}"
+        now = _now_iso()
+        snapshot = _build_assistant_input_snapshot(session, demand.id, trigger_type, trigger_update_id)
+        is_sqlite = _is_sqlite_session(session)
+        session.execute(
+            text(
+                """
+                INSERT INTO inspiration_assistant_runs (
+                    id, demand_id, trigger_type, trigger_update_id, status,
+                    input_snapshot_json, output_json, error_message, created_at, started_at, completed_at
+                )
+                VALUES (
+                    :id, :demand_id, :trigger_type, :trigger_update_id, 'pending',
+                    :input_snapshot_json, '{}', NULL, :created_at, NULL, NULL
+                )
+                """
+                if is_sqlite
+                else
+                """
+                INSERT INTO inspiration_assistant_runs (
+                    id, demand_id, trigger_type, trigger_update_id, status,
+                    input_snapshot_json, output_json, error_message, created_at, started_at, completed_at
+                )
+                VALUES (
+                    :id, :demand_id, :trigger_type, :trigger_update_id, 'pending',
+                    CAST(:input_snapshot_json AS JSONB), '{}'::jsonb, NULL, :created_at, NULL, NULL
+                )
+                """
+            ),
+            {
+                "id": run_id,
+                "demand_id": demand.id,
+                "trigger_type": trigger_type,
+                "trigger_update_id": trigger_update_id,
+                "input_snapshot_json": _json_dumps(snapshot),
+                "created_at": now,
+            },
+        )
+        session.execute(
+            text(
+                """
+                UPDATE inspiration_demands
+                SET assistant_status = 'pending',
+                    assistant_latest_run_id = :run_id,
+                    assistant_error_message = NULL,
+                    updated_at = :updated_at
+                WHERE id = :demand_id
+                """
+            ),
+            {"run_id": run_id, "demand_id": demand.id, "updated_at": now},
+        )
+        row = session.execute(
+            text(
+                """
+                SELECT id, demand_id, trigger_type, trigger_update_id, status, input_snapshot_json,
+                       output_json, error_message, created_at, started_at, completed_at
+                FROM inspiration_assistant_runs
+                WHERE id = :id
+                """
+            ),
+            {"id": run_id},
+        ).first()
+        return _serialize_run(row)
+
+
+def get_assistant_run(run_id: str) -> dict[str, Any] | None:
+    with get_db_session() as session:
+        ensure_inspiration_schema_and_seed_for_session(session)
+        row = session.execute(
+            text(
+                """
+                SELECT id, demand_id, trigger_type, trigger_update_id, status, input_snapshot_json,
+                       output_json, error_message, created_at, started_at, completed_at
+                FROM inspiration_assistant_runs
+                WHERE id = :id
+                LIMIT 1
+                """
+            ),
+            {"id": run_id},
+        ).first()
+        return _serialize_run(row) if row else None
+
+
+def list_assistant_runs_for_demand(slug: str) -> list[dict[str, Any]]:
+    with get_db_session() as session:
+        ensure_inspiration_schema_and_seed_for_session(session)
+        rows = session.execute(
+            text(
+                """
+                SELECT runs.id, runs.demand_id, runs.trigger_type, runs.trigger_update_id, runs.status,
+                       runs.input_snapshot_json, runs.output_json, runs.error_message,
+                       runs.created_at, runs.started_at, runs.completed_at
+                FROM inspiration_assistant_runs AS runs
+                JOIN inspiration_demands AS demands ON demands.id = runs.demand_id
+                WHERE demands.slug = :slug
+                ORDER BY runs.created_at DESC, runs.id DESC
+                """
+            ),
+            {"slug": slug},
+        ).fetchall()
+        return [_serialize_run(row) for row in rows]
+
+
+def mark_assistant_run_running(run_id: str) -> dict[str, Any] | None:
+    now = _now_iso()
+    with get_db_session() as session:
+        ensure_inspiration_schema_and_seed_for_session(session)
+        run = session.execute(text("SELECT demand_id FROM inspiration_assistant_runs WHERE id = :id"), {"id": run_id}).first()
+        if not run:
+            return None
+        session.execute(
+            text("UPDATE inspiration_assistant_runs SET status = 'running', started_at = :started_at WHERE id = :id"),
+            {"started_at": now, "id": run_id},
+        )
+        session.execute(
+            text(
+                """
+                UPDATE inspiration_demands
+                SET assistant_status = 'running',
+                    assistant_latest_run_id = :run_id,
+                    assistant_error_message = NULL,
+                    updated_at = :updated_at
+                WHERE id = :demand_id
+                """
+            ),
+            {"run_id": run_id, "demand_id": run.demand_id, "updated_at": now},
+        )
+    return get_assistant_run(run_id)
+
+
+def complete_assistant_run(run_id: str, output: dict[str, Any]) -> dict[str, Any] | None:
+    now = _now_iso()
+    with get_db_session() as session:
+        ensure_inspiration_schema_and_seed_for_session(session)
+        run = session.execute(text("SELECT demand_id, trigger_type FROM inspiration_assistant_runs WHERE id = :id"), {"id": run_id}).first()
+        if not run:
+            return None
+        should_update_public = run.trigger_type == "initial_submission"
+        public_title = _short_public_title(output.get("title")) if should_update_public else ""
+        public_summary = _public_text(output.get("summary"), fallback="", max_length=180) if should_update_public else ""
+        public_stuck = _public_text(output.get("public_stuck") or output.get("stuck"), fallback="", max_length=120) if should_update_public else ""
+        is_sqlite = _is_sqlite_session(session)
+        session.execute(
+            text(
+                """
+                UPDATE inspiration_assistant_runs
+                SET status = 'completed',
+                    output_json = :output_json,
+                    error_message = NULL,
+                    completed_at = :completed_at
+                WHERE id = :id
+                """
+                if is_sqlite
+                else
+                """
+                UPDATE inspiration_assistant_runs
+                SET status = 'completed',
+                    output_json = CAST(:output_json AS JSONB),
+                    error_message = NULL,
+                    completed_at = :completed_at
+                WHERE id = :id
+                """
+            ),
+            {"output_json": _json_dumps(output), "completed_at": now, "id": run_id},
+        )
+        session.execute(
+            text(
+                """
+                UPDATE inspiration_demands
+                SET assistant_status = 'ready',
+                    assistant_snapshot_json = :snapshot_json,
+                    assistant_version = COALESCE(assistant_version, 0) + 1,
+                    assistant_latest_run_id = :run_id,
+                    assistant_updated_at = :assistant_updated_at,
+                    assistant_error_message = NULL,
+                    llm_review_json = :snapshot_json,
+                    public_title = COALESCE(NULLIF(:public_title, ''), public_title),
+                    public_summary = COALESCE(NULLIF(:public_summary, ''), public_summary),
+                    public_stuck = COALESCE(NULLIF(:public_stuck, ''), public_stuck),
+                    redaction_method = CASE WHEN NULLIF(:public_summary, '') IS NULL THEN redaction_method ELSE 'llm_rewrite' END,
+                    redaction_status = CASE WHEN NULLIF(:public_summary, '') IS NULL THEN redaction_status ELSE 'published' END,
+                    stage = COALESCE(NULLIF(:suggested_stage, ''), stage),
+                    updated_at = :updated_at
+                WHERE id = :demand_id
+                """
+                if is_sqlite
+                else
+                """
+                UPDATE inspiration_demands
+                SET assistant_status = 'ready',
+                    assistant_snapshot_json = CAST(:snapshot_json AS JSONB),
+                    assistant_version = COALESCE(assistant_version, 0) + 1,
+                    assistant_latest_run_id = :run_id,
+                    assistant_updated_at = :assistant_updated_at,
+                    assistant_error_message = NULL,
+                    llm_review_json = CAST(:snapshot_json AS JSONB),
+                    public_title = COALESCE(NULLIF(:public_title, ''), public_title),
+                    public_summary = COALESCE(NULLIF(:public_summary, ''), public_summary),
+                    public_stuck = COALESCE(NULLIF(:public_stuck, ''), public_stuck),
+                    redaction_method = CASE WHEN NULLIF(:public_summary, '') IS NULL THEN redaction_method ELSE 'llm_rewrite' END,
+                    redaction_status = CASE WHEN NULLIF(:public_summary, '') IS NULL THEN redaction_status ELSE 'published' END,
+                    stage = COALESCE(NULLIF(:suggested_stage, ''), stage),
+                    updated_at = :updated_at
+                WHERE id = :demand_id
+                """
+            ),
+            {
+                "snapshot_json": _json_dumps(output),
+                "public_title": public_title,
+                "public_summary": public_summary,
+                "public_stuck": public_stuck,
+                "suggested_stage": str(output.get("suggested_stage") or ""),
+                "run_id": run_id,
+                "assistant_updated_at": now,
+                "updated_at": now,
+                "demand_id": run.demand_id,
+            },
+        )
+    return get_assistant_run(run_id)
+
+
+def fail_assistant_run(run_id: str, error_message: str) -> dict[str, Any] | None:
+    now = _now_iso()
+    with get_db_session() as session:
+        ensure_inspiration_schema_and_seed_for_session(session)
+        run = session.execute(text("SELECT demand_id FROM inspiration_assistant_runs WHERE id = :id"), {"id": run_id}).first()
+        if not run:
+            return None
+        session.execute(
+            text(
+                """
+                UPDATE inspiration_assistant_runs
+                SET status = 'failed',
+                    error_message = :error_message,
+                    completed_at = :completed_at
+                WHERE id = :id
+                """
+            ),
+            {"error_message": error_message[:1000], "completed_at": now, "id": run_id},
+        )
+        session.execute(
+            text(
+                """
+                UPDATE inspiration_demands
+                SET assistant_status = 'failed',
+                    assistant_latest_run_id = :run_id,
+                    assistant_error_message = :error_message,
+                    updated_at = :updated_at
+                WHERE id = :demand_id
+                """
+            ),
+            {"run_id": run_id, "error_message": error_message[:1000], "updated_at": now, "demand_id": run.demand_id},
+        )
+    return get_assistant_run(run_id)

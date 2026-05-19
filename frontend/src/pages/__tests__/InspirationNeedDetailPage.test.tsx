@@ -21,13 +21,41 @@ vi.mock('../../api/client', async () => {
     updated_at: '2026-05-18T00:00:00Z',
     can_view_private: true,
     can_update: true,
+    assistant: {
+      status: 'ready',
+      snapshot: {
+        clarity: '偏模糊',
+        next_step: '先把目标用户写清楚。',
+        follow_up_questions: ['目标用户是谁？'],
+        stages: {
+          submitted: {
+            status: 'needs_input',
+            ai_draft_answer: '可以写成：目标用户是正在做课堂阅读训练的学生。',
+            follow_up_questions: ['学生现在用什么材料？'],
+            next_step: '进入问题定义',
+          },
+        },
+      },
+      version: 1,
+      latest_run_id: 'iar-ready',
+      updated_at: '2026-05-18T00:00:00Z',
+      error_message: null,
+    },
     llm_review: {
       clarity: '偏模糊',
       next_step: '先把目标用户写清楚。',
       follow_up_questions: ['目标用户是谁？'],
+      stages: {
+        submitted: {
+          status: 'needs_input',
+          ai_draft_answer: '可以写成：目标用户是正在做课堂阅读训练的学生。',
+          follow_up_questions: ['学生现在用什么材料？'],
+          next_step: '进入问题定义',
+        },
+      },
     },
     path_progress: [
-      { key: 'submitted', label: '留下线索', status: 'done', summary: '', emotion_note: '' },
+      { key: 'submitted', label: '留下线索', status: 'needs_input', summary: '请补充：目标用户是谁？', emotion_note: '' },
       { key: 'defined', label: '问题定义', status: 'current', summary: '', emotion_note: '' },
       { key: 'demo', label: 'Demo 验证', status: 'pending', summary: '尚未开始。', emotion_note: '' },
     ],
@@ -122,6 +150,7 @@ describe('InspirationNeedDetailPage', () => {
     cleanup()
     localStorage.clear()
     vi.clearAllMocks()
+    vi.useRealTimers()
   })
 
   it('renders visual path, reveals private detail on demand, and lets owners update progress', async () => {
@@ -132,12 +161,31 @@ describe('InspirationNeedDetailPage', () => {
     renderDetail()
 
     expect(await screen.findByText('英语阅读课堂的 AI 助教')).toBeInTheDocument()
+    expect(screen.getAllByText('智能助手').length).toBeGreaterThanOrEqual(1)
+    expect(screen.queryByText('预分析')).not.toBeInTheDocument()
     expect(screen.getAllByText('留下线索').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText(/待补充/).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('目标用户是谁？').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('AI 生成参考')).toBeInTheDocument()
+    expect(screen.getByText('可以写成：目标用户是正在做课堂阅读训练的学生。')).toBeInTheDocument()
+    expect(screen.getByText('学生现在用什么材料？')).toBeInTheDocument()
     expect(screen.getAllByText('问题定义').length).toBeGreaterThanOrEqual(1)
     expect(screen.queryByText('人工访谈')).not.toBeInTheDocument()
     expect(screen.queryByText('18773233131')).not.toBeInTheDocument()
     expect(screen.getByLabelText('路径时间轴')).toBeInTheDocument()
     expect(screen.getByLabelText('路径进展列表')).toBeInTheDocument()
+
+    const submittedStage = screen.getByLabelText('留下线索阶段')
+    fireEvent.click(within(submittedStage).getByRole('button', { name: '补充回答' }))
+    fireEvent.change(within(submittedStage).getByPlaceholderText('比如：问题说清楚了 / 找到了一个可试的工具 / 做了一个小 Demo / 暂时卡住了。'), { target: { value: '目标用户是正在做课堂阅读训练的学生。' } })
+    fireEvent.click(screen.getByRole('button', { name: /保存回答/ }))
+
+    await waitFor(() => {
+      expect(inspirationApi.createUpdate).toHaveBeenCalledWith(
+        'need-01-ai-english-reading-assistant',
+        expect.objectContaining({ stage_key: 'submitted', stage_status: 'done', summary: '目标用户是正在做课堂阅读训练的学生。' }),
+      )
+    })
 
     fireEvent.click(screen.getByRole('button', { name: /显示完整信息/ }))
     await waitFor(() => {
@@ -182,6 +230,81 @@ describe('InspirationNeedDetailPage', () => {
       expect(screen.getAllByText('完成问题定义').length).toBeGreaterThanOrEqual(1)
     })
   })
+
+  it('shows assistant progress and polls until the latest snapshot is ready', async () => {
+    const pendingDemand = {
+      id: 'demand-1',
+      slug: 'need-01-ai-english-reading-assistant',
+      status: 'published',
+      stage: '问题定义中',
+      title: '英语阅读课堂的 AI 助教',
+      summary: '把一套大学英语阅读课拆成词汇、语法、阅读、翻译和写作训练。',
+      tags: ['教育 / 学习'],
+      stuck: '问题太大，需要拆成可先验证的一步。',
+      created_at: '2026-05-15T00:00:00Z',
+      updated_at: '2026-05-18T00:00:00Z',
+      can_view_private: true,
+      can_update: true,
+      assistant: {
+        status: 'running',
+        snapshot: {
+          clarity: '偏模糊',
+          next_step: '旧建议',
+          follow_up_questions: ['旧追问'],
+        },
+        version: 1,
+        latest_run_id: 'iar-running',
+        updated_at: '2026-05-18T00:00:00Z',
+        error_message: null,
+      },
+      llm_review: {
+        clarity: '偏模糊',
+        next_step: '旧建议',
+        follow_up_questions: ['旧追问'],
+      },
+      path_progress: [
+        { key: 'submitted', label: '留下线索', status: 'done', summary: '', emotion_note: '' },
+        { key: 'defined', label: '问题定义', status: 'current', summary: '', emotion_note: '' },
+      ],
+      updates: [],
+    }
+    const readyDemand = {
+      ...pendingDemand,
+      assistant: {
+        ...pendingDemand.assistant,
+        status: 'ready',
+        snapshot: {
+          clarity: '更清晰',
+          next_step: '找 3 名学生试用低保真原型。',
+          follow_up_questions: ['第一个试用对象是谁？'],
+        },
+        version: 2,
+        latest_run_id: 'iar-ready',
+      },
+      llm_review: {
+        clarity: '更清晰',
+        next_step: '找 3 名学生试用低保真原型。',
+        follow_up_questions: ['第一个试用对象是谁？'],
+      },
+    }
+    vi.mocked(inspirationApi.getDemand)
+      .mockResolvedValueOnce({ data: { demand: pendingDemand } } as any)
+      .mockResolvedValueOnce({ data: { demand: readyDemand } } as any)
+
+    renderDetail()
+
+    await waitFor(() => expect(screen.getAllByText('智能助手').length).toBeGreaterThanOrEqual(1))
+    expect(screen.getAllByText('智能助手正在基于最新信息更新建议…').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('旧建议').length).toBeGreaterThanOrEqual(1)
+
+    await new Promise((resolve) => setTimeout(resolve, 2100))
+
+    await waitFor(() => {
+      expect(inspirationApi.getDemand).toHaveBeenCalledTimes(2)
+      expect(screen.getAllByText('找 3 名学生试用低保真原型。').length).toBeGreaterThanOrEqual(1)
+      expect(screen.queryAllByText('智能助手正在基于最新信息更新建议…')).toHaveLength(0)
+    })
+  }, 7000)
 
   it('claims a private demand from the login redirect token even if public detail is hidden', async () => {
     localStorage.setItem(
