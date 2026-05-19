@@ -34,6 +34,12 @@ vi.mock('../../api/client', async () => {
             follow_up_questions: ['学生现在用什么材料？'],
             next_step: '进入问题定义',
           },
+          defined: {
+            status: 'needs_input',
+            ai_draft_answer: '可以先定义为：让学生在一节阅读课中完成词汇理解、长句拆解和阅读反馈。',
+            follow_up_questions: ['第一节课最想验证哪个环节？'],
+            next_step: '把问题定义成一周内可验证的小实验',
+          },
         },
       },
       version: 1,
@@ -51,6 +57,12 @@ vi.mock('../../api/client', async () => {
           ai_draft_answer: '可以写成：目标用户是正在做课堂阅读训练的学生。',
           follow_up_questions: ['学生现在用什么材料？'],
           next_step: '进入问题定义',
+        },
+        defined: {
+          status: 'needs_input',
+          ai_draft_answer: '可以先定义为：让学生在一节阅读课中完成词汇理解、长句拆解和阅读反馈。',
+          follow_up_questions: ['第一节课最想验证哪个环节？'],
+          next_step: '把问题定义成一周内可验证的小实验',
         },
       },
     },
@@ -135,9 +147,11 @@ vi.mock('../../api/auth', async () => {
   }
 })
 
-function renderDetail(initialPath = '/inspiration-co-creation/needs/need-01-ai-english-reading-assistant') {
+function renderDetail(
+  initialEntry: string | { pathname: string; search?: string; state?: unknown } = '/inspiration-co-creation/needs/need-01-ai-english-reading-assistant',
+) {
   return render(
-    <MemoryRouter initialEntries={[initialPath]}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route path="/inspiration-co-creation/needs/:slug" element={<InspirationNeedDetailPage />} />
       </Routes>
@@ -153,6 +167,17 @@ describe('InspirationNeedDetailPage', () => {
     vi.useRealTimers()
   })
 
+  it('shows the submission completion animation when opened from the form', async () => {
+    renderDetail({
+      pathname: '/inspiration-co-creation/needs/need-01-ai-english-reading-assistant',
+      search: '?claim_token=claim-token-123',
+      state: { inspirationSubmissionSuccess: true },
+    })
+
+    expect(await screen.findByText('提交成功')).toBeInTheDocument()
+    expect(screen.getByText('正在打开这条线索，你可以继续更新它。')).toBeInTheDocument()
+  })
+
   it('renders visual path, reveals private detail on demand, and lets owners update progress', async () => {
     localStorage.setItem(
       'auth_user',
@@ -166,9 +191,11 @@ describe('InspirationNeedDetailPage', () => {
     expect(screen.getAllByText('留下线索').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText(/待补充/).length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('目标用户是谁？').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByText('AI 生成参考')).toBeInTheDocument()
+    expect(screen.getAllByText('AI 生成参考').length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('可以写成：目标用户是正在做课堂阅读训练的学生。')).toBeInTheDocument()
     expect(screen.getByText('学生现在用什么材料？')).toBeInTheDocument()
+    expect(screen.getByText('可以先定义为：让学生在一节阅读课中完成词汇理解、长句拆解和阅读反馈。')).toBeInTheDocument()
+    expect(screen.getByText('第一节课最想验证哪个环节？')).toBeInTheDocument()
     expect(screen.getAllByText('问题定义').length).toBeGreaterThanOrEqual(1)
     expect(screen.queryByText('人工访谈')).not.toBeInTheDocument()
     expect(screen.queryByText('18773233131')).not.toBeInTheDocument()

@@ -1,5 +1,6 @@
-import { FormEvent, useState, type CSSProperties } from 'react'
+import { FormEvent, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import InspirationSubmissionSuccessOverlay from '../components/InspirationSubmissionSuccessOverlay'
 import { inspirationApi, type InspirationDemandSubmitRequest } from '../api/client'
 
 type IntentKey = 'demand' | 'idea' | 'participant' | 'observer'
@@ -71,15 +72,6 @@ const publicOptions = [
   { value: true, label: '愿意匿名公开，让更多人看到' },
   { value: false, label: '先不公开，只提交给共创队' },
 ]
-
-const successParticles = Array.from({ length: 24 }, (_, index) => ({
-  id: index,
-  left: 12 + ((index * 17) % 78),
-  delay: (index % 8) * 0.045,
-  color: ['#0f766e', '#14b8a6', '#60a5fa', '#facc15', '#fb7185'][index % 5],
-  size: 7 + (index % 4) * 2,
-  drift: -80 + (index % 9) * 20,
-}))
 
 const initialForm: InspirationDemandSubmitRequest = {
   submitter_name: '',
@@ -275,7 +267,7 @@ export default function InspirationSubmitPage() {
       if (claimToken) {
         localStorage.setItem(`inspiration_claim_${slug}`, claimToken)
       }
-      navigate(path, { replace: true })
+      navigate(path, { replace: true, state: { inspirationSubmissionSuccess: true } })
     } catch {
       setStatus('error')
       setError('提交失败，请稍后再试。')
@@ -297,38 +289,7 @@ export default function InspirationSubmitPage() {
   return (
     <div className="relative overflow-hidden bg-[#f6f9f8] px-5 py-12 text-slate-950 sm:px-8 lg:py-16">
       {status === 'success' ? (
-        <div
-          className="fixed inset-0 z-50 grid place-items-center overflow-hidden bg-white/92 px-6 text-center backdrop-blur-md"
-          role="status"
-          aria-live="assertive"
-        >
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(20,184,166,0.18),transparent_36%)]" />
-          <div className="pointer-events-none absolute inset-0">
-            {successParticles.map((particle) => (
-              <span
-                key={particle.id}
-                className="inspiration-confetti-piece"
-                style={{
-                  left: `${particle.left}%`,
-                  width: `${particle.size}px`,
-                  height: `${particle.size * 1.55}px`,
-                  backgroundColor: particle.color,
-                  animationDelay: `${particle.delay}s`,
-                  '--confetti-drift': `${particle.drift}px`,
-                } as CSSProperties & Record<'--confetti-drift', string>}
-              />
-            ))}
-          </div>
-          <div className="relative">
-            <div className="inspiration-success-mark mx-auto grid h-20 w-20 place-items-center rounded-full bg-teal-600 text-4xl font-semibold text-white shadow-[0_22px_58px_rgba(13,148,136,0.28)]">
-              ✓
-            </div>
-            <h2 className="mt-6 text-3xl font-semibold tracking-normal text-slate-950">提交成功</h2>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              正在打开这条线索，你可以继续更新它。
-            </p>
-          </div>
-        </div>
+        <InspirationSubmissionSuccessOverlay />
       ) : null}
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(20,184,166,0.10)_0%,rgba(255,255,255,0.92)_34%,rgba(148,163,184,0.12)_100%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(20,184,166,0.10),transparent_34%),linear-gradient(90deg,rgba(15,23,42,0.035)_1px,transparent_1px),linear-gradient(0deg,rgba(15,23,42,0.025)_1px,transparent_1px)] bg-[length:auto,42px_42px,42px_42px]" />

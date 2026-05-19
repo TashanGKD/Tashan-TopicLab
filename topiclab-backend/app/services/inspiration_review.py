@@ -18,6 +18,7 @@ STAGE_PROMPTS = {
     "demo": "stage_demo.md",
     "mvp": "stage_mvp.md",
 }
+STAGE_ORDER = ["submitted", "defined", "tooling", "demo", "mvp"]
 
 
 def _fallback_review(payload: dict[str, Any]) -> dict[str, Any]:
@@ -131,6 +132,11 @@ def _string_list(value: Any, fallback: list[str] | None = None, limit: int = 6) 
 def _stage_key_from_context(context: dict[str, Any]) -> str:
     trigger_update = context.get("trigger_update") if isinstance(context.get("trigger_update"), dict) else {}
     stage_key = str(trigger_update.get("stage_key") or context.get("stage_key") or "").strip()
+    stage_status = str(trigger_update.get("stage_status") or "").strip()
+    if stage_key in STAGE_ORDER and stage_status == "done":
+        next_index = STAGE_ORDER.index(stage_key) + 1
+        if next_index < len(STAGE_ORDER):
+            return STAGE_ORDER[next_index]
     return stage_key if stage_key in STAGE_PROMPTS else "submitted"
 
 

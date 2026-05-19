@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react'
-import { Link, useLocation, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import InspirationSubmissionSuccessOverlay from '../components/InspirationSubmissionSuccessOverlay'
 import { refreshCurrentUserProfile, tokenManager, type User } from '../api/auth'
 import { inspirationApi, type InspirationDemand, type InspirationDemandUpdate, type InspirationDemandUpdateRequest } from '../api/client'
 
@@ -280,9 +281,12 @@ function AssistantPanel({
 export default function InspirationNeedDetailPage() {
   const { slug = '' } = useParams()
   const location = useLocation()
+  const navigate = useNavigate()
+  const submissionState = location.state as { inspirationSubmissionSuccess?: boolean } | null
   const [currentUser, setCurrentUser] = useState<User | null>(() => tokenManager.getUser())
   const [demand, setDemand] = useState<InspirationDemand | null>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [showSubmissionSuccess, setShowSubmissionSuccess] = useState(() => Boolean(submissionState?.inspirationSubmissionSuccess))
   const [privateOpen, setPrivateOpen] = useState(false)
   const [privateEditOpen, setPrivateEditOpen] = useState(false)
   const [privateDraft, setPrivateDraft] = useState<PrivateDraft>({})
@@ -293,6 +297,16 @@ export default function InspirationNeedDetailPage() {
   const [activeComposerStage, setActiveComposerStage] = useState<string | null>(null)
   const [editingUpdateId, setEditingUpdateId] = useState<string | null>(null)
   const [openUpdateSections, setOpenUpdateSections] = useState<UpdateOptionalSection[]>([])
+
+  useEffect(() => {
+    if (!submissionState?.inspirationSubmissionSuccess) return
+    setShowSubmissionSuccess(true)
+    const timer = window.setTimeout(() => {
+      setShowSubmissionSuccess(false)
+      navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+    }, 1500)
+    return () => window.clearTimeout(timer)
+  }, [location.pathname, location.search, navigate, submissionState?.inspirationSubmissionSuccess])
 
   useEffect(() => {
     const syncUser = () => setCurrentUser(tokenManager.getUser())
@@ -509,7 +523,12 @@ export default function InspirationNeedDetailPage() {
   }
 
   if (status === 'loading') {
-    return <div className="px-5 py-20 text-center text-sm text-slate-500">共创路径加载中…</div>
+    return (
+      <div className="relative min-h-screen bg-[#fbfdfc] px-5 py-20 text-center text-sm text-slate-500">
+        {showSubmissionSuccess ? <InspirationSubmissionSuccessOverlay /> : null}
+        共创路径加载中…
+      </div>
+    )
   }
 
   if (status === 'error' || !demand) {
@@ -662,6 +681,7 @@ export default function InspirationNeedDetailPage() {
 
   return (
     <div className="bg-[#fbfdfc] px-5 py-12 text-slate-950 sm:px-8 lg:py-16">
+      {showSubmissionSuccess ? <InspirationSubmissionSuccessOverlay /> : null}
       <main className="mx-auto grid w-full max-w-6xl gap-8 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
         <div className="min-w-0">
         <Link to="/inspiration-co-creation" className="text-sm font-semibold text-teal-700">← 返回共创线索</Link>

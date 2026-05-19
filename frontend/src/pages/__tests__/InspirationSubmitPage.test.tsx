@@ -37,7 +37,12 @@ vi.mock('../../api/client', async () => {
 
 function LocationProbe() {
   const location = useLocation()
-  return <div data-testid="location-path">{location.pathname}{location.search}</div>
+  return (
+    <>
+      <div data-testid="location-path">{location.pathname}{location.search}</div>
+      <div data-testid="location-state">{JSON.stringify(location.state)}</div>
+    </>
+  )
 }
 
 function renderPage() {
@@ -93,7 +98,7 @@ describe('InspirationSubmitPage', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('location-path')).toHaveTextContent('/inspiration-co-creation/needs/test-demand-1234?claim_token=claim-token-123')
-      expect(screen.queryByText('提交成功')).not.toBeInTheDocument()
+      expect(screen.getByTestId('location-state')).toHaveTextContent('inspirationSubmissionSuccess')
     })
   })
 

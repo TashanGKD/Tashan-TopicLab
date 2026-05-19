@@ -167,7 +167,7 @@ def test_path_create_and_edit_enqueue_assistant_runs(client, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_stage_run_preserves_public_summary_and_updates_stage_ai_snapshot(client, monkeypatch):
+async def test_stage_run_preserves_public_summary_and_generates_next_stage_ai_snapshot(client, monkeypatch):
     test_client, auth_module, inspiration_api = client
     _disable_background_tasks(monkeypatch, inspiration_api)
     created = test_client.post("/api/v1/inspiration/demands", json=_submit_payload())
@@ -216,9 +216,10 @@ async def test_stage_run_preserves_public_summary_and_updates_stage_ai_snapshot(
     assert demand["title"] == "初始标题"
     assert demand["summary"] == "初始公开摘要。"
     assert demand["stuck"] == "初始公开需要。"
-    submitted_stage = demand["assistant"]["snapshot"]["stages"]["submitted"]
-    assert submitted_stage["ai_draft_answer"] == "可以写成：目标用户是正在做课堂阅读训练的学生。"
-    assert submitted_stage["follow_up_questions"] == ["学生现在用什么材料？"]
+    defined_stage = demand["assistant"]["snapshot"]["stages"]["defined"]
+    assert defined_stage["ai_draft_answer"] == "可以写成：目标用户是正在做课堂阅读训练的学生。"
+    assert defined_stage["follow_up_questions"] == ["学生现在用什么材料？"]
+    assert demand["assistant"]["snapshot"]["stage_key"] == "defined"
     assert demand["assistant"]["snapshot"]["next_step"] == "进入问题定义"
 
 
