@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { inspirationApi, type InspirationDemand } from '../api/client'
 
@@ -204,9 +204,137 @@ function normalizePathProgress(pathProgress?: InspirationDemand['path_progress']
   })
 }
 
+function getMasonryColumnCount(width: number) {
+  if (width < 720) return 1
+  return Math.max(2, Math.min(4, Math.floor(width / 340)))
+}
+
+function estimateDemandCardHeight(need: InspirationDemand) {
+  const textLength = `${need.title}${need.summary}${need.stuck}`.length
+  const tagRows = Math.ceil(Math.max(need.tags.length, 1) / 2)
+  const progressLength = normalizePathProgress(need.path_progress)
+    .slice(0, 6)
+    .reduce((total, stage) => total + `${stage.label}${stage.summary}`.length, 0)
+  return 180 + textLength * 0.56 + progressLength * 0.18 + tagRows * 24
+}
+
+function distributeIntoMasonryColumns(items: InspirationDemand[], columnCount: number) {
+  const normalizedColumnCount = Math.max(1, columnCount)
+  const columns = Array.from({ length: normalizedColumnCount }, () => ({
+    height: 0,
+    items: [] as Array<{ need: InspirationDemand; index: number }>,
+  }))
+
+  items.forEach((need, index) => {
+    const targetColumn = columns.reduce((shortest, column, columnIndex) => (
+      column.height < columns[shortest].height ? columnIndex : shortest
+    ), 0)
+    columns[targetColumn].items.push({ need, index })
+    columns[targetColumn].height += estimateDemandCardHeight(need)
+  })
+
+  return columns.map((column) => column.items)
+}
+
+function useMasonryColumnCount() {
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const [columnCount, setColumnCount] = useState(() => (
+    typeof window === 'undefined' ? 1 : getMasonryColumnCount(window.innerWidth)
+  ))
+
+  useEffect(() => {
+    const updateColumnCount = (width: number) => {
+      setColumnCount(getMasonryColumnCount(width))
+    }
+    const node = containerRef.current
+    updateColumnCount(node?.clientWidth || window.innerWidth)
+
+    if (!node || typeof ResizeObserver === 'undefined') {
+      const handleResize = () => updateColumnCount(containerRef.current?.clientWidth || window.innerWidth)
+      window.addEventListener('resize', handleResize)
+      return () => window.removeEventListener('resize', handleResize)
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width
+      if (width) updateColumnCount(width)
+    })
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
+
+  return { containerRef, columnCount }
+}
+
+interface DemandCardProps {
+  need: InspirationDemand
+  index: number
+}
+
+function DemandCard({ need, index }: DemandCardProps) {
+  const pathStage = currentPathStage(need)
+  const normalizedProgress = normalizePathProgress(need.path_progress)
+  const pathProgress = normalizedProgress.length ? normalizedProgress : [
+    { key: 'submitted', label: '留下线索', status: 'current', summary: need.stuck || '等待下一步共创更新。' },
+  ]
+
+  return (
+    <article
+      className="relative rounded-[var(--radius-md)] border border-slate-200 bg-[#fbfdfc] p-5 shadow-[0_18px_42px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:border-teal-200 hover:shadow-[0_22px_52px_rgba(15,118,110,0.1)]"
+    >
+      <Link
+        to={`/inspiration-co-creation/needs/${need.slug}`}
+        aria-label={`打开线索 ${String(index + 1).padStart(2, '0')}：${need.title}`}
+        className="absolute inset-0 z-10 rounded-[var(--radius-md)] focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40"
+      />
+      <div className="pointer-events-none relative z-20">
+        <div className="flex items-start justify-between gap-4">
+          <span className="shrink-0 text-xs font-semibold text-teal-700">
+            线索 {String(index + 1).padStart(2, '0')}
+          </span>
+          <span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-700">
+            {pathStage.label}
+          </span>
+        </div>
+        <h3 className="mt-4 text-xl font-semibold leading-tight text-slate-950">
+          {need.title}
+        </h3>
+        <p className="mt-4 text-sm leading-7 text-slate-600">{need.summary}</p>
+        <p className="mt-4 border-l-2 border-teal-400 pl-3 text-sm leading-7 text-slate-700">
+          {need.stuck}
+        </p>
+        <div className="mt-5 flex flex-wrap gap-2">
+          {need.tags.map((tag) => (
+            <span key={tag} className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-500 ring-1 ring-slate-200">
+              {tag}
+            </span>
+          ))}
+        </div>
+        <div className="mt-5 border-t border-slate-100 pt-4">
+          <div className="flex items-center gap-1.5" aria-label="路径进度">
+            {pathProgress.slice(0, 6).map((stage, stageIndex) => (
+              <span
+                key={`${stage.key}-${stageIndex}`}
+                className={`h-1.5 flex-1 rounded-full ${stage.status === 'done' ? 'bg-teal-500' : stage.status === 'current' ? 'bg-teal-300' : 'bg-slate-200'}`}
+              />
+            ))}
+          </div>
+          <p className="mt-3 text-xs font-semibold text-teal-700">{pathStage.label}</p>
+          <p className="mt-3 text-xs leading-6 text-slate-500">{pathStage.summary}</p>
+        </div>
+      </div>
+    </article>
+  )
+}
+
 export default function InspirationCoCreationPage() {
   const [demands, setDemands] = useState<InspirationDemand[]>(fallbackDemands)
   const [demandStatus, setDemandStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+  const { containerRef: masonryRef, columnCount: masonryColumnCount } = useMasonryColumnCount()
+  const demandColumns = useMemo(
+    () => distributeIntoMasonryColumns(demands, masonryColumnCount),
+    [demands, masonryColumnCount],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -285,63 +413,23 @@ export default function InspirationCoCreationPage() {
 
       <section id="needs" className="bg-white px-5 py-20 sm:px-8 lg:py-24">
         <div className="mx-auto w-full max-w-6xl">
-          <div className="columns-1 gap-5 md:columns-2 xl:columns-3" aria-label="共创线索瀑布流">
-            {demands.map((need, index) => {
-              const pathStage = currentPathStage(need)
-              const normalizedProgress = normalizePathProgress(need.path_progress)
-              const pathProgress = normalizedProgress.length ? normalizedProgress : [
-                { key: 'submitted', label: '留下线索', status: 'current', summary: need.stuck || '等待下一步共创更新。' },
-              ]
-
-              return (
-                <article
-                  key={need.slug}
-                  className="relative mb-5 break-inside-avoid rounded-[var(--radius-md)] border border-slate-200 bg-[#fbfdfc] p-5 shadow-[0_18px_42px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:border-teal-200 hover:shadow-[0_22px_52px_rgba(15,118,110,0.1)]"
-                >
-                <Link
-                  to={`/inspiration-co-creation/needs/${need.slug}`}
-                  aria-label={`打开线索 ${String(index + 1).padStart(2, '0')}：${need.title}`}
-                  className="absolute inset-0 z-10 rounded-[var(--radius-md)] focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40"
-                />
-                <div className="pointer-events-none relative z-20">
-                <div className="flex items-start justify-between gap-4">
-                  <span className="shrink-0 text-xs font-semibold text-teal-700">
-                    线索 {String(index + 1).padStart(2, '0')}
-                  </span>
-                  <span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-700">
-                    {pathStage.label}
-                  </span>
-                </div>
-                <h3 className="mt-4 text-xl font-semibold leading-tight text-slate-950">
-                  {need.title}
-                </h3>
-                <p className="mt-4 text-sm leading-7 text-slate-600">{need.summary}</p>
-                <p className="mt-4 border-l-2 border-teal-400 pl-3 text-sm leading-7 text-slate-700">
-                  {need.stuck}
-                </p>
-                <div className="mt-5 flex flex-wrap gap-2">
-                  {need.tags.map((tag) => (
-                    <span key={tag} className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-500 ring-1 ring-slate-200">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-                <div className="mt-5 border-t border-slate-100 pt-4">
-                  <div className="flex items-center gap-1.5" aria-label="路径进度">
-                    {pathProgress.slice(0, 6).map((stage, stageIndex) => (
-                      <span
-                        key={`${stage.key}-${stageIndex}`}
-                        className={`h-1.5 flex-1 rounded-full ${stage.status === 'done' ? 'bg-teal-500' : stage.status === 'current' ? 'bg-teal-300' : 'bg-slate-200'}`}
-                      />
-                    ))}
-                  </div>
-                  <p className="mt-3 text-xs font-semibold text-teal-700">{pathStage.label}</p>
-                  <p className="mt-3 text-xs leading-6 text-slate-500">{pathStage.summary}</p>
-                </div>
-                </div>
-                </article>
-              )
-            })}
+          <div
+            ref={masonryRef}
+            className="grid gap-5"
+            style={{ gridTemplateColumns: `repeat(${masonryColumnCount}, minmax(0, 1fr))` }}
+            aria-label="共创线索瀑布流"
+          >
+            {demandColumns.map((column, columnIndex) => (
+              <div key={`masonry-column-${columnIndex}`} className="flex min-w-0 flex-col gap-5">
+                {column.map(({ need, index }) => (
+                  <DemandCard
+                    key={need.slug}
+                    need={need}
+                    index={index}
+                  />
+                ))}
+              </div>
+            ))}
           </div>
           {demandStatus === 'error' ? (
             <p className="mt-6 text-sm text-slate-400">共创线索系统暂时无法连接，当前显示本地脱敏样例。</p>

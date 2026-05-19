@@ -1,7 +1,6 @@
-import { FormEvent, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { tokenManager } from '../api/auth'
-import { inspirationApi, type InspirationDemand, type InspirationDemandSubmitRequest } from '../api/client'
+import { FormEvent, useEffect, useState, type CSSProperties } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { inspirationApi, type InspirationDemandSubmitRequest } from '../api/client'
 
 type IntentKey = 'demand' | 'idea' | 'participant' | 'observer'
 
@@ -72,6 +71,15 @@ const publicOptions = [
   { value: true, label: '愿意匿名公开，让更多人看到' },
   { value: false, label: '先不公开，只提交给共创队' },
 ]
+
+const successParticles = Array.from({ length: 24 }, (_, index) => ({
+  id: index,
+  left: 12 + ((index * 17) % 78),
+  delay: (index % 8) * 0.045,
+  color: ['#0f766e', '#14b8a6', '#60a5fa', '#facc15', '#fb7185'][index % 5],
+  size: 7 + (index % 4) * 2,
+  drift: -80 + (index % 9) * 20,
+}))
 
 const initialForm: InspirationDemandSubmitRequest = {
   submitter_name: '',
@@ -193,12 +201,19 @@ function TextStrength({ value }: { value: string }) {
 }
 
 export default function InspirationSubmitPage() {
+  const navigate = useNavigate()
   const [intent, setIntent] = useState<IntentKey>('demand')
   const [form, setForm] = useState<InspirationDemandSubmitRequest>(initialForm)
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle')
   const [error, setError] = useState('')
-  const [createdDemand, setCreatedDemand] = useState<InspirationDemand | null>(null)
-  const [claimToken, setClaimToken] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (status !== 'success') return undefined
+    const timer = window.setTimeout(() => {
+      navigate('/inspiration-co-creation', { replace: true })
+    }, 1500)
+    return () => window.clearTimeout(timer)
+  }, [navigate, status])
 
   function updateField<K extends keyof InspirationDemandSubmitRequest>(key: K, value: InspirationDemandSubmitRequest[K]) {
     setForm((current) => ({ ...current, [key]: value }))
@@ -261,9 +276,7 @@ export default function InspirationSubmitPage() {
     setStatus('submitting')
     setError('')
     try {
-      const response = await inspirationApi.submitDemand(buildPayload())
-      setCreatedDemand(response.data.demand)
-      setClaimToken(response.data.claim_token ?? null)
+      await inspirationApi.submitDemand(buildPayload())
       setStatus('success')
     } catch {
       setStatus('error')
@@ -279,28 +292,44 @@ export default function InspirationSubmitPage() {
         ? '提交参与意愿'
         : '报名加入共创队'
 
-  const successTitle = intent === 'demand'
-    ? '已经收到你的需求'
-    : intent === 'idea'
-      ? '已经收到你的想法'
-      : intent === 'participant'
-        ? '已经收到你的参与意愿'
-        : '已经收到你的报名'
-
-  const successBody = intent === 'demand'
-    ? '我们会先帮你把问题理清楚，再看怎么往下推进。'
-    : intent === 'idea'
-      ? '我们会先帮你判断它现在到了哪个阶段，再一起看下一步。'
-      : intent === 'participant'
-        ? '后续有合适的真实问题，我们会优先联系你。'
-        : '欢迎先来看看，你会发现更多真实问题和正在进行的项目。'
-
   const completion = getCompletion(intent, form)
   const missingHint = getMissingHint(intent, form)
   const isReady = completion.completed === completion.total
 
   return (
     <div className="relative overflow-hidden bg-[#f6f9f8] px-5 py-12 text-slate-950 sm:px-8 lg:py-16">
+      {status === 'success' ? (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center overflow-hidden bg-white/92 px-6 text-center backdrop-blur-md"
+          role="status"
+          aria-live="assertive"
+        >
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(20,184,166,0.18),transparent_36%)]" />
+          <div className="pointer-events-none absolute inset-0">
+            {successParticles.map((particle) => (
+              <span
+                key={particle.id}
+                className="inspiration-confetti-piece"
+                style={{
+                  left: `${particle.left}%`,
+                  width: `${particle.size}px`,
+                  height: `${particle.size * 1.55}px`,
+                  backgroundColor: particle.color,
+                  animationDelay: `${particle.delay}s`,
+                  '--confetti-drift': `${particle.drift}px`,
+                } as CSSProperties & Record<'--confetti-drift', string>}
+              />
+            ))}
+          </div>
+          <div className="relative">
+            <div className="inspiration-success-mark mx-auto grid h-20 w-20 place-items-center rounded-full bg-teal-600 text-4xl font-semibold text-white shadow-[0_22px_58px_rgba(13,148,136,0.28)]">
+              ✓
+            </div>
+            <h2 className="mt-6 text-3xl font-semibold tracking-normal text-slate-950">提交成功</h2>
+            <p className="mt-3 text-sm leading-6 text-slate-600">正在回到灵感共创队。</p>
+          </div>
+        </div>
+      ) : null}
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(20,184,166,0.10)_0%,rgba(255,255,255,0.92)_34%,rgba(148,163,184,0.12)_100%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(20,184,166,0.10),transparent_34%),linear-gradient(90deg,rgba(15,23,42,0.035)_1px,transparent_1px),linear-gradient(0deg,rgba(15,23,42,0.025)_1px,transparent_1px)] bg-[length:auto,42px_42px,42px_42px]" />
       <div className="relative mx-auto w-full max-w-4xl">
@@ -642,51 +671,14 @@ export default function InspirationSubmitPage() {
                     : 'bg-slate-800 shadow-[0_16px_34px_rgba(15,23,42,0.14)] hover:bg-slate-950'
                 }`}
               >
-                {status === 'submitting' ? '正在保存…' : isReady ? submitLabel : '看看还差什么'}
+                {status === 'submitting' ? '正在提交…' : isReady ? submitLabel : '看看还差什么'}
               </button>
               <p className={`text-sm leading-6 ${isReady ? 'text-teal-700' : 'text-slate-500'}`} aria-live="polite">
-                {status === 'submitting' ? '正在保存这条记录。' : missingHint}
+                {status === 'submitting' ? '正在提交这条记录。' : missingHint}
               </p>
             </div>
           </form>
 
-          {status === 'success' && createdDemand ? (
-            <div className="mt-8 animate-stage-enter-right rounded-[var(--radius-md)] border border-teal-100 bg-white p-5 shadow-[0_20px_48px_rgba(15,23,42,0.08)]">
-              <p className="text-sm font-semibold text-teal-700">{successTitle}</p>
-              <h3 className="mt-3 text-lg font-semibold text-slate-950">{createdDemand.title}</h3>
-              <p className="mt-3 text-sm leading-7 text-slate-600">{successBody}</p>
-              <Link
-                to={`/inspiration-co-creation/needs/${createdDemand.slug}`}
-                className="mt-5 inline-flex min-h-10 items-center rounded-full bg-slate-950 px-4 text-sm font-semibold text-white"
-              >
-                查看整理后的内容
-              </Link>
-              {claimToken && !tokenManager.getUser() ? (
-                <div className="mt-5 border-t border-slate-100 pt-5">
-                  <p className="text-sm font-semibold text-slate-950">登录后绑定这条记录</p>
-                  <p className="mt-2 text-sm leading-7 text-slate-600">
-                    绑定后可以继续补充、查看完整原始内容，也方便我们后续联系你一起把它弄清楚。
-                  </p>
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    <Link
-                      to="/login"
-                      state={{ from: `/inspiration-co-creation/needs/${createdDemand.slug}?claim_token=${encodeURIComponent(claimToken)}` }}
-                      className="inline-flex min-h-9 items-center rounded-full border border-teal-200 px-4 text-sm font-semibold text-teal-700"
-                    >
-                      登录后绑定
-                    </Link>
-                    <Link
-                      to="/register"
-                      state={{ from: `/inspiration-co-creation/needs/${createdDemand.slug}?claim_token=${encodeURIComponent(claimToken)}` }}
-                      className="inline-flex min-h-9 items-center rounded-full border border-slate-200 px-4 text-sm font-semibold text-slate-700"
-                    >
-                      注册后绑定
-                    </Link>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
         </section>
       </div>
     </div>

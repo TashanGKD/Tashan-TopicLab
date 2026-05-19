@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import InspirationSubmitPage from '../InspirationSubmitPage'
@@ -35,10 +35,19 @@ vi.mock('../../api/client', async () => {
   }
 })
 
+function LocationProbe() {
+  const location = useLocation()
+  return <div data-testid="location-path">{location.pathname}</div>
+}
+
 function renderPage() {
   return render(
-    <MemoryRouter>
-      <InspirationSubmitPage />
+    <MemoryRouter initialEntries={['/inspiration-co-creation/submit']}>
+      <LocationProbe />
+      <Routes>
+        <Route path="/inspiration-co-creation/submit" element={<InspirationSubmitPage />} />
+        <Route path="/inspiration-co-creation" element={<div>灵感共创队主页</div>} />
+      </Routes>
     </MemoryRouter>,
   )
 }
@@ -47,9 +56,10 @@ describe('InspirationSubmitPage', () => {
   afterEach(() => {
     cleanup()
     vi.clearAllMocks()
+    vi.useRealTimers()
   })
 
-  it('submits a clear demand after asking demand-specific questions first', async () => {
+  it('submits a clear demand, shows success motion, and returns to the main page', async () => {
     renderPage()
 
     expect(screen.getByText('说说你在琢磨的事儿')).toBeInTheDocument()
@@ -76,13 +86,13 @@ describe('InspirationSubmitPage', () => {
         current_blockers: '想把需求边界说清楚',
         participation_mode: '我有一个明确需求',
       }))
-      expect(screen.getByText('已经收到你的需求')).toBeInTheDocument()
+      expect(screen.getByText('提交成功')).toBeInTheDocument()
     })
-    expect(screen.getByRole('link', { name: /查看整理后的内容/ })).toHaveAttribute(
-      'href',
-      '/inspiration-co-creation/needs/test-demand-1234',
-    )
-    expect(screen.getByText('登录后绑定这条记录')).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location-path')).toHaveTextContent('/inspiration-co-creation')
+      expect(screen.getByText('灵感共创队主页')).toBeInTheDocument()
+    }, { timeout: 2500 })
   })
 
   it('lets participants submit intent without writing a demand body', async () => {
@@ -106,7 +116,7 @@ describe('InspirationSubmitPage', () => {
         current_blockers: '找资料 / 调研',
         participation_mode: '我想参与别人的项目',
       }))
-      expect(screen.getByText('已经收到你的参与意愿')).toBeInTheDocument()
+      expect(screen.getByText('提交成功')).toBeInTheDocument()
     })
   })
 
@@ -130,7 +140,8 @@ describe('InspirationSubmitPage', () => {
         current_blockers: '先加入看看',
         participation_mode: '我想先加入看看',
       }))
-      expect(screen.getByText('已经收到你的报名')).toBeInTheDocument()
+      expect(screen.getByText('提交成功')).toBeInTheDocument()
     })
   })
+
 })

@@ -244,6 +244,39 @@
   .animate-nudge-right {
     animation: nudgeRight 2s ease-in-out infinite;
   }
+
+  @keyframes inspirationSuccessPop {
+    0% { opacity: 0; transform: scale(0.72); }
+    42% { opacity: 1; transform: scale(1.12); }
+    68% { transform: scale(0.96); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+
+  @keyframes inspirationConfettiFall {
+    0% {
+      opacity: 0;
+      transform: translate3d(0, -18vh, 0) rotate(0deg);
+    }
+    12% { opacity: 1; }
+    100% {
+      opacity: 0;
+      transform: translate3d(var(--confetti-drift), 56vh, 0) rotate(540deg);
+    }
+  }
+
+  .inspiration-success-mark {
+    animation: inspirationSuccessPop 0.62s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: transform, opacity;
+  }
+
+  .inspiration-confetti-piece {
+    position: absolute;
+    top: 24vh;
+    border-radius: 999px;
+    opacity: 0;
+    animation: inspirationConfettiFall 1.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    will-change: transform, opacity;
+  }
   
   /* Typography Utilities */
   .prose-serif {
