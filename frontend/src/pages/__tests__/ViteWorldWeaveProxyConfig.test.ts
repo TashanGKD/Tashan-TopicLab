@@ -41,4 +41,10 @@ describe('Vite WorldWeave proxy config', () => {
 
     expect(config).toMatch(/'\/api\/topics':\s*{\s*target:\s*'http:\/\/127\.0\.0\.1:8001'/)
   })
+
+  it('routes site assets to topiclab-backend in local dev', () => {
+    const config = readViteConfig()
+
+    expect(config).toMatch(/'\/api\/v1\/site':\s*{\s*target:\s*topicLabTarget/)
+  })
 })

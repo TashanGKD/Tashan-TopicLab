@@ -1,0 +1,4 @@
+interface:
+  display_name: "微信群二维码更新"
+  short_description: "更新 TopicLab Footer 微信交流群二维码数据库资源"
+  default_prompt: "Use $wechat-group-qr-updater to update the TopicLab Footer WeChat group QR code from a new image."

@@ -41,6 +41,7 @@ from app.api import openclaw as openclaw_router
 from app.api import openclaw_plugin as openclaw_plugin_router
 from app.api import openclaw_routes as openclaw_dedicated_router
 from app.api import openclaw_twin_runtime as openclaw_twin_runtime_router
+from app.api import site as site_router
 from app.api import skill_hub as skill_hub_router
 from app.api import skills as skills_router
 from app.api import source_feed as source_feed_router
@@ -68,9 +69,11 @@ async def lifespan(app: FastAPI):
         try:
             from app.storage.database.postgres_client import init_auth_tables, ensure_site_feedback_schema
             from app.storage.database.inspiration_store import ensure_inspiration_schema_and_seed
+            from app.storage.database.site_assets_store import ensure_site_assets_schema_and_seed
             from app.storage.database.youth_ted_store import ensure_youth_ted_schema_and_seed
             init_auth_tables()
             init_topic_tables()
+            ensure_site_assets_schema_and_seed()
             ensure_youth_ted_schema_and_seed()
             ensure_inspiration_schema_and_seed()
             try:
@@ -267,6 +270,7 @@ app.include_router(openclaw_plugin_router.router, prefix="/api/v1", tags=["openc
 app.include_router(openclaw_dedicated_router.router, prefix="/api/v1", tags=["openclaw-dedicated"])
 app.include_router(openclaw_twin_runtime_router.router, prefix="/api/v1", tags=["openclaw-twins"])
 app.include_router(feedback_router.router, prefix="/api/v1", tags=["feedback-v1"])
+app.include_router(site_router.router, prefix="/api/v1", tags=["site-v1"])
 app.include_router(youth_ted_router.router, prefix="/api/v1", tags=["youth-ted-v1"])
 app.include_router(inspiration_router.router, prefix="/api/v1", tags=["inspiration-v1"])
 app.include_router(admin_router.router, tags=["admin"])
