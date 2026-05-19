@@ -222,6 +222,7 @@ function cleanStageSummary(summary?: string) {
 function currentPathStage(need: InspirationDemand) {
   const pathProgress = normalizePathProgress(need.path_progress)
   const stage = pathProgress.find((item) => item.status === 'current')
+    ?? pathProgress.find((stage) => stage.status === 'needs_input')
     ?? pathProgress.find((stage) => stage.status === 'done')
     ?? { label: need.stage || '留下线索', summary: need.stuck || '' }
   return { ...stage, summary: cleanStageSummary(stage.summary) }
@@ -270,6 +271,144 @@ function distributeIntoMasonryColumns(items: InspirationDemand[], columnCount: n
   })
 
   return columns.map((column) => column.items)
+}
+
+const nonDirectionTags = new Set([
+  '需求拆解',
+  'Demo 反馈',
+  '找伙伴',
+  '找项目',
+  '找方向',
+  '工具原型',
+  '数据分析',
+  '数据接入',
+  '轻工具',
+  '工程自动化',
+  '顾问诊断',
+  '产业观察',
+  '围观',
+])
+
+const blockerRules = [
+  { label: '问题拆解', pattern: /拆|模糊|边界|说清楚|方向|入口|路径/ },
+  { label: '技术可行性', pattern: /技术|实现|模型|Agent|工具|自动化|权限|可靠|方案/ },
+  { label: '协作伙伴', pattern: /伙伴|一起|协作|找人|项目入口/ },
+  { label: '真实反馈', pattern: /反馈|用户|试用|验证|Demo/ },
+]
+
+function compactPublicText(need: InspirationDemand) {
+  return [need.title, need.summary, need.stuck, ...(need.tags ?? [])].join(' ')
+}
+
+function primaryDirectionTag(tag: string) {
+  const primary = tag.split(/[\/／]/)[0]?.trim() || tag.trim()
+  return primary
+}
+
+function countValues(values: string[]) {
+  return values.reduce<Record<string, number>>((acc, value) => {
+    const key = value.trim()
+    if (!key) return acc
+    acc[key] = (acc[key] ?? 0) + 1
+    return acc
+  }, {})
+}
+
+function topCountEntries(counts: Record<string, number>, limit: number) {
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-Hans-CN'))
+    .slice(0, limit)
+}
+
+function buildDemandOverview(demands: InspirationDemand[]) {
+  const total = demands.length
+  const needsInput = demands.filter((need) => (
+    normalizePathProgress(need.path_progress).some((stage) => stage.status === 'needs_input')
+    || /待补充/.test(need.stage)
+  )).length
+  const demoOrFeedback = demands.filter((need) => /Demo|反馈|验证|试用/.test(compactPublicText(need))).length
+  const participation = demands.filter((need) => /参与|围观|找项目|找伙伴|练手/.test(compactPublicText(need))).length
+  const directionCounts = countValues(
+    demands.flatMap((need) => (
+      (need.tags ?? [])
+        .map(primaryDirectionTag)
+        .filter((tag) => tag && !nonDirectionTags.has(tag))
+    )),
+  )
+  const stageCounts = countValues(demands.map((need) => currentPathStage(need).label))
+  const blockerCounts = countValues(
+    demands.flatMap((need) => {
+      const text = compactPublicText(need)
+      const labels = blockerRules.filter((rule) => rule.pattern.test(text)).map((rule) => rule.label)
+      return labels.length ? labels : ['下一步澄清']
+    }),
+  )
+  return {
+    total,
+    coreStats: [
+      { label: '线索总数', value: total, hint: '公开展示中的共创线索' },
+      { label: '待补充', value: needsInput, hint: '需要继续回答追问' },
+      { label: 'Demo/反馈', value: demoOrFeedback, hint: '已有验证或反馈信号' },
+      { label: '参与/围观', value: participation, hint: '偏向加入项目或先观察' },
+    ],
+    directions: topCountEntries(directionCounts, 5),
+    stages: topCountEntries(stageCounts, 5),
+    blockers: topCountEntries(blockerCounts, 4),
+  }
+}
+
+function DistributionList({
+  title,
+  items,
+  total,
+}: {
+  title: string
+  items: Array<[string, number]>
+  total: number
+}) {
+  return (
+    <div>
+      <h3 className="text-sm font-semibold text-slate-950">{title}</h3>
+      <div className="mt-4 space-y-3">
+        {items.map(([label, count]) => {
+          const percent = total > 0 ? Math.round((count / total) * 100) : 0
+          return (
+            <div key={label}>
+              <div className="flex items-center justify-between gap-4 text-xs">
+                <span className="font-medium text-slate-600">{label}</span>
+                <span className="text-slate-400">{count} 条</span>
+              </div>
+              <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100" aria-hidden="true">
+                <div className="h-full rounded-full bg-teal-600" style={{ width: `${Math.max(percent, count > 0 ? 8 : 0)}%` }} />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function DemandOverview({ demands }: { demands: InspirationDemand[] }) {
+  const overview = useMemo(() => buildDemandOverview(demands), [demands])
+  return (
+    <section className="mb-10 border-y border-slate-200 py-6" aria-label="线索概览">
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {overview.coreStats.map((stat) => (
+          <div key={stat.label} className="min-w-0">
+            <p className="text-3xl font-semibold leading-none text-slate-950">{stat.value}</p>
+            <p className="mt-2 text-sm font-semibold text-slate-700">{stat.label}</p>
+            <p className="mt-1 text-xs leading-5 text-slate-400">{stat.hint}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-7 grid gap-8 lg:grid-cols-3">
+        <DistributionList title="方向分布" items={overview.directions} total={overview.total} />
+        <DistributionList title="路径分布" items={overview.stages} total={overview.total} />
+        <DistributionList title="卡点标签" items={overview.blockers} total={overview.total} />
+      </div>
+    </section>
+  )
 }
 
 function useMasonryColumnCount() {
@@ -452,6 +591,7 @@ export default function InspirationCoCreationPage() {
 
       <section id="needs" className="bg-white px-5 py-20 sm:px-8 lg:py-24">
         <div className="mx-auto w-full max-w-6xl">
+          <DemandOverview demands={demands} />
           <div
             ref={masonryRef}
             className="grid gap-5"

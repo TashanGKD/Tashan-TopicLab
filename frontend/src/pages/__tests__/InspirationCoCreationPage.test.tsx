@@ -15,6 +15,7 @@ vi.mock('../../api/client', async () => {
             {
               id: 'demand-1',
               slug: 'need-01-ai-english-reading-assistant',
+              clue_number: 1,
               status: 'published',
               stage: '模糊想法',
               title: '英语阅读课堂的 AI 助教',
@@ -27,6 +28,23 @@ vi.mock('../../api/client', async () => {
               ],
               created_at: '2026-05-15 15:32:05',
               updated_at: '2026-05-18T00:00:00Z',
+            },
+            {
+              id: 'demand-2',
+              slug: 'need-02-demo-feedback',
+              clue_number: 2,
+              status: 'published',
+              stage: '模糊想法',
+              title: 'AI for Science Demo 反馈',
+              summary: '已有 Demo，希望获得真实用户反馈并寻找协作伙伴。',
+              tags: ['科研 / AI for Science', 'Demo 反馈', '找伙伴'],
+              stuck: '缺少真实用户反馈，需要协作伙伴。',
+              path_progress: [
+                { key: 'submitted', label: '留下线索', status: 'needs_input', summary: '请补充：最小验证对象是谁？', emotion_note: '' },
+                { key: 'defined', label: '问题定义', status: 'pending', summary: '', emotion_note: '' },
+              ],
+              created_at: '2026-05-16 15:32:05',
+              updated_at: '2026-05-19T00:00:00Z',
             },
           ],
         },
@@ -104,6 +122,25 @@ describe('InspirationCoCreationPage', () => {
     expect(screen.queryByRole('button', { name: /显示需求 01 完整信息/ })).not.toBeInTheDocument()
     expect(within(waterfall).queryByText('人工访谈')).not.toBeInTheDocument()
     expect(screen.queryByText('18773233131')).not.toBeInTheDocument()
+  })
+
+  it('summarizes public clues above the waterfall without revealing private data', async () => {
+    renderPage()
+
+    const overview = await screen.findByLabelText('线索概览')
+
+    expect(within(overview).getByText('线索总数')).toBeInTheDocument()
+    expect(within(overview).getByText('待补充')).toBeInTheDocument()
+    expect(within(overview).getByText('Demo/反馈')).toBeInTheDocument()
+    expect(within(overview).getByText('参与/围观')).toBeInTheDocument()
+    expect(within(overview).getByText('方向分布')).toBeInTheDocument()
+    expect(within(overview).getByText('路径分布')).toBeInTheDocument()
+    expect(within(overview).getByText('卡点标签')).toBeInTheDocument()
+    expect(within(overview).getByText('教育')).toBeInTheDocument()
+    expect(within(overview).getByText('科研')).toBeInTheDocument()
+    expect(within(overview).getByText('留下线索')).toBeInTheDocument()
+    expect(within(overview).getByText('真实反馈')).toBeInTheDocument()
+    expect(within(overview).queryByText('18773233131')).not.toBeInTheDocument()
   })
 
   it('renders each demand card as a direct detail link', async () => {
