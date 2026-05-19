@@ -496,9 +496,6 @@ function DemandCard({ need, index }: DemandCardProps) {
             ))}
           </div>
           <p className="mt-3 text-xs font-semibold text-teal-700">{pathStage.label}</p>
-          {pathStage.summary ? (
-            <p className="mt-3 text-xs leading-6 text-slate-500">{pathStage.summary}</p>
-          ) : null}
         </div>
       </div>
     </article>
