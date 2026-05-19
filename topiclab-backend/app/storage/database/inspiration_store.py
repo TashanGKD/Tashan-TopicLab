@@ -554,6 +554,74 @@ def _public_text(value: Any, *, fallback: str, max_length: int) -> str:
     return f"{text_value[: max_length - 1]}…"
 
 
+def _raw_public_payload_from_private(private_payload: dict[str, Any]) -> dict[str, Any]:
+    problem = str(private_payload.get("problem") or private_payload.get("note") or "").strip()
+    category = str(private_payload.get("category") or "").strip()
+    category_extra = str(private_payload.get("category_extra") or "").strip()
+    blockers = str(private_payload.get("current_blockers") or "").strip()
+    participation = str(private_payload.get("participation_mode") or "").strip()
+    tags = [item.strip() for item in re.split(r"[,，、/]+", category) if item.strip()]
+    if category_extra:
+        tags.append(category_extra)
+    if participation:
+        tags.append(participation)
+    summary_parts = [part for part in [problem, str(private_payload.get("note") or "").strip()] if part]
+    return {
+        "title": _short_public_title(problem or participation or category, "原文公开线索"),
+        "summary": _public_text(" ".join(summary_parts), fallback="提出者选择公开完整问题描述。", max_length=600),
+        "stuck": _public_text(blockers, fallback="", max_length=240),
+        "tags": tags[:4],
+    }
+
+
+def _fuzzy_public_payload_from_private(private_payload: dict[str, Any]) -> dict[str, Any]:
+    category_text = f"{private_payload.get('category') or ''},{private_payload.get('category_extra') or ''}"
+    participation = str(private_payload.get("participation_mode") or "")
+    blockers = str(private_payload.get("current_blockers") or "")
+    if "教育" in category_text or "学习" in category_text:
+        category = "教育学习"
+    elif "科研" in category_text or "Science" in category_text or "数据" in category_text:
+        category = "科研数据"
+    elif "内容创作" in category_text or "新媒体" in category_text:
+        category = "内容创作"
+    elif "生活效率" in category_text or "个人工作流" in category_text:
+        category = "效率工具"
+    else:
+        category = "跨域探索"
+    if "围观" in participation:
+        title = "共创观察线索"
+        summary = f"希望先观察共创队的真实问题和讨论方向。公开摘要仅保留方向层级：{category}。具体场景、身份信息和原始描述仅在完整表单信息中查看。"
+    elif "练手" in participation or "真实项目" in participation:
+        title = "参与共创线索"
+        summary = f"希望加入真实项目，在讨论、调研、开发或反馈中练手。公开摘要仅保留方向层级：{category}。具体场景、身份信息和原始描述仅在完整表单信息中查看。"
+    elif "Demo" in participation or "小工具" in participation:
+        title = f"{category}Demo"[:10]
+        summary = f"已有初步想法或 Demo，希望获得真实反馈并寻找协作伙伴。公开摘要仅保留方向层级：{category}。具体场景、身份信息和原始描述仅在完整表单信息中查看。"
+    else:
+        title = f"{category}线索"[:10]
+        summary = f"希望围绕一个真实问题开展 AI + X 共创。公开摘要仅保留方向层级：{category}。具体场景、身份信息和原始描述仅在完整表单信息中查看。"
+    needs = []
+    if "怎么把问题拆成项目" in blockers or "模糊" in blockers:
+        needs.append("问题拆解")
+    if "技术" in blockers or "实现" in blockers:
+        needs.append("技术可行性判断")
+    if "缺一个能一起做的人" in blockers or "伙伴" in blockers:
+        needs.append("协作伙伴")
+    if "真实用户反馈" in blockers or "反馈" in blockers:
+        needs.append("真实反馈")
+    if not needs:
+        needs.append("下一步澄清")
+    tags = [category]
+    if participation:
+        tags.append(participation)
+    return {
+        "title": title,
+        "summary": summary,
+        "stuck": f"当前需要：{'、'.join(dict.fromkeys(needs))}。",
+        "tags": tags[:4],
+    }
+
+
 def _can_view_private(row, user: dict[str, Any] | None) -> bool:
     if not user:
         return False
@@ -871,6 +939,84 @@ def update_demand_private(*, slug: str, private_payload: dict[str, Any], user: d
                 """
             ),
             {"private_json": _json_dumps(current_private), "updated_at": now, "id": row.id},
+        )
+    return get_demand_by_slug(slug, user=user, include_private=True)
+
+
+def update_demand_public_mode(*, slug: str, raw_public: bool, user: dict[str, Any]) -> dict[str, Any] | None:
+    with get_db_session() as session:
+        ensure_inspiration_schema_and_seed_for_session(session)
+        row = session.execute(
+            text(
+                """
+                SELECT id, owner_user_id, private_json
+                FROM inspiration_demands
+                WHERE slug = :slug
+                LIMIT 1
+                """
+            ),
+            {"slug": slug},
+        ).first()
+        if not row:
+            return None
+        if not _can_update(row, user):
+            return {"error": "forbidden"}
+        private_payload = _json_loads(row.private_json, {})
+        public_payload = _raw_public_payload_from_private(private_payload) if raw_public else _fuzzy_public_payload_from_private(private_payload)
+        method = "raw_public" if raw_public else "spreadsheet_fuzzy_rule"
+        notes = [
+            "提出者选择公开完整问题描述，公开标题和摘要不做模糊化处理。"
+            if raw_public
+            else "公开标题和摘要已模糊化，仅保留方向层级。",
+            "联系方式字段仍仅保存在完整表单信息中；如果原始问题描述内包含个人信息，也会随原文公开。",
+        ]
+        now = _now_iso()
+        is_sqlite = _is_sqlite_session(session)
+        session.execute(
+            text(
+                """
+                UPDATE inspiration_demands
+                SET public_title = :public_title,
+                    public_summary = :public_summary,
+                    public_tags = :public_tags,
+                    public_stuck = :public_stuck,
+                    allow_public = :allow_public,
+                    status = 'published',
+                    redaction_method = :redaction_method,
+                    redaction_status = :redaction_status,
+                    redaction_notes = :redaction_notes,
+                    updated_at = :updated_at
+                WHERE id = :id
+                """
+                if is_sqlite
+                else
+                """
+                UPDATE inspiration_demands
+                SET public_title = :public_title,
+                    public_summary = :public_summary,
+                    public_tags = CAST(:public_tags AS JSONB),
+                    public_stuck = :public_stuck,
+                    allow_public = :allow_public,
+                    status = 'published',
+                    redaction_method = :redaction_method,
+                    redaction_status = :redaction_status,
+                    redaction_notes = CAST(:redaction_notes AS JSONB),
+                    updated_at = :updated_at
+                WHERE id = :id
+                """
+            ),
+            {
+                "public_title": public_payload["title"],
+                "public_summary": public_payload["summary"],
+                "public_tags": _json_dumps(public_payload["tags"]),
+                "public_stuck": public_payload["stuck"],
+                "allow_public": True,
+                "redaction_method": method,
+                "redaction_status": "raw_public" if raw_public else "published",
+                "redaction_notes": _json_dumps(notes),
+                "updated_at": now,
+                "id": row.id,
+            },
         )
     return get_demand_by_slug(slug, user=user, include_private=True)
 
@@ -1239,10 +1385,20 @@ def complete_assistant_run(run_id: str, output: dict[str, Any]) -> dict[str, Any
     now = _now_iso()
     with get_db_session() as session:
         ensure_inspiration_schema_and_seed_for_session(session)
-        run = session.execute(text("SELECT demand_id, trigger_type FROM inspiration_assistant_runs WHERE id = :id"), {"id": run_id}).first()
+        run = session.execute(
+            text(
+                """
+                SELECT r.demand_id, r.trigger_type, d.redaction_method
+                FROM inspiration_assistant_runs r
+                JOIN inspiration_demands d ON d.id = r.demand_id
+                WHERE r.id = :id
+                """
+            ),
+            {"id": run_id},
+        ).first()
         if not run:
             return None
-        should_update_public = run.trigger_type == "initial_submission"
+        should_update_public = run.trigger_type == "initial_submission" and run.redaction_method != "raw_public"
         public_title = _short_public_title(output.get("title")) if should_update_public else ""
         public_summary = _public_text(output.get("summary"), fallback="", max_length=180) if should_update_public else ""
         public_stuck = _public_text(output.get("public_stuck") or output.get("stuck"), fallback="", max_length=120) if should_update_public else ""

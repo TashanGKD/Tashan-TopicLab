@@ -17,6 +17,11 @@ vi.mock('../../api/client', async () => {
     summary: '把一套大学英语阅读课拆成词汇、语法、阅读、翻译和写作训练。',
     tags: ['教育 / 学习'],
     stuck: '问题太大，需要拆成可先验证的一步。',
+    redaction: {
+      method: 'spreadsheet_fuzzy_rule',
+      status: 'published',
+      notes: ['公开标题和摘要已模糊化，仅保留方向层级。'],
+    },
     created_at: '2026-05-15T00:00:00Z',
     updated_at: '2026-05-18T00:00:00Z',
     can_view_private: true,
@@ -126,6 +131,29 @@ vi.mock('../../api/client', async () => {
           },
         },
       })),
+      updateDemandPublicMode: vi.fn((_slug: string, rawPublic: boolean) => Promise.resolve({
+        data: {
+          demand: {
+            ...demand,
+            title: rawPublic ? '我想把英语阅读' : demand.title,
+            summary: rawPublic ? '我想把英语阅读课堂拆成可以验证的 AI 助教需求。 已有课程材料。' : demand.summary,
+            stuck: rawPublic ? '想找人一起拆解' : demand.stuck,
+            redaction: rawPublic
+              ? { method: 'raw_public', status: 'raw_public', notes: ['提出者选择公开完整问题描述，公开标题和摘要不做模糊化处理。'] }
+              : { method: 'spreadsheet_fuzzy_rule', status: 'published', notes: ['公开标题和摘要已模糊化，仅保留方向层级。'] },
+            private: {
+              participation_mode: '我有一个明确需求',
+              problem: '我想把英语阅读课堂拆成可以验证的 AI 助教需求。',
+              category: '学习 / 教育',
+              current_blockers: '想找人一起拆解',
+              note: '已有课程材料。',
+              allow_public: false,
+              contact: '18773233131',
+              submitter_name: '测试同学',
+            },
+          },
+        },
+      })),
       updateUpdate: vi.fn((_slug: string, _updateId: string, payload: any) => Promise.resolve({
         data: {
           update: {
@@ -224,6 +252,15 @@ describe('InspirationNeedDetailPage', () => {
       expect(screen.queryByText('contact')).not.toBeInTheDocument()
       expect(screen.queryByText('allow_public')).not.toBeInTheDocument()
       expect(screen.queryByText('account_phone')).not.toBeInTheDocument()
+      expect(screen.getByText('公开方式')).toBeInTheDocument()
+      expect(screen.getByText('当前公开标题和摘要已模糊化，只保留方向层级。')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('checkbox', { name: '完全公开标题和摘要，不做模糊化' }))
+    await waitFor(() => {
+      expect(inspirationApi.updateDemandPublicMode).toHaveBeenCalledWith('need-01-ai-english-reading-assistant', true)
+      expect(screen.getByText('当前公开标题和摘要使用完整表单原文，不做模糊化。')).toBeInTheDocument()
+      expect(screen.getByText('我想把英语阅读课堂拆成可以验证的 AI 助教需求。 已有课程材料。')).toBeInTheDocument()
     })
 
     fireEvent.click(screen.getByRole('button', { name: '收起完整信息' }))

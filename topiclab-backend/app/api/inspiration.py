@@ -20,6 +20,7 @@ from app.storage.database.inspiration_store import (
     get_demand_by_slug,
     list_public_demands,
     update_demand_private,
+    update_demand_public_mode,
     update_demand_update,
 )
 
@@ -57,6 +58,10 @@ class InspirationDemandClaimRequest(BaseModel):
 
 class InspirationDemandPrivateUpdateRequest(BaseModel):
     private: dict[str, Any] = Field(default_factory=dict)
+
+
+class InspirationDemandPublicModeRequest(BaseModel):
+    raw_public: bool = False
 
 
 def _build_public_payload(req: InspirationDemandSubmitRequest, redaction: dict[str, Any]) -> dict[str, Any]:
@@ -142,6 +147,16 @@ def claim_submitted_demand(slug: str, req: InspirationDemandClaimRequest, user: 
 @router.patch("/demands/{slug}/private")
 def update_private_info(slug: str, req: InspirationDemandPrivateUpdateRequest, user: dict = Depends(get_current_user)):
     demand = update_demand_private(slug=slug, private_payload=req.private, user=user)
+    if demand is None:
+        raise HTTPException(status_code=404, detail="需求不存在")
+    if demand.get("error") == "forbidden":
+        raise HTTPException(status_code=403, detail="没有更新权限")
+    return {"demand": demand}
+
+
+@router.patch("/demands/{slug}/public-mode")
+def update_public_mode(slug: str, req: InspirationDemandPublicModeRequest, user: dict = Depends(get_current_user)):
+    demand = update_demand_public_mode(slug=slug, raw_public=req.raw_public, user=user)
     if demand is None:
         raise HTTPException(status_code=404, detail="需求不存在")
     if demand.get("error") == "forbidden":

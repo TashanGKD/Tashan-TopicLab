@@ -273,6 +273,72 @@ def test_inspiration_admin_can_edit_private_info_and_existing_update(client, mon
     assert demo_stage["summary"] == "Demo 已跑通"
 
 
+def test_inspiration_owner_can_toggle_raw_public_mode(client, monkeypatch):
+    test_client, auth_module = client
+    monkeypatch.setenv("ADMIN_USER_IDS", "1")
+    admin_token = auth_module.create_jwt_token(1, "13800138000", is_admin=True)
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+    user_token = auth_module.create_jwt_token(2, "13800138002")
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+    slug = "need-01-ai-english-reading-assistant"
+    raw_problem = "我想把英语阅读课堂拆成可以验证的 AI 助教需求。"
+
+    denied = test_client.patch(
+        f"/api/v1/inspiration/demands/{slug}/public-mode",
+        headers=user_headers,
+        json={"raw_public": True},
+    )
+    assert denied.status_code == 403
+
+    private_update = test_client.patch(
+        f"/api/v1/inspiration/demands/{slug}/private",
+        headers=admin_headers,
+        json={
+            "private": {
+                "problem": raw_problem,
+                "note": "已有课程材料，希望公开找同伴。",
+                "category": "学习 / 教育",
+                "current_blockers": "想找人一起拆解",
+                "contact": "raw-mode@example.com",
+            }
+        },
+    )
+    assert private_update.status_code == 200
+
+    raw = test_client.patch(
+        f"/api/v1/inspiration/demands/{slug}/public-mode",
+        headers=admin_headers,
+        json={"raw_public": True},
+    )
+    assert raw.status_code == 200
+    raw_demand = raw.json()["demand"]
+    assert raw_demand["redaction"]["method"] == "raw_public"
+    assert raw_demand["redaction"]["status"] == "raw_public"
+    assert len(raw_demand["title"]) <= 10
+    assert raw_problem in raw_demand["summary"]
+
+    public_detail = test_client.get(f"/api/v1/inspiration/demands/{slug}")
+    assert public_detail.status_code == 200
+    public_demand = public_detail.json()["demand"]
+    assert public_demand["redaction"]["method"] == "raw_public"
+    assert raw_problem in public_demand["summary"]
+    assert "raw-mode@example.com" not in str(public_demand)
+
+    fuzzy = test_client.patch(
+        f"/api/v1/inspiration/demands/{slug}/public-mode",
+        headers=admin_headers,
+        json={"raw_public": False},
+    )
+    assert fuzzy.status_code == 200
+    fuzzy_demand = fuzzy.json()["demand"]
+    assert fuzzy_demand["redaction"]["method"] == "spreadsheet_fuzzy_rule"
+    assert "公开摘要仅保留方向层级" in fuzzy_demand["summary"]
+
+    fuzzy_public_detail = test_client.get(f"/api/v1/inspiration/demands/{slug}")
+    assert fuzzy_public_detail.status_code == 200
+    assert raw_problem not in str(fuzzy_public_detail.json()["demand"])
+
+
 def test_inspiration_public_list_reflects_latest_path_stage(client, monkeypatch):
     test_client, auth_module = client
     monkeypatch.setenv("ADMIN_USER_IDS", "1")

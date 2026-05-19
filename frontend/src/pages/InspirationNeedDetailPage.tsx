@@ -291,6 +291,7 @@ export default function InspirationNeedDetailPage() {
   const [privateEditOpen, setPrivateEditOpen] = useState(false)
   const [privateDraft, setPrivateDraft] = useState<PrivateDraft>({})
   const [privateSaveStatus, setPrivateSaveStatus] = useState<'idle' | 'saving' | 'error'>('idle')
+  const [publicModeStatus, setPublicModeStatus] = useState<'idle' | 'saving' | 'error'>('idle')
   const [claimStatus, setClaimStatus] = useState<'idle' | 'claiming' | 'claimed' | 'auth_error' | 'error'>('idle')
   const [updateDraft, setUpdateDraft] = useState<InspirationDemandUpdateRequest>(initialUpdate)
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'saving' | 'error'>('idle')
@@ -448,6 +449,19 @@ export default function InspirationNeedDetailPage() {
     }
   }
 
+  async function handlePublicModeToggle(rawPublic: boolean) {
+    if (!demand) return
+    setPublicModeStatus('saving')
+    try {
+      const response = await inspirationApi.updateDemandPublicMode(demand.slug, rawPublic)
+      setDemand(response.data.demand)
+      setPrivateDraft(response.data.demand.private ?? privateDraft)
+      setPublicModeStatus('idle')
+    } catch {
+      setPublicModeStatus('error')
+    }
+  }
+
   function startStageComposer(stageKey: string) {
     setEditingUpdateId(null)
     setActiveComposerStage(stageKey)
@@ -543,6 +557,7 @@ export default function InspirationNeedDetailPage() {
   const assistant = getDemandAssistant(demand)
   const canRevealPrivate = Boolean(demand.can_view_private)
   const canUpdate = Boolean(demand.can_update)
+  const isRawPublic = demand.redaction?.method === 'raw_public' || demand.redaction?.status === 'raw_public'
   const pathProgress = normalizePathProgress(demand.path_progress)
   const updatesByStage = (demand.updates ?? []).reduce<Record<string, InspirationDemandUpdate[]>>((acc, update) => {
     const key = update.stage_key || 'defined'
@@ -824,6 +839,35 @@ export default function InspirationNeedDetailPage() {
           ) : (
             <p className="mt-4 text-sm leading-7 text-slate-500">完整信息加载中…</p>
           )}
+          {canUpdate && privateOpen ? (
+            <div className="mt-5 rounded-[var(--radius-sm)] border border-amber-200 bg-amber-50/70 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-950">公开方式</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">
+                    {isRawPublic
+                      ? '当前公开标题和摘要使用完整表单原文，不做模糊化。'
+                      : '当前公开标题和摘要已模糊化，只保留方向层级。'}
+                  </p>
+                </div>
+                <label className="flex min-h-9 cursor-pointer items-center gap-2 text-sm font-semibold text-slate-800">
+                  <input
+                    type="checkbox"
+                    checked={isRawPublic}
+                    disabled={publicModeStatus === 'saving'}
+                    onChange={(event) => void handlePublicModeToggle(event.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-600"
+                  />
+                  完全公开标题和摘要，不做模糊化
+                </label>
+              </div>
+              <p className="mt-3 text-xs leading-6 text-amber-800">
+                开启后，完整问题描述和补充说明会进入公开摘要；联系方式字段不会主动公开，但原文里写入的个人信息也会被公开。
+              </p>
+              {publicModeStatus === 'saving' ? <p className="mt-2 text-sm text-slate-500">正在更新公开方式…</p> : null}
+              {publicModeStatus === 'error' ? <p className="mt-2 text-sm text-red-600">公开方式更新失败，请确认更新权限。</p> : null}
+            </div>
+          ) : null}
         </section>
 
         <section className="mt-12">

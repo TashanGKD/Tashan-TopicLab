@@ -778,6 +778,8 @@ export const inspirationApi = {
     api.post<{ demand: InspirationDemand }>(`v1/inspiration/demands/${encodeURIComponent(slug)}/claim`, { claim_token: claimToken }),
   updateDemandPrivate: (slug: string, privateData: Record<string, string | boolean | number | null | undefined>) =>
     api.patch<{ demand: InspirationDemand }>(`v1/inspiration/demands/${encodeURIComponent(slug)}/private`, { private: privateData }),
+  updateDemandPublicMode: (slug: string, rawPublic: boolean) =>
+    api.patch<{ demand: InspirationDemand }>(`v1/inspiration/demands/${encodeURIComponent(slug)}/public-mode`, { raw_public: rawPublic }),
   createUpdate: (slug: string, payload: InspirationDemandUpdateRequest) =>
     api.post<{ update: InspirationDemandUpdate }>(`v1/inspiration/demands/${encodeURIComponent(slug)}/updates`, payload),
   updateUpdate: (slug: string, updateId: string, payload: InspirationDemandUpdateRequest) =>
