@@ -81,6 +81,29 @@ def test_inspiration_submission_creates_path_and_public_detail(client):
     assert "test@example.com" not in str(demand)
 
 
+def test_inspiration_submission_accepts_very_short_problem(client):
+    test_client, _ = client
+    payload = {
+        "submitter_name": "",
+        "participation_mode": "我有一个明确需求",
+        "contact": "1",
+        "problem": "1",
+        "category": "科研 / 数据",
+        "current_blockers": "想找人一起拆解",
+        "note": "",
+        "allow_public": True,
+    }
+
+    created = test_client.post("/api/v1/inspiration/demands", json=payload)
+
+    assert created.status_code == 200
+    body = created.json()
+    assert body["demand"]["slug"]
+    assert body["demand"]["summary"] == "1"
+    assert body["demand"]["path_progress"][0]["key"] == "submitted"
+    assert body["claim_token"]
+
+
 def test_inspiration_private_submission_is_hidden_until_claimed(client):
     test_client, auth_module = client
     payload = {

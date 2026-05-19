@@ -25,7 +25,7 @@ class InspirationDemandSubmitRequest(BaseModel):
     submitter_name: str = Field(default="", max_length=120)
     participation_mode: str = Field(default="", max_length=120)
     contact: str = Field(default="", max_length=255)
-    problem: str = Field(..., min_length=4, max_length=6000)
+    problem: str = Field(..., min_length=1, max_length=6000)
     category: str = Field(default="", max_length=255)
     category_extra: str = Field(default="", max_length=500)
     current_blockers: str = Field(default="", max_length=500)

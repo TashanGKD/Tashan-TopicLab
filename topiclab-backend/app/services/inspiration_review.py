@@ -79,7 +79,7 @@ def _redact_text(value: str, payload: dict[str, Any]) -> str:
         text = re.sub(pattern, repl, text)
     for key in ("submitter_name", "contact", "submitter_account", "account_phone", "account_username"):
         raw = str(payload.get(key) or "").strip()
-        if raw:
+        if len(raw) >= 3:
             text = text.replace(raw, "个人信息已隐藏")
     return text
 
