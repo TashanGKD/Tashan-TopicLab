@@ -632,7 +632,7 @@ export interface InspirationDemandUpdate {
   stage_key: string
   stage_status: string
   emotion_note: string
-  artifacts: Array<{ type?: string; label?: string; url?: string }>
+  artifacts: Array<{ type?: string; label?: string; url?: string; visibility?: 'public' | 'admin_only' | string }>
   visibility: 'public' | 'admin_only' | string
   created_at: string
   updated_at?: string
@@ -659,7 +659,7 @@ export interface InspirationDemandUpdateRequest {
   blockers: string
   next_steps: string
   emotion_note: string
-  artifacts: Array<{ type?: string; label?: string; url?: string }>
+  artifacts: Array<{ type?: string; label?: string; url?: string; visibility?: 'public' | 'admin_only' | string }>
   visibility: 'public' | 'admin_only'
 }
 

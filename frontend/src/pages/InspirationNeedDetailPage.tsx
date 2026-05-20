@@ -1,4 +1,8 @@
 import { FormEvent, useEffect, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import rehypeKatex from 'rehype-katex'
+import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import InspirationSubmissionSuccessOverlay from '../components/InspirationSubmissionSuccessOverlay'
 import { refreshCurrentUserProfile, tokenManager, type User } from '../api/auth'
@@ -180,7 +184,11 @@ function setFirstArtifactByType(
     visibility: index >= 0 ? artifacts[index].visibility ?? 'public' : 'public',
     ...patch,
   }
-  const hasContent = Boolean((nextArtifact.label ?? '').trim() || (nextArtifact.url ?? '').trim())
+  const hasContent = Boolean(
+    (nextArtifact.label ?? '').trim()
+    || (nextArtifact.url ?? '').trim()
+    || Object.prototype.hasOwnProperty.call(patch, 'visibility'),
+  )
   if (index >= 0) {
     if (hasContent) artifacts[index] = nextArtifact
     else artifacts.splice(index, 1)
@@ -195,7 +203,54 @@ function toExternalHref(rawUrl?: string) {
   if (!value) return ''
   if (/^https?:\/\//i.test(value)) return value
   if (value.startsWith('//')) return `https:${value}`
+  if (value.startsWith('/')) return value
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return ''
   return `https://${value.replace(/^\/+/, '')}`
+}
+
+function StageMarkdown({
+  children,
+  className = '',
+}: {
+  children?: string
+  className?: string
+}) {
+  const content = String(children ?? '').trim()
+  if (!content) return null
+  return (
+    <div className={`break-words ${className}`}>
+      <div
+        className="markdown-content markdown-content-compact"
+        style={{ color: 'inherit', fontFamily: 'inherit' }}
+      >
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm, remarkMath]}
+          rehypePlugins={[rehypeKatex]}
+        >
+          {content}
+        </ReactMarkdown>
+      </div>
+    </div>
+  )
+}
+
+function LabeledStageMarkdown({
+  label,
+  children,
+  className = '',
+}: {
+  label: string
+  children?: string
+  className?: string
+}) {
+  const content = String(children ?? '').trim()
+  if (!content) return null
+  return (
+    <div className={`mt-2 ${className}`}>
+      <p className="text-xs font-semibold text-slate-500">{label}</p>
+      <StageMarkdown className="mt-1 text-sm text-slate-600">{content}</StageMarkdown>
+    </div>
+  )
 }
 
 function getOpenSectionsFromUpdate(update: InspirationDemandUpdate): UpdateOptionalSection[] {
@@ -583,6 +638,7 @@ export default function InspirationNeedDetailPage() {
   const assistant = getDemandAssistant(demand)
   const canRevealPrivate = Boolean(demand.can_view_private)
   const canUpdate = Boolean(demand.can_update)
+  const canEditPrivate = canUpdate
   const isRawPublic = demand.redaction?.method === 'raw_public' || demand.redaction?.status === 'raw_public'
   const pathProgress = normalizePathProgress(demand.path_progress)
   const assistantGeneratingStageIndex = getAssistantGeneratingStageIndex(pathProgress, assistant)
@@ -599,6 +655,7 @@ export default function InspirationNeedDetailPage() {
     : currentStageIndex >= 0
       ? currentStageIndex
       : lastDoneStageIndex
+  const headerStageLabel = pathProgress[timelineIndex]?.label || demand.stage
   const pendingClaimToken = new URLSearchParams(location.search).get('claim_token') || localStorage.getItem(`inspiration_claim_${demand.slug}`)
   const claimReturnPath = `/inspiration-co-creation/needs/${encodeURIComponent(demand.slug)}${pendingClaimToken ? `?claim_token=${encodeURIComponent(pendingClaimToken)}` : ''}`
   const loginBindSearch = `?next=${encodeURIComponent(claimReturnPath)}`
@@ -658,19 +715,30 @@ export default function InspirationNeedDetailPage() {
         ))}
       </div>
       {openUpdateSections.includes('links') ? (
-        <div className="grid gap-3 rounded-[var(--radius-sm)] bg-white p-3 ring-1 ring-teal-100 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
-          <input
-            value={linkArtifact.label ?? ''}
-            onChange={(event) => setUpdateDraft((current) => setFirstArtifactByType(current, 'link', { label: event.target.value }))}
-            placeholder="链接名称，可选"
-            className="min-h-10 rounded-[var(--radius-sm)] border border-slate-200 px-3 text-sm"
-          />
-          <input
-            value={linkArtifact.url ?? ''}
-            onChange={(event) => setUpdateDraft((current) => setFirstArtifactByType(current, 'link', { url: event.target.value }))}
-            placeholder="文档、网页、Demo 或原型链接"
-            className="min-h-10 rounded-[var(--radius-sm)] border border-slate-200 px-3 text-sm"
-          />
+        <div className="rounded-[var(--radius-sm)] bg-white p-3 ring-1 ring-teal-100">
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+            <input
+              value={linkArtifact.label ?? ''}
+              onChange={(event) => setUpdateDraft((current) => setFirstArtifactByType(current, 'link', { label: event.target.value }))}
+              placeholder="链接名称，可选"
+              className="min-h-10 rounded-[var(--radius-sm)] border border-slate-200 px-3 text-sm"
+            />
+            <input
+              value={linkArtifact.url ?? ''}
+              onChange={(event) => setUpdateDraft((current) => setFirstArtifactByType(current, 'link', { url: event.target.value }))}
+              placeholder="文档、网页、Demo 或原型链接"
+              className="min-h-10 rounded-[var(--radius-sm)] border border-slate-200 px-3 text-sm"
+            />
+          </div>
+          <label className="mt-3 flex min-h-8 cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
+            <input
+              type="checkbox"
+              checked={(linkArtifact.visibility ?? 'public') === 'public'}
+              onChange={(event) => setUpdateDraft((current) => setFirstArtifactByType(current, 'link', { visibility: event.target.checked ? 'public' : 'admin_only' }))}
+              className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-600"
+            />
+            公开展示这个链接
+          </label>
         </div>
       ) : null}
       {openUpdateSections.includes('tools') ? (
@@ -732,7 +800,7 @@ export default function InspirationNeedDetailPage() {
         <div className="min-w-0">
         <Link to="/inspiration-co-creation" className="text-sm font-semibold text-teal-700">← 返回共创线索</Link>
         <div className="mt-6 flex flex-wrap items-center gap-3 text-sm">
-          <span className="rounded-full bg-teal-50 px-3 py-1 font-medium text-teal-700">{demand.stage}</span>
+          <span className="rounded-full bg-teal-50 px-3 py-1 font-medium text-teal-700">{headerStageLabel}</span>
           <span className="text-slate-400">{demand.slug}</span>
         </div>
         <h1 className="mt-5 text-4xl font-semibold leading-tight sm:text-5xl">{demand.title}</h1>
@@ -798,17 +866,21 @@ export default function InspirationNeedDetailPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-2xl font-semibold text-slate-950">完整表单信息</h2>
-              <p className="mt-2 text-sm leading-7 text-slate-500">你提交时的原始内容。觉得不够清楚的话，可以在这里补全。</p>
+              <p className="mt-2 text-sm leading-7 text-slate-500">
+                {canEditPrivate ? '你提交时的原始内容。觉得不够清楚的话，可以在这里补全。' : '提出者已选择公开的原始线索详情。'}
+              </p>
             </div>
             {canRevealPrivate && privateOpen && privateDraftEntries.length ? (
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPrivateEditOpen((value) => !value)}
-                  className="inline-flex min-h-10 items-center rounded-full bg-slate-950 px-4 text-sm font-semibold text-white"
-                >
-                  {privateEditOpen ? '收起编辑' : '编辑完整信息'}
-                </button>
+                {canEditPrivate ? (
+                  <button
+                    type="button"
+                    onClick={() => setPrivateEditOpen((value) => !value)}
+                    className="inline-flex min-h-10 items-center rounded-full bg-slate-950 px-4 text-sm font-semibold text-white"
+                  >
+                    {privateEditOpen ? '收起编辑' : '编辑完整信息'}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => {
@@ -835,7 +907,7 @@ export default function InspirationNeedDetailPage() {
                 显示完整信息
               </button>
           ) : privateDraftEntries.length ? (
-            privateEditOpen ? (
+            privateEditOpen && canEditPrivate ? (
               <form onSubmit={handlePrivateSubmit} className="mt-5 space-y-4">
                 {privateDraftEntries.map((entry) => (
                   <label key={entry.key} className="block text-sm font-medium text-slate-700">
@@ -877,8 +949,8 @@ export default function InspirationNeedDetailPage() {
                   <p className="text-sm font-semibold text-slate-950">公开方式</p>
                   <p className="mt-1 text-sm leading-6 text-slate-600">
                     {isRawPublic
-                      ? '当前公开标题和摘要使用完整表单原文，不做模糊化。'
-                      : '当前公开标题和摘要已模糊化，只保留方向层级。'}
+                      ? '当前完整表单信息已对所有访客公开，公开标题和摘要不做模糊化。'
+                      : '当前仅公开脱敏标题和摘要，完整表单信息只对提出者和管理员可见。'}
                   </p>
                 </div>
                 <label className="flex min-h-9 cursor-pointer items-center gap-2 text-sm font-semibold text-slate-800">
@@ -889,11 +961,11 @@ export default function InspirationNeedDetailPage() {
                     onChange={(event) => void handlePublicModeToggle(event.target.checked)}
                     className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-600"
                   />
-                  完全公开标题和摘要，不做模糊化
+                  完全公开线索详情
                 </label>
               </div>
               <p className="mt-3 text-xs leading-6 text-amber-800">
-                开启后，完整问题描述和补充说明会进入公开摘要；联系方式字段不会主动公开，但原文里写入的个人信息也会被公开。
+                开启后，完整表单信息中的问题描述、补充说明、联系方式和称呼会对所有访客可见；关闭后回到脱敏公开摘要。
               </p>
               {publicModeStatus === 'saving' ? <p className="mt-2 text-sm text-slate-500">正在更新公开方式…</p> : null}
               {publicModeStatus === 'error' ? <p className="mt-2 text-sm text-red-600">公开方式更新失败，请确认更新权限。</p> : null}
@@ -976,26 +1048,31 @@ export default function InspirationNeedDetailPage() {
                       </button>
                     ) : null}
                   </div>
-                  {stage.summary ? (
-                    <p className="mt-4 text-sm leading-7 text-slate-600">{stage.summary}</p>
-                  ) : null}
-                  {stage.emotion_note ? <p className="mt-2 text-sm leading-7 text-slate-700">{stage.emotion_note}</p> : null}
+                  <StageMarkdown className="mt-4 text-sm text-slate-600">{stage.summary}</StageMarkdown>
+                  <StageMarkdown className="mt-2 text-sm text-slate-700">{stage.emotion_note}</StageMarkdown>
                   {stageAssistant?.ai_draft_answer || stageAssistant?.follow_up_questions?.length || stageAssistant?.next_step ? (
                     <section className="mt-5 rounded-[var(--radius-sm)] border border-teal-100 bg-teal-50/60 p-4">
                       <p className="text-xs font-semibold text-teal-700">AI 生成参考</p>
                       {stageAssistant.ai_draft_answer ? (
-                        <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-slate-700">{stageAssistant.ai_draft_answer}</p>
+                        <StageMarkdown className="mt-2 text-sm text-slate-700">{stageAssistant.ai_draft_answer}</StageMarkdown>
                       ) : null}
                       {stageAssistant.follow_up_questions?.length ? (
                         <div className="mt-3">
                           <p className="text-xs font-semibold text-slate-500">继续追问</p>
-                          <div className="mt-1 space-y-1 text-sm leading-6 text-slate-600">
-                            {stageAssistant.follow_up_questions.map((question) => <p key={question}>{question}</p>)}
+                          <div className="mt-1 space-y-2">
+                            {stageAssistant.follow_up_questions.map((question) => (
+                              <StageMarkdown key={question} className="text-sm text-slate-600">
+                                {question}
+                              </StageMarkdown>
+                            ))}
                           </div>
                         </div>
                       ) : null}
                       {stageAssistant.next_step ? (
-                        <p className="mt-3 text-sm leading-6 text-teal-800">下一步：{stageAssistant.next_step}</p>
+                        <div className="mt-3">
+                          <p className="text-xs font-semibold text-teal-700">下一步</p>
+                          <StageMarkdown className="mt-1 text-sm text-teal-800">{stageAssistant.next_step}</StageMarkdown>
+                        </div>
                       ) : null}
                     </section>
                   ) : null}
@@ -1024,14 +1101,14 @@ export default function InspirationNeedDetailPage() {
                               </button>
                             ) : null}
                           </div>
-                          <p className="mt-2 text-base font-semibold text-slate-950">{update.summary}</p>
+                          <StageMarkdown className="mt-2 text-base font-semibold text-slate-950">{update.summary}</StageMarkdown>
                           {links.length ? (
                             <div className="mt-3 flex flex-wrap gap-2">
                               {links.map((artifact, artifactIndex) => (
                                 artifact.url ? (
                                   <a
                                     key={`${artifact.url}-${artifactIndex}`}
-                                    href={artifact.url}
+                                    href={toExternalHref(artifact.url)}
                                     target="_blank"
                                     rel="noreferrer"
                                     className="relative z-20 rounded-full bg-white px-3 py-1 text-xs font-semibold text-teal-700 ring-1 ring-teal-100 hover:ring-teal-300"
@@ -1048,10 +1125,10 @@ export default function InspirationNeedDetailPage() {
                               {tools.map((artifact) => artifact.label).filter(Boolean).join(' / ')}
                             </p>
                           ) : null}
-                          {update.progress ? <p className="mt-2 text-sm leading-7 text-slate-600">{update.progress}</p> : null}
-                          {update.emotion_note ? <p className="mt-2 text-sm leading-7 text-slate-600">反思&感想：{update.emotion_note}</p> : null}
-                          {update.blockers ? <p className="mt-2 text-sm leading-7 text-slate-600">遇到的问题：{update.blockers}</p> : null}
-                          {update.next_steps ? <p className="mt-2 text-sm leading-7 text-slate-500">下一步：{update.next_steps}</p> : null}
+                          <StageMarkdown className="mt-2 text-sm text-slate-600">{update.progress}</StageMarkdown>
+                          <LabeledStageMarkdown label="反思&感想">{update.emotion_note}</LabeledStageMarkdown>
+                          <LabeledStageMarkdown label="遇到的问题">{update.blockers}</LabeledStageMarkdown>
+                          <LabeledStageMarkdown label="下一步" className="text-slate-500">{update.next_steps}</LabeledStageMarkdown>
                               </>
                             )
                           })()}

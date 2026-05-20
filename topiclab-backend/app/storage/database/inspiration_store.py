@@ -26,6 +26,7 @@ PATH_STAGES = [
     {"key": "demo", "label": "Demo 验证"},
     {"key": "mvp", "label": "MVP/复盘"},
 ]
+INTERNAL_PRIVATE_KEYS = {"account_user_id", "account_username", "account_phone"}
 _SCHEMA_READY_KEYS: set[str] = set()
 _SCHEMA_READY_LOCK = threading.Lock()
 
@@ -480,7 +481,37 @@ def _serialize_public(row) -> dict[str, Any]:
     }
 
 
-def _serialize_update(row) -> dict[str, Any]:
+def _filter_update_artifacts(artifacts: Any, *, include_private_artifacts: bool) -> list[dict[str, Any]]:
+    if not isinstance(artifacts, list):
+        return []
+    normalized: list[dict[str, Any]] = []
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            continue
+        visibility = str(artifact.get("visibility") or "public")
+        if not include_private_artifacts and visibility != "public":
+            continue
+        normalized.append({**artifact, "visibility": visibility})
+    return normalized
+
+
+def _normalize_update_artifacts(artifacts: Any) -> list[dict[str, Any]]:
+    if not isinstance(artifacts, list):
+        return []
+    normalized: list[dict[str, Any]] = []
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            continue
+        item = dict(artifact)
+        if not str(item.get("label") or "").strip() and not str(item.get("url") or "").strip():
+            continue
+        visibility = str(item.get("visibility") or "public")
+        item["visibility"] = visibility if visibility in {"public", "admin_only"} else "public"
+        normalized.append(item)
+    return normalized
+
+
+def _serialize_update(row, *, include_private_artifacts: bool = True) -> dict[str, Any]:
     return {
         "id": row.id,
         "week_label": row.week_label,
@@ -491,7 +522,10 @@ def _serialize_update(row) -> dict[str, Any]:
         "stage_key": getattr(row, "stage_key", "") or "",
         "stage_status": getattr(row, "stage_status", "") or "",
         "emotion_note": getattr(row, "emotion_note", "") or "",
-        "artifacts": _json_loads(row.artifacts_json, []),
+        "artifacts": _filter_update_artifacts(
+            _json_loads(row.artifacts_json, []),
+            include_private_artifacts=include_private_artifacts,
+        ),
         "visibility": row.visibility,
         "created_at": str(row.created_at),
         "updated_at": str(getattr(row, "updated_at", row.created_at)),
@@ -684,6 +718,18 @@ def _can_view_private(row, user: dict[str, Any] | None) -> bool:
     return int(row.owner_user_id) == int(user["sub"])
 
 
+def _is_raw_public(row) -> bool:
+    return getattr(row, "redaction_method", "") == "raw_public" or getattr(row, "redaction_status", "") == "raw_public"
+
+
+def _public_private_payload(private_payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        str(key): value
+        for key, value in private_payload.items()
+        if str(key) not in INTERNAL_PRIVATE_KEYS and not str(key).startswith("account_")
+    }
+
+
 def _can_update(row, user: dict[str, Any] | None) -> bool:
     return _can_view_private(row, user)
 
@@ -802,7 +848,9 @@ def list_public_demands() -> list[dict[str, Any]]:
                 {"demand_ids": demand_ids},
             ).fetchall()
             for update in update_rows:
-                updates_by_demand.setdefault(update.demand_id, []).append(_serialize_update(update))
+                updates_by_demand.setdefault(update.demand_id, []).append(
+                    _serialize_update(update, include_private_artifacts=False)
+                )
         items = [
             {**_serialize_public(row), "path_progress": _build_path_progress(row, updates_by_demand.get(row.id, []))}
             for row in rows
@@ -837,7 +885,9 @@ def get_demand_by_slug(slug: str, *, user: dict[str, Any] | None = None, include
         ).first()
         if not row:
             return None
-        can_view_private = _can_view_private(row, user)
+        owner_can_view_private = _can_view_private(row, user)
+        can_view_public_private = _is_raw_public(row)
+        can_view_private = owner_can_view_private or can_view_public_private
         update_rows = session.execute(
             text(
                 """
@@ -849,9 +899,12 @@ def get_demand_by_slug(slug: str, *, user: dict[str, Any] | None = None, include
                 ORDER BY updated_at DESC, created_at DESC
                 """
             ),
-            {"demand_id": row.id, "include_private": 1 if can_view_private else 0},
+            {"demand_id": row.id, "include_private": 1 if owner_can_view_private else 0},
         ).fetchall()
-        updates = [_serialize_update(update) for update in update_rows]
+        updates = [
+            _serialize_update(update, include_private_artifacts=owner_can_view_private)
+            for update in update_rows
+        ]
         payload = _serialize_public(row)
         payload["updates"] = updates
         payload["path_progress"] = _build_path_progress(row, updates)
@@ -860,7 +913,8 @@ def get_demand_by_slug(slug: str, *, user: dict[str, Any] | None = None, include
         payload["assistant"] = _serialize_assistant(row)
         payload["llm_review"] = payload["assistant"]["snapshot"] or _json_loads(row.llm_review_json, {})
         if include_private and can_view_private:
-            payload["private"] = _json_loads(row.private_json, {})
+            private_payload = _json_loads(row.private_json, {})
+            payload["private"] = private_payload if owner_can_view_private else _public_private_payload(private_payload)
         return payload
 
 
@@ -1050,10 +1104,10 @@ def update_demand_public_mode(
         )
         method = "raw_public" if raw_public else "spreadsheet_fuzzy_rule"
         notes = [
-            "提出者选择公开完整问题描述，公开标题和摘要不做模糊化处理。"
+            "提出者选择公开完整线索详情，公开标题、摘要和完整表单信息不做模糊化处理。"
             if raw_public
             else "公开标题和摘要已模糊化，仅保留方向层级。",
-            "联系方式字段仍仅保存在完整表单信息中；如果原始问题描述内包含个人信息，也会随原文公开。",
+            "账号绑定字段不会公开；完整表单信息中的联系方式和称呼会随线索详情公开。",
         ]
         now = _now_iso()
         is_sqlite = _is_sqlite_session(session)
@@ -1150,7 +1204,7 @@ def add_demand_update(*, slug: str, payload: dict[str, Any], created_by_user_id:
             "stage_key": payload.get("stage_key") or "",
             "stage_status": payload.get("stage_status") or "",
             "emotion_note": payload.get("emotion_note") or "",
-            "artifacts_json": _json_dumps(payload.get("artifacts") or []),
+            "artifacts_json": _json_dumps(_normalize_update_artifacts(payload.get("artifacts") or [])),
             "visibility": payload.get("visibility") or "public",
             "created_by_user_id": created_by_user_id,
             "created_at": now,
@@ -1254,7 +1308,7 @@ def update_demand_update(*, slug: str, update_id: str, payload: dict[str, Any], 
                 "stage_key": payload.get("stage_key") or "",
                 "stage_status": payload.get("stage_status") or "",
                 "emotion_note": payload.get("emotion_note") or "",
-                "artifacts_json": _json_dumps(payload.get("artifacts") or []),
+                "artifacts_json": _json_dumps(_normalize_update_artifacts(payload.get("artifacts") or [])),
                 "visibility": payload.get("visibility") or "public",
                 "updated_at": now,
             },

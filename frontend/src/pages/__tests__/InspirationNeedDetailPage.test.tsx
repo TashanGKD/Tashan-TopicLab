@@ -41,9 +41,9 @@ vi.mock('../../api/client', async () => {
           },
           defined: {
             status: 'needs_input',
-            ai_draft_answer: '可以先定义为：让学生在一节阅读课中完成词汇理解、长句拆解和阅读反馈。',
-            follow_up_questions: ['第一节课最想验证哪个环节？'],
-            next_step: '把问题定义成一周内可验证的小实验',
+            ai_draft_answer: '可以先定义为：让学生在一节阅读课中完成 **词汇理解、长句拆解和阅读反馈**。',
+            follow_up_questions: ['第一节课最想验证 **哪个环节**？'],
+            next_step: '把问题定义成一周内可验证的 **小实验**',
           },
         },
       },
@@ -65,18 +65,33 @@ vi.mock('../../api/client', async () => {
         },
         defined: {
           status: 'needs_input',
-          ai_draft_answer: '可以先定义为：让学生在一节阅读课中完成词汇理解、长句拆解和阅读反馈。',
-          follow_up_questions: ['第一节课最想验证哪个环节？'],
-          next_step: '把问题定义成一周内可验证的小实验',
+          ai_draft_answer: '可以先定义为：让学生在一节阅读课中完成 **词汇理解、长句拆解和阅读反馈**。',
+          follow_up_questions: ['第一节课最想验证 **哪个环节**？'],
+          next_step: '把问题定义成一周内可验证的 **小实验**',
         },
       },
     },
     path_progress: [
       { key: 'submitted', label: '留下线索', status: 'needs_input', summary: '请补充：目标用户是谁？', emotion_note: '' },
       { key: 'defined', label: '问题定义', status: 'current', summary: '', emotion_note: '' },
-      { key: 'demo', label: 'Demo 验证', status: 'pending', summary: '尚未开始。', emotion_note: '' },
+      { key: 'demo', label: 'Demo 验证', status: 'pending', summary: '尚未开始。\n\n- 等待下一步共创', emotion_note: '' },
     ],
-    updates: [],
+    updates: [
+      {
+        id: 'upd-link',
+        week_label: '2026-05-20 12:00',
+        summary: '**已经做出一个基本助手。**',
+        progress: '- 梳理课堂链路\n- 做出低保真助手',
+        blockers: '**学生样本**还没确认',
+        next_steps: '找 3 名学生试用 [原型](https://example.com/prototype)',
+        stage_key: 'defined',
+        stage_status: 'done',
+        emotion_note: '从大想法变成 **课堂实验**。',
+        artifacts: [{ type: 'link', label: 'coze 项目', url: 'code.coze.cn/p/7641557348380688425/preview', visibility: 'public' }],
+        visibility: 'public',
+        created_at: '2026-05-20T12:00:00Z',
+      },
+    ],
   }
   return {
     ...actual,
@@ -139,7 +154,7 @@ vi.mock('../../api/client', async () => {
             summary: rawPublic ? '我想把英语阅读课堂拆成可以验证的 AI 助教需求。 已有课程材料。' : demand.summary,
             stuck: rawPublic ? '想找人一起拆解' : demand.stuck,
             redaction: rawPublic
-              ? { method: 'raw_public', status: 'raw_public', notes: ['提出者选择公开完整问题描述，公开标题和摘要不做模糊化处理。'] }
+              ? { method: 'raw_public', status: 'raw_public', notes: ['提出者选择公开完整线索详情。'] }
               : { method: 'spreadsheet_fuzzy_rule', status: 'published', notes: ['公开标题和摘要已模糊化，仅保留方向层级。'] },
             private: {
               participation_mode: '我有一个明确需求',
@@ -222,13 +237,26 @@ describe('InspirationNeedDetailPage', () => {
     expect(screen.getAllByText('AI 生成参考').length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('可以写成：目标用户是正在做课堂阅读训练的学生。')).toBeInTheDocument()
     expect(screen.getByText('学生现在用什么材料？')).toBeInTheDocument()
-    expect(screen.getByText('可以先定义为：让学生在一节阅读课中完成词汇理解、长句拆解和阅读反馈。')).toBeInTheDocument()
-    expect(screen.getByText('第一节课最想验证哪个环节？')).toBeInTheDocument()
+    expect(screen.getByText('词汇理解、长句拆解和阅读反馈')).toBeInTheDocument()
+    expect(screen.getByText('哪个环节')).toBeInTheDocument()
+    expect(screen.getByText('小实验')).toBeInTheDocument()
     expect(screen.getAllByText('问题定义').length).toBeGreaterThanOrEqual(1)
     expect(screen.queryByText('人工访谈')).not.toBeInTheDocument()
     expect(screen.queryByText('18773233131')).not.toBeInTheDocument()
     expect(screen.getByLabelText('路径时间轴')).toBeInTheDocument()
     expect(screen.getByLabelText('路径进展列表')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'coze 项目' })).toHaveAttribute(
+      'href',
+      'https://code.coze.cn/p/7641557348380688425/preview',
+    )
+    const initialDefinedStage = screen.getByLabelText('问题定义阶段')
+    const demoStage = screen.getByLabelText('Demo 验证阶段')
+    expect(within(initialDefinedStage).getByText('课堂实验')).toBeInTheDocument()
+    expect(within(initialDefinedStage).getByText('梳理课堂链路')).toBeInTheDocument()
+    expect(within(initialDefinedStage).getByText('学生样本')).toBeInTheDocument()
+    expect(within(initialDefinedStage).getByRole('link', { name: '原型' })).toHaveAttribute('href', 'https://example.com/prototype')
+    expect(within(demoStage).getByText('等待下一步共创')).toBeInTheDocument()
+    expect(within(initialDefinedStage).queryByText(/\*\*/)).not.toBeInTheDocument()
 
     const submittedStage = screen.getByLabelText('留下线索阶段')
     fireEvent.click(within(submittedStage).getByRole('button', { name: '补充回答' }))
@@ -253,13 +281,13 @@ describe('InspirationNeedDetailPage', () => {
       expect(screen.queryByText('allow_public')).not.toBeInTheDocument()
       expect(screen.queryByText('account_phone')).not.toBeInTheDocument()
       expect(screen.getByText('公开方式')).toBeInTheDocument()
-      expect(screen.getByText('当前公开标题和摘要已模糊化，只保留方向层级。')).toBeInTheDocument()
+      expect(screen.getByText('当前仅公开脱敏标题和摘要，完整表单信息只对提出者和管理员可见。')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByRole('checkbox', { name: '完全公开标题和摘要，不做模糊化' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: '完全公开线索详情' }))
     await waitFor(() => {
       expect(inspirationApi.updateDemandPublicMode).toHaveBeenCalledWith('need-01-ai-english-reading-assistant', true)
-      expect(screen.getByText('当前公开标题和摘要使用完整表单原文，不做模糊化。')).toBeInTheDocument()
+      expect(screen.getByText('当前完整表单信息已对所有访客公开，公开标题和摘要不做模糊化。')).toBeInTheDocument()
       expect(screen.getByText('我想把英语阅读课堂拆成可以验证的 AI 助教需求。 已有课程材料。')).toBeInTheDocument()
     })
 
@@ -284,12 +312,21 @@ describe('InspirationNeedDetailPage', () => {
     const definedStage = screen.getByLabelText('问题定义阶段')
     fireEvent.click(within(definedStage).getByRole('button', { name: '更新' }))
     fireEvent.change(within(definedStage).getByPlaceholderText('比如：问题说清楚了 / 找到了一个可试的工具 / 做了一个小 Demo / 暂时卡住了。'), { target: { value: '完成问题定义' } })
+    fireEvent.click(within(definedStage).getByRole('button', { name: '文档/网页链接' }))
+    fireEvent.change(within(definedStage).getByPlaceholderText('链接名称，可选'), { target: { value: '内部原型' } })
+    fireEvent.change(within(definedStage).getByPlaceholderText('文档、网页、Demo 或原型链接'), { target: { value: 'internal.example.com/demo' } })
+    fireEvent.click(within(definedStage).getByRole('checkbox', { name: '公开展示这个链接' }))
     fireEvent.click(screen.getByRole('button', { name: /保存进展/ }))
 
     await waitFor(() => {
       expect(inspirationApi.createUpdate).toHaveBeenCalledWith(
         'need-01-ai-english-reading-assistant',
-        expect.objectContaining({ stage_key: 'defined', summary: '完成问题定义', week_label: expect.stringMatching(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/) }),
+        expect.objectContaining({
+          stage_key: 'defined',
+          summary: '完成问题定义',
+          week_label: expect.stringMatching(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/),
+          artifacts: [expect.objectContaining({ type: 'link', label: '内部原型', url: 'internal.example.com/demo', visibility: 'admin_only' })],
+        }),
       )
       expect(screen.getAllByText('完成问题定义').length).toBeGreaterThanOrEqual(1)
       expect(screen.getAllByText('AI 正在生成参考').length).toBeGreaterThanOrEqual(1)
@@ -371,6 +408,110 @@ describe('InspirationNeedDetailPage', () => {
       expect(screen.queryAllByText('智能助手正在基于最新信息更新建议…')).toHaveLength(0)
     })
   }, 7000)
+
+  it('derives the header stage badge from path progress instead of the legacy demand stage', async () => {
+    vi.mocked(inspirationApi.getDemand).mockResolvedValueOnce({
+      data: {
+        demand: {
+          id: 'demand-27',
+          slug: 'demand-19a1f71a',
+          status: 'published',
+          stage: '问题定义中',
+          title: '问题→方案的AI推荐引擎',
+          summary: '希望构建一个面向 AI 小白的智能体。',
+          tags: ['内容创作'],
+          stuck: '如何清晰定义需求边界。',
+          created_at: '2026-05-20T00:00:00Z',
+          updated_at: '2026-05-20T00:00:00Z',
+          can_view_private: true,
+          can_update: true,
+          assistant: {
+            status: 'ready',
+            snapshot: { next_step: '继续复盘迭代。' },
+            version: 2,
+            latest_run_id: 'iar-mvp',
+            updated_at: '2026-05-20T00:00:00Z',
+            error_message: null,
+          },
+          path_progress: [
+            { key: 'submitted', label: '留下线索', status: 'done', summary: '', emotion_note: '' },
+            { key: 'defined', label: '问题定义', status: 'done', summary: '', emotion_note: '' },
+            { key: 'tooling', label: '工具选择', status: 'done', summary: '', emotion_note: '' },
+            { key: 'demo', label: 'Demo 验证', status: 'done', summary: '', emotion_note: '' },
+            { key: 'mvp', label: 'MVP/复盘', status: 'done', summary: '完成 MVP 复盘。', emotion_note: '' },
+          ],
+          updates: [],
+        },
+      },
+    } as any)
+
+    renderDetail('/inspiration-co-creation/needs/demand-19a1f71a')
+
+    expect(await screen.findByText('问题→方案的AI推荐引擎')).toBeInTheDocument()
+    expect(screen.getAllByText('MVP/复盘').length).toBeGreaterThanOrEqual(1)
+    expect(screen.queryByText('问题定义中')).not.toBeInTheDocument()
+  })
+
+  it('lets public visitors read full form details when the owner enables complete public mode', async () => {
+    const publicDemand = {
+      id: 'demand-public',
+      slug: 'need-public-full-detail',
+      status: 'published',
+      stage: '问题定义中',
+      title: '阅读课堂共创',
+      summary: '我想把英语阅读课堂拆成可以验证的 AI 助教需求。 已有课程材料。',
+      tags: ['学习 / 教育'],
+      stuck: '想找人一起拆解',
+      redaction: {
+        method: 'raw_public',
+        status: 'raw_public',
+        notes: ['提出者选择公开完整线索详情。'],
+      },
+      created_at: '2026-05-20T00:00:00Z',
+      updated_at: '2026-05-20T00:00:00Z',
+      can_view_private: true,
+      can_update: false,
+      path_progress: [
+        { key: 'submitted', label: '留下线索', status: 'done', summary: '', emotion_note: '' },
+      ],
+      updates: [],
+    }
+    vi.mocked(inspirationApi.getDemand)
+      .mockResolvedValueOnce({ data: { demand: publicDemand } } as any)
+      .mockResolvedValueOnce({
+        data: {
+          demand: {
+            ...publicDemand,
+            private: {
+              participation_mode: '我有一个明确需求',
+              problem: '我想把英语阅读课堂拆成可以验证的 AI 助教需求。',
+              category: '学习 / 教育',
+              current_blockers: '想找人一起拆解',
+              note: '已有课程材料。',
+              contact: 'raw-mode@example.com',
+              submitter_name: '测试同学',
+            },
+          },
+        },
+      } as any)
+
+    renderDetail('/inspiration-co-creation/needs/need-public-full-detail')
+
+    expect(await screen.findByText('阅读课堂共创')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /显示完整信息/ })).toBeInTheDocument()
+    expect(screen.queryByText('登录并绑定这条线索，或使用管理员账号查看完整表单信息。')).not.toBeInTheDocument()
+    expect(screen.queryByText('公开方式')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /显示完整信息/ }))
+
+    await waitFor(() => {
+      expect(inspirationApi.getDemand).toHaveBeenCalledWith('need-public-full-detail', { includePrivate: true })
+      expect(screen.getByText('raw-mode@example.com')).toBeInTheDocument()
+      expect(screen.getByText('怎么联系你')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: '编辑完整信息' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('checkbox', { name: '完全公开线索详情' })).not.toBeInTheDocument()
+    })
+  })
 
   it('claims a private demand from the login redirect token even if public detail is hidden', async () => {
     localStorage.setItem(

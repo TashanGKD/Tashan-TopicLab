@@ -195,11 +195,15 @@ def test_inspiration_admin_can_view_private_and_create_update(client, monkeypatc
             "blockers": "还缺真实学生样本。",
             "next_steps": "下周找 3 名学生试用低保真原型。",
             "emotion_note": "这个问题已经从一个大想法变成可讨论的课堂实验。",
-            "artifacts": [{"label": "问题定义记录", "url": "https://example.com"}],
+            "artifacts": [
+                {"type": "link", "label": "问题定义记录", "url": "https://example.com", "visibility": "public"},
+                {"type": "link", "label": "内部原型", "url": "https://internal.example.com", "visibility": "admin_only"},
+            ],
             "visibility": "public",
         },
     )
     assert update.status_code == 200
+    assert len(update.json()["update"]["artifacts"]) == 2
 
     refreshed = test_client.get("/api/v1/inspiration/demands/need-01-ai-english-reading-assistant")
 
@@ -209,10 +213,21 @@ def test_inspiration_admin_can_view_private_and_create_update(client, monkeypatc
     assert updates[0]["stage_key"] == "defined"
     assert updates[0]["emotion_note"] == "这个问题已经从一个大想法变成可讨论的课堂实验。"
     assert updates[0]["summary"] == "完成问题定义"
+    assert updates[0]["artifacts"] == [
+        {"type": "link", "label": "问题定义记录", "url": "https://example.com", "visibility": "public"}
+    ]
     path = refreshed.json()["demand"]["path_progress"]
     defined = next(item for item in path if item["key"] == "defined")
     assert defined["status"] == "done"
     assert all(item["key"] != "interview" for item in path)
+
+    admin_refreshed = test_client.get(
+        "/api/v1/inspiration/demands/need-01-ai-english-reading-assistant",
+        headers=headers,
+    )
+    assert admin_refreshed.status_code == 200
+    admin_updates = admin_refreshed.json()["demand"]["updates"]
+    assert {artifact["label"] for artifact in admin_updates[0]["artifacts"]} == {"问题定义记录", "内部原型"}
 
 
 def test_inspiration_admin_can_edit_private_info_and_existing_update(client, monkeypatch):
@@ -305,6 +320,8 @@ def test_inspiration_owner_can_toggle_raw_public_mode(client, monkeypatch):
                 "category": "学习 / 教育",
                 "current_blockers": "想找人一起拆解",
                 "contact": "raw-mode@example.com",
+                "account_user_id": 2,
+                "account_phone": "13800138002",
             }
         },
     )
@@ -327,7 +344,16 @@ def test_inspiration_owner_can_toggle_raw_public_mode(client, monkeypatch):
     public_demand = public_detail.json()["demand"]
     assert public_demand["redaction"]["method"] == "raw_public"
     assert raw_problem in public_demand["summary"]
-    assert "raw-mode@example.com" not in str(public_demand)
+    assert public_demand["can_view_private"] is True
+    assert public_demand["can_update"] is False
+
+    public_full_detail = test_client.get(f"/api/v1/inspiration/demands/{slug}?include_private=true")
+    assert public_full_detail.status_code == 200
+    public_private = public_full_detail.json()["demand"]["private"]
+    assert public_private["problem"] == raw_problem
+    assert public_private["contact"] == "raw-mode@example.com"
+    assert "account_phone" not in public_private
+    assert "account_user_id" not in public_private
 
     fuzzy = test_client.patch(
         f"/api/v1/inspiration/demands/{slug}/public-mode",
@@ -346,6 +372,8 @@ def test_inspiration_owner_can_toggle_raw_public_mode(client, monkeypatch):
     fuzzy_public_detail = test_client.get(f"/api/v1/inspiration/demands/{slug}")
     assert fuzzy_public_detail.status_code == 200
     assert raw_problem not in str(fuzzy_public_detail.json()["demand"])
+    fuzzy_full_detail = test_client.get(f"/api/v1/inspiration/demands/{slug}?include_private=true")
+    assert "private" not in fuzzy_full_detail.json()["demand"]
 
 
 def test_inspiration_fuzzy_public_mode_uses_llm_title(client, monkeypatch):
