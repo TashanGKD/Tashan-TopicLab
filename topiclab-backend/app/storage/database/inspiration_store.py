@@ -170,6 +170,7 @@ def _apply_inspiration_ddl(session) -> None:
                 redaction_method TEXT NOT NULL DEFAULT 'rule_only',
                 redaction_status TEXT NOT NULL DEFAULT 'published',
                 redaction_notes TEXT NOT NULL DEFAULT '[]',
+                public_fuzzy_json TEXT NOT NULL DEFAULT '{}',
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
@@ -202,6 +203,7 @@ def _apply_inspiration_ddl(session) -> None:
                 redaction_method VARCHAR(32) NOT NULL DEFAULT 'rule_only',
                 redaction_status VARCHAR(32) NOT NULL DEFAULT 'published',
                 redaction_notes JSONB NOT NULL DEFAULT '[]'::jsonb,
+                public_fuzzy_json JSONB NOT NULL DEFAULT '{}'::jsonb,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
@@ -267,6 +269,7 @@ def _apply_inspiration_ddl(session) -> None:
     _ensure_column(session, "inspiration_demands", "redaction_method", "TEXT NOT NULL DEFAULT 'rule_only'", "VARCHAR(32) NOT NULL DEFAULT 'rule_only'")
     _ensure_column(session, "inspiration_demands", "redaction_status", "TEXT NOT NULL DEFAULT 'published'", "VARCHAR(32) NOT NULL DEFAULT 'published'")
     _ensure_column(session, "inspiration_demands", "redaction_notes", "TEXT NOT NULL DEFAULT '[]'", "JSONB NOT NULL DEFAULT '[]'::jsonb")
+    _ensure_column(session, "inspiration_demands", "public_fuzzy_json", "TEXT NOT NULL DEFAULT '{}'", "JSONB NOT NULL DEFAULT '{}'::jsonb")
     _ensure_column(session, "inspiration_demands", "assistant_status", "TEXT NOT NULL DEFAULT 'ready'", "VARCHAR(32) NOT NULL DEFAULT 'ready'")
     _ensure_column(session, "inspiration_demands", "assistant_snapshot_json", "TEXT NOT NULL DEFAULT '{}'", "JSONB NOT NULL DEFAULT '{}'::jsonb")
     _ensure_column(session, "inspiration_demands", "assistant_version", "INTEGER NOT NULL DEFAULT 0", "INTEGER NOT NULL DEFAULT 0")
@@ -479,6 +482,26 @@ def _serialize_public(row) -> dict[str, Any]:
         "created_at": str(row.created_at),
         "updated_at": str(row.updated_at),
         "latest_update_at": str(getattr(row, "latest_update_at", row.created_at)),
+    }
+
+
+def _public_payload_from_row(row) -> dict[str, Any]:
+    return {
+        "title": str(row.public_title or ""),
+        "summary": str(row.public_summary or ""),
+        "tags": _json_loads(row.public_tags, []),
+        "stuck": str(row.public_stuck or ""),
+    }
+
+
+def _coerce_public_payload(payload: Any, fallback: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        payload = {}
+    return {
+        "title": str(payload.get("title") or fallback.get("title") or "共创线索"),
+        "summary": str(payload.get("summary") or fallback.get("summary") or ""),
+        "tags": [str(item) for item in (payload.get("tags") or fallback.get("tags") or [])][:4],
+        "stuck": str(payload.get("stuck") or fallback.get("stuck") or ""),
     }
 
 
@@ -932,12 +955,14 @@ def create_demand(*, payload: dict[str, Any], public_payload: dict[str, Any], ll
             INSERT INTO inspiration_demands (
                 id, slug, clue_number, status, stage, owner_user_id, public_title, public_summary,
                 public_tags, public_stuck, allow_public, private_json, llm_review_json,
-                claim_token, claimed_at, redaction_method, redaction_status, redaction_notes, created_at, updated_at
+                claim_token, claimed_at, redaction_method, redaction_status, redaction_notes,
+                public_fuzzy_json, created_at, updated_at
             )
             VALUES (
                 :id, :slug, :clue_number, :status, :stage, :owner_user_id, :public_title, :public_summary,
                 :public_tags, :public_stuck, :allow_public, :private_json, :llm_review_json,
-                :claim_token, :claimed_at, :redaction_method, :redaction_status, :redaction_notes, :created_at, :updated_at
+                :claim_token, :claimed_at, :redaction_method, :redaction_status, :redaction_notes,
+                :public_fuzzy_json, :created_at, :updated_at
             )
             """
             if is_sqlite
@@ -946,16 +971,24 @@ def create_demand(*, payload: dict[str, Any], public_payload: dict[str, Any], ll
             INSERT INTO inspiration_demands (
                 id, slug, clue_number, status, stage, owner_user_id, public_title, public_summary,
                 public_tags, public_stuck, allow_public, private_json, llm_review_json,
-                claim_token, claimed_at, redaction_method, redaction_status, redaction_notes, created_at, updated_at
+                claim_token, claimed_at, redaction_method, redaction_status, redaction_notes,
+                public_fuzzy_json, created_at, updated_at
             )
             VALUES (
                 :id, :slug, :clue_number, :status, :stage, :owner_user_id, :public_title, :public_summary,
                 CAST(:public_tags AS JSONB), :public_stuck, :allow_public, CAST(:private_json AS JSONB),
                 CAST(:llm_review_json AS JSONB), :claim_token, :claimed_at, :redaction_method,
-                :redaction_status, CAST(:redaction_notes AS JSONB), :created_at, :updated_at
+                :redaction_status, CAST(:redaction_notes AS JSONB), CAST(:public_fuzzy_json AS JSONB),
+                :created_at, :updated_at
             )
             """
         )
+        public_fuzzy_payload = {
+            "title": public_payload["title"],
+            "summary": public_payload["summary"],
+            "tags": public_payload.get("tags") or [],
+            "stuck": public_payload.get("stuck") or "",
+        }
         session.execute(
             text(insert_sql),
             {
@@ -977,6 +1010,7 @@ def create_demand(*, payload: dict[str, Any], public_payload: dict[str, Any], ll
                 "redaction_method": public_payload.get("redaction_method") or "rule_only",
                 "redaction_status": public_payload.get("redaction_status") or ("published" if public_payload.get("allow_public") else "draft"),
                 "redaction_notes": _json_dumps(public_payload.get("redaction_notes") or []),
+                "public_fuzzy_json": _json_dumps(public_fuzzy_payload),
                 "created_at": now,
                 "updated_at": now,
             },
@@ -1037,7 +1071,8 @@ def update_demand_private(*, slug: str, private_payload: dict[str, Any], user: d
         row = session.execute(
             text(
                 """
-                SELECT id, owner_user_id, private_json
+                SELECT id, owner_user_id, private_json, public_title, public_summary, public_tags, public_stuck,
+                       public_fuzzy_json, redaction_method, redaction_status
                 FROM inspiration_demands
                 WHERE slug = :slug
                 LIMIT 1
@@ -1085,7 +1120,8 @@ def update_demand_public_mode(
         row = session.execute(
             text(
                 """
-                SELECT id, owner_user_id, private_json
+                SELECT id, owner_user_id, private_json, public_title, public_summary, public_tags, public_stuck,
+                       public_fuzzy_json, redaction_method, redaction_status
                 FROM inspiration_demands
                 WHERE slug = :slug
                 LIMIT 1
@@ -1098,11 +1134,17 @@ def update_demand_public_mode(
         if not _can_update(row, user):
             return {"error": "forbidden"}
         private_payload = _json_loads(row.private_json, {})
-        public_payload = (
-            _raw_public_payload_from_private(private_payload)
-            if raw_public
-            else (public_payload_override or _fuzzy_public_payload_from_private(private_payload))
+        current_public_payload = _public_payload_from_row(row)
+        stored_fuzzy_payload = _coerce_public_payload(
+            _json_loads(getattr(row, "public_fuzzy_json", "{}"), {}),
+            current_public_payload if not _is_raw_public(row) else _fuzzy_public_payload_from_private(private_payload),
         )
+        if raw_public:
+            public_payload = _raw_public_payload_from_private(private_payload)
+            next_public_fuzzy_payload = stored_fuzzy_payload if _is_raw_public(row) else current_public_payload
+        else:
+            public_payload = public_payload_override or stored_fuzzy_payload
+            next_public_fuzzy_payload = public_payload
         method = "raw_public" if raw_public else "spreadsheet_fuzzy_rule"
         notes = [
             "提出者选择公开完整线索详情，公开标题、摘要和完整表单信息不做模糊化处理。"
@@ -1125,6 +1167,7 @@ def update_demand_public_mode(
                     redaction_method = :redaction_method,
                     redaction_status = :redaction_status,
                     redaction_notes = :redaction_notes,
+                    public_fuzzy_json = :public_fuzzy_json,
                     updated_at = :updated_at
                 WHERE id = :id
                 """
@@ -1141,6 +1184,7 @@ def update_demand_public_mode(
                     redaction_method = :redaction_method,
                     redaction_status = :redaction_status,
                     redaction_notes = CAST(:redaction_notes AS JSONB),
+                    public_fuzzy_json = CAST(:public_fuzzy_json AS JSONB),
                     updated_at = :updated_at
                 WHERE id = :id
                 """
@@ -1154,8 +1198,82 @@ def update_demand_public_mode(
                 "redaction_method": method,
                 "redaction_status": "raw_public" if raw_public else "published",
                 "redaction_notes": _json_dumps(notes),
+                "public_fuzzy_json": _json_dumps(next_public_fuzzy_payload),
                 "updated_at": now,
                 "id": row.id,
+            },
+        )
+    return get_demand_by_slug(slug, user=user, include_private=True)
+
+
+def update_demand_public_fields(*, slug: str, public_payload: dict[str, Any], user: dict[str, Any]) -> dict[str, Any] | None:
+    with get_db_session() as session:
+        ensure_inspiration_schema_and_seed_for_session(session)
+        row = session.execute(
+            text(
+                """
+                SELECT id, owner_user_id, public_title, public_summary, public_tags, public_stuck,
+                       public_fuzzy_json, redaction_method, redaction_status
+                FROM inspiration_demands
+                WHERE slug = :slug
+                LIMIT 1
+                """
+            ),
+            {"slug": slug},
+        ).first()
+        if not row:
+            return None
+        if not _can_update(row, user):
+            return {"error": "forbidden"}
+        current_public_payload = _public_payload_from_row(row)
+        next_public_payload = {
+            **current_public_payload,
+            **{
+                key: str(public_payload[key]).strip()
+                for key in ("title", "summary", "stuck")
+                if key in public_payload and str(public_payload[key]).strip()
+            },
+        }
+        stored_fuzzy_payload = _coerce_public_payload(
+            _json_loads(getattr(row, "public_fuzzy_json", "{}"), {}),
+            current_public_payload,
+        )
+        next_fuzzy_payload = stored_fuzzy_payload if _is_raw_public(row) else next_public_payload
+        now = _now_iso()
+        is_sqlite = _is_sqlite_session(session)
+        session.execute(
+            text(
+                """
+                UPDATE inspiration_demands
+                SET public_title = :public_title,
+                    public_summary = :public_summary,
+                    public_stuck = :public_stuck,
+                    public_tags = :public_tags,
+                    public_fuzzy_json = :public_fuzzy_json,
+                    updated_at = :updated_at
+                WHERE id = :id
+                """
+                if is_sqlite
+                else
+                """
+                UPDATE inspiration_demands
+                SET public_title = :public_title,
+                    public_summary = :public_summary,
+                    public_stuck = :public_stuck,
+                    public_tags = CAST(:public_tags AS JSONB),
+                    public_fuzzy_json = CAST(:public_fuzzy_json AS JSONB),
+                    updated_at = :updated_at
+                WHERE id = :id
+                """
+            ),
+            {
+                "id": row.id,
+                "public_title": next_public_payload["title"],
+                "public_summary": next_public_payload["summary"],
+                "public_stuck": next_public_payload["stuck"],
+                "public_tags": _json_dumps(next_public_payload["tags"]),
+                "public_fuzzy_json": _json_dumps(next_fuzzy_payload),
+                "updated_at": now,
             },
         )
     return get_demand_by_slug(slug, user=user, include_private=True)

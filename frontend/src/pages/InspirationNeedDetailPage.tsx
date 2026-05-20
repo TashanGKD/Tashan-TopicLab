@@ -6,7 +6,7 @@ import remarkMath from 'remark-math'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import InspirationSubmissionSuccessOverlay from '../components/InspirationSubmissionSuccessOverlay'
 import { refreshCurrentUserProfile, tokenManager, type User } from '../api/auth'
-import { inspirationApi, type InspirationDemand, type InspirationDemandUpdate, type InspirationDemandUpdateRequest } from '../api/client'
+import { inspirationApi, type InspirationDemand, type InspirationDemandPublicFieldsRequest, type InspirationDemandUpdate, type InspirationDemandUpdateRequest } from '../api/client'
 
 const initialUpdate: InspirationDemandUpdateRequest = {
   week_label: '',
@@ -220,7 +220,7 @@ function StageMarkdown({
   return (
     <div className={`break-words ${className}`}>
       <div
-        className="markdown-content markdown-content-compact"
+        className="markdown-content markdown-content-compact inspiration-stage-markdown"
         style={{ color: 'inherit', fontFamily: 'inherit' }}
       >
         <ReactMarkdown
@@ -373,6 +373,9 @@ export default function InspirationNeedDetailPage() {
   const [privateDraft, setPrivateDraft] = useState<PrivateDraft>({})
   const [privateSaveStatus, setPrivateSaveStatus] = useState<'idle' | 'saving' | 'error'>('idle')
   const [publicModeStatus, setPublicModeStatus] = useState<'idle' | 'saving' | 'error'>('idle')
+  const [publicEditOpen, setPublicEditOpen] = useState(false)
+  const [publicSaveStatus, setPublicSaveStatus] = useState<'idle' | 'saving' | 'error'>('idle')
+  const [publicDraft, setPublicDraft] = useState<InspirationDemandPublicFieldsRequest>({})
   const [claimStatus, setClaimStatus] = useState<'idle' | 'claiming' | 'claimed' | 'auth_error' | 'error'>('idle')
   const [updateDraft, setUpdateDraft] = useState<InspirationDemandUpdateRequest>(initialUpdate)
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'saving' | 'error'>('idle')
@@ -470,6 +473,15 @@ export default function InspirationNeedDetailPage() {
   }, [demand, status])
 
   useEffect(() => {
+    if (!demand || publicEditOpen) return
+    setPublicDraft({
+      title: demand.title,
+      summary: demand.summary,
+      stuck: demand.stuck,
+    })
+  }, [demand?.title, demand?.summary, demand?.stuck, publicEditOpen])
+
+  useEffect(() => {
     const assistant = getDemandAssistant(demand)
     if (!demand || !assistant || !['pending', 'running'].includes(String(assistant.status))) {
       return
@@ -540,6 +552,30 @@ export default function InspirationNeedDetailPage() {
       setPublicModeStatus('idle')
     } catch {
       setPublicModeStatus('error')
+    }
+  }
+
+  async function handlePublicFieldsSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!demand) return
+    setPublicSaveStatus('saving')
+    try {
+      const payload = {
+        title: String(publicDraft.title ?? '').trim(),
+        summary: String(publicDraft.summary ?? '').trim(),
+        stuck: String(publicDraft.stuck ?? '').trim(),
+      }
+      const response = await inspirationApi.updateDemandPublicFields(demand.slug, payload)
+      setDemand(response.data.demand)
+      setPublicDraft({
+        title: response.data.demand.title,
+        summary: response.data.demand.summary,
+        stuck: response.data.demand.stuck,
+      })
+      setPublicEditOpen(false)
+      setPublicSaveStatus('idle')
+    } catch {
+      setPublicSaveStatus('error')
     }
   }
 
@@ -824,7 +860,79 @@ export default function InspirationNeedDetailPage() {
               ))}
             </div>
           ) : null}
+          {canUpdate ? (
+            <div>
+              <button
+                type="button"
+                onClick={() => {
+                  setPublicDraft({ title: demand.title, summary: demand.summary, stuck: demand.stuck })
+                  setPublicEditOpen((value) => !value)
+                  setPublicSaveStatus('idle')
+                }}
+                className="inline-flex min-h-10 items-center rounded-full bg-white px-4 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 transition hover:text-slate-950 hover:ring-teal-200"
+              >
+                {publicEditOpen ? '收起公开信息编辑' : '编辑公开信息'}
+              </button>
+            </div>
+          ) : null}
         </section>
+
+        {canUpdate && publicEditOpen ? (
+          <form onSubmit={handlePublicFieldsSubmit} className="mt-6 space-y-4 rounded-[var(--radius-md)] border border-teal-100 bg-white p-5">
+            <div>
+              <p className="text-base font-semibold text-slate-950">公开信息</p>
+              <p className="mt-1 text-sm leading-6 text-slate-500">
+                这里会影响线索墙和详情页首屏展示；关闭完全公开时会回到这里保存的脱敏公开信息。
+              </p>
+            </div>
+            <label className="block text-sm font-semibold text-slate-700">
+              公开标题
+              <input
+                value={String(publicDraft.title ?? '')}
+                onChange={(event) => setPublicDraft((current) => ({ ...current, title: event.target.value }))}
+                className="mt-2 min-h-10 w-full rounded-[var(--radius-sm)] border border-slate-200 px-3 text-sm"
+              />
+            </label>
+            <label className="block text-sm font-semibold text-slate-700">
+              公开摘要
+              <textarea
+                value={String(publicDraft.summary ?? '')}
+                onChange={(event) => setPublicDraft((current) => ({ ...current, summary: event.target.value }))}
+                rows={4}
+                className="mt-2 w-full rounded-[var(--radius-sm)] border border-slate-200 px-3 py-2 text-sm leading-7"
+              />
+            </label>
+            <label className="block text-sm font-semibold text-slate-700">
+              当前需要
+              <textarea
+                value={String(publicDraft.stuck ?? '')}
+                onChange={(event) => setPublicDraft((current) => ({ ...current, stuck: event.target.value }))}
+                rows={2}
+                className="mt-2 w-full rounded-[var(--radius-sm)] border border-slate-200 px-3 py-2 text-sm leading-7"
+              />
+            </label>
+            {publicSaveStatus === 'error' ? <p className="text-sm text-red-600">公开信息保存失败，请确认更新权限。</p> : null}
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="submit"
+                disabled={publicSaveStatus === 'saving'}
+                className="inline-flex min-h-10 items-center rounded-full bg-teal-700 px-4 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {publicSaveStatus === 'saving' ? '保存中…' : '保存公开信息'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPublicEditOpen(false)
+                  setPublicSaveStatus('idle')
+                }}
+                className="inline-flex min-h-10 items-center rounded-full bg-white px-4 text-sm font-semibold text-slate-600 ring-1 ring-slate-200"
+              >
+                取消
+              </button>
+            </div>
+          </form>
+        ) : null}
 
         {claimStatus === 'claimed' ? (
           <p className="mt-6 rounded-[var(--radius-md)] bg-teal-50 px-4 py-3 text-sm font-medium text-teal-800">

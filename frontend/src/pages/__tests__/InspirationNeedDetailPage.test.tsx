@@ -146,6 +146,14 @@ vi.mock('../../api/client', async () => {
           },
         },
       })),
+      updateDemandPublicFields: vi.fn((_slug: string, publicData: { title?: string; summary?: string; stuck?: string }) => Promise.resolve({
+        data: {
+          demand: {
+            ...demand,
+            ...publicData,
+          },
+        },
+      })),
       updateDemandPublicMode: vi.fn((_slug: string, rawPublic: boolean) => Promise.resolve({
         data: {
           demand: {
@@ -282,6 +290,26 @@ describe('InspirationNeedDetailPage', () => {
       expect(screen.queryByText('account_phone')).not.toBeInTheDocument()
       expect(screen.getByText('公开方式')).toBeInTheDocument()
       expect(screen.getByText('当前仅公开脱敏标题和摘要，完整表单信息只对提出者和管理员可见。')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑公开信息' }))
+    fireEvent.change(screen.getByLabelText('公开标题'), { target: { value: '手动编辑后的公开标题' } })
+    fireEvent.change(screen.getByLabelText('公开摘要'), { target: { value: '手动编辑后的公开摘要。' } })
+    fireEvent.change(screen.getByLabelText('当前需要'), { target: { value: '当前需要：真实试用对象。' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存公开信息' }))
+
+    await waitFor(() => {
+      expect(inspirationApi.updateDemandPublicFields).toHaveBeenCalledWith(
+        'need-01-ai-english-reading-assistant',
+        {
+          title: '手动编辑后的公开标题',
+          summary: '手动编辑后的公开摘要。',
+          stuck: '当前需要：真实试用对象。',
+        },
+      )
+      expect(screen.getByText('手动编辑后的公开标题')).toBeInTheDocument()
+      expect(screen.getByText('手动编辑后的公开摘要。')).toBeInTheDocument()
+      expect(screen.getByText('当前需要：真实试用对象。')).toBeInTheDocument()
     })
 
     fireEvent.click(screen.getByRole('checkbox', { name: '完全公开线索详情' }))

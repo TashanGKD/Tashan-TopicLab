@@ -14,17 +14,16 @@ from app.services.inspiration_assistant import run_inspiration_assistant_once
 from app.services.inspiration_review import (
     build_initial_inspiration_review,
     build_initial_public_redaction,
-    generate_public_fuzzy_title,
 )
 from app.storage.database.inspiration_store import (
     add_demand_update,
-    build_fuzzy_public_payload,
     claim_demand,
     create_assistant_run,
     create_demand,
     get_demand_by_slug,
     list_public_demands,
     update_demand_private,
+    update_demand_public_fields,
     update_demand_public_mode,
     update_demand_update,
 )
@@ -67,6 +66,12 @@ class InspirationDemandPrivateUpdateRequest(BaseModel):
 
 class InspirationDemandPublicModeRequest(BaseModel):
     raw_public: bool = False
+
+
+class InspirationDemandPublicFieldsRequest(BaseModel):
+    title: str | None = Field(default=None, max_length=80)
+    summary: str | None = Field(default=None, max_length=2000)
+    stuck: str | None = Field(default=None, max_length=500)
 
 
 def _build_public_payload(req: InspirationDemandSubmitRequest, redaction: dict[str, Any]) -> dict[str, Any]:
@@ -161,19 +166,18 @@ def update_private_info(slug: str, req: InspirationDemandPrivateUpdateRequest, u
 
 @router.patch("/demands/{slug}/public-mode")
 async def update_public_mode(slug: str, req: InspirationDemandPublicModeRequest, user: dict = Depends(get_current_user)):
-    public_payload_override = None
-    if not req.raw_public:
-        current = get_demand_by_slug(slug, user=user, include_private=True)
-        if current is None:
-            raise HTTPException(status_code=404, detail="需求不存在")
-        if not current.get("can_update"):
-            raise HTTPException(status_code=403, detail="没有更新权限")
-        private_payload = current.get("private") if isinstance(current.get("private"), dict) else {}
-        fallback_payload = build_fuzzy_public_payload(private_payload)
-        title = await generate_public_fuzzy_title(private_payload, fallback_title=str(fallback_payload.get("title") or "共创线索"))
-        public_payload_override = {**fallback_payload, "title": title}
+    demand = update_demand_public_mode(slug=slug, raw_public=req.raw_public, user=user)
+    if demand is None:
+        raise HTTPException(status_code=404, detail="需求不存在")
+    if demand.get("error") == "forbidden":
+        raise HTTPException(status_code=403, detail="没有更新权限")
+    return {"demand": demand}
 
-    demand = update_demand_public_mode(slug=slug, raw_public=req.raw_public, user=user, public_payload_override=public_payload_override)
+
+@router.patch("/demands/{slug}/public-fields")
+def update_public_fields(slug: str, req: InspirationDemandPublicFieldsRequest, user: dict = Depends(get_current_user)):
+    public_payload = req.model_dump(exclude_unset=True)
+    demand = update_demand_public_fields(slug=slug, public_payload=public_payload, user=user)
     if demand is None:
         raise HTTPException(status_code=404, detail="需求不存在")
     if demand.get("error") == "forbidden":

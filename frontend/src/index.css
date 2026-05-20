@@ -529,6 +529,23 @@
   @apply mt-1;
 }
 
+.inspiration-stage-markdown p,
+.inspiration-stage-markdown li,
+.inspiration-stage-markdown blockquote {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.inspiration-stage-markdown h1,
+.inspiration-stage-markdown h2,
+.inspiration-stage-markdown h3,
+.inspiration-stage-markdown h4,
+.inspiration-stage-markdown h5,
+.inspiration-stage-markdown h6 {
+  color: inherit;
+  font-family: inherit;
+}
+
 /* Status Badge - Monochrome */
 .status-badge {
   @apply inline-flex items-center px-2 py-0.5 text-xs border;

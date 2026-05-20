@@ -298,7 +298,11 @@ def test_inspiration_owner_can_toggle_raw_public_mode(client, monkeypatch):
     slug = "need-01-ai-english-reading-assistant"
     raw_problem = "我想把英语阅读课堂拆成可以验证的 AI 助教需求。"
 
+    llm_calls = 0
+
     async def fake_request(messages, **kwargs):
+        nonlocal llm_calls
+        llm_calls += 1
         return '{"title":"阅读课堂共创"}'
 
     monkeypatch.setattr("app.services.inspiration_review.request_inspiration_llm", fake_request)
@@ -326,6 +330,10 @@ def test_inspiration_owner_can_toggle_raw_public_mode(client, monkeypatch):
         },
     )
     assert private_update.status_code == 200
+    original_public = test_client.get(f"/api/v1/inspiration/demands/{slug}").json()["demand"]
+    original_public_title = original_public["title"]
+    original_public_summary = original_public["summary"]
+    original_public_stuck = original_public["stuck"]
 
     raw = test_client.patch(
         f"/api/v1/inspiration/demands/{slug}/public-mode",
@@ -363,11 +371,10 @@ def test_inspiration_owner_can_toggle_raw_public_mode(client, monkeypatch):
     assert fuzzy.status_code == 200
     fuzzy_demand = fuzzy.json()["demand"]
     assert fuzzy_demand["redaction"]["method"] == "spreadsheet_fuzzy_rule"
-    assert "公开摘要仅保留方向层级" in fuzzy_demand["summary"]
-    assert fuzzy_demand["title"] == "阅读课堂共创"
-    assert 4 <= len(fuzzy_demand["title"]) <= 12
-    assert "英语阅读训练" in fuzzy_demand["summary"]
-    assert "问题拆解" in fuzzy_demand["stuck"]
+    assert fuzzy_demand["title"] == original_public_title
+    assert fuzzy_demand["summary"] == original_public_summary
+    assert fuzzy_demand["stuck"] == original_public_stuck
+    assert llm_calls == 0
 
     fuzzy_public_detail = test_client.get(f"/api/v1/inspiration/demands/{slug}")
     assert fuzzy_public_detail.status_code == 200
@@ -376,14 +383,67 @@ def test_inspiration_owner_can_toggle_raw_public_mode(client, monkeypatch):
     assert "private" not in fuzzy_full_detail.json()["demand"]
 
 
-def test_inspiration_fuzzy_public_mode_uses_llm_title(client, monkeypatch):
+def test_inspiration_owner_can_edit_public_fields_and_restore_them_after_raw_public(client, monkeypatch):
     test_client, auth_module = client
     monkeypatch.setenv("ADMIN_USER_IDS", "1")
     token = auth_module.create_jwt_token(1, "13800138000", is_admin=True)
     headers = {"Authorization": f"Bearer {token}"}
     slug = "need-01-ai-english-reading-assistant"
 
+    edited = test_client.patch(
+        f"/api/v1/inspiration/demands/{slug}/public-fields",
+        headers=headers,
+        json={
+            "title": "阅读共创标题",
+            "summary": "这是提出者手动编辑后的公开摘要。",
+            "stuck": "当前需要：找真实试用对象。",
+        },
+    )
+    assert edited.status_code == 200
+    edited_demand = edited.json()["demand"]
+    assert edited_demand["title"] == "阅读共创标题"
+    assert edited_demand["summary"] == "这是提出者手动编辑后的公开摘要。"
+    assert edited_demand["stuck"] == "当前需要：找真实试用对象。"
+
+    raw = test_client.patch(
+        f"/api/v1/inspiration/demands/{slug}/public-mode",
+        headers=headers,
+        json={"raw_public": True},
+    )
+    assert raw.status_code == 200
+    assert raw.json()["demand"]["redaction"]["method"] == "raw_public"
+
+    raw_title = test_client.patch(
+        f"/api/v1/inspiration/demands/{slug}/public-fields",
+        headers=headers,
+        json={"title": "公开后的标题"},
+    )
+    assert raw_title.status_code == 200
+    assert raw_title.json()["demand"]["title"] == "公开后的标题"
+
+    restored = test_client.patch(
+        f"/api/v1/inspiration/demands/{slug}/public-mode",
+        headers=headers,
+        json={"raw_public": False},
+    )
+    assert restored.status_code == 200
+    restored_demand = restored.json()["demand"]
+    assert restored_demand["title"] == "阅读共创标题"
+    assert restored_demand["summary"] == "这是提出者手动编辑后的公开摘要。"
+    assert restored_demand["stuck"] == "当前需要：找真实试用对象。"
+
+
+def test_inspiration_fuzzy_public_mode_keeps_existing_public_fields(client, monkeypatch):
+    test_client, auth_module = client
+    monkeypatch.setenv("ADMIN_USER_IDS", "1")
+    token = auth_module.create_jwt_token(1, "13800138000", is_admin=True)
+    headers = {"Authorization": f"Bearer {token}"}
+    slug = "need-01-ai-english-reading-assistant"
+    llm_calls = 0
+
     async def fake_request(messages, **kwargs):
+        nonlocal llm_calls
+        llm_calls += 1
         return '{"title":"课堂阅读反馈"}'
 
     monkeypatch.setattr("app.services.inspiration_review.request_inspiration_llm", fake_request)
@@ -401,6 +461,7 @@ def test_inspiration_fuzzy_public_mode_uses_llm_title(client, monkeypatch):
         },
     )
     assert private_update.status_code == 200
+    original_public = test_client.get(f"/api/v1/inspiration/demands/{slug}").json()["demand"]
 
     fuzzy = test_client.patch(
         f"/api/v1/inspiration/demands/{slug}/public-mode",
@@ -410,9 +471,10 @@ def test_inspiration_fuzzy_public_mode_uses_llm_title(client, monkeypatch):
 
     assert fuzzy.status_code == 200
     demand = fuzzy.json()["demand"]
-    assert demand["title"] == "课堂阅读反馈"
+    assert demand["title"] == original_public["title"]
+    assert demand["summary"] == original_public["summary"]
     assert demand["redaction"]["method"] == "spreadsheet_fuzzy_rule"
-    assert "公开摘要仅保留方向层级" in demand["summary"]
+    assert llm_calls == 0
 
 
 def test_inspiration_fuzzy_title_rules_distinguish_specific_domains(client):

@@ -667,6 +667,12 @@ export interface InspirationDemandUpdateRequest {
   visibility: 'public' | 'admin_only'
 }
 
+export interface InspirationDemandPublicFieldsRequest {
+  title?: string
+  summary?: string
+  stuck?: string
+}
+
 export const topicsApi = {
   list: (params?: { category?: string; q?: string; cursor?: string | null; limit?: number }) => {
     const searchParams = new URLSearchParams()
@@ -784,6 +790,8 @@ export const inspirationApi = {
     api.patch<{ demand: InspirationDemand }>(`v1/inspiration/demands/${encodeURIComponent(slug)}/private`, { private: privateData }),
   updateDemandPublicMode: (slug: string, rawPublic: boolean) =>
     api.patch<{ demand: InspirationDemand }>(`v1/inspiration/demands/${encodeURIComponent(slug)}/public-mode`, { raw_public: rawPublic }),
+  updateDemandPublicFields: (slug: string, payload: InspirationDemandPublicFieldsRequest) =>
+    api.patch<{ demand: InspirationDemand }>(`v1/inspiration/demands/${encodeURIComponent(slug)}/public-fields`, payload),
   createUpdate: (slug: string, payload: InspirationDemandUpdateRequest) =>
     api.post<{ update: InspirationDemandUpdate }>(`v1/inspiration/demands/${encodeURIComponent(slug)}/updates`, payload),
   updateUpdate: (slug: string, updateId: string, payload: InspirationDemandUpdateRequest) =>
