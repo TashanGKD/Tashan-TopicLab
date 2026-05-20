@@ -465,6 +465,7 @@ def _serialize_public(row) -> dict[str, Any]:
         "slug": row.slug,
         "clue_number": getattr(row, "clue_number", None) or _clue_number(row.slug),
         "status": row.status,
+        # Legacy compatibility field. Current stage display should be derived from path_progress.
         "stage": row.stage,
         "title": row.public_title,
         "summary": row.public_summary,

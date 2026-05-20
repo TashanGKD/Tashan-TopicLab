@@ -560,6 +560,10 @@ export interface InspirationDemand {
   slug: string
   clue_number?: number | null
   status: string
+  /**
+   * @deprecated Legacy demand-level stage kept for older records and fallback UI.
+   * Use path_progress and update stage_key/stage_status for current stage display.
+   */
   stage: string
   title: string
   summary: string

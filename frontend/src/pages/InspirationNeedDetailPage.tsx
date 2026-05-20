@@ -655,6 +655,7 @@ export default function InspirationNeedDetailPage() {
     : currentStageIndex >= 0
       ? currentStageIndex
       : lastDoneStageIndex
+  // demand.stage is legacy; path_progress is the source of truth for display.
   const headerStageLabel = pathProgress[timelineIndex]?.label || demand.stage
   const pendingClaimToken = new URLSearchParams(location.search).get('claim_token') || localStorage.getItem(`inspiration_claim_${demand.slug}`)
   const claimReturnPath = `/inspiration-co-creation/needs/${encodeURIComponent(demand.slug)}${pendingClaimToken ? `?claim_token=${encodeURIComponent(pendingClaimToken)}` : ''}`

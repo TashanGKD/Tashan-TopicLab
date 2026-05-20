@@ -224,6 +224,7 @@ function currentPathStage(need: InspirationDemand) {
   const stage = pathProgress.find((item) => item.status === 'current')
     ?? pathProgress.find((stage) => stage.status === 'needs_input')
     ?? [...pathProgress].reverse().find((stage) => stage.status === 'done')
+    // Legacy fallback for older API rows without path_progress.
     ?? { label: need.stage || '留下线索', summary: need.stuck || '' }
   return { ...stage, summary: cleanStageSummary(stage.summary) }
 }
@@ -324,6 +325,7 @@ function buildDemandOverview(demands: InspirationDemand[]) {
   const total = demands.length
   const needsInput = demands.filter((need) => (
     normalizePathProgress(need.path_progress).some((stage) => stage.status === 'needs_input')
+    // Legacy fallback for older API rows without path_progress.
     || /待补充/.test(need.stage)
   )).length
   const demoOrFeedback = demands.filter((need) => /Demo|反馈|验证|试用/.test(compactPublicText(need))).length
