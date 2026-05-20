@@ -976,7 +976,11 @@ export default function InspirationNeedDetailPage() {
             <div>
               <h2 className="text-2xl font-semibold text-slate-950">完整表单信息</h2>
               <p className="mt-2 text-sm leading-7 text-slate-500">
-                {canEditPrivate ? '你提交时的原始内容。觉得不够清楚的话，可以在这里补全。' : '提出者已选择公开的原始线索详情。'}
+                {canEditPrivate
+                  ? '你提交时的原始内容。觉得不够清楚的话，可以在这里补全。'
+                  : canRevealPrivate
+                    ? '提出者已选择公开的原始线索详情。'
+                    : '完整信息仅对提出者本人和管理员可见。'}
               </p>
             </div>
             {canRevealPrivate && privateOpen && privateDraftEntries.length ? (
