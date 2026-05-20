@@ -289,6 +289,56 @@ def test_inspiration_admin_can_edit_private_info_and_existing_update(client, mon
     assert demo_stage["summary"] == "Demo 已跑通"
 
 
+def test_logged_in_user_can_mark_inspiration_demand_interest(client):
+    test_client, auth_module = client
+    token = auth_module.create_jwt_token(2, "13800138002")
+    headers = {"Authorization": f"Bearer {token}"}
+    slug = "need-01-ai-english-reading-assistant"
+
+    anonymous_detail = test_client.get(f"/api/v1/inspiration/demands/{slug}")
+    assert anonymous_detail.status_code == 200
+    assert anonymous_detail.json()["demand"]["interest"] == {
+        "interested": False,
+        "interested_count": 0,
+        "interested_users": [],
+    }
+
+    anonymous_vote = test_client.post(
+        f"/api/v1/inspiration/demands/{slug}/interest",
+        json={"interested": True},
+    )
+    assert anonymous_vote.status_code == 401
+
+    interested = test_client.post(
+        f"/api/v1/inspiration/demands/{slug}/interest",
+        headers=headers,
+        json={"interested": True},
+    )
+    assert interested.status_code == 200
+    interest = interested.json()["interest"]
+    assert interest["interested"] is True
+    assert interest["interested_count"] == 1
+    assert interest["interested_users"] == [
+        {"user_id": 2, "display_name": "用户 2"},
+    ]
+
+    detail = test_client.get(f"/api/v1/inspiration/demands/{slug}", headers=headers)
+    assert detail.status_code == 200
+    assert detail.json()["demand"]["interest"] == interest
+
+    cancelled = test_client.post(
+        f"/api/v1/inspiration/demands/{slug}/interest",
+        headers=headers,
+        json={"interested": False},
+    )
+    assert cancelled.status_code == 200
+    assert cancelled.json()["interest"] == {
+        "interested": False,
+        "interested_count": 0,
+        "interested_users": [],
+    }
+
+
 def test_inspiration_owner_can_toggle_raw_public_mode(client, monkeypatch):
     test_client, auth_module = client
     monkeypatch.setenv("ADMIN_USER_IDS", "1")

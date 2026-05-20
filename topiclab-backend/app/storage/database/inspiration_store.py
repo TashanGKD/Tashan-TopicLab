@@ -331,6 +331,35 @@ def _apply_inspiration_ddl(session) -> None:
     )
     session.execute(text("CREATE INDEX IF NOT EXISTS idx_inspiration_assistant_runs_demand_created ON inspiration_assistant_runs(demand_id, created_at DESC)"))
     session.execute(text("CREATE INDEX IF NOT EXISTS idx_inspiration_assistant_runs_status_created ON inspiration_assistant_runs(status, created_at DESC)"))
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS inspiration_demand_interests (
+                id TEXT PRIMARY KEY,
+                demand_id TEXT NOT NULL REFERENCES inspiration_demands(id) ON DELETE CASCADE,
+                user_id INTEGER NOT NULL,
+                display_name TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(demand_id, user_id)
+            )
+            """
+            if is_sqlite
+            else
+            """
+            CREATE TABLE IF NOT EXISTS inspiration_demand_interests (
+                id VARCHAR(255) PRIMARY KEY,
+                demand_id VARCHAR(255) NOT NULL REFERENCES inspiration_demands(id) ON DELETE CASCADE,
+                user_id INTEGER NOT NULL,
+                display_name TEXT NOT NULL DEFAULT '',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(demand_id, user_id)
+            )
+            """
+        )
+    )
+    session.execute(text("CREATE INDEX IF NOT EXISTS idx_inspiration_interests_demand_created ON inspiration_demand_interests(demand_id, created_at ASC)"))
 
 
 def _backfill_clue_numbers(session) -> None:
@@ -588,6 +617,51 @@ def _serialize_run(row) -> dict[str, Any]:
         "created_at": str(row.created_at),
         "started_at": str(row.started_at) if row.started_at is not None else None,
         "completed_at": str(row.completed_at) if row.completed_at is not None else None,
+    }
+
+
+def _user_id_from_auth(user: dict[str, Any] | None) -> int | None:
+    if not user or user.get("sub") is None:
+        return None
+    try:
+        return int(user["sub"])
+    except (TypeError, ValueError):
+        return None
+
+
+def _display_name_for_user(session, user: dict[str, Any]) -> str:
+    user_id = _user_id_from_auth(user)
+    if user_id is None:
+        return ""
+    row = session.execute(text("SELECT username FROM users WHERE id = :id"), {"id": user_id}).first()
+    username = str((row.username if row else user.get("username")) or "").strip()
+    return username or f"用户 {user_id}"
+
+
+def _serialize_interest_for_demand(session, demand_id: str, user: dict[str, Any] | None = None) -> dict[str, Any]:
+    rows = session.execute(
+        text(
+            """
+            SELECT user_id, display_name, created_at
+            FROM inspiration_demand_interests
+            WHERE demand_id = :demand_id
+            ORDER BY created_at ASC
+            """
+        ),
+        {"demand_id": demand_id},
+    ).fetchall()
+    current_user_id = _user_id_from_auth(user)
+    interested_users = [
+        {
+            "user_id": int(row.user_id),
+            "display_name": str(row.display_name or f"用户 {int(row.user_id)}"),
+        }
+        for row in rows
+    ]
+    return {
+        "interested": current_user_id is not None and any(item["user_id"] == current_user_id for item in interested_users),
+        "interested_count": len(interested_users),
+        "interested_users": interested_users,
     }
 
 
@@ -901,7 +975,11 @@ def list_public_demands() -> list[dict[str, Any]]:
                     _serialize_update(update, include_private_artifacts=False)
                 )
         items = [
-            {**_serialize_public(row), "path_progress": _build_path_progress(row, updates_by_demand.get(row.id, []))}
+            {
+                **_serialize_public(row),
+                "path_progress": _build_path_progress(row, updates_by_demand.get(row.id, [])),
+                "interest": _serialize_interest_for_demand(session, row.id),
+            }
             for row in rows
         ]
         items.sort(
@@ -961,6 +1039,7 @@ def get_demand_by_slug(slug: str, *, user: dict[str, Any] | None = None, include
         payload["can_update"] = _can_update(row, user)
         payload["assistant"] = _serialize_assistant(row)
         payload["llm_review"] = payload["assistant"]["snapshot"] or _json_loads(row.llm_review_json, {})
+        payload["interest"] = _serialize_interest_for_demand(session, row.id, user=user)
         if include_private and can_view_private:
             private_payload = _json_loads(row.private_json, {})
             payload["private"] = private_payload if owner_can_view_private else _public_private_payload(private_payload)
@@ -1473,6 +1552,90 @@ def update_demand_update(*, slug: str, update_id: str, payload: dict[str, Any], 
             {"id": update_id},
         ).first()
         return _serialize_update(row)
+
+
+def set_demand_interest(*, slug: str, user: dict[str, Any], interested: bool) -> dict[str, Any] | None:
+    user_id = _user_id_from_auth(user)
+    if user_id is None:
+        return {"error": "unauthorized"}
+    with get_db_session() as session:
+        ensure_inspiration_schema_and_seed_for_session(session)
+        demand = session.execute(
+            text(
+                """
+                SELECT id, status, owner_user_id
+                FROM inspiration_demands
+                WHERE slug = :slug
+                LIMIT 1
+                """
+            ),
+            {"slug": slug},
+        ).first()
+        if not demand:
+            return None
+        if demand.status != "published" and not _can_view_private(demand, user):
+            return None
+        now = _now_iso()
+        if interested:
+            display_name = _display_name_for_user(session, user)
+            existing = session.execute(
+                text(
+                    """
+                    SELECT id
+                    FROM inspiration_demand_interests
+                    WHERE demand_id = :demand_id AND user_id = :user_id
+                    LIMIT 1
+                    """
+                ),
+                {"demand_id": demand.id, "user_id": user_id},
+            ).first()
+            if existing:
+                session.execute(
+                    text(
+                        """
+                        UPDATE inspiration_demand_interests
+                        SET display_name = :display_name, updated_at = :updated_at
+                        WHERE id = :id
+                        """
+                    ),
+                    {"display_name": display_name, "updated_at": now, "id": existing.id},
+                )
+            else:
+                session.execute(
+                    text(
+                        """
+                        INSERT INTO inspiration_demand_interests (
+                            id, demand_id, user_id, display_name, created_at, updated_at
+                        )
+                        VALUES (
+                            :id, :demand_id, :user_id, :display_name, :created_at, :updated_at
+                        )
+                        """
+                    ),
+                    {
+                        "id": f"int_{uuid4().hex}",
+                        "demand_id": demand.id,
+                        "user_id": user_id,
+                        "display_name": display_name,
+                        "created_at": now,
+                        "updated_at": now,
+                    },
+                )
+        else:
+            session.execute(
+                text(
+                    """
+                    DELETE FROM inspiration_demand_interests
+                    WHERE demand_id = :demand_id AND user_id = :user_id
+                    """
+                ),
+                {"demand_id": demand.id, "user_id": user_id},
+            )
+        session.execute(
+            text("UPDATE inspiration_demands SET updated_at = :updated_at WHERE id = :id"),
+            {"updated_at": now, "id": demand.id},
+        )
+        return _serialize_interest_for_demand(session, demand.id, user=user)
 
 
 def _build_assistant_input_snapshot(session, demand_id: str, trigger_type: str, trigger_update_id: str | None) -> dict[str, Any]:

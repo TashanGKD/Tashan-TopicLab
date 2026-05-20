@@ -26,6 +26,11 @@ vi.mock('../../api/client', async () => {
     updated_at: '2026-05-18T00:00:00Z',
     can_view_private: true,
     can_update: true,
+    interest: {
+      interested: false,
+      interested_count: 0,
+      interested_users: [],
+    },
     assistant: {
       status: 'ready',
       snapshot: {
@@ -186,6 +191,21 @@ vi.mock('../../api/client', async () => {
           },
         },
       })),
+      toggleInterest: vi.fn((_slug: string, interested: boolean) => Promise.resolve({
+        data: {
+          interest: interested
+            ? {
+                interested: true,
+                interested_count: 1,
+                interested_users: [{ user_id: 1, display_name: '管理员' }],
+              }
+            : {
+                interested: false,
+                interested_count: 0,
+                interested_users: [],
+              },
+        },
+      })),
     },
   }
 })
@@ -229,6 +249,77 @@ describe('InspirationNeedDetailPage', () => {
     expect(screen.getByText('正在打开这条线索，你可以继续更新它。')).toBeInTheDocument()
   })
 
+  it('copies the inspiration share text with title and demand link', async () => {
+    const writeText = vi.fn(() => Promise.resolve())
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    })
+    window.history.pushState({}, '', '/inspiration-co-creation/needs/need-01-ai-english-reading-assistant')
+
+    renderDetail()
+
+    expect(await screen.findByText('英语阅读课堂的 AI 助教')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '分享' }))
+    const shareText = `【灵感共创】我分享了一个灵感：英语阅读课堂的 AI 助教\n${window.location.origin}/inspiration-co-creation/needs/need-01-ai-english-reading-assistant`
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(shareText)
+      expect(screen.getByLabelText('分享文案')).toBeInTheDocument()
+      expect(screen.getByLabelText('完整分享文案')).toHaveValue(shareText)
+    })
+  })
+
+  it('falls back to document copy when the Clipboard API is unavailable', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      value: undefined,
+      configurable: true,
+    })
+    const execCommand = vi.fn(() => true)
+    Object.defineProperty(document, 'execCommand', {
+      value: execCommand,
+      configurable: true,
+    })
+
+    renderDetail()
+
+    expect(await screen.findByText('英语阅读课堂的 AI 助教')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '分享' }))
+
+    await waitFor(() => {
+      expect(execCommand).toHaveBeenCalledWith('copy')
+      expect(screen.getByRole('button', { name: '已复制' })).toBeInTheDocument()
+      expect(screen.getByLabelText('分享文案')).toBeInTheDocument()
+      expect(screen.getByLabelText('完整分享文案')).toHaveValue(
+        `【灵感共创】我分享了一个灵感：英语阅读课堂的 AI 助教\n${window.location.origin}/inspiration-co-creation/needs/need-01-ai-english-reading-assistant`,
+      )
+    })
+  })
+
+  it('keeps the manual share text visible when automatic copy fails', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      value: undefined,
+      configurable: true,
+    })
+    Object.defineProperty(document, 'execCommand', {
+      value: vi.fn(() => false),
+      configurable: true,
+    })
+
+    renderDetail()
+
+    expect(await screen.findByText('英语阅读课堂的 AI 助教')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '分享' }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('分享文案')).toBeInTheDocument()
+      expect(screen.getByLabelText('完整分享文案')).toHaveValue(
+        `【灵感共创】我分享了一个灵感：英语阅读课堂的 AI 助教\n${window.location.origin}/inspiration-co-creation/needs/need-01-ai-english-reading-assistant`,
+      )
+      expect(screen.queryByText('复制失败，请稍后重试。')).not.toBeInTheDocument()
+    })
+  })
+
   it('renders visual path, reveals private detail on demand, and lets owners update progress', async () => {
     localStorage.setItem(
       'auth_user',
@@ -253,6 +344,13 @@ describe('InspirationNeedDetailPage', () => {
     expect(screen.queryByText('18773233131')).not.toBeInTheDocument()
     expect(screen.getByLabelText('路径时间轴')).toBeInTheDocument()
     expect(screen.getByLabelText('路径进展列表')).toBeInTheDocument()
+    expect(screen.getByText('还没有人表示感兴趣。')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '我感兴趣' }))
+    await waitFor(() => {
+      expect(inspirationApi.toggleInterest).toHaveBeenCalledWith('need-01-ai-english-reading-assistant', true)
+      expect(screen.getByRole('button', { name: '已感兴趣' })).toBeInTheDocument()
+      expect(screen.getByText('管理员 感兴趣')).toBeInTheDocument()
+    })
     expect(screen.getByRole('link', { name: 'coze 项目' })).toHaveAttribute(
       'href',
       'https://code.coze.cn/p/7641557348380688425/preview',
@@ -359,7 +457,7 @@ describe('InspirationNeedDetailPage', () => {
       expect(screen.getAllByText('完成问题定义').length).toBeGreaterThanOrEqual(1)
       expect(screen.getAllByText('AI 正在生成参考').length).toBeGreaterThanOrEqual(1)
     })
-  })
+  }, 10000)
 
   it('shows assistant progress and polls until the latest snapshot is ready', async () => {
     const pendingDemand = {

@@ -22,6 +22,7 @@ from app.storage.database.inspiration_store import (
     create_demand,
     get_demand_by_slug,
     list_public_demands,
+    set_demand_interest,
     update_demand_private,
     update_demand_public_fields,
     update_demand_public_mode,
@@ -72,6 +73,10 @@ class InspirationDemandPublicFieldsRequest(BaseModel):
     title: str | None = Field(default=None, max_length=80)
     summary: str | None = Field(default=None, max_length=2000)
     stuck: str | None = Field(default=None, max_length=500)
+
+
+class InspirationDemandInterestRequest(BaseModel):
+    interested: bool = True
 
 
 def _build_public_payload(req: InspirationDemandSubmitRequest, redaction: dict[str, Any]) -> dict[str, Any]:
@@ -183,6 +188,16 @@ def update_public_fields(slug: str, req: InspirationDemandPublicFieldsRequest, u
     if demand.get("error") == "forbidden":
         raise HTTPException(status_code=403, detail="没有更新权限")
     return {"demand": demand}
+
+
+@router.post("/demands/{slug}/interest")
+def update_interest(slug: str, req: InspirationDemandInterestRequest, user: dict = Depends(get_current_user)):
+    interest = set_demand_interest(slug=slug, user=user, interested=req.interested)
+    if interest is None:
+        raise HTTPException(status_code=404, detail="需求不存在")
+    if interest.get("error") == "unauthorized":
+        raise HTTPException(status_code=401, detail="未登录")
+    return {"interest": interest}
 
 
 @router.post("/demands/{slug}/updates")

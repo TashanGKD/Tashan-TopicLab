@@ -21,6 +21,12 @@ const initialUpdate: InspirationDemandUpdateRequest = {
   visibility: 'public',
 }
 
+const emptyInterest = {
+  interested: false,
+  interested_count: 0,
+  interested_users: [],
+}
+
 const statusOptions: Array<{ key: InspirationDemandUpdateRequest['stage_status']; label: string }> = [
   { key: 'done', label: '已完成' },
   { key: 'current', label: '进行中' },
@@ -298,6 +304,40 @@ function isAssistantUpdating(assistant: NonNullable<ReturnType<typeof getDemandA
   return assistant?.status === 'pending' || assistant?.status === 'running'
 }
 
+function getDemandInterest(demand: InspirationDemand | null) {
+  return demand?.interest ?? emptyInterest
+}
+
+function buildDemandShareText(demand: InspirationDemand) {
+  const basePath = (import.meta.env.BASE_URL || '/').replace(/\/?$/, '/')
+  const url = new URL(
+    `${basePath}inspiration-co-creation/needs/${encodeURIComponent(demand.slug)}`,
+    window.location.origin,
+  ).toString()
+  return `【灵感共创】我分享了一个灵感：${demand.title}\n${url}`
+}
+
+async function copyText(text: string) {
+  if (window.navigator?.clipboard?.writeText) {
+    await window.navigator.clipboard.writeText(text)
+    return
+  }
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', '')
+  textarea.style.position = 'fixed'
+  textarea.style.left = '-9999px'
+  textarea.style.top = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  try {
+    const copied = document.execCommand('copy')
+    if (!copied) throw new Error('copy command failed')
+  } finally {
+    textarea.remove()
+  }
+}
+
 function getAssistantGeneratingStageIndex(
   pathProgress: InspirationDemand['path_progress'],
   assistant: NonNullable<ReturnType<typeof getDemandAssistant>> | null,
@@ -379,6 +419,10 @@ export default function InspirationNeedDetailPage() {
   const [claimStatus, setClaimStatus] = useState<'idle' | 'claiming' | 'claimed' | 'auth_error' | 'error'>('idle')
   const [updateDraft, setUpdateDraft] = useState<InspirationDemandUpdateRequest>(initialUpdate)
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'saving' | 'error'>('idle')
+  const [interestStatus, setInterestStatus] = useState<'idle' | 'saving' | 'error'>('idle')
+  const [shareStatus, setShareStatus] = useState<'idle' | 'copied'>('idle')
+  const [shareText, setShareText] = useState('')
+  const [sharePanelOpen, setSharePanelOpen] = useState(false)
   const [activeComposerStage, setActiveComposerStage] = useState<string | null>(null)
   const [editingUpdateId, setEditingUpdateId] = useState<string | null>(null)
   const [openUpdateSections, setOpenUpdateSections] = useState<UpdateOptionalSection[]>([])
@@ -579,6 +623,33 @@ export default function InspirationNeedDetailPage() {
     }
   }
 
+  async function handleInterestToggle() {
+    if (!demand || !currentUser) return
+    const nextInterested = !getDemandInterest(demand).interested
+    setInterestStatus('saving')
+    try {
+      const response = await inspirationApi.toggleInterest(demand.slug, nextInterested)
+      setDemand((current) => current ? { ...current, interest: response.data.interest } : current)
+      setInterestStatus('idle')
+    } catch {
+      setInterestStatus('error')
+    }
+  }
+
+  async function handleShareCopy() {
+    if (!demand) return
+    const nextShareText = buildDemandShareText(demand)
+    setShareText(nextShareText)
+    setSharePanelOpen(true)
+    try {
+      await copyText(nextShareText)
+      setShareStatus('copied')
+      window.setTimeout(() => setShareStatus('idle'), 1600)
+    } catch {
+      setShareStatus('idle')
+    }
+  }
+
   function startStageComposer(stageKey: string) {
     setEditingUpdateId(null)
     setActiveComposerStage(stageKey)
@@ -698,6 +769,8 @@ export default function InspirationNeedDetailPage() {
   const loginBindSearch = `?next=${encodeURIComponent(claimReturnPath)}`
   const shouldShowClaimLogin = Boolean(pendingClaimToken && (!currentUser || claimStatus === 'auth_error'))
   const privateDraftEntries = getVisiblePrivateEntries(privateDraft)
+  const interest = getDemandInterest(demand)
+  const interestedNames = interest.interested_users.map((user) => user.display_name).filter(Boolean)
   const linkArtifact = getUpdateArtifactsByType(updateDraft, 'link')[0] ?? {}
   const toolArtifact = getUpdateArtifactsByType(updateDraft, 'tool')[0] ?? {}
   const activeStage = pathProgress.find((stage) => stage.key === activeComposerStage)
@@ -860,8 +933,15 @@ export default function InspirationNeedDetailPage() {
               ))}
             </div>
           ) : null}
-          {canUpdate ? (
-            <div>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => void handleShareCopy()}
+              className="inline-flex min-h-10 items-center rounded-full bg-white px-4 text-sm font-semibold text-teal-700 ring-1 ring-teal-200 transition hover:ring-teal-400"
+            >
+              {shareStatus === 'copied' ? '已复制' : '分享'}
+            </button>
+            {canUpdate ? (
               <button
                 type="button"
                 onClick={() => {
@@ -873,8 +953,57 @@ export default function InspirationNeedDetailPage() {
               >
                 {publicEditOpen ? '收起公开信息编辑' : '编辑公开信息'}
               </button>
-            </div>
+            ) : null}
+          </div>
+          {sharePanelOpen ? (
+            <section
+              aria-label="分享文案"
+              className="rounded-[var(--radius-md)] border border-teal-100 bg-teal-50/50 p-4"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-slate-950">分享文案</p>
+                <button
+                  type="button"
+                  onClick={() => setSharePanelOpen(false)}
+                  className="text-sm font-semibold text-slate-500 transition hover:text-slate-800"
+                >
+                  收起
+                </button>
+              </div>
+              <textarea
+                aria-label="完整分享文案"
+                readOnly
+                value={shareText}
+                onFocus={(event) => event.currentTarget.select()}
+                rows={3}
+                className="mt-3 w-full resize-none rounded-[var(--radius-sm)] border border-teal-100 bg-white px-3 py-2 text-sm leading-7 text-slate-700"
+              />
+            </section>
           ) : null}
+        </section>
+
+        <section className="mt-8 rounded-[var(--radius-md)] border border-teal-100 bg-white p-5" aria-label="感兴趣的同学">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold text-slate-950">感兴趣的同学</h2>
+              <p className="mt-2 text-sm leading-7 text-slate-500">
+                {interestedNames.length ? `${interestedNames.join('、')} 感兴趣` : '还没有人表示感兴趣。'}
+              </p>
+            </div>
+            {currentUser ? (
+              <button
+                type="button"
+                disabled={interestStatus === 'saving'}
+                onClick={() => void handleInterestToggle()}
+                className={`inline-flex min-h-10 items-center rounded-full px-4 text-sm font-semibold transition disabled:opacity-60 ${interest.interested ? 'bg-teal-700 text-white' : 'bg-white text-teal-700 ring-1 ring-teal-200 hover:ring-teal-400'}`}
+              >
+                {interest.interested ? '已感兴趣' : '我感兴趣'}
+              </button>
+            ) : (
+              <p className="rounded-full bg-slate-50 px-3 py-2 text-sm font-medium text-slate-500">登录后可以表示感兴趣。</p>
+            )}
+          </div>
+          {interestStatus === 'error' ? <p className="mt-3 text-sm text-red-600">保存失败，请确认登录状态后再试。</p> : null}
         </section>
 
         {canUpdate && publicEditOpen ? (

@@ -584,6 +584,13 @@ export interface InspirationDemand {
   }
   assistant?: InspirationDemandAssistant
   llm_review?: InspirationDemandReview
+  interest?: InspirationDemandInterest
+}
+
+export interface InspirationDemandInterest {
+  interested: boolean
+  interested_count: number
+  interested_users: Array<{ user_id: number; display_name: string }>
 }
 
 export interface InspirationPathStage {
@@ -796,6 +803,8 @@ export const inspirationApi = {
     api.post<{ update: InspirationDemandUpdate }>(`v1/inspiration/demands/${encodeURIComponent(slug)}/updates`, payload),
   updateUpdate: (slug: string, updateId: string, payload: InspirationDemandUpdateRequest) =>
     api.patch<{ update: InspirationDemandUpdate }>(`v1/inspiration/demands/${encodeURIComponent(slug)}/updates/${encodeURIComponent(updateId)}`, payload),
+  toggleInterest: (slug: string, interested: boolean) =>
+    api.post<{ interest: InspirationDemandInterest }>(`v1/inspiration/demands/${encodeURIComponent(slug)}/interest`, { interested }),
 }
 
 /** 学术板块：经 topiclab-backend 代理到 IC（与信源同源 INFORMATION_COLLECTION_BASE_URL） */
