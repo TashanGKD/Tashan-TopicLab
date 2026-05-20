@@ -223,7 +223,7 @@ function currentPathStage(need: InspirationDemand) {
   const pathProgress = normalizePathProgress(need.path_progress)
   const stage = pathProgress.find((item) => item.status === 'current')
     ?? pathProgress.find((stage) => stage.status === 'needs_input')
-    ?? pathProgress.find((stage) => stage.status === 'done')
+    ?? [...pathProgress].reverse().find((stage) => stage.status === 'done')
     ?? { label: need.stage || '留下线索', summary: need.stuck || '' }
   return { ...stage, summary: cleanStageSummary(stage.summary) }
 }

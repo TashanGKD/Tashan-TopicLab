@@ -689,11 +689,20 @@ def _can_update(row, user: dict[str, Any] | None) -> bool:
 
 
 def _build_path_progress(row, updates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    stage_index_by_key = {stage["key"]: index for index, stage in enumerate(PATH_STAGES)}
     latest_by_stage = {}
     for update in updates:
         key = update.get("stage_key")
         if key and key not in latest_by_stage:
             latest_by_stage[key] = update
+    latest_reached_index = max(
+        (
+            stage_index_by_key[key]
+            for key, update in latest_by_stage.items()
+            if (update.get("stage_status") or "done") in {"done", "current", "needs_input"}
+        ),
+        default=-1,
+    )
     current_seen = False
     result = []
     for index, stage in enumerate(PATH_STAGES):
@@ -701,8 +710,14 @@ def _build_path_progress(row, updates: list[dict[str, Any]]) -> list[dict[str, A
         if stage["key"] == "submitted":
             if update:
                 status = update.get("stage_status") or "done"
+                if status == "current" and index < latest_reached_index:
+                    status = "done"
                 summary = update.get("summary") or update.get("progress") or ""
                 emotion = update.get("emotion_note") or ""
+            elif latest_reached_index > index:
+                status = "done"
+                summary = ""
+                emotion = ""
             else:
                 questions = _assistant_follow_up_questions(row)
                 if questions:
@@ -715,8 +730,14 @@ def _build_path_progress(row, updates: list[dict[str, Any]]) -> list[dict[str, A
                 emotion = ""
         elif update:
             status = update.get("stage_status") or "done"
+            if status == "current" and index < latest_reached_index:
+                status = "done"
             summary = update.get("summary") or update.get("progress") or "这一阶段已有进展。"
             emotion = update.get("emotion_note") or ""
+        elif latest_reached_index > index:
+            status = "done"
+            summary = ""
+            emotion = ""
         elif not current_seen and index > 0:
             status = "current"
             summary = ""
@@ -726,6 +747,8 @@ def _build_path_progress(row, updates: list[dict[str, Any]]) -> list[dict[str, A
             status = "pending"
             summary = "尚未开始。"
             emotion = ""
+        if status in {"current", "needs_input"}:
+            current_seen = True
         result.append({**stage, "status": status, "summary": summary, "emotion_note": emotion})
     return result
 

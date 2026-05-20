@@ -453,6 +453,56 @@ def test_inspiration_public_list_reflects_latest_path_stage(client, monkeypatch)
     assert tooling_stage["summary"] == "正在确定信息渠道和可用工具。"
 
 
+def test_inspiration_path_progress_advances_past_stale_current_stage(client, monkeypatch):
+    test_client, auth_module = client
+    monkeypatch.setenv("ADMIN_USER_IDS", "1")
+    token = auth_module.create_jwt_token(1, "13800138000", is_admin=True)
+    headers = {"Authorization": f"Bearer {token}"}
+    slug = "need-25-ai-for-science"
+
+    demo_update = test_client.post(
+        f"/api/v1/inspiration/demands/{slug}/updates",
+        headers=headers,
+        json={
+            "week_label": "2026-05-19 16:30",
+            "stage_key": "demo",
+            "stage_status": "current",
+            "summary": "正在做 Demo 验证。",
+            "progress": "",
+            "blockers": "",
+            "next_steps": "",
+            "emotion_note": "",
+            "artifacts": [],
+            "visibility": "public",
+        },
+    )
+    mvp_update = test_client.post(
+        f"/api/v1/inspiration/demands/{slug}/updates",
+        headers=headers,
+        json={
+            "week_label": "2026-05-20 20:30",
+            "stage_key": "mvp",
+            "stage_status": "done",
+            "summary": "已经完成 MVP 复盘，确认下一步迭代。",
+            "progress": "",
+            "blockers": "",
+            "next_steps": "",
+            "emotion_note": "",
+            "artifacts": [],
+            "visibility": "public",
+        },
+    )
+    assert demo_update.status_code == 200
+    assert mvp_update.status_code == 200
+
+    demand = test_client.get(f"/api/v1/inspiration/demands/{slug}").json()["demand"]
+    path = {stage["key"]: stage for stage in demand["path_progress"]}
+
+    assert path["demo"]["status"] == "done"
+    assert path["mvp"]["status"] == "done"
+    assert path["mvp"]["summary"] == "已经完成 MVP 复盘，确认下一步迭代。"
+
+
 def test_inspiration_public_list_sorts_by_latest_update_then_clue_number(client, monkeypatch):
     test_client, auth_module = client
     monkeypatch.setenv("ADMIN_USER_IDS", "1")

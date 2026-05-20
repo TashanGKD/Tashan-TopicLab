@@ -170,13 +170,14 @@ function getUpdateArtifactsByType(update: InspirationDemandUpdate | InspirationD
 function setFirstArtifactByType(
   draft: InspirationDemandUpdateRequest,
   type: string,
-  patch: { label?: string; url?: string },
+  patch: { label?: string; url?: string; visibility?: 'public' | 'admin_only' },
 ): InspirationDemandUpdateRequest {
   const artifacts = [...(draft.artifacts ?? [])]
   const index = artifacts.findIndex((artifact) => artifact.type === type || (!artifact.type && type === 'link' && artifact.url))
   const nextArtifact = {
     ...(index >= 0 ? artifacts[index] : {}),
     type,
+    visibility: index >= 0 ? artifacts[index].visibility ?? 'public' : 'public',
     ...patch,
   }
   const hasContent = Boolean((nextArtifact.label ?? '').trim() || (nextArtifact.url ?? '').trim())
@@ -187,6 +188,14 @@ function setFirstArtifactByType(
     artifacts.push(nextArtifact)
   }
   return { ...draft, artifacts }
+}
+
+function toExternalHref(rawUrl?: string) {
+  const value = String(rawUrl ?? '').trim()
+  if (!value) return ''
+  if (/^https?:\/\//i.test(value)) return value
+  if (value.startsWith('//')) return `https:${value}`
+  return `https://${value.replace(/^\/+/, '')}`
 }
 
 function getOpenSectionsFromUpdate(update: InspirationDemandUpdate): UpdateOptionalSection[] {
@@ -230,6 +239,23 @@ function getStageAssistant(
   return stages && typeof stages === 'object' ? stages[stageKey] : undefined
 }
 
+function isAssistantUpdating(assistant: NonNullable<ReturnType<typeof getDemandAssistant>> | null) {
+  return assistant?.status === 'pending' || assistant?.status === 'running'
+}
+
+function getAssistantGeneratingStageIndex(
+  pathProgress: InspirationDemand['path_progress'],
+  assistant: NonNullable<ReturnType<typeof getDemandAssistant>> | null,
+) {
+  if (!isAssistantUpdating(assistant) || !pathProgress?.length) return -1
+  const currentStageIndex = pathProgress.findIndex((stage) => stage.status === 'current')
+  if (currentStageIndex >= 0) return currentStageIndex
+  const lastDoneStageIndex = pathProgress.reduce((latest, stage, index) => (
+    stage.status === 'done' ? index : latest
+  ), -1)
+  return Math.min(lastDoneStageIndex + 1, pathProgress.length - 1)
+}
+
 function AssistantPanel({
   assistant,
   className = '',
@@ -238,7 +264,7 @@ function AssistantPanel({
   className?: string
 }) {
   const review = assistant.snapshot
-  const isUpdating = assistant.status === 'pending' || assistant.status === 'running'
+  const isUpdating = isAssistantUpdating(assistant)
   return (
     <section className={`rounded-[var(--radius-md)] border border-slate-200 bg-white p-5 ${className}`}>
       <div className="flex items-center justify-between gap-3">
@@ -559,6 +585,7 @@ export default function InspirationNeedDetailPage() {
   const canUpdate = Boolean(demand.can_update)
   const isRawPublic = demand.redaction?.method === 'raw_public' || demand.redaction?.status === 'raw_public'
   const pathProgress = normalizePathProgress(demand.path_progress)
+  const assistantGeneratingStageIndex = getAssistantGeneratingStageIndex(pathProgress, assistant)
   const updatesByStage = (demand.updates ?? []).reduce<Record<string, InspirationDemandUpdate[]>>((acc, update) => {
     const key = update.stage_key || 'defined'
     acc[key] = acc[key] ?? []
@@ -567,7 +594,11 @@ export default function InspirationNeedDetailPage() {
   }, {})
   const currentStageIndex = pathProgress.findIndex((stage) => stage.status === 'current')
   const lastDoneStageIndex = pathProgress.reduce((latest, stage, index) => stage.status === 'done' ? index : latest, 0)
-  const timelineIndex = currentStageIndex >= 0 ? currentStageIndex : lastDoneStageIndex
+  const timelineIndex = assistantGeneratingStageIndex >= 0
+    ? assistantGeneratingStageIndex
+    : currentStageIndex >= 0
+      ? currentStageIndex
+      : lastDoneStageIndex
   const pendingClaimToken = new URLSearchParams(location.search).get('claim_token') || localStorage.getItem(`inspiration_claim_${demand.slug}`)
   const claimReturnPath = `/inspiration-co-creation/needs/${encodeURIComponent(demand.slug)}${pendingClaimToken ? `?claim_token=${encodeURIComponent(pendingClaimToken)}` : ''}`
   const loginBindSearch = `?next=${encodeURIComponent(claimReturnPath)}`
@@ -876,13 +907,21 @@ export default function InspirationNeedDetailPage() {
             <ol className="flex min-w-[42rem] items-start">
               {pathProgress.map((stage, index) => {
                 const reached = index <= timelineIndex
+                const isGeneratingStage = index === assistantGeneratingStageIndex
                 return (
                   <li key={`timeline-${stage.key}-${index}`} className="relative flex flex-1 flex-col items-center text-center">
                     {index > 0 ? <span className={`absolute left-[-50%] top-3 h-0.5 w-full ${reached ? 'bg-teal-600' : 'bg-slate-200'}`} /> : null}
                     <span className={`relative z-10 flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ring-4 ring-[#fbfdfc] ${reached ? 'bg-teal-700 text-white' : 'bg-white text-slate-400 ring-[#fbfdfc]'}`}>
+                      {isGeneratingStage ? <span className="absolute inset-[-0.35rem] rounded-full border border-teal-300 opacity-75 motion-safe:animate-ping" aria-hidden="true" /> : null}
                       {index + 1}
                     </span>
                     <span className={`mt-2 text-sm font-medium ${index === timelineIndex ? 'text-teal-700' : reached ? 'text-slate-800' : 'text-slate-400'}`}>{stage.label}</span>
+                    {isGeneratingStage ? (
+                      <span className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-teal-700">
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-teal-600" aria-hidden="true" />
+                        AI 正在生成参考
+                      </span>
+                    ) : null}
                   </li>
                 )
               })}
@@ -906,16 +945,26 @@ export default function InspirationNeedDetailPage() {
             {pathProgress.map((stage, stageIndex) => {
               const stageUpdates = updatesByStage[stage.key] ?? []
               const stageAssistant = getStageAssistant(assistant, stage.key)
+              const isGeneratingStage = stageIndex === assistantGeneratingStageIndex
               return (
                 <article
                   key={`${stage.key}-${stageIndex}`}
                   aria-label={`${stage.label}阶段`}
-                  className={`rounded-[var(--radius-md)] border bg-white p-5 ${stage.status === 'current' ? 'border-teal-300 shadow-[0_18px_40px_rgba(13,148,136,0.08)]' : 'border-slate-200'}`}
+                  className={`rounded-[var(--radius-md)] border p-5 transition ${isGeneratingStage ? 'border-teal-300 bg-teal-50/40 shadow-[0_18px_40px_rgba(13,148,136,0.08)]' : stage.status === 'current' ? 'border-teal-300 bg-white shadow-[0_18px_40px_rgba(13,148,136,0.08)]' : 'border-slate-200 bg-white'}`}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <p className="text-xs font-semibold text-teal-700">{String(stageIndex + 1).padStart(2, '0')} / {statusLabel(stage.status)}</p>
                       <h3 className="mt-2 text-xl font-semibold text-slate-950">{stage.label}</h3>
+                      {isGeneratingStage ? (
+                        <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-teal-700 ring-1 ring-teal-100">
+                          <span className="relative flex h-2 w-2" aria-hidden="true">
+                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-teal-400 opacity-75" />
+                            <span className="relative inline-flex h-2 w-2 rounded-full bg-teal-600" />
+                          </span>
+                          AI 正在生成参考
+                        </p>
+                      ) : null}
                     </div>
                     {canUpdate ? (
                       <button

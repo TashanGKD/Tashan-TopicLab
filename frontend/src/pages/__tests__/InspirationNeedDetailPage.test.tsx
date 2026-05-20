@@ -292,6 +292,7 @@ describe('InspirationNeedDetailPage', () => {
         expect.objectContaining({ stage_key: 'defined', summary: '完成问题定义', week_label: expect.stringMatching(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/) }),
       )
       expect(screen.getAllByText('完成问题定义').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getAllByText('AI 正在生成参考').length).toBeGreaterThanOrEqual(1)
     })
   })
 
@@ -359,6 +360,7 @@ describe('InspirationNeedDetailPage', () => {
 
     await waitFor(() => expect(screen.getAllByText('智能助手').length).toBeGreaterThanOrEqual(1))
     expect(screen.getAllByText('智能助手正在基于最新信息更新建议…').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('AI 正在生成参考').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('旧建议').length).toBeGreaterThanOrEqual(1)
 
     await new Promise((resolve) => setTimeout(resolve, 2100))

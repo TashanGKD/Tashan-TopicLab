@@ -46,6 +46,26 @@ vi.mock('../../api/client', async () => {
               created_at: '2026-05-16 15:32:05',
               updated_at: '2026-05-19T00:00:00Z',
             },
+            {
+              id: 'demand-3',
+              slug: 'need-03-mvp-review',
+              clue_number: 3,
+              status: 'published',
+              stage: 'MVP/复盘',
+              title: '问题方案推荐引擎',
+              summary: '已经完成 MVP 复盘，确认下一轮迭代方向。',
+              tags: ['内容创作', 'MVP 复盘'],
+              stuck: '需要继续收敛推荐边界。',
+              path_progress: [
+                { key: 'submitted', label: '留下线索', status: 'done', summary: '', emotion_note: '' },
+                { key: 'defined', label: '问题定义', status: 'done', summary: '', emotion_note: '' },
+                { key: 'tooling', label: '工具选择', status: 'done', summary: '', emotion_note: '' },
+                { key: 'demo', label: 'Demo 验证', status: 'done', summary: '', emotion_note: '' },
+                { key: 'mvp', label: 'MVP/复盘', status: 'done', summary: '已经完成 MVP 复盘，确认下一轮迭代方向。', emotion_note: '' },
+              ],
+              created_at: '2026-05-17 15:32:05',
+              updated_at: '2026-05-20T00:00:00Z',
+            },
           ],
         },
       })),
@@ -105,7 +125,7 @@ describe('InspirationCoCreationPage', () => {
     expect(screen.queryByText('围绕真实场景组队，把想法推进到可验证的一步。')).not.toBeInTheDocument()
   })
 
-  it('shows desensitized real needs directly as a waterfall', () => {
+  it('shows desensitized real needs directly as a waterfall', async () => {
     renderPage()
 
     expect(screen.queryByText('共创流程')).not.toBeInTheDocument()
@@ -116,7 +136,9 @@ describe('InspirationCoCreationPage', () => {
 
     const waterfall = screen.getByLabelText('共创线索瀑布流')
     expect(within(waterfall).getByText('英语阅读课堂的 AI 助教')).toBeInTheDocument()
+    expect(await within(waterfall).findByText('问题方案推荐引擎')).toBeInTheDocument()
     expect(within(waterfall).getAllByText('所处阶段：问题定义').length).toBeGreaterThanOrEqual(1)
+    expect(within(waterfall).getByText('所处阶段：MVP/复盘')).toBeInTheDocument()
     expect(within(waterfall).queryByText('问题定义')).not.toBeInTheDocument()
     expect(within(waterfall).queryByText('一个需求、想法或参与意愿已经被放到这里。')).not.toBeInTheDocument()
     expect(within(waterfall).queryByText('请补充：最小验证对象是谁？')).not.toBeInTheDocument()
