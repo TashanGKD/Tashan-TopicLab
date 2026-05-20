@@ -776,6 +776,10 @@ export default function InspirationNeedDetailPage() {
   const toolArtifact = getUpdateArtifactsByType(updateDraft, 'tool')[0] ?? {}
   const activeStage = pathProgress.find((stage) => stage.key === activeComposerStage)
   const isAnsweringAssistantQuestions = activeStage?.key === 'submitted' && activeStage?.status === 'needs_input'
+  const interestCount = interest.interested_count || interestedNames.length
+  const mainLayoutClass = assistant
+    ? 'mx-auto grid w-full max-w-6xl gap-8 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start'
+    : 'mx-auto w-full max-w-6xl'
 
   const progressForm = (
     <form onSubmit={handleUpdateSubmit} className="mt-5 space-y-4 rounded-[var(--radius-md)] border border-teal-100 bg-teal-50/50 p-4">
@@ -905,107 +909,117 @@ export default function InspirationNeedDetailPage() {
   )
 
   return (
-    <div className="bg-[#fbfdfc] px-5 py-12 text-slate-950 sm:px-8 lg:py-16">
+    <div className="bg-[#fbfdfc] px-4 py-10 text-slate-950 sm:px-8 lg:py-14">
       {showSubmissionSuccess ? <InspirationSubmissionSuccessOverlay /> : null}
-      <main className="mx-auto grid w-full max-w-6xl gap-8 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+      <main className={mainLayoutClass}>
         <div className="min-w-0">
-        <Link to="/inspiration-co-creation" className="text-sm font-semibold text-teal-700">← 返回共创线索</Link>
-        <div className="mt-6 flex flex-wrap items-center gap-3 text-sm">
-          <span className="rounded-full bg-teal-50 px-3 py-1 font-medium text-teal-700">{headerStageLabel}</span>
-          <span className="text-slate-400">{demand.slug}</span>
-        </div>
-        <h1 className="mt-5 text-4xl font-semibold leading-tight sm:text-5xl">{demand.title}</h1>
-        <section className="mt-7 space-y-5" aria-label="线索概览">
-          <div>
-            <p className="text-xs font-semibold text-slate-400">线索摘要</p>
-            <p className="mt-2 text-base leading-8 text-slate-600">{demand.summary}</p>
+        <header className="pb-2">
+          <Link to="/inspiration-co-creation" className="inline-flex text-sm font-semibold text-teal-700 transition hover:text-teal-900">← 返回共创线索</Link>
+          <div className="mt-6 flex flex-wrap items-center gap-3 text-sm">
+            <span className="rounded-full bg-teal-50 px-3 py-1 font-medium text-teal-700">{headerStageLabel}</span>
+            <span className="text-slate-400">{demand.slug}</span>
           </div>
-          {demand.stuck ? (
-            <div className="border-l-2 border-teal-400 pl-4">
-              <p className="text-xs font-semibold text-teal-700">当前需要</p>
-              <p className="mt-2 text-base leading-8 text-slate-700">{demand.stuck}</p>
-            </div>
-          ) : null}
-          {demand.tags.length ? (
-            <div className="flex flex-wrap items-center gap-2 text-sm" aria-label="关联方向">
-              <span className="mr-1 text-xs font-semibold text-slate-400">关联方向</span>
-              {demand.tags.map((tag) => (
-                <span key={tag} className="rounded-full bg-white px-3 py-1 text-slate-500 ring-1 ring-slate-200">{tag}</span>
-              ))}
-            </div>
-          ) : null}
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => void handleShareCopy()}
-              className="inline-flex min-h-10 items-center rounded-full bg-white px-4 text-sm font-semibold text-teal-700 ring-1 ring-teal-200 transition hover:ring-teal-400"
-            >
-              {shareStatus === 'copied' ? '已复制' : '分享'}
-            </button>
-            {canUpdate ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setPublicDraft({ title: demand.title, summary: demand.summary, stuck: demand.stuck })
-                  setPublicEditOpen((value) => !value)
-                  setPublicSaveStatus('idle')
-                }}
-                className="inline-flex min-h-10 items-center rounded-full bg-white px-4 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 transition hover:text-slate-950 hover:ring-teal-200"
-              >
-                {publicEditOpen ? '收起公开信息编辑' : '编辑公开信息'}
-              </button>
-            ) : null}
-          </div>
-          {sharePanelOpen ? (
-            <section
-              aria-label="分享文案"
-              className="rounded-[var(--radius-md)] border border-teal-100 bg-teal-50/50 p-4"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-slate-950">分享文案</p>
+          <h1 className="mt-5 max-w-4xl text-4xl font-semibold leading-tight sm:text-5xl lg:text-[4rem]">{demand.title}</h1>
+          <section className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_17rem]" aria-label="线索概览">
+            <div className="min-w-0 space-y-6">
+              <div>
+                <p className="text-xs font-semibold text-slate-400">线索摘要</p>
+                <p className="mt-2 max-w-4xl text-lg leading-9 text-slate-600">{demand.summary}</p>
+              </div>
+              <div className="flex flex-wrap gap-3">
                 <button
                   type="button"
-                  onClick={() => setSharePanelOpen(false)}
-                  className="text-sm font-semibold text-slate-500 transition hover:text-slate-800"
+                  onClick={() => void handleShareCopy()}
+                  className="inline-flex min-h-10 items-center rounded-full bg-white px-4 text-sm font-semibold text-teal-700 ring-1 ring-teal-200 transition hover:ring-teal-400"
                 >
-                  收起
+                  {shareStatus === 'copied' ? '已复制' : '分享'}
                 </button>
+                {canUpdate ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPublicDraft({ title: demand.title, summary: demand.summary, stuck: demand.stuck })
+                      setPublicEditOpen((value) => !value)
+                      setPublicSaveStatus('idle')
+                    }}
+                    className="inline-flex min-h-10 items-center rounded-full bg-white px-4 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 transition hover:text-slate-950 hover:ring-teal-200"
+                  >
+                    {publicEditOpen ? '收起公开信息编辑' : '编辑公开信息'}
+                  </button>
+                ) : null}
               </div>
-              <textarea
-                aria-label="完整分享文案"
-                readOnly
-                value={shareText}
-                onFocus={(event) => event.currentTarget.select()}
-                rows={3}
-                className="mt-3 w-full resize-none rounded-[var(--radius-sm)] border border-teal-100 bg-white px-3 py-2 text-sm leading-7 text-slate-700"
-              />
-            </section>
-          ) : null}
-        </section>
-
-        <section className="mt-8 rounded-[var(--radius-md)] border border-teal-100 bg-white p-5" aria-label="感兴趣的同学">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h2 className="text-xl font-semibold text-slate-950">感兴趣的同学</h2>
-              <p className="mt-2 text-sm leading-7 text-slate-500">
-                {interestedNames.length ? `${interestedNames.join('、')} 感兴趣` : '还没有人表示感兴趣。'}
-              </p>
+              {sharePanelOpen ? (
+                <section
+                  aria-label="分享文案"
+                  className="rounded-[var(--radius-md)] border border-teal-100 bg-teal-50/50 p-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-slate-950">分享文案</p>
+                    <button
+                      type="button"
+                      onClick={() => setSharePanelOpen(false)}
+                      className="text-sm font-semibold text-slate-500 transition hover:text-slate-800"
+                    >
+                      收起
+                    </button>
+                  </div>
+                  <textarea
+                    aria-label="完整分享文案"
+                    readOnly
+                    value={shareText}
+                    onFocus={(event) => event.currentTarget.select()}
+                    rows={3}
+                    className="mt-3 w-full resize-none rounded-[var(--radius-sm)] border border-teal-100 bg-white px-3 py-2 text-sm leading-7 text-slate-700"
+                  />
+                </section>
+              ) : null}
             </div>
-            {currentUser ? (
-              <button
-                type="button"
-                disabled={interestStatus === 'saving'}
-                onClick={() => void handleInterestToggle()}
-                className={`inline-flex min-h-10 items-center rounded-full px-4 text-sm font-semibold transition disabled:opacity-60 ${interest.interested ? 'bg-teal-700 text-white' : 'bg-white text-teal-700 ring-1 ring-teal-200 hover:ring-teal-400'}`}
-              >
-                {interest.interested ? '已感兴趣' : '我感兴趣'}
-              </button>
-            ) : (
-              <p className="rounded-full bg-slate-50 px-3 py-2 text-sm font-medium text-slate-500">登录后可以表示感兴趣。</p>
-            )}
-          </div>
-          {interestStatus === 'error' ? <p className="mt-3 text-sm text-red-600">保存失败，请确认登录状态后再试。</p> : null}
-        </section>
+
+            <section className="space-y-6 border-t border-teal-100 pt-5 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0" aria-label="感兴趣的同学">
+              {demand.stuck ? (
+                <div>
+                  <p className="text-xs font-semibold text-teal-700">当前需要</p>
+                  <p className="mt-2 text-base leading-8 text-slate-700">{demand.stuck}</p>
+                </div>
+              ) : null}
+              {demand.tags.length ? (
+                <div aria-label="关联方向">
+                  <p className="text-xs font-semibold text-slate-400">关联方向</p>
+                  <div className="mt-2 flex flex-wrap gap-2 text-sm">
+                    {demand.tags.map((tag) => (
+                      <span key={tag} className="rounded-full bg-white px-3 py-1 text-slate-500 ring-1 ring-slate-200">{tag}</span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              <div>
+                <p className="text-xs font-semibold text-slate-400">感兴趣的同学</p>
+                {interestCount > 0 ? (
+                  <div className="mt-3 flex items-baseline gap-2">
+                    <span className="text-4xl font-semibold leading-none text-slate-950">{interestCount}</span>
+                    <span className="text-sm text-slate-500">人</span>
+                  </div>
+                ) : null}
+                <p className="mt-3 text-sm leading-7 text-slate-500">
+                  {interestedNames.length ? `${interestedNames.join('、')} 感兴趣` : '还没有人表示感兴趣。'}
+                </p>
+                {currentUser ? (
+                  <button
+                    type="button"
+                    disabled={interestStatus === 'saving'}
+                    onClick={() => void handleInterestToggle()}
+                    className={`mt-5 inline-flex min-h-10 items-center rounded-full px-4 text-sm font-semibold transition disabled:opacity-60 ${interest.interested ? 'bg-teal-700 text-white' : 'bg-white text-teal-700 ring-1 ring-teal-200 hover:ring-teal-400'}`}
+                  >
+                    {interest.interested ? '已感兴趣' : '我感兴趣'}
+                  </button>
+                ) : (
+                  <p className="mt-5 rounded-full bg-slate-50 px-3 py-2 text-sm font-medium text-slate-500">登录后可以表示感兴趣。</p>
+                )}
+                {interestStatus === 'error' ? <p className="mt-3 text-sm text-red-600">保存失败，请确认登录状态后再试。</p> : null}
+              </div>
+            </section>
+          </section>
+        </header>
 
         {canUpdate && publicEditOpen ? (
           <form onSubmit={handlePublicFieldsSubmit} className="mt-6 space-y-4 rounded-[var(--radius-md)] border border-teal-100 bg-white p-5">
@@ -1101,11 +1115,11 @@ export default function InspirationNeedDetailPage() {
           </section>
         ) : null}
 
-        <section className="mt-12 rounded-[var(--radius-md)] border border-teal-100 bg-white p-5" aria-label="完整表单信息">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <section className="mt-10 border-t border-slate-200/80 pt-8" aria-label="完整表单信息">
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
             <div>
               <h2 className="text-2xl font-semibold text-slate-950">完整表单信息</h2>
-              <p className="mt-2 text-sm leading-7 text-slate-500">
+              <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-500">
                 {canEditPrivate
                   ? '你提交时的原始内容。觉得不够清楚的话，可以在这里补全。'
                   : canRevealPrivate
@@ -1113,8 +1127,9 @@ export default function InspirationNeedDetailPage() {
                     : '完整信息仅对提出者本人和管理员可见。'}
               </p>
             </div>
-            {canRevealPrivate && privateOpen && privateDraftEntries.length ? (
-              <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 lg:justify-end">
+              {canRevealPrivate && privateOpen && privateDraftEntries.length ? (
+                <>
                 {canEditPrivate ? (
                   <button
                     type="button"
@@ -1131,24 +1146,29 @@ export default function InspirationNeedDetailPage() {
                     setPrivateEditOpen(false)
                   }}
                   className="inline-flex min-h-10 items-center rounded-full bg-white px-4 text-sm font-semibold text-slate-600 ring-1 ring-slate-200 transition hover:text-slate-950 hover:ring-slate-300"
+                  >
+                    收起完整信息
+                  </button>
+                </>
+              ) : canRevealPrivate && !privateOpen ? (
+                <button
+                  type="button"
+                  onClick={() => void revealPrivate()}
+                  className="inline-flex min-h-10 items-center rounded-full bg-teal-700 px-4 text-sm font-semibold text-white"
                 >
-                  收起完整信息
+                  显示完整信息
                 </button>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
           </div>
           {!canRevealPrivate ? (
-            <p className="mt-5 rounded-[var(--radius-sm)] bg-slate-50 px-4 py-3 text-sm leading-7 text-slate-500">
+            <p className="mt-5 border-l border-slate-200 bg-white/60 px-4 py-3 text-sm leading-7 text-slate-500">
               登录并绑定这条线索，或使用管理员账号查看完整表单信息。
             </p>
           ) : !privateOpen ? (
-              <button
-                type="button"
-                onClick={() => void revealPrivate()}
-                className="mt-5 inline-flex min-h-10 items-center rounded-full bg-teal-700 px-4 text-sm font-semibold text-white"
-              >
-                显示完整信息
-              </button>
+            <p className="mt-5 border-l border-teal-100 bg-white/60 px-4 py-3 text-sm leading-7 text-slate-500">
+              点击右侧按钮后查看提交时的原始内容。
+            </p>
           ) : privateDraftEntries.length ? (
             privateEditOpen && canEditPrivate ? (
               <form onSubmit={handlePrivateSubmit} className="mt-5 space-y-4">
@@ -1173,7 +1193,7 @@ export default function InspirationNeedDetailPage() {
                 </button>
               </form>
             ) : (
-              <div className="mt-5 divide-y divide-slate-100">
+              <div className="mt-5 divide-y divide-slate-100 border-y border-slate-100">
                 {privateDraftEntries.map((entry) => (
                   <div key={entry.key} className="grid gap-2 py-4 sm:grid-cols-[12rem_minmax(0,1fr)]">
                     <div className="text-sm font-semibold text-slate-500">{entry.label}</div>
