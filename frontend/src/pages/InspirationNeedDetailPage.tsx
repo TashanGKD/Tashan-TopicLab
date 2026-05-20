@@ -429,6 +429,7 @@ export default function InspirationNeedDetailPage() {
 
   useEffect(() => {
     if (!submissionState?.inspirationSubmissionSuccess) return
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
     setShowSubmissionSuccess(true)
     const timer = window.setTimeout(() => {
       setShowSubmissionSuccess(false)

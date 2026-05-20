@@ -239,6 +239,8 @@ describe('InspirationNeedDetailPage', () => {
   })
 
   it('shows the submission completion animation when opened from the form', async () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+
     renderDetail({
       pathname: '/inspiration-co-creation/needs/need-01-ai-english-reading-assistant',
       search: '?claim_token=claim-token-123',
@@ -247,6 +249,9 @@ describe('InspirationNeedDetailPage', () => {
 
     expect(await screen.findByText('提交成功')).toBeInTheDocument()
     expect(screen.getByText('正在打开这条线索，你可以继续更新它。')).toBeInTheDocument()
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'auto' })
+
+    scrollTo.mockRestore()
   })
 
   it('copies the inspiration share text with title and demand link', async () => {
