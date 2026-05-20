@@ -497,11 +497,14 @@ def _public_payload_from_row(row) -> dict[str, Any]:
 def _coerce_public_payload(payload: Any, fallback: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict):
         payload = {}
+    title = str(payload.get("title") or "")
+    summary = str(payload.get("summary") or "")
+    stuck = str(payload.get("stuck") or "")
     return {
-        "title": str(payload.get("title") or fallback.get("title") or "共创线索"),
-        "summary": str(payload.get("summary") or fallback.get("summary") or ""),
+        "title": str((fallback.get("title") if _looks_like_prompt_leak(title) else title) or fallback.get("title") or "共创线索"),
+        "summary": str((fallback.get("summary") if _looks_like_prompt_leak(summary) else summary) or fallback.get("summary") or ""),
         "tags": [str(item) for item in (payload.get("tags") or fallback.get("tags") or [])][:4],
-        "stuck": str(payload.get("stuck") or fallback.get("stuck") or ""),
+        "stuck": str((fallback.get("stuck") if _looks_like_prompt_leak(stuck) else stuck) or fallback.get("stuck") or ""),
     }
 
 
@@ -610,6 +613,28 @@ def _public_text(value: Any, *, fallback: str, max_length: int) -> str:
     if len(text_value) <= max_length:
         return text_value
     return f"{text_value[: max_length - 1]}…"
+
+
+_PROMPT_LEAK_PATTERNS = (
+    "请仅输出 JSON",
+    "不要 Markdown",
+    "字段必须包含",
+    "你是灵感共创队",
+    "任务：根据用户表单",
+    '"role"',
+    '"content"',
+)
+
+
+def _looks_like_prompt_leak(value: Any) -> bool:
+    text_value = str(value or "")
+    return any(pattern in text_value for pattern in _PROMPT_LEAK_PATTERNS)
+
+
+def _safe_public_text(value: Any, *, fallback: str, max_length: int) -> str:
+    if _looks_like_prompt_leak(value):
+        return fallback
+    return _public_text(value, fallback=fallback, max_length=max_length)
 
 
 def _public_category_from_private(private_payload: dict[str, Any]) -> str:
@@ -1646,7 +1671,7 @@ def complete_assistant_run(run_id: str, output: dict[str, Any]) -> dict[str, Any
         run = session.execute(
             text(
                 """
-                SELECT r.demand_id, r.trigger_type, d.redaction_method
+                SELECT r.demand_id, r.trigger_type, d.redaction_method, d.public_tags
                 FROM inspiration_assistant_runs r
                 JOIN inspiration_demands d ON d.id = r.demand_id
                 WHERE r.id = :id
@@ -1657,9 +1682,16 @@ def complete_assistant_run(run_id: str, output: dict[str, Any]) -> dict[str, Any
         if not run:
             return None
         should_update_public = run.trigger_type == "initial_submission" and run.redaction_method != "raw_public"
-        public_title = _short_public_title(output.get("title")) if should_update_public else ""
-        public_summary = _public_text(output.get("summary"), fallback="", max_length=180) if should_update_public else ""
-        public_stuck = _public_text(output.get("public_stuck") or output.get("stuck"), fallback="", max_length=120) if should_update_public else ""
+        public_title = "" if _looks_like_prompt_leak(output.get("title")) or not should_update_public else _short_public_title(output.get("title"))
+        public_summary = _safe_public_text(output.get("summary"), fallback="", max_length=180) if should_update_public else ""
+        public_stuck = _safe_public_text(output.get("public_stuck") or output.get("stuck"), fallback="", max_length=120) if should_update_public else ""
+        public_fuzzy_payload = {
+            "title": public_title,
+            "summary": public_summary,
+            "stuck": public_stuck,
+            "tags": _json_loads(getattr(run, "public_tags", "[]"), []),
+        }
+        public_fuzzy_json = _json_dumps(public_fuzzy_payload) if public_summary else ""
         is_sqlite = _is_sqlite_session(session)
         session.execute(
             text(
@@ -1698,6 +1730,7 @@ def complete_assistant_run(run_id: str, output: dict[str, Any]) -> dict[str, Any
                     public_title = COALESCE(NULLIF(:public_title, ''), public_title),
                     public_summary = COALESCE(NULLIF(:public_summary, ''), public_summary),
                     public_stuck = COALESCE(NULLIF(:public_stuck, ''), public_stuck),
+                    public_fuzzy_json = COALESCE(NULLIF(:public_fuzzy_json, ''), public_fuzzy_json),
                     redaction_method = CASE WHEN NULLIF(:public_summary, '') IS NULL THEN redaction_method ELSE 'llm_rewrite' END,
                     redaction_status = CASE WHEN NULLIF(:public_summary, '') IS NULL THEN redaction_status ELSE 'published' END,
                     stage = COALESCE(NULLIF(:suggested_stage, ''), stage),
@@ -1718,6 +1751,7 @@ def complete_assistant_run(run_id: str, output: dict[str, Any]) -> dict[str, Any
                     public_title = COALESCE(NULLIF(:public_title, ''), public_title),
                     public_summary = COALESCE(NULLIF(:public_summary, ''), public_summary),
                     public_stuck = COALESCE(NULLIF(:public_stuck, ''), public_stuck),
+                    public_fuzzy_json = COALESCE(CAST(NULLIF(:public_fuzzy_json, '') AS JSONB), public_fuzzy_json),
                     redaction_method = CASE WHEN NULLIF(:public_summary, '') IS NULL THEN redaction_method ELSE 'llm_rewrite' END,
                     redaction_status = CASE WHEN NULLIF(:public_summary, '') IS NULL THEN redaction_status ELSE 'published' END,
                     stage = COALESCE(NULLIF(:suggested_stage, ''), stage),
@@ -1730,6 +1764,7 @@ def complete_assistant_run(run_id: str, output: dict[str, Any]) -> dict[str, Any
                 "public_title": public_title,
                 "public_summary": public_summary,
                 "public_stuck": public_stuck,
+                "public_fuzzy_json": public_fuzzy_json,
                 "suggested_stage": str(output.get("suggested_stage") or ""),
                 "run_id": run_id,
                 "assistant_updated_at": now,

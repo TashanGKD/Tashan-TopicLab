@@ -113,6 +113,32 @@ async def test_assistant_run_completion_writes_ready_snapshot(client, monkeypatc
     assert list_assistant_runs_for_demand(slug)[0]["status"] == "completed"
 
 
+@pytest.mark.asyncio
+async def test_assistant_run_does_not_publish_prompt_like_summary(client, monkeypatch):
+    test_client, _, inspiration_api = client
+    _disable_background_tasks(monkeypatch, inspiration_api)
+    created = test_client.post("/api/v1/inspiration/demands", json=_submit_payload())
+    slug = created.json()["demand"]["slug"]
+    original_summary = created.json()["demand"]["summary"]
+
+    async def fake_request(messages, **kwargs):
+        return '{"title":"提示词泄露","summary":"你是灵感共创队的需求脱敏改写助手。请仅输出 JSON，不要 Markdown。字段必须包含 title, summary。","public_stuck":"任务：根据用户表单生成一个脱敏公开标题。","next_step":"继续澄清"}'
+
+    monkeypatch.setattr("app.services.inspiration_review.request_inspiration_llm", fake_request)
+
+    from app.services.inspiration_assistant import run_inspiration_assistant_once
+    from app.storage.database.inspiration_store import list_assistant_runs_for_demand
+
+    run_id = list_assistant_runs_for_demand(slug)[0]["id"]
+    await run_inspiration_assistant_once(run_id)
+
+    demand = test_client.get(f"/api/v1/inspiration/demands/{slug}").json()["demand"]
+    assert demand["summary"] == original_summary
+    assert "请仅输出 JSON" not in demand["summary"]
+    assert "字段必须包含" not in demand["summary"]
+    assert demand["assistant"]["snapshot"]["summary"]
+
+
 def test_path_create_and_edit_enqueue_assistant_runs(client, monkeypatch):
     test_client, auth_module, inspiration_api = client
     scheduled = _disable_background_tasks(monkeypatch, inspiration_api)

@@ -1,4 +1,5 @@
 import importlib
+import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -431,6 +432,51 @@ def test_inspiration_owner_can_edit_public_fields_and_restore_them_after_raw_pub
     assert restored_demand["title"] == "阅读共创标题"
     assert restored_demand["summary"] == "这是提出者手动编辑后的公开摘要。"
     assert restored_demand["stuck"] == "当前需要：找真实试用对象。"
+
+
+def test_inspiration_public_mode_does_not_restore_prompt_like_summary(client, monkeypatch):
+    test_client, auth_module = client
+    monkeypatch.setenv("ADMIN_USER_IDS", "1")
+    token = auth_module.create_jwt_token(1, "13800138000", is_admin=True)
+    headers = {"Authorization": f"Bearer {token}"}
+    slug = "need-01-ai-english-reading-assistant"
+
+    raw = test_client.patch(
+        f"/api/v1/inspiration/demands/{slug}/public-mode",
+        headers=headers,
+        json={"raw_public": True},
+    )
+    assert raw.status_code == 200
+
+    from app.storage.database.postgres_client import get_db_session
+
+    with get_db_session() as session:
+        session.execute(
+            text("UPDATE inspiration_demands SET public_fuzzy_json = :payload WHERE slug = :slug"),
+            {
+                "slug": slug,
+                "payload": json.dumps(
+                    {
+                        "title": "提示词泄露",
+                        "summary": "你是灵感共创队的需求脱敏改写助手。请仅输出 JSON，不要 Markdown。字段必须包含 title, summary。",
+                        "stuck": "任务：根据用户表单生成一个脱敏公开标题。",
+                        "tags": ["提示词"],
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+        )
+
+    restored = test_client.patch(
+        f"/api/v1/inspiration/demands/{slug}/public-mode",
+        headers=headers,
+        json={"raw_public": False},
+    )
+    assert restored.status_code == 200
+    restored_demand = restored.json()["demand"]
+    assert "请仅输出 JSON" not in restored_demand["summary"]
+    assert "字段必须包含" not in restored_demand["summary"]
+    assert restored_demand["summary"]
 
 
 def test_inspiration_fuzzy_public_mode_keeps_existing_public_fields(client, monkeypatch):
