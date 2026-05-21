@@ -364,6 +364,69 @@ describe('InspirationNeedDetailPage', () => {
     })
   })
 
+  it('renders markdown in public detail and assistant generated text', async () => {
+    vi.mocked(inspirationApi.getDemand).mockResolvedValueOnce({
+      data: {
+        demand: {
+          id: 'demand-md',
+          slug: 'demand-markdown',
+          status: 'published',
+          stage: '问题定义中',
+          title: 'Markdown 渲染线索',
+          summary: '摘要里有 **关键判断**。\n\n- 第一条证据',
+          tags: ['学习 / 教育'],
+          stuck: '当前需要：\n\n1.**开发者**支持\n2.产品反馈',
+          created_at: '2026-05-21T00:00:00Z',
+          updated_at: '2026-05-21T00:00:00Z',
+          can_view_private: false,
+          can_update: false,
+          assistant: {
+            status: 'ready',
+            snapshot: {
+              clarity: '**较清晰**',
+              next_step: '先做一个 **小实验**。',
+              follow_up_questions: ['是否已有 **试用对象**？'],
+              stages: {
+                defined: {
+                  status: 'needs_input',
+                  ai_draft_answer: '根据当前进展，建议如下： ### 候选工具 1. **后端开发**：建议采用 **Python + FastAPI**。 2. **AI/LLM集成**：**LangChain** 或 **LlamaIndex**。 ### 风险 - **过度选型**：先不要引入复杂图数据库。 ### 下一步建议 1. **最小化验证**：先用 PostgreSQL + FastAPI + LangChain。',
+                  follow_up_questions: ['第一轮用户是谁？'],
+                  next_step: '把问题定义成一周内可验证的 **小实验**',
+                },
+              },
+            },
+            version: 1,
+            latest_run_id: 'iar-md',
+            updated_at: '2026-05-21T00:00:00Z',
+            error_message: null,
+          },
+          path_progress: [
+            { key: 'defined', label: '问题定义', status: 'current', summary: '阶段摘要： **已经开始**', emotion_note: '' },
+          ],
+          updates: [],
+        },
+      },
+    } as any)
+
+    const { container } = renderDetail('/inspiration-co-creation/needs/demand-markdown')
+
+    expect(await screen.findByText('Markdown 渲染线索')).toBeInTheDocument()
+    expect(screen.getByText('关键判断')).toBeInTheDocument()
+    expect(screen.getByText('第一条证据')).toBeInTheDocument()
+    expect(screen.getByText('开发者')).toBeInTheDocument()
+    expect(screen.getAllByText('试用对象').length).toBeGreaterThanOrEqual(1)
+
+    const definedStage = screen.getByLabelText('问题定义阶段')
+    expect(within(definedStage).getByRole('heading', { name: '候选工具' })).toBeInTheDocument()
+    expect(within(definedStage).getByRole('heading', { name: '风险' })).toBeInTheDocument()
+    expect(within(definedStage).getByRole('heading', { name: '下一步建议' })).toBeInTheDocument()
+    expect(within(definedStage).getByText('后端开发')).toBeInTheDocument()
+    expect(within(definedStage).getByText('过度选型')).toBeInTheDocument()
+    expect(within(definedStage).getByText('最小化验证')).toBeInTheDocument()
+    expect(container.textContent).not.toContain('### 候选工具')
+    expect(container.textContent).not.toContain('**后端开发**')
+  })
+
   it('renders visual path, reveals private detail on demand, and lets owners update progress', async () => {
     localStorage.setItem(
       'auth_user',

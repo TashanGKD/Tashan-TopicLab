@@ -214,6 +214,21 @@ function toExternalHref(rawUrl?: string) {
   return `https://${value.replace(/^\/+/, '')}`
 }
 
+function normalizeGeneratedMarkdown(rawContent?: string) {
+  const content = String(rawContent ?? '').trim()
+  if (!content) return ''
+  return content
+    .replace(/\r\n?/g, '\n')
+    .replace(/[ \t]+(#{1,6}[ \t]+)/g, '\n\n$1')
+    .replace(/[ \t]+(\d{1,2}\.[ \t]+(?=\S))/g, '\n$1')
+    .replace(/[ \t]+(\d{1,2}\.(?=[\u4e00-\u9fa5A-Za-z*]))/g, '\n$1')
+    .replace(/[ \t]+([-*][ \t]+(?=\S))/g, '\n$1')
+    .replace(/(^|[。；;：:\n])[ \t]+(\*\*[^*\n]{1,40}\*\*[：:])/g, '$1\n\n$2')
+    .replace(/(^|\n)(\d{1,2})\.(?=\S)/g, '$1$2. ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 function StageMarkdown({
   children,
   className = '',
@@ -221,7 +236,7 @@ function StageMarkdown({
   children?: string
   className?: string
 }) {
-  const content = String(children ?? '').trim()
+  const content = normalizeGeneratedMarkdown(children)
   if (!content) return null
   return (
     <div className={`break-words ${className}`}>
@@ -383,13 +398,27 @@ function AssistantPanel({
       ) : null}
       {review ? (
         <dl className="mt-4 space-y-4 text-sm leading-7">
-          {review.clarity ? <div><dt className="font-semibold text-slate-500">清晰度</dt><dd>{review.clarity}</dd></div> : null}
-          {review.next_step ? <div><dt className="font-semibold text-slate-500">建议下一步</dt><dd>{review.next_step}</dd></div> : null}
+          {review.clarity ? (
+            <div>
+              <dt className="font-semibold text-slate-500">清晰度</dt>
+              <dd><StageMarkdown className="text-sm text-slate-700">{review.clarity}</StageMarkdown></dd>
+            </div>
+          ) : null}
+          {review.next_step ? (
+            <div>
+              <dt className="font-semibold text-slate-500">建议下一步</dt>
+              <dd><StageMarkdown className="text-sm text-slate-700">{review.next_step}</StageMarkdown></dd>
+            </div>
+          ) : null}
           {review.follow_up_questions?.length ? (
           <div>
             <dt className="font-semibold text-slate-500">建议追问</dt>
-            <dd className="mt-2 space-y-1">
-              {review.follow_up_questions.map((question) => <p key={question}>{question}</p>)}
+            <dd className="mt-2 space-y-2">
+              {review.follow_up_questions.map((question) => (
+                <StageMarkdown key={question} className="text-sm text-slate-700">
+                  {question}
+                </StageMarkdown>
+              ))}
             </dd>
           </div>
           ) : null}
@@ -939,7 +968,7 @@ export default function InspirationNeedDetailPage() {
             <div className="min-w-0 space-y-6">
               <div>
                 <p className="text-xs font-semibold text-slate-400">线索摘要</p>
-                <p className="mt-2 max-w-4xl text-lg leading-9 text-slate-600">{demand.summary}</p>
+                <StageMarkdown className="mt-2 max-w-4xl text-lg leading-9 text-slate-600">{demand.summary}</StageMarkdown>
               </div>
               <div className="flex flex-wrap gap-3">
                 <button
@@ -1005,7 +1034,7 @@ export default function InspirationNeedDetailPage() {
               {demand.stuck ? (
                 <div>
                   <p className="text-xs font-semibold text-teal-700">当前需要</p>
-                  <p className="mt-2 text-base leading-8 text-slate-700">{demand.stuck}</p>
+                  <StageMarkdown className="mt-2 text-base leading-8 text-slate-700">{demand.stuck}</StageMarkdown>
                 </div>
               ) : null}
               {demand.tags.length ? (
@@ -1223,7 +1252,7 @@ export default function InspirationNeedDetailPage() {
                 {privateDraftEntries.map((entry) => (
                   <div key={entry.key} className="grid gap-2 py-4 sm:grid-cols-[12rem_minmax(0,1fr)]">
                     <div className="text-sm font-semibold text-slate-500">{entry.label}</div>
-                    <div className="whitespace-pre-wrap break-words text-sm leading-7 text-slate-700">{entry.displayValue}</div>
+                    <StageMarkdown className="text-sm leading-7 text-slate-700">{entry.displayValue}</StageMarkdown>
                   </div>
                 ))}
               </div>
