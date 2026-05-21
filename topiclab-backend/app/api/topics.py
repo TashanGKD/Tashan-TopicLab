@@ -1513,10 +1513,10 @@ def _apply_snapshot_to_db(topic_id: str, snapshot: dict) -> None:
 async def _sync_discussion_snapshot(topic_id: str) -> dict | None:
     try:
         snapshot = await request_json("GET", f"/executor/discussions/{topic_id}/snapshot", timeout=120.0)
+        _apply_snapshot_to_db(topic_id, snapshot)
     except Exception:
+        logging.getLogger(__name__).exception("Failed to sync discussion snapshot for topic %s", topic_id)
         return None
-
-    _apply_snapshot_to_db(topic_id, snapshot)
     return snapshot
 
 

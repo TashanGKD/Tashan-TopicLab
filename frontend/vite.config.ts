@@ -31,22 +31,27 @@ export default defineConfig(({ mode }) => {
       proxy: {
         // Must be before `/api` -> Resonnet; admin lives on topiclab-backend :8001
         [adminPrefix]: {
-          target: 'http://127.0.0.1:8001',
+          target: topicLabTarget,
           changeOrigin: true,
           rewrite: (path) => path.replace(adminPrefixRe, '/admin'),
         },
         '/api/auth': {
-          target: 'http://127.0.0.1:8001',
+          target: topicLabTarget,
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api/, ''),
         },
         '/api/source-feed': {
-          target: 'http://127.0.0.1:8001',
+          target: topicLabTarget,
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api/, ''),
         },
         '/api/topics': {
-          target: 'http://127.0.0.1:8001',
+          target: topicLabTarget,
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api/, ''),
+        },
+        '/api/topiclink': {
+          target: topicLabTarget,
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api/, ''),
         },
@@ -64,7 +69,11 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
         },
         '/api/v1/openclaw': {
-          target: 'http://127.0.0.1:8001',
+          target: topicLabTarget,
+          changeOrigin: true,
+        },
+        '/api/v1/topiclink': {
+          target: topicLabTarget,
           changeOrigin: true,
         },
         '/api/v1/youth-ted': {

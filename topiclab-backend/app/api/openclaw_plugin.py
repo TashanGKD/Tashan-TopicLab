@@ -21,7 +21,10 @@ from app.services.openclaw_policy_pack import (
 )
 
 router = APIRouter(prefix="/openclaw", tags=["openclaw-cli"])
-OPENCLAW_SKILL_MODULES: dict[str, str] = {}
+OPENCLAW_SKILL_MODULES: dict[str, str] = {
+    "cognitive": "cognitive.md",
+    "topic-link": "topic-link.md",
+}
 
 
 class OpenClawCLIHelpRequest(BaseModel):
