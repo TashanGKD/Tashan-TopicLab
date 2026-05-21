@@ -38,16 +38,104 @@ def client(tmp_path, monkeypatch):
 
 def test_inspiration_public_list_is_seeded_and_desensitized(client):
     test_client, _ = client
-    res = test_client.get("/api/v1/inspiration/demands")
+    res = test_client.get("/api/v1/inspiration/demands?limit=50")
 
     assert res.status_code == 200
-    items = res.json()["list"]
+    payload = res.json()
+    items = payload["list"]
     assert len(items) >= 25
+    assert payload["total"] >= 25
+    assert payload["overview"]["total"] >= 25
+    assert payload["overview"]["core_stats"][0]["label"] == "线索总数"
     first = items[0]
     assert {"slug", "title", "summary", "tags", "stage", "stuck"}.issubset(first)
     serialized = str(items)
     assert "18773233131" not in serialized
     assert "联系方式" not in serialized
+
+
+def test_inspiration_public_list_is_limited_with_database_overview(client):
+    test_client, _ = client
+    res = test_client.get("/api/v1/inspiration/demands?limit=5&offset=0&include_interest=false")
+
+    assert res.status_code == 200
+    payload = res.json()
+    assert len(payload["list"]) == 5
+    assert payload["limit"] == 5
+    assert payload["offset"] == 0
+    assert payload["total"] >= 25
+    assert payload["has_more"] is True
+    assert payload["next_offset"] == 5
+    assert payload["overview"]["total"] == payload["total"]
+    assert payload["overview"]["directions"]
+    assert "interest" not in payload["list"][0]
+
+    next_page = test_client.get("/api/v1/inspiration/demands?limit=5&offset=5&include_interest=false")
+    assert next_page.status_code == 200
+    next_payload = next_page.json()
+    assert len(next_payload["list"]) == 5
+    assert next_payload["total"] == payload["total"]
+    assert "overview" not in next_payload
+
+    forced_overview = test_client.get("/api/v1/inspiration/demands?limit=5&offset=5&include_interest=false&include_overview=true")
+    assert forced_overview.status_code == 200
+    assert forced_overview.json()["overview"]["total"] == payload["total"]
+
+
+def test_inspiration_public_overview_is_cached_and_refreshed_on_submission(client):
+    test_client, _ = client
+    initial = test_client.get("/api/v1/inspiration/demands?limit=5&include_interest=false")
+    assert initial.status_code == 200
+    initial_total = initial.json()["overview"]["total"]
+
+    from app.storage.database.postgres_client import get_db_session
+
+    with get_db_session() as session:
+        session.execute(
+            text(
+                """
+                UPDATE inspiration_public_overview_cache
+                SET overview_json = :overview_json, total = :total
+                WHERE cache_key = 'public_demands'
+                """
+            ),
+            {
+                "overview_json": json.dumps(
+                    {
+                        "total": 999,
+                        "core_stats": [{"label": "线索总数", "value": 999, "hint": "cached"}],
+                        "directions": [],
+                        "stages": [],
+                        "blockers": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                "total": 999,
+            },
+        )
+
+    cached = test_client.get("/api/v1/inspiration/demands?limit=5&include_interest=false")
+    assert cached.status_code == 200
+    assert cached.json()["overview"]["total"] == 999
+
+    created = test_client.post(
+        "/api/v1/inspiration/demands",
+        json={
+            "submitter_name": "",
+            "participation_mode": "我有一个明确需求",
+            "contact": "",
+            "problem": "我想新增一条用于验证统计缓存刷新的公开线索。",
+            "category": "生活效率 / 个人工作流",
+            "current_blockers": "想先拆成一个小实验",
+            "note": "",
+            "allow_public": True,
+        },
+    )
+    assert created.status_code == 200
+
+    refreshed = test_client.get("/api/v1/inspiration/demands?limit=5&include_interest=false")
+    assert refreshed.status_code == 200
+    assert refreshed.json()["overview"]["total"] == initial_total + 1
 
 
 def test_inspiration_submission_creates_path_and_public_detail(client):
@@ -306,7 +394,7 @@ def test_inspiration_admin_can_delete_demand(client, monkeypatch):
     assert removed.json() == {"ok": True, "slug": slug}
 
     assert test_client.get(f"/api/v1/inspiration/demands/{slug}", headers=admin_headers).status_code == 404
-    listed = test_client.get("/api/v1/inspiration/demands").json()["list"]
+    listed = test_client.get("/api/v1/inspiration/demands?limit=50").json()["list"]
     assert slug not in {item["slug"] for item in listed}
 
     missing = test_client.delete(f"/api/v1/inspiration/demands/{slug}", headers=admin_headers)
@@ -349,6 +437,17 @@ def test_logged_in_user_can_mark_inspiration_demand_interest(client):
     detail = test_client.get(f"/api/v1/inspiration/demands/{slug}", headers=headers)
     assert detail.status_code == 200
     assert detail.json()["demand"]["interest"] == interest
+
+    listed = test_client.get("/api/v1/inspiration/demands?limit=50")
+    listed_item = next(item for item in listed.json()["list"] if item["slug"] == slug)
+    assert listed_item["interest"]["interested_count"] == 1
+    assert listed_item["interest"]["interested_users"] == [
+        {"user_id": 2, "display_name": "用户 2"},
+    ]
+
+    compact_listed = test_client.get("/api/v1/inspiration/demands?limit=50&include_interest=false")
+    compact_item = next(item for item in compact_listed.json()["list"] if item["slug"] == slug)
+    assert "interest" not in compact_item
 
     cancelled = test_client.post(
         f"/api/v1/inspiration/demands/{slug}/interest",

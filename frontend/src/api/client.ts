@@ -587,6 +587,24 @@ export interface InspirationDemand {
   interest?: InspirationDemandInterest
 }
 
+export interface InspirationDemandOverview {
+  total: number
+  core_stats: Array<{ label: string; value: number; hint: string }>
+  directions: Array<[string, number]>
+  stages: Array<[string, number]>
+  blockers: Array<[string, number]>
+}
+
+export interface InspirationDemandListResponse {
+  list: InspirationDemand[]
+  limit: number
+  offset: number
+  total: number
+  has_more: boolean
+  next_offset?: number | null
+  overview?: InspirationDemandOverview
+}
+
 export interface InspirationDemandInterest {
   interested: boolean
   interested_count: number
@@ -784,7 +802,24 @@ export const youthTedApi = {
 }
 
 export const inspirationApi = {
-  listDemands: () => api.get<{ list: InspirationDemand[] }>('v1/inspiration/demands'),
+  listDemands: (
+    params?: { includeInterest?: boolean; includeOverview?: boolean; limit?: number; offset?: number },
+    options?: { signal?: AbortSignal },
+  ) => {
+    const searchParams = new URLSearchParams()
+    if (params?.includeInterest != null) {
+      searchParams.set('include_interest', params.includeInterest ? 'true' : 'false')
+    }
+    if (params?.includeOverview != null) {
+      searchParams.set('include_overview', params.includeOverview ? 'true' : 'false')
+    }
+    if (params?.limit != null) searchParams.set('limit', String(params.limit))
+    if (params?.offset != null) searchParams.set('offset', String(params.offset))
+    const qs = searchParams.toString()
+    return api.get<InspirationDemandListResponse>(`v1/inspiration/demands${qs ? `?${qs}` : ''}`, {
+      signal: options?.signal,
+    })
+  },
   submitDemand: (payload: InspirationDemandSubmitRequest) =>
     api.post<{ demand: InspirationDemand; claim_token?: string | null; llm_review: InspirationDemandReview; redaction: InspirationDemand['redaction'] }>('v1/inspiration/demands', payload),
   getDemand: (slug: string, options?: { includePrivate?: boolean }) => {

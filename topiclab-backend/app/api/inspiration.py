@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 
@@ -22,7 +22,7 @@ from app.storage.database.inspiration_store import (
     create_demand,
     delete_demand,
     get_demand_by_slug,
-    list_public_demands,
+    list_public_demands_page,
     set_demand_interest,
     update_demand_private,
     update_demand_public_fields,
@@ -112,8 +112,19 @@ def _enqueue_assistant_run(*, slug: str, trigger_type: str, trigger_update_id: s
 
 
 @router.get("/demands")
-def list_demands():
-    return {"list": list_public_demands()}
+def list_demands(
+    include_interest: bool = True,
+    include_overview: bool | None = None,
+    limit: int = Query(default=12, ge=1, le=50),
+    offset: int = Query(default=0, ge=0),
+):
+    should_include_overview = offset == 0 if include_overview is None else include_overview
+    return list_public_demands_page(
+        limit=limit,
+        offset=offset,
+        include_interest=include_interest,
+        include_overview=should_include_overview,
+    )
 
 
 @router.post("/demands")

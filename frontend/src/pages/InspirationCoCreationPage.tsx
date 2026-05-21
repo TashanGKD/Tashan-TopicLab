@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { inspirationApi, type InspirationDemand } from '../api/client'
+import { inspirationApi, type InspirationDemand, type InspirationDemandOverview } from '../api/client'
 
 const SUBMISSION_PATH = '/inspiration-co-creation/submit'
 const POSTER_URL = '/media/inspiration-co-creation/poster.webp'
+const DEMAND_PAGE_LIMIT = 12
 
 const builderTypes = [
   '真实问题提出者',
@@ -321,6 +322,14 @@ function topCountEntries(counts: Record<string, number>, limit: number) {
     .slice(0, limit)
 }
 
+interface DemandOverviewData {
+  total: number
+  coreStats: Array<{ label: string; value: number; hint: string }>
+  directions: Array<[string, number]>
+  stages: Array<[string, number]>
+  blockers: Array<[string, number]>
+}
+
 function buildDemandOverview(demands: InspirationDemand[]) {
   const total = demands.length
   const needsInput = demands.filter((need) => (
@@ -359,6 +368,20 @@ function buildDemandOverview(demands: InspirationDemand[]) {
   }
 }
 
+function normalizeDemandOverview(
+  overview: InspirationDemandOverview | undefined,
+  fallbackDemandsForOverview: InspirationDemand[],
+): DemandOverviewData {
+  if (!overview) return buildDemandOverview(fallbackDemandsForOverview)
+  return {
+    total: overview.total,
+    coreStats: overview.core_stats ?? [],
+    directions: overview.directions ?? [],
+    stages: overview.stages ?? [],
+    blockers: overview.blockers ?? [],
+  }
+}
+
 function DistributionList({
   title,
   items,
@@ -391,8 +414,7 @@ function DistributionList({
   )
 }
 
-function DemandOverview({ demands }: { demands: InspirationDemand[] }) {
-  const overview = useMemo(() => buildDemandOverview(demands), [demands])
+function DemandOverview({ overview }: { overview: DemandOverviewData }) {
   return (
     <section className="mb-10 border-y border-slate-200 py-6" aria-label="线索概览">
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -503,7 +525,14 @@ function DemandCard({ need, index }: DemandCardProps) {
 
 export default function InspirationCoCreationPage() {
   const [demands, setDemands] = useState<InspirationDemand[]>(fallbackDemands)
+  const [overview, setOverview] = useState<DemandOverviewData>(() => buildDemandOverview(fallbackDemands))
+  const [pagination, setPagination] = useState<{ total: number; hasMore: boolean; nextOffset: number | null }>({
+    total: fallbackDemands.length,
+    hasMore: false,
+    nextOffset: null,
+  })
   const [demandStatus, setDemandStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [loadMoreStatus, setLoadMoreStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const { containerRef: masonryRef, columnCount: masonryColumnCount } = useMasonryColumnCount()
   const demandColumns = useMemo(
     () => distributeIntoMasonryColumns(sortDemandsByLatestUpdate(demands), masonryColumnCount),
@@ -512,10 +541,23 @@ export default function InspirationCoCreationPage() {
 
   useEffect(() => {
     let cancelled = false
-    inspirationApi.listDemands()
+    const controller = new AbortController()
+    inspirationApi.listDemands({
+      includeInterest: false,
+      includeOverview: true,
+      limit: DEMAND_PAGE_LIMIT,
+      offset: 0,
+    }, { signal: controller.signal })
       .then((response) => {
         if (cancelled) return
-        setDemands(response.data.list.length ? response.data.list : fallbackDemands)
+        const nextDemands = response.data.list.length ? response.data.list : fallbackDemands
+        setDemands(nextDemands)
+        setOverview(normalizeDemandOverview(response.data.overview, nextDemands))
+        setPagination({
+          total: response.data.total ?? nextDemands.length,
+          hasMore: response.data.has_more ?? false,
+          nextOffset: response.data.next_offset ?? null,
+        })
         setDemandStatus('ready')
       })
       .catch(() => {
@@ -525,8 +567,39 @@ export default function InspirationCoCreationPage() {
       })
     return () => {
       cancelled = true
+      controller.abort()
     }
   }, [])
+
+  function loadMoreDemands() {
+    if (!pagination.hasMore || pagination.nextOffset == null || loadMoreStatus === 'loading') return
+    setLoadMoreStatus('loading')
+    inspirationApi.listDemands({
+      includeInterest: false,
+      includeOverview: false,
+      limit: DEMAND_PAGE_LIMIT,
+      offset: pagination.nextOffset,
+    })
+      .then((response) => {
+        setDemands((current) => {
+          const seen = new Set(current.map((item) => item.slug))
+          const appended = response.data.list.filter((item) => !seen.has(item.slug))
+          return [...current, ...appended]
+        })
+        setOverview((current) => (
+          response.data.overview ? normalizeDemandOverview(response.data.overview, []) : current
+        ))
+        setPagination({
+          total: response.data.total ?? pagination.total,
+          hasMore: response.data.has_more ?? false,
+          nextOffset: response.data.next_offset ?? null,
+        })
+        setLoadMoreStatus('idle')
+      })
+      .catch(() => {
+        setLoadMoreStatus('error')
+      })
+  }
 
   return (
     <div className="bg-[#f6f9f8] text-slate-950">
@@ -587,7 +660,7 @@ export default function InspirationCoCreationPage() {
 
       <section id="needs" className="bg-white px-5 py-20 sm:px-8 lg:py-24">
         <div className="mx-auto w-full max-w-6xl">
-          <DemandOverview demands={demands} />
+          <DemandOverview overview={overview} />
           <div
             ref={masonryRef}
             className="grid gap-5"
@@ -608,6 +681,25 @@ export default function InspirationCoCreationPage() {
           </div>
           {demandStatus === 'error' ? (
             <p className="mt-6 text-sm text-slate-400">共创线索系统暂时无法连接，当前显示本地脱敏样例。</p>
+          ) : null}
+          {demandStatus !== 'error' ? (
+            <div className="mt-10 flex flex-col items-center gap-3">
+              {pagination.hasMore ? (
+                <button
+                  type="button"
+                  disabled={loadMoreStatus === 'loading'}
+                  onClick={loadMoreDemands}
+                  className="inline-flex min-h-11 items-center rounded-full bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loadMoreStatus === 'loading' ? '加载中…' : '加载更多'}
+                </button>
+              ) : (
+                <p className="text-sm text-slate-400">已显示全部 {pagination.total} 条线索。</p>
+              )}
+              {loadMoreStatus === 'error' ? (
+                <p className="text-sm text-red-600">加载更多失败，请稍后再试。</p>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </section>

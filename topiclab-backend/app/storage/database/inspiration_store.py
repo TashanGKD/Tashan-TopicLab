@@ -360,6 +360,28 @@ def _apply_inspiration_ddl(session) -> None:
         )
     )
     session.execute(text("CREATE INDEX IF NOT EXISTS idx_inspiration_interests_demand_created ON inspiration_demand_interests(demand_id, created_at ASC)"))
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS inspiration_public_overview_cache (
+                cache_key TEXT PRIMARY KEY,
+                overview_json TEXT NOT NULL DEFAULT '{}',
+                total INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            if is_sqlite
+            else
+            """
+            CREATE TABLE IF NOT EXISTS inspiration_public_overview_cache (
+                cache_key VARCHAR(64) PRIMARY KEY,
+                overview_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+                total INTEGER NOT NULL DEFAULT 0,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
 
 
 def _backfill_clue_numbers(session) -> None:
@@ -483,6 +505,7 @@ def ensure_inspiration_schema_and_seed_for_session(session) -> None:
         _apply_inspiration_ddl(session)
         _seed_inspiration_demands(session)
         _backfill_clue_numbers(session)
+        _ensure_public_demands_overview_cache(session)
         _SCHEMA_READY_KEYS.add(cache_key)
 
 
@@ -663,6 +686,52 @@ def _serialize_interest_for_demand(session, demand_id: str, user: dict[str, Any]
         "interested_count": len(interested_users),
         "interested_users": interested_users,
     }
+
+
+def _serialize_interests_for_demands(
+    session,
+    demand_ids: list[str],
+    user: dict[str, Any] | None = None,
+) -> dict[str, dict[str, Any]]:
+    if not demand_ids:
+        return {}
+    current_user_id = _user_id_from_auth(user)
+    rows = session.execute(
+        text(
+            """
+            SELECT demand_id, user_id, display_name, created_at
+            FROM inspiration_demand_interests
+            WHERE demand_id IN :demand_ids
+            ORDER BY demand_id ASC, created_at ASC
+            """
+        ).bindparams(bindparam("demand_ids", expanding=True)),
+        {"demand_ids": demand_ids},
+    ).fetchall()
+    interests = {
+        demand_id: {
+            "interested": False,
+            "interested_count": 0,
+            "interested_users": [],
+        }
+        for demand_id in demand_ids
+    }
+    for row in rows:
+        item = interests.setdefault(
+            row.demand_id,
+            {"interested": False, "interested_count": 0, "interested_users": []},
+        )
+        user_id = int(row.user_id)
+        if current_user_id is not None and user_id == current_user_id:
+            item["interested"] = True
+        item["interested_users"].append(
+            {
+                "user_id": user_id,
+                "display_name": str(row.display_name or f"用户 {user_id}"),
+            }
+        )
+    for item in interests.values():
+        item["interested_count"] = len(item["interested_users"])
+    return interests
 
 
 def _assistant_follow_up_questions(row) -> list[str]:
@@ -922,74 +991,292 @@ def _build_path_progress(row, updates: list[dict[str, Any]]) -> list[dict[str, A
     return result
 
 
-def list_public_demands() -> list[dict[str, Any]]:
-    with get_db_session() as session:
-        ensure_inspiration_schema_and_seed_for_session(session)
-        rows = session.execute(
+_NON_DIRECTION_TAGS = {
+    "需求拆解",
+    "Demo 反馈",
+    "找伙伴",
+    "找项目",
+    "找方向",
+    "工具原型",
+    "数据分析",
+    "数据接入",
+    "轻工具",
+    "工程自动化",
+    "顾问诊断",
+    "产业观察",
+    "围观",
+}
+
+_BLOCKER_RULES = (
+    ("问题拆解", re.compile(r"拆|模糊|边界|说清楚|方向|入口|路径")),
+    ("技术可行性", re.compile(r"技术|实现|模型|Agent|工具|自动化|权限|可靠|方案")),
+    ("协作伙伴", re.compile(r"伙伴|一起|协作|找人|项目入口")),
+    ("真实反馈", re.compile(r"反馈|用户|试用|验证|Demo")),
+)
+
+
+def _primary_direction_tag(tag: str) -> str:
+    return re.split(r"[/／]", tag, maxsplit=1)[0].strip() or tag.strip()
+
+
+def _count_values(values: list[str]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for value in values:
+        key = value.strip()
+        if not key:
+            continue
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _top_count_entries(counts: dict[str, int], limit: int) -> list[list[Any]]:
+    return [[label, count] for label, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit]]
+
+
+def _current_path_stage_label(item: dict[str, Any]) -> str:
+    path_progress = item.get("path_progress") if isinstance(item.get("path_progress"), list) else []
+    stage = (
+        next((stage for stage in path_progress if stage.get("status") == "current"), None)
+        or next((stage for stage in path_progress if stage.get("status") == "needs_input"), None)
+        or next((stage for stage in reversed(path_progress) if stage.get("status") == "done"), None)
+    )
+    return str((stage or {}).get("label") or item.get("stage") or "留下线索")
+
+
+def _build_public_demands_overview(items: list[dict[str, Any]]) -> dict[str, Any]:
+    total = len(items)
+    needs_input = sum(
+        1
+        for item in items
+        if any(stage.get("status") == "needs_input" for stage in item.get("path_progress", []))
+        or re.search(r"待补充", str(item.get("stage") or ""))
+    )
+    compact_texts = [
+        " ".join(
+            [
+                str(item.get("title") or ""),
+                str(item.get("summary") or ""),
+                str(item.get("stuck") or ""),
+                *[str(tag) for tag in item.get("tags", [])],
+            ]
+        )
+        for item in items
+    ]
+    demo_or_feedback = sum(1 for text_value in compact_texts if re.search(r"Demo|反馈|验证|试用", text_value))
+    participation = sum(1 for text_value in compact_texts if re.search(r"参与|围观|找项目|找伙伴|练手", text_value))
+    direction_counts = _count_values(
+        [
+            primary
+            for item in items
+            for primary in (_primary_direction_tag(str(tag)) for tag in item.get("tags", []))
+            if primary and primary not in _NON_DIRECTION_TAGS
+        ]
+    )
+    stage_counts = _count_values([_current_path_stage_label(item) for item in items])
+    blocker_counts = _count_values(
+        [
+            label
+            for text_value in compact_texts
+            for label in ([rule_label for rule_label, pattern in _BLOCKER_RULES if pattern.search(text_value)] or ["下一步澄清"])
+        ]
+    )
+    return {
+        "total": total,
+        "core_stats": [
+            {"label": "线索总数", "value": total, "hint": "公开展示中的共创线索"},
+            {"label": "待补充", "value": needs_input, "hint": "需要继续回答追问"},
+            {"label": "Demo/反馈", "value": demo_or_feedback, "hint": "已有验证或反馈信号"},
+            {"label": "参与/围观", "value": participation, "hint": "偏向加入项目或先观察"},
+        ],
+        "directions": _top_count_entries(direction_counts, 5),
+        "stages": _top_count_entries(stage_counts, 5),
+        "blockers": _top_count_entries(blocker_counts, 4),
+    }
+
+
+def _refresh_public_demands_overview_cache(session) -> dict[str, Any]:
+    rows = _fetch_public_demand_rows(session)
+    items = _serialize_public_demand_items(session, rows, include_interest=False)
+    overview = _build_public_demands_overview(items)
+    now = _now_iso()
+    is_sqlite = _is_sqlite_session(session)
+    session.execute(
+        text(
+            """
+            INSERT INTO inspiration_public_overview_cache (cache_key, overview_json, total, updated_at)
+            VALUES ('public_demands', :overview_json, :total, :updated_at)
+            ON CONFLICT(cache_key) DO UPDATE SET
+                overview_json = excluded.overview_json,
+                total = excluded.total,
+                updated_at = excluded.updated_at
+            """
+            if is_sqlite
+            else
+            """
+            INSERT INTO inspiration_public_overview_cache (cache_key, overview_json, total, updated_at)
+            VALUES ('public_demands', CAST(:overview_json AS JSONB), :total, :updated_at)
+            ON CONFLICT(cache_key) DO UPDATE SET
+                overview_json = excluded.overview_json,
+                total = excluded.total,
+                updated_at = excluded.updated_at
+            """
+        ),
+        {"overview_json": _json_dumps(overview), "total": int(overview.get("total") or 0), "updated_at": now},
+    )
+    return overview
+
+
+def _ensure_public_demands_overview_cache(session) -> None:
+    existing = session.execute(
+        text(
+            """
+            SELECT 1
+            FROM inspiration_public_overview_cache
+            WHERE cache_key = 'public_demands'
+            LIMIT 1
+            """
+        )
+    ).first()
+    if not existing:
+        _refresh_public_demands_overview_cache(session)
+
+
+def _get_public_demands_overview_cache(session) -> dict[str, Any]:
+    row = session.execute(
+        text(
+            """
+            SELECT overview_json
+            FROM inspiration_public_overview_cache
+            WHERE cache_key = 'public_demands'
+            LIMIT 1
+            """
+        )
+    ).first()
+    overview = _json_loads(row.overview_json if row else None, {})
+    if isinstance(overview, dict) and overview:
+        return overview
+    return _refresh_public_demands_overview_cache(session)
+
+
+def _fetch_public_demand_rows(session, *, limit: int | None = None, offset: int = 0):
+    sql = """
+        WITH latest_public_updates AS (
+            SELECT demand_id, MAX(updated_at) AS latest_update_at
+            FROM inspiration_demand_updates
+            WHERE visibility = 'public'
+            GROUP BY demand_id
+        )
+        SELECT d.id, d.slug, d.clue_number, d.status, d.stage, d.public_title, d.public_summary,
+               d.public_tags, d.public_stuck, d.llm_review_json, d.assistant_status,
+               d.assistant_snapshot_json, d.assistant_version, d.assistant_latest_run_id,
+               d.assistant_updated_at, d.assistant_error_message, d.redaction_method,
+               d.redaction_status, d.redaction_notes, d.created_at, d.updated_at,
+               COALESCE(l.latest_update_at, d.created_at) AS latest_update_at
+        FROM inspiration_demands d
+        LEFT JOIN latest_public_updates l ON l.demand_id = d.id
+        WHERE d.status = 'published' AND d.allow_public = :allow_public
+        ORDER BY latest_update_at DESC, d.clue_number ASC, d.slug ASC
+        """
+    params: dict[str, Any] = {"allow_public": True}
+    if limit is not None:
+        sql += " LIMIT :limit OFFSET :offset"
+        params["limit"] = limit
+        params["offset"] = offset
+    return session.execute(text(sql), params).fetchall()
+
+
+def _count_public_demands(session) -> int:
+    row = session.execute(
+        text(
+            """
+            SELECT COUNT(*) AS total
+            FROM inspiration_demands
+            WHERE status = 'published' AND allow_public = :allow_public
+            """
+        ),
+        {"allow_public": True},
+    ).first()
+    return int(row.total or 0) if row else 0
+
+
+def _serialize_public_demand_items(session, rows, *, include_interest: bool) -> list[dict[str, Any]]:
+    demand_ids = [row.id for row in rows]
+    updates_by_demand: dict[str, list[dict[str, Any]]] = {}
+    if demand_ids:
+        update_rows = session.execute(
             text(
                 """
-                SELECT id, slug, clue_number, status, stage, public_title, public_summary, public_tags, public_stuck,
-                       llm_review_json, assistant_status, assistant_snapshot_json, assistant_version,
-                       assistant_latest_run_id, assistant_updated_at, assistant_error_message,
-                       redaction_method, redaction_status, redaction_notes, created_at, updated_at,
-                       COALESCE(
-                           (
-                               SELECT MAX(updated_at)
-                               FROM inspiration_demand_updates
-                               WHERE demand_id = inspiration_demands.id AND visibility = 'public'
-                           ),
-                           created_at
-                       ) AS latest_update_at
-                FROM inspiration_demands
-                WHERE status = 'published' AND allow_public = :allow_public
-                """
-            ),
-            {"allow_public": True},
-        ).fetchall()
-        demand_ids = [row.id for row in rows]
-        updates_by_demand: dict[str, list[dict[str, Any]]] = {}
-        if demand_ids:
-            update_rows = session.execute(
-                text(
-                    """
+                SELECT id, demand_id, week_label, summary, progress, blockers, next_steps,
+                       stage_key, stage_status, emotion_note, artifacts_json, visibility, created_at, updated_at
+                FROM (
                     SELECT id, demand_id, week_label, summary, progress, blockers, next_steps,
-                           stage_key, stage_status, emotion_note, artifacts_json, visibility, created_at, updated_at
-                    FROM (
-                        SELECT id, demand_id, week_label, summary, progress, blockers, next_steps,
-                               stage_key, stage_status, emotion_note, artifacts_json, visibility, created_at, updated_at,
-                               ROW_NUMBER() OVER (
-                                   PARTITION BY demand_id, stage_key
-                                   ORDER BY updated_at DESC, created_at DESC
-                               ) AS rn
-                        FROM inspiration_demand_updates
-                        WHERE visibility = 'public' AND demand_id IN :demand_ids
-                    ) latest_updates
-                    WHERE rn = 1
-                    ORDER BY updated_at DESC, created_at DESC
-                    """
-                ).bindparams(bindparam("demand_ids", expanding=True)),
-                {"demand_ids": demand_ids},
-            ).fetchall()
-            for update in update_rows:
-                updates_by_demand.setdefault(update.demand_id, []).append(
-                    _serialize_update(update, include_private_artifacts=False)
-                )
-        items = [
-            {
-                **_serialize_public(row),
-                "path_progress": _build_path_progress(row, updates_by_demand.get(row.id, [])),
-                "interest": _serialize_interest_for_demand(session, row.id),
-            }
-            for row in rows
-        ]
-        items.sort(
-            key=lambda item: (
-                _time_sort_value(item.get("latest_update_at")),
-                -int(item.get("clue_number") or _clue_number(item.get("slug", ""))),
-            ),
-            reverse=True,
-        )
-        return items
+                           stage_key, stage_status, emotion_note, artifacts_json, visibility, created_at, updated_at,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY demand_id, stage_key
+                               ORDER BY updated_at DESC, created_at DESC
+                           ) AS rn
+                    FROM inspiration_demand_updates
+                    WHERE visibility = 'public' AND demand_id IN :demand_ids
+                ) latest_updates
+                WHERE rn = 1
+                ORDER BY updated_at DESC, created_at DESC
+                """
+            ).bindparams(bindparam("demand_ids", expanding=True)),
+            {"demand_ids": demand_ids},
+        ).fetchall()
+        for update in update_rows:
+            updates_by_demand.setdefault(update.demand_id, []).append(
+                _serialize_update(update, include_private_artifacts=False)
+            )
+    interests_by_demand = _serialize_interests_for_demands(session, demand_ids) if include_interest else {}
+    items = []
+    for row in rows:
+        item = {
+            **_serialize_public(row),
+            "path_progress": _build_path_progress(row, updates_by_demand.get(row.id, [])),
+        }
+        if include_interest:
+            item["interest"] = interests_by_demand.get(
+                row.id,
+                {"interested": False, "interested_count": 0, "interested_users": []},
+            )
+        items.append(item)
+    return items
+
+
+def list_public_demands(*, include_interest: bool = True) -> list[dict[str, Any]]:
+    with get_db_session() as session:
+        ensure_inspiration_schema_and_seed_for_session(session)
+        rows = _fetch_public_demand_rows(session)
+        return _serialize_public_demand_items(session, rows, include_interest=include_interest)
+
+
+def list_public_demands_page(
+    *,
+    limit: int = 12,
+    offset: int = 0,
+    include_interest: bool = True,
+    include_overview: bool = True,
+) -> dict[str, Any]:
+    normalized_limit = max(1, min(int(limit), 50))
+    normalized_offset = max(0, int(offset))
+    with get_db_session() as session:
+        ensure_inspiration_schema_and_seed_for_session(session)
+        total = _count_public_demands(session)
+        page_rows = _fetch_public_demand_rows(session, limit=normalized_limit, offset=normalized_offset)
+        items = _serialize_public_demand_items(session, page_rows, include_interest=include_interest)
+        next_offset = normalized_offset + len(items)
+        payload = {
+            "list": items,
+            "limit": normalized_limit,
+            "offset": normalized_offset,
+            "total": total,
+            "has_more": next_offset < total,
+            "next_offset": next_offset if next_offset < total else None,
+        }
+        if include_overview:
+            payload["overview"] = _get_public_demands_overview_cache(session)
+        return payload
 
 
 def get_demand_by_slug(slug: str, *, user: dict[str, Any] | None = None, include_private: bool = False) -> dict[str, Any] | None:
@@ -1132,6 +1419,7 @@ def create_demand(*, payload: dict[str, Any], public_payload: dict[str, Any], ll
         ).first()
         demand = _serialize_public(row)
         demand["path_progress"] = _build_path_progress(row, [])
+        _refresh_public_demands_overview_cache(session)
         return {"demand": demand, "claim_token": claim_token}
 
 
@@ -1307,6 +1595,7 @@ def update_demand_public_mode(
                 "id": row.id,
             },
         )
+        _refresh_public_demands_overview_cache(session)
     return get_demand_by_slug(slug, user=user, include_private=True)
 
 
@@ -1380,6 +1669,7 @@ def update_demand_public_fields(*, slug: str, public_payload: dict[str, Any], us
                 "updated_at": now,
             },
         )
+        _refresh_public_demands_overview_cache(session)
     return get_demand_by_slug(slug, user=user, include_private=True)
 
 
@@ -1403,7 +1693,10 @@ def delete_demand(*, slug: str) -> bool:
         session.execute(text("DELETE FROM inspiration_assistant_runs WHERE demand_id = :demand_id"), {"demand_id": row.id})
         session.execute(text("DELETE FROM inspiration_demand_updates WHERE demand_id = :demand_id"), {"demand_id": row.id})
         result = session.execute(text("DELETE FROM inspiration_demands WHERE id = :id"), {"id": row.id})
-        return int(result.rowcount or 0) > 0
+        removed = int(result.rowcount or 0) > 0
+        if removed:
+            _refresh_public_demands_overview_cache(session)
+        return removed
 
 
 def add_demand_update(*, slug: str, payload: dict[str, Any], created_by_user_id: int | None) -> dict[str, Any] | None:
@@ -1461,6 +1754,7 @@ def add_demand_update(*, slug: str, payload: dict[str, Any], created_by_user_id:
             text("UPDATE inspiration_demands SET updated_at = :updated_at WHERE id = :id"),
             {"updated_at": now, "id": demand.id},
         )
+        _refresh_public_demands_overview_cache(session)
         row = session.execute(
             text(
                 """
@@ -1563,6 +1857,7 @@ def update_demand_update(*, slug: str, update_id: str, payload: dict[str, Any], 
             text("UPDATE inspiration_demands SET updated_at = :updated_at WHERE id = :id"),
             {"updated_at": now, "id": demand.id},
         )
+        _refresh_public_demands_overview_cache(session)
         row = session.execute(
             text(
                 """
@@ -1958,6 +2253,7 @@ def complete_assistant_run(run_id: str, output: dict[str, Any]) -> dict[str, Any
                 "demand_id": run.demand_id,
             },
         )
+        _refresh_public_demands_overview_cache(session)
     return get_assistant_run(run_id)
 
 

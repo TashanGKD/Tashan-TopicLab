@@ -1,7 +1,8 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { inspirationApi } from '../../api/client'
 import InspirationCoCreationPage from '../InspirationCoCreationPage'
 
 vi.mock('../../api/client', async () => {
@@ -67,6 +68,23 @@ vi.mock('../../api/client', async () => {
               updated_at: '2026-05-20T00:00:00Z',
             },
           ],
+          limit: 12,
+          offset: 0,
+          total: 3,
+          has_more: false,
+          next_offset: null,
+          overview: {
+            total: 25,
+            core_stats: [
+              { label: '线索总数', value: 25, hint: '公开展示中的共创线索' },
+              { label: '待补充', value: 6, hint: '需要继续回答追问' },
+              { label: 'Demo/反馈', value: 8, hint: '已有验证或反馈信号' },
+              { label: '参与/围观', value: 9, hint: '偏向加入项目或先观察' },
+            ],
+            directions: [['教育', 7], ['科研', 5]],
+            stages: [['留下线索', 12], ['问题定义', 8]],
+            blockers: [['真实反馈', 9], ['技术可行性', 7]],
+          },
         },
       })),
       getDemand: vi.fn(() => Promise.resolve({
@@ -103,6 +121,7 @@ describe('InspirationCoCreationPage', () => {
   afterEach(() => {
     cleanup()
     localStorage.clear()
+    vi.clearAllMocks()
   })
 
   it('shows audience categories without repeated descriptions in the hero audience strip', () => {
@@ -128,6 +147,10 @@ describe('InspirationCoCreationPage', () => {
   it('shows desensitized real needs directly as a waterfall', async () => {
     renderPage()
 
+    expect(inspirationApi.listDemands).toHaveBeenCalledWith(
+      { includeInterest: false, includeOverview: true, limit: 12, offset: 0 },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     expect(screen.queryByText('共创流程')).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /查看共创流程/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /浏览真实需求/ })).not.toBeInTheDocument()
@@ -154,6 +177,7 @@ describe('InspirationCoCreationPage', () => {
     const overview = await screen.findByLabelText('线索概览')
 
     expect(within(overview).getByText('线索总数')).toBeInTheDocument()
+    expect(within(overview).getByText('25')).toBeInTheDocument()
     expect(within(overview).getByText('待补充')).toBeInTheDocument()
     expect(within(overview).getByText('Demo/反馈')).toBeInTheDocument()
     expect(within(overview).getByText('参与/围观')).toBeInTheDocument()
@@ -177,6 +201,87 @@ describe('InspirationCoCreationPage', () => {
         'href',
         '/inspiration-co-creation/needs/need-01-ai-english-reading-assistant',
       )
+    })
+  })
+
+  it('loads more public clues from the next page', async () => {
+    vi.mocked(inspirationApi.listDemands)
+      .mockResolvedValueOnce({
+        data: {
+          list: [
+            {
+              id: 'demand-1',
+              slug: 'need-01-ai-english-reading-assistant',
+              clue_number: 1,
+              status: 'published',
+              stage: '模糊想法',
+              title: '英语阅读课堂的 AI 助教',
+              summary: '把一套大学英语阅读课拆成词汇、语法、阅读、翻译和写作训练。',
+              tags: ['教育 / 学习'],
+              stuck: '问题太大，需要拆成可先验证的一步。',
+              path_progress: [{ key: 'submitted', label: '留下线索', status: 'done', summary: '', emotion_note: '' }],
+              created_at: '2026-05-15T00:00:00Z',
+              updated_at: '2026-05-18T00:00:00Z',
+            },
+          ],
+          limit: 1,
+          offset: 0,
+          total: 2,
+          has_more: true,
+          next_offset: 1,
+          overview: {
+            total: 2,
+            core_stats: [
+              { label: '线索总数', value: 2, hint: '公开展示中的共创线索' },
+              { label: '待补充', value: 0, hint: '需要继续回答追问' },
+              { label: 'Demo/反馈', value: 1, hint: '已有验证或反馈信号' },
+              { label: '参与/围观', value: 1, hint: '偏向加入项目或先观察' },
+            ],
+            directions: [['教育', 1]],
+            stages: [['留下线索', 2]],
+            blockers: [['问题拆解', 1]],
+          },
+        },
+      } as any)
+      .mockResolvedValueOnce({
+        data: {
+          list: [
+            {
+              id: 'demand-2',
+              slug: 'need-02-demo-feedback',
+              clue_number: 2,
+              status: 'published',
+              stage: '模糊想法',
+              title: 'AI for Science Demo 反馈',
+              summary: '已有 Demo，希望获得真实用户反馈并寻找协作伙伴。',
+              tags: ['科研 / AI for Science', 'Demo 反馈'],
+              stuck: '缺少真实用户反馈，需要协作伙伴。',
+              path_progress: [{ key: 'submitted', label: '留下线索', status: 'done', summary: '', emotion_note: '' }],
+              created_at: '2026-05-16T00:00:00Z',
+              updated_at: '2026-05-19T00:00:00Z',
+            },
+          ],
+          limit: 1,
+          offset: 1,
+          total: 2,
+          has_more: false,
+          next_offset: null,
+        },
+      } as any)
+
+    renderPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: '加载更多' }))
+
+    await waitFor(() => {
+      expect(inspirationApi.listDemands).toHaveBeenLastCalledWith({
+        includeInterest: false,
+        includeOverview: false,
+        limit: 12,
+        offset: 1,
+      })
+      expect(screen.getByText('AI for Science Demo 反馈')).toBeInTheDocument()
+      expect(screen.getByText('已显示全部 2 条线索。')).toBeInTheDocument()
     })
   })
 
