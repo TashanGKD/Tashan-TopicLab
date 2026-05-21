@@ -31,6 +31,7 @@ import YouthTedPage from './pages/YouthTedPage'
 import InspirationCoCreationPage from './pages/InspirationCoCreationPage'
 import InspirationSubmitPage from './pages/InspirationSubmitPage'
 import InspirationNeedDetailPage from './pages/InspirationNeedDetailPage'
+import WechatGroupQrPage from './pages/WechatGroupQrPage'
 import AdminLoginPage from './pages/AdminLoginPage'
 import AdminDashboardPage from './pages/AdminDashboardPage'
 import AppErrorBoundary from './components/AppErrorBoundary'
@@ -68,6 +69,15 @@ function App() {
             <Route path="/inspiration-co-creation" element={<InspirationCoCreationPage />} />
             <Route path="/inspiration-co-creation/submit" element={<InspirationSubmitPage />} />
             <Route path="/inspiration-co-creation/needs/:slug" element={<InspirationNeedDetailPage />} />
+            <Route path="/wechat-group-qr" element={<Navigate to="/qr/lggc-wechat-group" replace />} />
+            <Route
+              path="/qr/world-wechat-group"
+              element={<WechatGroupQrPage assetKey="wechat-group-qr" title="他山世界交流群二维码" />}
+            />
+            <Route
+              path="/qr/lggc-wechat-group"
+              element={<WechatGroupQrPage assetKey="lggc-wechat-group" title="灵感共创队群聊二维码" />}
+            />
             <Route path="/register" element={<Register />} />
             <Route path="/login" element={<Login />} />
             <Route path="/auth/watcha/callback" element={<WatchaAuthCallback />} />

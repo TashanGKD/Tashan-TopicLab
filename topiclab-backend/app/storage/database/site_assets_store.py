@@ -12,9 +12,11 @@ from app.storage.database.postgres_client import _is_sqlite_session, get_db_sess
 
 
 WECHAT_GROUP_QR_KEY = "wechat-group-qr"
+LGGC_WECHAT_GROUP_QR_KEY = "lggc-wechat-group"
 WEBP_MIME_TYPE = "image/webp"
 
 _SEED_WECHAT_GROUP_QR_PATH = Path(__file__).resolve().parents[2] / "resources" / "wechat_group_qr.webp"
+_SEED_LGGC_WECHAT_GROUP_QR_PATH = Path(__file__).resolve().parents[2] / "resources" / "lggc_wechat_group_qr.webp"
 _CACHE_LOCK = RLock()
 _ASSET_CACHE: dict[str, tuple[float, tuple[bytes, str]]] = {}
 
@@ -64,24 +66,32 @@ def _apply_site_assets_ddl(session) -> None:
     )
 
 
-def _seed_wechat_group_qr(session) -> None:
+def _seed_site_image_asset(session, *, key: str, image_path: Path) -> None:
     existing = session.execute(
         text("SELECT 1 FROM site_assets WHERE key = :key LIMIT 1"),
-        {"key": WECHAT_GROUP_QR_KEY},
+        {"key": key},
     ).first()
     if existing:
         return
-    if not _SEED_WECHAT_GROUP_QR_PATH.exists():
+    if not image_path.exists():
         return
 
     upsert_site_image_asset_for_session(
         session,
-        key=WECHAT_GROUP_QR_KEY,
-        image_webp=_SEED_WECHAT_GROUP_QR_PATH.read_bytes(),
+        key=key,
+        image_webp=image_path.read_bytes(),
         mime_type=WEBP_MIME_TYPE,
         expires_at=None,
-        source_filename=_SEED_WECHAT_GROUP_QR_PATH.name,
+        source_filename=image_path.name,
     )
+
+
+def _seed_wechat_group_qr(session) -> None:
+    _seed_site_image_asset(session, key=WECHAT_GROUP_QR_KEY, image_path=_SEED_WECHAT_GROUP_QR_PATH)
+
+
+def _seed_lggc_wechat_group_qr(session) -> None:
+    _seed_site_image_asset(session, key=LGGC_WECHAT_GROUP_QR_KEY, image_path=_SEED_LGGC_WECHAT_GROUP_QR_PATH)
 
 
 def ensure_site_assets_schema_and_seed() -> None:
@@ -92,6 +102,7 @@ def ensure_site_assets_schema_and_seed() -> None:
 def ensure_site_assets_schema_and_seed_for_session(session) -> None:
     _apply_site_assets_ddl(session)
     _seed_wechat_group_qr(session)
+    _seed_lggc_wechat_group_qr(session)
 
 
 def upsert_site_image_asset_for_session(

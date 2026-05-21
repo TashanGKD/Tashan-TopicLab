@@ -17,7 +17,7 @@ const footerLinks = {
 
 export default function Footer() {
   const currentYear = new Date().getFullYear()
-  const wechatGroupQrUrl = `${import.meta.env.BASE_URL}api/v1/site/wechat-group-qr.webp`
+  const wechatGroupQrUrl = `${import.meta.env.BASE_URL}api/v1/site/assets/wechat-group-qr.webp`
 
   return (
     <footer

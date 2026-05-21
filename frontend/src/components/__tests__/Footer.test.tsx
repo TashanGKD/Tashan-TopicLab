@@ -18,7 +18,7 @@ describe('Footer', () => {
 
     expect(screen.getByRole('img', { name: '他山世界交流群二维码' })).toHaveAttribute(
       'src',
-      '/api/v1/site/wechat-group-qr.webp',
+      '/api/v1/site/assets/wechat-group-qr.webp',
     )
     expect(screen.getByText('他山世界交流群')).toBeInTheDocument()
     expect(screen.queryByText('扫码加入他山世界交流群')).not.toBeInTheDocument()

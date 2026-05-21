@@ -9,5 +9,8 @@ export function shouldHideGlobalChrome(pathname: string): boolean {
   if (pathname.startsWith('/library')) {
     return true
   }
+  if (pathname === '/wechat-group-qr' || pathname.startsWith('/qr/')) {
+    return true
+  }
   return false
 }
