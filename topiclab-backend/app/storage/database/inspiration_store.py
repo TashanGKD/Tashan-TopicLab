@@ -1383,6 +1383,29 @@ def update_demand_public_fields(*, slug: str, public_payload: dict[str, Any], us
     return get_demand_by_slug(slug, user=user, include_private=True)
 
 
+def delete_demand(*, slug: str) -> bool:
+    with get_db_session() as session:
+        ensure_inspiration_schema_and_seed_for_session(session)
+        row = session.execute(
+            text(
+                """
+                SELECT id
+                FROM inspiration_demands
+                WHERE slug = :slug
+                LIMIT 1
+                """
+            ),
+            {"slug": slug},
+        ).first()
+        if not row:
+            return False
+        session.execute(text("DELETE FROM inspiration_demand_interests WHERE demand_id = :demand_id"), {"demand_id": row.id})
+        session.execute(text("DELETE FROM inspiration_assistant_runs WHERE demand_id = :demand_id"), {"demand_id": row.id})
+        session.execute(text("DELETE FROM inspiration_demand_updates WHERE demand_id = :demand_id"), {"demand_id": row.id})
+        result = session.execute(text("DELETE FROM inspiration_demands WHERE id = :id"), {"id": row.id})
+        return int(result.rowcount or 0) > 0
+
+
 def add_demand_update(*, slug: str, payload: dict[str, Any], created_by_user_id: int | None) -> dict[str, Any] | None:
     with get_db_session() as session:
         ensure_inspiration_schema_and_seed_for_session(session)

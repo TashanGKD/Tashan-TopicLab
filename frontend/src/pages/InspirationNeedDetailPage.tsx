@@ -420,6 +420,7 @@ export default function InspirationNeedDetailPage() {
   const [updateDraft, setUpdateDraft] = useState<InspirationDemandUpdateRequest>(initialUpdate)
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'saving' | 'error'>('idle')
   const [interestStatus, setInterestStatus] = useState<'idle' | 'saving' | 'error'>('idle')
+  const [deleteStatus, setDeleteStatus] = useState<'idle' | 'deleting' | 'error'>('idle')
   const [shareStatus, setShareStatus] = useState<'idle' | 'copied'>('idle')
   const [shareText, setShareText] = useState('')
   const [sharePanelOpen, setSharePanelOpen] = useState(false)
@@ -651,6 +652,19 @@ export default function InspirationNeedDetailPage() {
     }
   }
 
+  async function handleDeleteDemand() {
+    if (!demand || !currentUser?.is_admin) return
+    const confirmed = window.confirm('确定要删除这条线索吗？删除后无法恢复。')
+    if (!confirmed) return
+    setDeleteStatus('deleting')
+    try {
+      await inspirationApi.deleteDemand(demand.slug)
+      navigate('/inspiration-co-creation', { replace: true })
+    } catch {
+      setDeleteStatus('error')
+    }
+  }
+
   function startStageComposer(stageKey: string) {
     setEditingUpdateId(null)
     setActiveComposerStage(stageKey)
@@ -746,6 +760,7 @@ export default function InspirationNeedDetailPage() {
   const assistant = getDemandAssistant(demand)
   const canRevealPrivate = Boolean(demand.can_view_private)
   const canUpdate = Boolean(demand.can_update)
+  const canDelete = Boolean(currentUser?.is_admin)
   const canEditPrivate = canUpdate
   const isRawPublic = demand.redaction?.method === 'raw_public' || demand.redaction?.status === 'raw_public'
   const pathProgress = normalizePathProgress(demand.path_progress)
@@ -947,7 +962,18 @@ export default function InspirationNeedDetailPage() {
                     {publicEditOpen ? '收起公开信息编辑' : '编辑公开信息'}
                   </button>
                 ) : null}
+                {canDelete ? (
+                  <button
+                    type="button"
+                    disabled={deleteStatus === 'deleting'}
+                    onClick={handleDeleteDemand}
+                    className="inline-flex min-h-10 items-center rounded-full bg-white px-4 text-sm font-semibold text-red-600 ring-1 ring-red-200 transition hover:text-red-700 hover:ring-red-300 disabled:opacity-60"
+                  >
+                    {deleteStatus === 'deleting' ? '删除中…' : '删除线索'}
+                  </button>
+                ) : null}
               </div>
+              {deleteStatus === 'error' ? <p className="text-sm text-red-600">删除失败，请确认管理员登录状态后再试。</p> : null}
               {sharePanelOpen ? (
                 <section
                   aria-label="分享文案"

@@ -799,6 +799,8 @@ export const inspirationApi = {
     api.patch<{ demand: InspirationDemand }>(`v1/inspiration/demands/${encodeURIComponent(slug)}/public-mode`, { raw_public: rawPublic }),
   updateDemandPublicFields: (slug: string, payload: InspirationDemandPublicFieldsRequest) =>
     api.patch<{ demand: InspirationDemand }>(`v1/inspiration/demands/${encodeURIComponent(slug)}/public-fields`, payload),
+  deleteDemand: (slug: string) =>
+    api.delete<{ ok: boolean; slug: string }>(`v1/inspiration/demands/${encodeURIComponent(slug)}`),
   createUpdate: (slug: string, payload: InspirationDemandUpdateRequest) =>
     api.post<{ update: InspirationDemandUpdate }>(`v1/inspiration/demands/${encodeURIComponent(slug)}/updates`, payload),
   updateUpdate: (slug: string, updateId: string, payload: InspirationDemandUpdateRequest) =>

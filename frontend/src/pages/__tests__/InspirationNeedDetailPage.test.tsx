@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import InspirationNeedDetailPage from '../InspirationNeedDetailPage'
 import { inspirationApi } from '../../api/client'
-import { refreshCurrentUserProfile } from '../../api/auth'
+import { refreshCurrentUserProfile, tokenManager } from '../../api/auth'
 
 vi.mock('../../api/client', async () => {
   const actual = await vi.importActual<typeof import('../../api/client')>('../../api/client')
@@ -191,6 +191,12 @@ vi.mock('../../api/client', async () => {
           },
         },
       })),
+      deleteDemand: vi.fn(() => Promise.resolve({
+        data: {
+          ok: true,
+          slug: demand.slug,
+        },
+      })),
       toggleInterest: vi.fn((_slug: string, interested: boolean) => Promise.resolve({
         data: {
           interest: interested
@@ -230,10 +236,24 @@ function renderDetail(
   )
 }
 
+function renderDetailWithListRoute(
+  initialEntry: string | { pathname: string; search?: string; state?: unknown } = '/inspiration-co-creation/needs/need-01-ai-english-reading-assistant',
+) {
+  return render(
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <Routes>
+        <Route path="/inspiration-co-creation/needs/:slug" element={<InspirationNeedDetailPage />} />
+        <Route path="/inspiration-co-creation" element={<div>共创线索列表</div>} />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
+
 describe('InspirationNeedDetailPage', () => {
   afterEach(() => {
     cleanup()
     localStorage.clear()
+    vi.unstubAllGlobals()
     vi.clearAllMocks()
     vi.useRealTimers()
   })
@@ -252,6 +272,25 @@ describe('InspirationNeedDetailPage', () => {
     expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'auto' })
 
     scrollTo.mockRestore()
+  })
+
+  it('shows the delete control to admins', async () => {
+    const adminUser = {
+      id: 1,
+      phone: '13800138000',
+      username: '管理员',
+      is_admin: true,
+      created_at: '2026-05-18T00:00:00Z',
+    }
+    tokenManager.set('admin-token')
+    tokenManager.setUser(adminUser)
+    vi.mocked(refreshCurrentUserProfile).mockResolvedValue(adminUser)
+
+    renderDetailWithListRoute()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '删除线索' })).toBeInTheDocument()
+    })
   })
 
   it('copies the inspiration share text with title and demand link', async () => {

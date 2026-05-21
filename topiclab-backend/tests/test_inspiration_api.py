@@ -289,6 +289,30 @@ def test_inspiration_admin_can_edit_private_info_and_existing_update(client, mon
     assert demo_stage["summary"] == "Demo 已跑通"
 
 
+def test_inspiration_admin_can_delete_demand(client, monkeypatch):
+    test_client, auth_module = client
+    monkeypatch.setenv("ADMIN_USER_IDS", "1")
+    slug = "need-01-ai-english-reading-assistant"
+    user_token = auth_module.create_jwt_token(2, "13800138002")
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+    admin_token = auth_module.create_jwt_token(1, "13800138000", is_admin=True)
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+    forbidden = test_client.delete(f"/api/v1/inspiration/demands/{slug}", headers=user_headers)
+    assert forbidden.status_code == 403
+
+    removed = test_client.delete(f"/api/v1/inspiration/demands/{slug}", headers=admin_headers)
+    assert removed.status_code == 200
+    assert removed.json() == {"ok": True, "slug": slug}
+
+    assert test_client.get(f"/api/v1/inspiration/demands/{slug}", headers=admin_headers).status_code == 404
+    listed = test_client.get("/api/v1/inspiration/demands").json()["list"]
+    assert slug not in {item["slug"] for item in listed}
+
+    missing = test_client.delete(f"/api/v1/inspiration/demands/{slug}", headers=admin_headers)
+    assert missing.status_code == 404
+
+
 def test_logged_in_user_can_mark_inspiration_demand_interest(client):
     test_client, auth_module = client
     token = auth_module.create_jwt_token(2, "13800138002")

@@ -20,6 +20,7 @@ from app.storage.database.inspiration_store import (
     claim_demand,
     create_assistant_run,
     create_demand,
+    delete_demand,
     get_demand_by_slug,
     list_public_demands,
     set_demand_interest,
@@ -146,6 +147,14 @@ def get_demand(slug: str, include_private: bool = False, user: dict | None = Dep
     if demand["status"] != "published" and not demand.get("can_view_private"):
         raise HTTPException(status_code=404, detail="需求不存在")
     return {"demand": demand}
+
+
+@router.delete("/demands/{slug}")
+def delete_submitted_demand(slug: str, _user: dict = Depends(_require_admin)):
+    removed = delete_demand(slug=slug)
+    if not removed:
+        raise HTTPException(status_code=404, detail="需求不存在")
+    return {"ok": True, "slug": slug}
 
 
 @router.post("/demands/{slug}/claim")
