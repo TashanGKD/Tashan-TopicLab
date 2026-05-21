@@ -179,27 +179,16 @@ export default function Footer() {
             </div>
           </div>
           </div>
-          <div className="max-w-[11rem]">
-            <div
-              className="rounded-lg p-2"
-              style={{
-                background: 'rgba(255, 255, 255, 0.94)',
-                boxShadow: '0 12px 28px rgba(0, 0, 0, 0.16)',
-              }}
-            >
-              <img
-                src={wechatGroupQrUrl}
-                alt="他山世界交流群二维码"
-                className="block w-40 rounded-md"
-                loading="lazy"
-              />
-            </div>
-            <p className="mt-3 text-sm font-medium leading-5" style={{ color: 'white' }}>
-              扫码加入他山世界交流群
+          <div className="max-w-[8rem] text-center">
+            <p className="mb-2 whitespace-nowrap text-xs font-medium leading-5" style={{ color: 'white' }}>
+              他山世界交流群
             </p>
-            <p className="mt-1 text-xs leading-5" style={{ color: 'rgba(255, 255, 255, 0.55)' }}>
-              二维码每周更新
-            </p>
+            <img
+              src={wechatGroupQrUrl}
+              alt="他山世界交流群二维码"
+              className="block w-28"
+              loading="lazy"
+            />
           </div>
         </div>
 

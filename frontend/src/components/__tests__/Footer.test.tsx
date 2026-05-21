@@ -20,7 +20,9 @@ describe('Footer', () => {
       'src',
       '/api/v1/site/wechat-group-qr.webp',
     )
-    expect(screen.getByText('扫码加入他山世界交流群')).toBeInTheDocument()
+    expect(screen.getByText('他山世界交流群')).toBeInTheDocument()
+    expect(screen.queryByText('扫码加入他山世界交流群')).not.toBeInTheDocument()
+    expect(screen.queryByText('二维码每周更新')).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '微信公众号' })).not.toBeInTheDocument()
   })
 })
