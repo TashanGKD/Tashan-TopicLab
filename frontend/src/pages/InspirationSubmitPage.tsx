@@ -1,7 +1,7 @@
 import { FormEvent, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import InspirationSubmissionSuccessOverlay from '../components/InspirationSubmissionSuccessOverlay'
-import { inspirationApi, type InspirationDemandSubmitRequest } from '../api/client'
+import { feedbackApi, inspirationApi, type InspirationDemandSubmitRequest } from '../api/client'
 
 type IntentKey = 'demand' | 'idea' | 'participant' | 'observer'
 
@@ -105,6 +105,10 @@ function primaryProblemFeedback(value: string) {
 
 function isFilled(value?: string | null) {
   return Boolean(value?.trim())
+}
+
+function isSignupOnlyIntent(intent: IntentKey) {
+  return intent === 'participant' || intent === 'observer'
 }
 
 function getCompletion(intent: IntentKey, form: InspirationDemandSubmitRequest) {
@@ -250,6 +254,19 @@ export default function InspirationSubmitPage() {
     return ''
   }
 
+  function buildSignupFeedbackBody() {
+    const lines = [
+      '来源：灵感共创队表单',
+      `参与方式：${form.participation_mode}`,
+      intent === 'participant' ? `想参与方向：${form.category}` : '',
+      intent === 'participant' ? `想参与方式：${form.current_blockers}` : '',
+      form.note.trim() ? `补充说明：${form.note.trim()}` : '',
+      form.submitter_name.trim() ? `称呼：${form.submitter_name.trim()}` : '',
+      `联系方式：${form.contact.trim()}`,
+    ]
+    return lines.filter(Boolean).join('\n')
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const validationError = validate()
@@ -260,6 +277,17 @@ export default function InspirationSubmitPage() {
     setStatus('submitting')
     setError('')
     try {
+      if (isSignupOnlyIntent(intent)) {
+        await feedbackApi.submit({
+          scenario: '灵感共创队报名',
+          body: buildSignupFeedbackBody(),
+          page_url: typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}${window.location.search}` : null,
+        })
+        window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+        navigate('/inspiration-co-creation', { replace: true, state: { inspirationSignupSuccess: true } })
+        return
+      }
+
       const response = await inspirationApi.submitDemand(buildPayload())
       const slug = response.data.demand.slug
       const claimToken = response.data.claim_token || null

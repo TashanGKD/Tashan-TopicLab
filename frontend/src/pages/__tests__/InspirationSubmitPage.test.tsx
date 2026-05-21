@@ -3,7 +3,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import InspirationSubmitPage from '../InspirationSubmitPage'
-import { inspirationApi } from '../../api/client'
+import { feedbackApi, inspirationApi } from '../../api/client'
 
 vi.mock('../../api/client', async () => {
   const actual = await vi.importActual<typeof import('../../api/client')>('../../api/client')
@@ -29,6 +29,15 @@ vi.mock('../../api/client', async () => {
             next_step: '先把目标用户、使用场景和一次可观察的验证动作写清楚。',
             follow_up_questions: ['目标用户是谁？'],
           },
+        },
+      })),
+    },
+    feedbackApi: {
+      submit: vi.fn(() => Promise.resolve({
+        data: {
+          id: 101,
+          username: '匿名用户',
+          created_at: '2026-05-18T00:00:00Z',
         },
       })),
     },
@@ -102,7 +111,9 @@ describe('InspirationSubmitPage', () => {
     })
   })
 
-  it('lets participants submit intent without writing a demand body', async () => {
+  it('records participant signups without creating a clue', async () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+
     renderPage()
 
     fireEvent.click(screen.getByRole('radio', { name: /我想参与别人的项目/ }))
@@ -117,17 +128,22 @@ describe('InspirationSubmitPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /提交参与意愿/ }))
 
     await waitFor(() => {
-      expect(inspirationApi.submitDemand).toHaveBeenCalledWith(expect.objectContaining({
-        allow_public: false,
-        category: '科研 / 数据',
-        current_blockers: '找资料 / 调研',
-        participation_mode: '我想参与别人的项目',
+      expect(inspirationApi.submitDemand).not.toHaveBeenCalled()
+      expect(feedbackApi.submit).toHaveBeenCalledWith(expect.objectContaining({
+        scenario: '灵感共创队报名',
+        body: expect.stringContaining('参与方式：我想参与别人的项目'),
       }))
-      expect(screen.getByTestId('location-path')).toHaveTextContent('/inspiration-co-creation/needs/test-demand-1234?claim_token=claim-token-123')
+      expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'auto' })
+      expect(screen.getByTestId('location-path')).toHaveTextContent('/inspiration-co-creation')
+      expect(screen.getByTestId('location-state')).toHaveTextContent('inspirationSignupSuccess')
     })
+
+    scrollTo.mockRestore()
   })
 
-  it('lets observers sign up with contact only', async () => {
+  it('records observer signups without creating a clue', async () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+
     renderPage()
 
     fireEvent.click(screen.getByRole('radio', { name: /我想先加入看看/ }))
@@ -141,14 +157,17 @@ describe('InspirationSubmitPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /报名加入共创队/ }))
 
     await waitFor(() => {
-      expect(inspirationApi.submitDemand).toHaveBeenCalledWith(expect.objectContaining({
-        allow_public: false,
-        category: '先加入看看',
-        current_blockers: '先加入看看',
-        participation_mode: '我想先加入看看',
+      expect(inspirationApi.submitDemand).not.toHaveBeenCalled()
+      expect(feedbackApi.submit).toHaveBeenCalledWith(expect.objectContaining({
+        scenario: '灵感共创队报名',
+        body: expect.stringContaining('参与方式：我想先加入看看'),
       }))
-      expect(screen.getByTestId('location-path')).toHaveTextContent('/inspiration-co-creation/needs/test-demand-1234?claim_token=claim-token-123')
+      expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'auto' })
+      expect(screen.getByTestId('location-path')).toHaveTextContent('/inspiration-co-creation')
+      expect(screen.getByTestId('location-state')).toHaveTextContent('inspirationSignupSuccess')
     })
+
+    scrollTo.mockRestore()
   })
 
 })
