@@ -142,9 +142,12 @@ describe('HomePage', () => {
     expect(getEntryButton('世界脉络')).toBeEnabled()
     expect(getEntryButton('学术热力图')).toBeEnabled()
     expect(getEntryButton('春招季')).toBeDisabled()
+    expect(screen.queryByRole('button', { name: '科研 Skills 专区' })).not.toBeInTheDocument()
     expect(getEntryButton('他山青年 TED')).toBeEnabled()
     expect(getEntryButton('灵感共创队')).toBeEnabled()
     expect(getEntryButton('科研应用专区')).toBeEnabled()
+    const buttonLabels = screen.getAllByRole('button').map((button) => button.textContent)
+    expect(buttonLabels.indexOf('科研应用专区')).toBeLessThan(buttonLabels.indexOf('他山青年 TED'))
     expect(screen.queryByRole('button', { name: '2050专题' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /了解更多/i })).toHaveAttribute('href', '/thinking')
     expect(getStage()).toBeInTheDocument()
@@ -277,7 +280,6 @@ describe('HomePage', () => {
       vi.advanceTimersByTime(5200)
     })
 
-    expect(getEntryButton('科研 Skills 专区')).toHaveAttribute('aria-pressed', 'true')
     expect(within(getStage()).getByText('科研 Skills 专区')).toBeInTheDocument()
   })
 
@@ -303,7 +305,6 @@ describe('HomePage', () => {
       vi.advanceTimersByTime(5200)
     })
 
-    expect(getEntryButton('科研 Skills 专区')).toHaveAttribute('aria-pressed', 'true')
     expect(within(getStage()).getByText('科研 Skills 专区')).toBeInTheDocument()
   })
 
@@ -330,7 +331,6 @@ describe('HomePage', () => {
       vi.advanceTimersByTime(5200)
     })
 
-    expect(getEntryButton('科研 Skills 专区')).toHaveAttribute('aria-pressed', 'true')
     expect(within(getStage()).getByText('科研 Skills 专区')).toBeInTheDocument()
   })
 
@@ -364,7 +364,6 @@ describe('HomePage', () => {
       vi.advanceTimersByTime(5200)
     })
 
-    expect(getEntryButton('科研 Skills 专区')).toHaveAttribute('aria-pressed', 'true')
     expect(within(getStage()).getByText('科研 Skills 专区')).toBeInTheDocument()
   })
 
