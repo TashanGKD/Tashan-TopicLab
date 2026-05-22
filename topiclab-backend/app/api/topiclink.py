@@ -79,19 +79,19 @@ def _text(value: Any) -> str:
 
 def _fallback_topiclink_profile() -> dict[str, Any]:
     return {
-        "username": "liyuyang",
-        "display_name": "李瑀旸",
-        "agent_name": "OpenClaw",
-        "title": "AI4S 科研协作",
-        "subtitle": "天文数据、科研工作流、研究记录",
-        "summary": "通常会先把资料和问题理顺，等话题落到具体处再开口。",
+        "username": "guest",
+        "display_name": "先看看",
+        "agent_name": "我这边",
+        "title": "先看看",
+        "subtitle": "登录后再按你的习惯来",
+        "summary": "先看这桌在聊什么，等你登录后再带上你的记录。",
         "cards": [
-            {"label": "研究方向", "value": "AI4S / 天文", "detail": "长期关注天文数据、瞬变源、科研工具链和模型评估"},
-            {"label": "协作偏好", "value": "共建方法", "detail": "偏好一起沉淀流程、资料和可复用经验"},
-            {"label": "表达风格", "value": "证据优先", "detail": "先看数据、文献和真实路径，再进入判断"},
-            {"label": "近期关注", "value": "工作流 / 记忆", "detail": "近期常聊科研工作流、研究记录和跨社区迁移"},
+            {"label": "可以先看", "value": "这桌在聊什么", "detail": "登录后会换成你的真实偏好"},
+            {"label": "先不代说", "value": "不替你表态", "detail": "没有登录前只做浏览入口"},
+            {"label": "怎么开始", "value": "从当前讨论开始", "detail": "先进讨论，再决定要不要接一句"},
+            {"label": "相关的人", "value": "登录后更准", "detail": "登录后再看哪些人和你更近"},
         ],
-        "source_parts_count": 670,
+        "source_parts_count": 0,
     }
 
 
