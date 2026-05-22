@@ -4,6 +4,7 @@ import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import { Post } from '../api/client'
+import DefaultAvatar from './DefaultAvatar'
 import ReactionButton from './ReactionButton'
 import { isVideoMediaSrc, resolveTopicImageSrc } from '../utils/topicImage'
 import { getArcadeKind } from '../utils/arcade'
@@ -37,6 +38,7 @@ interface Props {
   onLoadReplies?: (post: Post) => void
   replyLoadingPostIds?: Set<string>
   replyNextCursorByPostId?: Record<string, string | null | undefined>
+  compactLongPosts?: boolean
 }
 
 interface ThreadEntry {
@@ -50,6 +52,15 @@ interface ThreadEntry {
 
 const INITIAL_VISIBLE_POSTS = 24
 const VISIBLE_POSTS_STEP = 20
+
+function cleanPostDisplayName(name: string | null | undefined) {
+  const raw = (name ?? '').trim()
+  if (!raw) return '参与者'
+  const guestMatch = raw.match(/^OpenClaw\s+Guest\s+([^'\s]+)(?:'s)?(?:\s+openclaw)?/i)
+  if (guestMatch) return `来访者 ${guestMatch[1]}`
+  if (/^openclaw$/i.test(raw)) return '我这边'
+  return raw.replace(/\s*'s\s+openclaw$/i, '').trim()
+}
 
 /** Build threaded structure: roots + children map. Render in chronological order with nesting. */
 function buildThread(posts: Post[]): { roots: Post[]; childrenMap: Record<string, Post[]> } {
@@ -119,6 +130,7 @@ export default function PostThread({
   onLoadReplies,
   replyLoadingPostIds,
   replyNextCursorByPostId,
+  compactLongPosts = false,
 }: Props) {
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_POSTS)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
@@ -183,6 +195,7 @@ export default function PostThread({
           canLoadMoreReplies={entry.canLoadMoreReplies}
           loadingReplies={entry.loadingReplies}
           remainingReplies={entry.remainingReplies}
+          compactLongPosts={compactLongPosts}
         />
       ))}
       {hasMoreEntries ? (
@@ -216,6 +229,7 @@ function PostCard({
   canLoadMoreReplies,
   loadingReplies,
   remainingReplies,
+  compactLongPosts,
 }: {
   post: Post
   parent?: Post
@@ -232,34 +246,42 @@ function PostCard({
   canLoadMoreReplies?: boolean
   loadingReplies?: boolean
   remainingReplies?: number
+  compactLongPosts?: boolean
 }) {
   const isAgent = post.author_type === 'agent'
   const isSystem = post.author_type === 'system'
   const isPending = post.status === 'pending'
   const isFailed = post.status === 'failed'
   const arcadeKind = getArcadeKind(post)
-  const displayName = isSystem ? '评测员' : (isAgent ? (post.expert_label ?? post.author) : post.author)
+  const displayName = isSystem ? '评测员' : cleanPostDisplayName(isAgent ? (post.expert_label ?? post.author) : post.author)
   const parentDisplayName = parent
     ? (parent.author_type === 'system'
         ? '评测员'
         : parent.author_type === 'agent'
-          ? (parent.expert_label ?? parent.author)
-          : parent.author)
+          ? cleanPostDisplayName(parent.expert_label ?? parent.author)
+          : cleanPostDisplayName(parent.author))
     : ''
   const isReply = depth > 0
   const indentPx = Math.min(depth * 12, 36)
-  const initial = displayName.charAt(0).toUpperCase()
   const showDelete = !isPending && !isFailed && !!onDelete && !!canDelete?.(post)
   const likesCount = post.interaction?.likes_count ?? 0
   const sharesCount = post.interaction?.shares_count ?? 0
   const liked = post.interaction?.liked ?? false
   const liking = pendingLikePostIds?.has(post.id) ?? false
-  const [renderRichBody, setRenderRichBody] = useState(isPending || isFailed || depth > 0)
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const plainTextBody = post.body.replace(/!\[[^\]]*]\(([^)]+)\)/g, '').replace(/\[(.*?)\]\((.*?)\)/g, '$1').replace(/[*_`>#-]/g, '').trim()
-  const summary = plainTextBody.length > 220 ? `${plainTextBody.slice(0, 220)}...` : plainTextBody
+  const shouldKeepCollapsed = compactLongPosts && !isPending && !isFailed && depth === 0 && plainTextBody.length > 360
+  const initialRenderRichBody = compactLongPosts
+    ? isPending || isFailed || depth > 0 || !shouldKeepCollapsed
+    : isPending || isFailed || depth > 0
+  const [renderRichBody, setRenderRichBody] = useState(initialRenderRichBody)
+  const summaryLength = compactLongPosts ? 190 : 220
+  const summary = plainTextBody.length > summaryLength ? `${plainTextBody.slice(0, summaryLength)}...` : plainTextBody
 
   useEffect(() => {
+    if (shouldKeepCollapsed) {
+      return
+    }
     if (renderRichBody || !bodyRef.current) {
       return
     }
@@ -270,12 +292,12 @@ function PostCard({
     }, { rootMargin: '160px 0px' })
     observer.observe(bodyRef.current)
     return () => observer.disconnect()
-  }, [renderRichBody])
+  }, [renderRichBody, shouldKeepCollapsed])
 
   return (
     <div
       id={`post-${post.id}`}
-      className={`group relative ${isPending ? 'opacity-60' : ''} ${
+      className={`group relative ${isAgent ? 'topiclink-post-agent' : 'topiclink-post-person'} ${isPending ? 'opacity-60' : ''} ${
         isReply ? 'pl-3 ml-3 border-l border-gray-200' : 'border-b border-gray-100'
       }`}
       style={isReply ? { marginLeft: indentPx } : undefined}
@@ -291,42 +313,40 @@ function PostCard({
 
         {/* Header */}
         <div className="mb-1 flex items-start gap-2">
-          <div
-            className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-medium flex-shrink-0 ${
-              isSystem ? 'bg-amber-100 text-amber-700' : isAgent ? 'bg-black text-white' : 'bg-gray-200 text-gray-600'
-            }`}
-          >
-            {initial}
+          <DefaultAvatar
+            name={displayName}
+            kind={isAgent ? 'openclaw' : 'person'}
+            className="topiclink-post-avatar h-8 w-8 shrink-0 shadow-[0_8px_18px_rgba(42,59,49,0.12)] ring-2 ring-white"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-sm font-medium text-black">{displayName}</span>
+              {isSystem ? <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">记录</span> : null}
+              {arcadeKind === 'submission' && (
+                <span className="shrink-0 text-[10px] px-1 py-0.5 rounded bg-slate-100 text-slate-600">提交</span>
+              )}
+              {arcadeKind === 'evaluation' && (
+                <span className="shrink-0 text-[10px] px-1 py-0.5 rounded bg-emerald-100 text-emerald-700">评测</span>
+              )}
+              <span className="shrink-0 text-[11px] text-gray-400">
+                {new Date(post.created_at).toLocaleString('zh-CN', {
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </span>
+            </div>
+            {parent && isReply ? (
+              <p className="mt-1 text-[11px] text-gray-400">回复 {parentDisplayName}</p>
+            ) : null}
           </div>
-          <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-medium text-black">{displayName}</span>
-            {isAgent && (
-              <span className="text-[10px] px-1 py-0.5 rounded bg-gray-200 text-gray-600">角色</span>
-            )}
-            {isSystem && (
-              <span className="text-[10px] px-1 py-0.5 rounded bg-amber-100 text-amber-700">系统</span>
-            )}
-            {arcadeKind === 'submission' && (
-              <span className="text-[10px] px-1 py-0.5 rounded bg-slate-100 text-slate-600">提交</span>
-            )}
-            {arcadeKind === 'evaluation' && (
-              <span className="text-[10px] px-1 py-0.5 rounded bg-emerald-100 text-emerald-700">评测</span>
-            )}
-            <span className="text-[11px] text-gray-400">
-              {new Date(post.created_at).toLocaleString('zh-CN', {
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
-            </span>
-          </div>
-          <div className="flex shrink-0 items-center">
+          <div className="flex shrink-0 items-center gap-1">
             {showDelete ? (
               <button
                 type="button"
                 onClick={() => onDelete(post)}
-                className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded px-2 py-1.5 text-xs text-gray-400 touch-manipulation hover:text-red-600"
+                className="flex min-h-[36px] min-w-[36px] shrink-0 items-center justify-center rounded px-2 py-1 text-xs text-gray-400 touch-manipulation hover:text-red-600"
                 aria-label={`删除 ${displayName} 的帖子`}
               >
                 删除
@@ -336,7 +356,7 @@ function PostCard({
               <button
                 type="button"
                 onClick={() => onReply(post)}
-                className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded px-2 py-1.5 text-xs text-gray-400 touch-manipulation hover:text-black"
+                className="flex min-h-[36px] min-w-[36px] shrink-0 items-center justify-center rounded px-2 py-1 text-xs text-gray-400 touch-manipulation hover:text-black"
                 aria-label={`回复 ${displayName}`}
               >
                 回复
@@ -361,7 +381,7 @@ function PostCard({
           ) : !renderRichBody ? (
             <div>
               <p className="whitespace-pre-wrap">{summary || post.body}</p>
-              {plainTextBody.length > 220 ? (
+              {plainTextBody.length > summaryLength ? (
                 <button
                   type="button"
                   onClick={(event) => {

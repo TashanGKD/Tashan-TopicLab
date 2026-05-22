@@ -45,6 +45,7 @@ from app.api import site as site_router
 from app.api import skill_hub as skill_hub_router
 from app.api import skills as skills_router
 from app.api import source_feed as source_feed_router
+from app.api import topiclink as topiclink_router
 from app.api import topics as topics_router
 from app.api import youth_ted as youth_ted_router
 from app.services.http_client import close_shared_async_clients
@@ -262,6 +263,8 @@ app.include_router(aminer_router.router, prefix="/aminer", tags=["aminer"])
 app.include_router(aminer_router.router, prefix="/api/v1/aminer", tags=["aminer-v1"])
 app.include_router(topics_router.router, tags=["topics"])
 app.include_router(topics_router.router, prefix="/api/v1", tags=["topics-v1"])
+app.include_router(topiclink_router.router, tags=["topiclink"])
+app.include_router(topiclink_router.router, prefix="/api/v1", tags=["topiclink-v1"])
 app.include_router(skills_router.router, tags=["skills"])
 app.include_router(skills_router.router, prefix="/api/v1", tags=["skills-v1"])
 app.include_router(skill_hub_router.router, prefix="/api/v1", tags=["skill-hub-v1"])

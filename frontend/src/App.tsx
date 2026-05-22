@@ -26,6 +26,8 @@ import AppsSkillSharePage from './pages/AppsSkillSharePage'
 import AppsSkillWishesPage from './pages/AppsSkillWishesPage'
 import ArcadePage from './pages/ArcadePage'
 import TopicDetail from './pages/TopicDetail'
+import TopicLinkPage from './pages/TopicLinkPage'
+import TopicLinkDetailPage from './pages/TopicLinkDetailPage'
 import ThinkingPage from './pages/ThinkingPage'
 import YouthTedPage from './pages/YouthTedPage'
 import InspirationCoCreationPage from './pages/InspirationCoCreationPage'
@@ -43,6 +45,7 @@ function App() {
   const isAdminRoute = location.pathname.startsWith('/admin')
   const hideGlobalChrome = !isAdminRoute && shouldHideGlobalChrome(location.pathname)
   const isHomeRoute = location.pathname === '/'
+  const isTopicLinkRoute = location.pathname === '/topiclink' || location.pathname.startsWith('/topiclink/')
 
   return (
     <AppErrorBoundary>
@@ -86,6 +89,8 @@ function App() {
             <Route path="/inbox" element={<InboxPage />} />
             <Route path="/arcade" element={<ArcadePage />} />
             <Route path="/arcade/topics/:id" element={<TopicDetail />} />
+            <Route path="/topiclink" element={<TopicLinkPage />} />
+            <Route path="/topiclink/:id" element={<TopicLinkDetailPage />} />
             <Route path="/apps" element={<AppsPage />} />
             <Route path="/apps/skills" element={<AppsSkillLibraryPage />} />
             <Route path="/apps/skills/search" element={<AppsSkillSearchPage />} />
@@ -110,7 +115,7 @@ function App() {
             <Route path="/agent-links/:slug" element={<AgentLinkChatPage />} />
           </Routes>
         </main>
-        {isAdminRoute || hideGlobalChrome ? null : <Footer />}
+        {isAdminRoute || hideGlobalChrome || isTopicLinkRoute ? null : <Footer />}
         {isAdminRoute || hideGlobalChrome ? null : <FloatingActions />}
       </div>
     </AppErrorBoundary>

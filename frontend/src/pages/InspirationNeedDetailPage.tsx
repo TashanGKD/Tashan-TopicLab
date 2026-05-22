@@ -7,6 +7,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import InspirationSubmissionSuccessOverlay from '../components/InspirationSubmissionSuccessOverlay'
 import { refreshCurrentUserProfile, tokenManager, type User } from '../api/auth'
 import { inspirationApi, type InspirationDemand, type InspirationDemandPublicFieldsRequest, type InspirationDemandUpdate, type InspirationDemandUpdateRequest } from '../api/client'
+import { toast } from '../utils/toast'
 
 const initialUpdate: InspirationDemandUpdateRequest = {
   week_label: '',
@@ -36,6 +37,16 @@ const statusOptions: Array<{ key: InspirationDemandUpdateRequest['stage_status']
 
 type PrivateDraft = Record<string, string | boolean | number | null | undefined>
 type UpdateOptionalSection = 'links' | 'tools' | 'emotion' | 'blockers'
+type AiCodeTask = {
+  id: string
+  title: string
+  role: string
+  goal: string
+  input: string
+  output: string
+  acceptance: string[]
+  starterPrompt: string
+}
 
 const updateOptionalSections: Array<{ key: UpdateOptionalSection; label: string }> = [
   { key: 'links', label: '文档/网页链接' },
@@ -428,6 +439,207 @@ function AssistantPanel({
   )
 }
 
+function demandText(demand: InspirationDemand) {
+  return [
+    demand.title,
+    demand.summary,
+    demand.stuck,
+    ...(demand.tags ?? []),
+  ].filter(Boolean).join('\n')
+}
+
+function buildAiCodeTasks(demand: InspirationDemand): AiCodeTask[] {
+  const title = demand.title || '这条共创线索'
+  const summary = demand.summary || demand.stuck || '还需要把问题继续拆清楚。'
+  const text = demandText(demand).toLowerCase()
+  const isScienceCommercial = /ai for science|科研|science|材料|化工|高分子|产业|商业化|论文|专利/.test(text)
+  const isJsonOrData = /json|数据字典|表格|数据|schema|api/.test(text)
+  if (isScienceCommercial) {
+    return [
+      {
+        id: 'science-signal-crawler',
+        title: '产业线索抓取器',
+        role: '检索脚本 / 数据整理',
+        goal: `围绕「${title}」做一个最小脚本，批量收集 AI for Science 商业化线索。`,
+        input: '关键词、公司名、材料方向、论文/新闻/官网链接。',
+        output: 'CSV 或 Markdown 表：公司/项目/AI 方法/应用材料/证据链接/商业阶段/可信度。',
+        acceptance: ['能用 5-10 个关键词跑出样例表', '每条线索必须带来源链接', '能标出“论文阶段 / 原型阶段 / 客户或产品阶段”'],
+        starterPrompt: `请为「${title}」实现一个 Python 最小原型：输入关键词列表，抓取或整理公开网页/手工链接，输出 AI for Science 商业化线索表。需求背景：${summary}。要求：1. 给出数据结构；2. 写可运行脚本；3. 附 3 条样例输入；4. 输出 Markdown/CSV；5. 不要编造来源链接。`,
+      },
+      {
+        id: 'science-readiness-scorer',
+        title: '项目成熟度评分器',
+        role: '模型评估 / 打分规则',
+        goal: `把「${title}」里的线索按科研证据、产业接近度、数据可得性做初筛。`,
+        input: '一条项目线索的标题、摘要、来源、应用场景和证据链接。',
+        output: '0-100 分评分、判断理由、缺失信息、下一步验证问题。',
+        acceptance: ['评分维度清楚且可解释', '低证据线索不能高分', '能输出需要人工确认的问题'],
+        starterPrompt: `请设计并实现一个 AI for Science 商业化线索评分器。需求背景：${summary}。输入是一组项目线索 JSON，输出每条线索的 maturity_score、evidence_score、market_fit_score、risk_notes、next_questions。请给出 TypeScript 或 Python 实现、评分规则和样例测试。`,
+      },
+      {
+        id: 'weekly-brief-generator',
+        title: '每周线索简报生成器',
+        role: '报告生成 / 工作流',
+        goal: `把收集到的线索整理成给共创队看的周报，方便继续招募和讨论。`,
+        input: '线索表、评分结果、人工备注。',
+        output: '一页 Markdown 简报：本周新线索、最值得跟进的项目、风险、需要谁加入。',
+        acceptance: ['能从结构化表格生成简报', '明确列出 3 个可跟进任务', '能说明需要开发、调研还是产业访谈'],
+        starterPrompt: `请实现一个 Markdown 简报生成器。输入是 AI for Science 商业化线索表和评分结果，输出共创队周报。背景：${summary}。请给出输入 schema、生成模板、样例数据和最小可运行代码。`,
+      },
+    ]
+  }
+  if (isJsonOrData) {
+    return [
+      {
+        id: 'schema-extractor',
+        title: '数据结构提取器',
+        role: '解析脚本 / Schema',
+        goal: `把「${title}」里的样例数据转成可维护的数据字典。`,
+        input: 'JSON、CSV、接口返回样例或字段截图。',
+        output: '字段名、类型、枚举、含义、样例值、可空性。',
+        acceptance: ['能处理嵌套字段', '输出结构稳定', '保留原始样例方便校对'],
+        starterPrompt: `请实现一个数据字典生成工具。背景：${summary}。输入 JSON/CSV 样例，输出字段路径、类型、样例值、解释占位和可空性。请给出 Python 实现和测试样例。`,
+      },
+      {
+        id: 'field-description-agent',
+        title: '字段解释补全器',
+        role: '模型补全 / 文档',
+        goal: '用模型给数据字典补充人能读懂的字段解释，但保留人工复核入口。',
+        input: '字段路径、样例值、上下文字段。',
+        output: '字段解释、可能业务含义、置信度、待确认问题。',
+        acceptance: ['低置信度字段必须标待确认', '不能覆盖人工解释', '能批量输出 Markdown 表格'],
+        starterPrompt: `请实现一个字段解释补全器。背景：${summary}。输入字段字典 JSON，输出带 explanation、confidence、questions 的增强字典。请写实现方案和最小代码。`,
+      },
+      {
+        id: 'doc-preview',
+        title: '数据字典预览页',
+        role: '前端原型',
+        goal: '做一个可搜索、可展开、可人工修订的数据字典预览页。',
+        input: '数据字典 JSON。',
+        output: '可交互表格页面或组件。',
+        acceptance: ['支持搜索字段名和解释', '支持嵌套路径展开', '长文本不撑破页面'],
+        starterPrompt: `请实现一个数据字典预览组件。背景：${summary}。输入字段数组，展示字段路径、类型、解释、样例值和待确认问题。请用 React + TypeScript 写组件和样例数据。`,
+      },
+    ]
+  }
+  return [
+    {
+      id: 'need-to-prototype',
+      title: '需求转原型任务',
+      role: '产品 / 代码原型',
+      goal: `把「${title}」拆成一周内能跑起来的最小原型。`,
+      input: '需求描述、目标用户、当前卡点。',
+      output: '功能列表、数据结构、页面或脚本入口、验收标准。',
+      acceptance: ['只保留 1 个核心流程', '能用假数据演示', '有明确验收方式'],
+      starterPrompt: `请把这个共创需求拆成一个最小可运行原型，并给出代码实现计划。标题：${title}。背景：${summary}。请输出：功能边界、输入输出、文件结构、关键代码、验收测试。`,
+    },
+    {
+      id: 'research-assistant',
+      title: '资料整理助手',
+      role: '检索 / 摘要',
+      goal: '先做一个能收集资料、整理观点、列出待验证问题的小工具。',
+      input: '关键词、链接、用户补充说明。',
+      output: '资料清单、摘要、风险、下一步问题。',
+      acceptance: ['来源链接可追溯', '区分事实和推测', '输出能直接贴回共创记录'],
+      starterPrompt: `请实现一个资料整理助手。背景：${summary}。输入关键词和链接列表，输出可追溯的资料摘要、风险点和下一步问题。请给出最小代码或伪代码。`,
+    },
+    {
+      id: 'matching-workflow',
+      title: '参与者匹配流程',
+      role: '协作匹配 / 规则',
+      goal: '根据需求类型和缺口，推荐需要开发者、调研者、产品或试用者加入。',
+      input: '需求文本、当前卡点、已有参与者。',
+      output: '角色缺口、推荐邀请语、下一步行动。',
+      acceptance: ['角色推荐有理由', '邀请语自然', '能说明为什么现在需要这个人'],
+      starterPrompt: `请设计一个共创队参与者匹配流程。背景：${summary}。输入需求文本和已有参与者，输出角色缺口、推荐邀请语和下一步行动。请给出规则和代码原型。`,
+    },
+  ]
+}
+
+function AiCodeCoCreationPanel({
+  demand,
+  canUpdate,
+  copiedTaskId,
+  onCopyPrompt,
+  onAdoptTask,
+}: {
+  demand: InspirationDemand
+  canUpdate: boolean
+  copiedTaskId: string | null
+  onCopyPrompt: (task: AiCodeTask) => void
+  onAdoptTask: (task: AiCodeTask) => void
+}) {
+  const tasks = buildAiCodeTasks(demand)
+  return (
+    <section className="mt-8 rounded-[var(--radius-lg)] border border-teal-100 bg-white p-5 shadow-[0_18px_48px_rgba(13,148,136,0.08)]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-teal-700">AI 代码共创</p>
+          <h2 className="mt-2 text-2xl font-semibold text-slate-950">让模型先把它做成能跑的东西</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-600">
+            这里不是继续写想法，而是把需求拆成 AI coding agent 能接的任务：输入、输出、验收标准和可直接交给 Codex 的提示词。
+          </p>
+        </div>
+        <span className="w-fit rounded-full bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700">
+          {tasks.length} 个可执行任务
+        </span>
+      </div>
+      <div className="mt-5 grid gap-3 xl:grid-cols-3">
+        {tasks.map((task) => (
+          <article key={task.id} className="flex min-h-[22rem] flex-col rounded-[var(--radius-md)] border border-slate-200 bg-slate-50/70 p-4">
+            <p className="text-xs font-semibold text-teal-700">{task.role}</p>
+            <h3 className="mt-2 text-lg font-semibold leading-snug text-slate-950">{task.title}</h3>
+            <p className="mt-3 text-sm leading-7 text-slate-600">{task.goal}</p>
+            <dl className="mt-4 space-y-3 text-sm leading-6">
+              <div>
+                <dt className="font-semibold text-slate-500">输入</dt>
+                <dd className="text-slate-700">{task.input}</dd>
+              </div>
+              <div>
+                <dt className="font-semibold text-slate-500">产出</dt>
+                <dd className="text-slate-700">{task.output}</dd>
+              </div>
+            </dl>
+            <div className="mt-4">
+              <p className="text-xs font-semibold text-slate-500">验收</p>
+              <ul className="mt-2 space-y-1 text-sm leading-6 text-slate-600">
+                {task.acceptance.map((item) => <li key={item}>{item}</li>)}
+              </ul>
+            </div>
+            <div className="mt-auto grid gap-2 pt-5">
+              {copiedTaskId === task.id ? (
+                <textarea
+                  readOnly
+                  value={task.starterPrompt}
+                  rows={5}
+                  className="w-full resize-none rounded-[var(--radius-sm)] border border-teal-100 bg-white px-3 py-2 text-xs leading-5 text-slate-700"
+                  aria-label={`${task.title} 的 AI 实现任务`}
+                />
+              ) : null}
+              <button
+                type="button"
+                onClick={() => onCopyPrompt(task)}
+                className="min-h-10 rounded-full bg-teal-700 px-4 text-sm font-semibold text-white transition hover:bg-teal-800"
+              >
+                {copiedTaskId === task.id ? '已展开给 AI 的任务' : '复制给 AI 写代码'}
+              </button>
+              {canUpdate ? (
+                <button
+                  type="button"
+                  onClick={() => onAdoptTask(task)}
+                  className="min-h-10 rounded-full border border-teal-200 bg-white px-4 text-sm font-semibold text-teal-700 transition hover:border-teal-400 hover:bg-teal-50"
+                >
+                  记为下一步实现
+                </button>
+              ) : null}
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 export default function InspirationNeedDetailPage() {
   const { slug = '' } = useParams()
   const location = useLocation()
@@ -456,6 +668,7 @@ export default function InspirationNeedDetailPage() {
   const [activeComposerStage, setActiveComposerStage] = useState<string | null>(null)
   const [editingUpdateId, setEditingUpdateId] = useState<string | null>(null)
   const [openUpdateSections, setOpenUpdateSections] = useState<UpdateOptionalSection[]>([])
+  const [copiedCodeTaskId, setCopiedCodeTaskId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!submissionState?.inspirationSubmissionSuccess) return
@@ -716,6 +929,37 @@ export default function InspirationNeedDetailPage() {
         ? current.filter((item) => item !== section)
         : [...current, section]
     ))
+  }
+
+  async function copyCodeTaskPrompt(task: AiCodeTask) {
+    setCopiedCodeTaskId(task.id)
+    try {
+      await navigator.clipboard.writeText(task.starterPrompt)
+      toast.success('已复制给 AI 的实现任务')
+    } catch {
+      toast.info('已展开任务提示词，可以手动复制')
+    }
+  }
+
+  function adoptCodeTask(task: AiCodeTask) {
+    const stageKey = pathProgress.find((stage) => stage.status === 'current')?.key
+      ?? pathProgress.find((stage) => stage.key === 'prototype')?.key
+      ?? pathProgress.find((stage) => stage.key === 'defined')?.key
+      ?? pathProgress[0]?.key
+      ?? 'defined'
+    setEditingUpdateId(null)
+    setActiveComposerStage(stageKey)
+    setUpdateDraft({
+      ...initialUpdate,
+      stage_key: stageKey,
+      week_label: getCurrentMinuteLabel(),
+      summary: `准备让 AI 先实现：${task.title}`,
+      progress: `${task.goal}\n\n输入：${task.input}\n产出：${task.output}`,
+      next_steps: task.acceptance.join('\n'),
+      artifacts: [{ type: 'tool', label: 'Codex / AI coding agent' }],
+      visibility: 'public',
+    })
+    setOpenUpdateSections(['tools'])
   }
 
   async function handleUpdateSubmit(event: FormEvent<HTMLFormElement>) {
@@ -1290,6 +1534,14 @@ export default function InspirationNeedDetailPage() {
             </div>
           ) : null}
         </section>
+
+        <AiCodeCoCreationPanel
+          demand={demand}
+          canUpdate={canUpdate}
+          copiedTaskId={copiedCodeTaskId}
+          onCopyPrompt={copyCodeTaskPrompt}
+          onAdoptTask={adoptCodeTask}
+        />
 
         <section className="mt-12">
           <h2 className="text-2xl font-semibold text-slate-950">路径进展</h2>

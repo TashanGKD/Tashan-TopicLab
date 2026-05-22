@@ -31,7 +31,8 @@ describe('Vite WorldWeave proxy config', () => {
   it('keeps the canonical OpenClaw skill and bootstrap on topiclab-backend', () => {
     const config = readViteConfig()
 
-    expect(config).toMatch(/'\/api\/v1\/openclaw':\s*{\s*target:\s*'http:\/\/127\.0\.0\.1:8001'/)
+    expect(config).toContain("const topicLabTarget = env.VITE_TOPICLAB_PROXY_TARGET || 'http://127.0.0.1:8001'")
+    expect(config).toMatch(/'\/api\/v1\/openclaw':\s*{\s*target:\s*topicLabTarget/)
     expect(config).not.toMatch(/'\/api\/v1\/openclaw':\s*{\s*target:\s*worldWeaveTarget/)
     expect(config).not.toContain("'^/api/v1/openclaw/skill\\\\.md'")
   })
@@ -39,7 +40,8 @@ describe('Vite WorldWeave proxy config', () => {
   it('routes TopicLab topic reads to topiclab-backend in local dev', () => {
     const config = readViteConfig()
 
-    expect(config).toMatch(/'\/api\/topics':\s*{\s*target:\s*'http:\/\/127\.0\.0\.1:8001'/)
+    expect(config).toMatch(/'\/api\/topics':\s*{\s*target:\s*topicLabTarget/)
+    expect(config).toMatch(/'\/api\/topiclink':\s*{\s*target:\s*topicLabTarget/)
   })
 
   it('routes site assets to topiclab-backend in local dev', () => {

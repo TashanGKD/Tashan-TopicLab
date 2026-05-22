@@ -130,6 +130,7 @@ describe('ChatWindow', () => {
 
     await waitFor(() => {
       expect(mockedGetOrCreateSession).toHaveBeenCalled()
+      expect(localStorage.getItem('tashan_session_id')).toBe('session-1')
     })
 
     fireEvent.click(container.querySelector('.chat-send-btn') as HTMLButtonElement)

@@ -1,5 +1,5 @@
-import { FormEvent, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { FormEvent, useEffect, useRef, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import InspirationSubmissionSuccessOverlay from '../components/InspirationSubmissionSuccessOverlay'
 import { feedbackApi, inspirationApi, type InspirationDemandSubmitRequest } from '../api/client'
 
@@ -198,10 +198,32 @@ function TextStrength({ value }: { value: string }) {
 
 export default function InspirationSubmitPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const prefilledFromTopicLinkRef = useRef(false)
   const [intent, setIntent] = useState<IntentKey>('demand')
   const [form, setForm] = useState<InspirationDemandSubmitRequest>(initialForm)
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle')
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (prefilledFromTopicLinkRef.current || searchParams.get('from') !== 'topiclink') return
+    const topicTitle = (searchParams.get('topic_title') || '').trim()
+    const problem = (searchParams.get('problem') || '').trim()
+    if (!topicTitle && !problem) return
+    const nextIntent = (searchParams.get('intent') || '').trim() === 'demand' ? 'demand' : 'idea'
+    prefilledFromTopicLinkRef.current = true
+    setIntent(nextIntent)
+    setForm((current) => ({
+      ...current,
+      participation_mode: intentOptions.find((item) => item.key === nextIntent)?.label ?? current.participation_mode,
+      problem: problem || `我想把这桌讨论继续拆清楚：${topicTitle}`,
+      category: (searchParams.get('category') || '').trim() || '还说不清 / 其他',
+      category_extra: (searchParams.get('category_extra') || '').trim() || '观察到一个问题',
+      current_blockers: (searchParams.get('current_blockers') || '').trim() || (nextIntent === 'demand' ? '想找人一起拆解' : '缺少一起讨论的人'),
+      note: (searchParams.get('note') || '').trim() || '来自 TopicLink 圆桌。',
+      allow_public: true,
+    }))
+  }, [searchParams])
 
   function updateField<K extends keyof InspirationDemandSubmitRequest>(key: K, value: InspirationDemandSubmitRequest[K]) {
     setForm((current) => ({ ...current, [key]: value }))

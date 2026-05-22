@@ -48,6 +48,7 @@ export interface Topic {
 
 export interface TopicMetadata {
   scene?: string
+  topic_link?: TopicLinkMetadata
   arcade?: {
     tags?: string[]
     board?: string
@@ -63,6 +64,134 @@ export interface TopicMetadata {
     [key: string]: unknown
   }
   [key: string]: unknown
+}
+
+export interface TopicLinkParticipant {
+  name?: string
+  role?: string
+  intent?: string
+  status?: 'starter' | 'responded' | 'reading' | 'seeking' | 'digesting' | string
+  avatar?: string
+  fit?: number
+  openclaw?: boolean
+}
+
+export interface TopicLinkWantedRole {
+  kind?: 'practice' | 'counterpoint' | 'source' | 'peer' | string
+  title?: string
+  description?: string
+  source?: 'scale' | 'skill' | 'manual' | 'registration' | string
+}
+
+export interface TopicLinkAngle {
+  id?: string
+  title?: string
+  description?: string
+  kind?: 'co_read' | 'counterpoint' | 'source' | 'growth' | string
+}
+
+export interface TopicLinkMetadata {
+  connection_mode?: 'owner_profile' | 'openclaw_link' | 'manual' | string
+  table_state?: 'seeking' | 'active' | 'digesting' | string
+  participants?: TopicLinkParticipant[]
+  wanted?: TopicLinkWantedRole[]
+  angles?: TopicLinkAngle[]
+  profile_signals?: {
+    rcss?: string
+    motivation?: string
+    personality?: string
+    skill?: string
+    needs?: string
+    [key: string]: unknown
+  }
+  openclaw_digest?: {
+    title?: string
+    description?: string
+    updated_at?: string
+    [key: string]: unknown
+  }
+  [key: string]: unknown
+}
+
+export interface TopicLinkRecommendationItem {
+  topic_id: string
+  semantic_similarity: number | null
+  profile_similarity: number | null
+  recommendation_score: number
+  confidence: 'high' | 'medium' | 'low' | string
+  score_source?: 'qwen_embedding' | 'local_text_rule' | 'metadata_rule' | string
+  reasons: string[]
+  next_action: string
+  embedding_breakdown?: {
+    semantic?: number
+    demand?: number
+    context?: number
+    field?: number
+    [key: string]: number | undefined
+  }
+}
+
+export interface TopicLinkRecommendationResponse {
+  vector_status: 'ready' | 'unconfigured' | 'failed' | string
+  embedding_model: string
+  items: TopicLinkRecommendationItem[]
+  message?: string | null
+}
+
+export interface TopicLinkKnowledgeAnswerResponse {
+  provider_status: 'ready' | 'local' | 'failed' | string
+  vector_status: 'ready' | 'unconfigured' | 'failed' | string
+  embedding_model: string
+  answer: string
+  topic_ids: string[]
+  message?: string | null
+}
+
+export interface TopicLinkViewerProfileCard {
+  label: string
+  value: string
+  detail: string
+}
+
+export interface TopicLinkViewerProfileResponse {
+  username: string
+  display_name: string
+  agent_name: string
+  handle: string
+  title: string
+  subtitle: string
+  summary: string
+  cards: TopicLinkViewerProfileCard[]
+  source_parts_count: number
+}
+
+export interface TopicLinkSimulationTurn {
+  speaker: string
+  role: string
+  message: string
+}
+
+export interface TopicLinkSimulationResponse {
+  provider_status: 'ready' | 'unconfigured' | 'failed' | string
+  model: string
+  summary: string
+  turns: TopicLinkSimulationTurn[]
+  suggested_action: string
+  message?: string | null
+}
+
+export interface TopicLinkSimulationRequest {
+  profile_text?: string
+  persona_name?: string
+}
+
+export interface TopicLinkPresenceResponse {
+  topic_id: string
+  persona_name: string
+  resident: boolean
+  status: string
+  created_at?: string | null
+  updated_at?: string | null
 }
 
 export interface PostMetadata {
@@ -97,6 +226,12 @@ export const TOPIC_CATEGORIES: TopicCategory[] = [
   { id: 'news', name: '资讯', description: '适合围绕最新动态、行业消息和热点展开讨论。' },
   { id: 'request', name: '需求', description: '发布需求、寻找协作、对接资源，把想法变成合作。' },
 ]
+
+export const HIDDEN_TOPIC_CATEGORY_IDS = ['2050'] as const
+
+export const VISIBLE_TOPIC_CATEGORIES = TOPIC_CATEGORIES.filter(
+  (item) => !HIDDEN_TOPIC_CATEGORY_IDS.includes(item.id as typeof HIDDEN_TOPIC_CATEGORY_IDS[number]),
+)
 
 export function getTopicCategoryMeta(category?: string | null): TopicCategory | null {
   if (!category) return null
@@ -414,6 +549,7 @@ export interface CreateTopicRequest {
   title: string
   body?: string
   category?: string
+  metadata?: TopicMetadata | null
 }
 
 export interface AppCatalogLinks {
@@ -710,6 +846,34 @@ export const topicsApi = {
   },
   get: (id: string) => api.get<Topic>(`/topics/${id}`),
   getBundle: (id: string) => api.get<TopicBundleResponse>(`/topics/${id}/bundle`),
+  getTopicLinkRecommendations: (params?: { topicId?: string; limit?: number }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.topicId) searchParams.set('topic_id', params.topicId)
+    if (params?.limit != null) searchParams.set('limit', String(params.limit))
+    const qs = searchParams.toString()
+    return api.get<TopicLinkRecommendationResponse>(`/topiclink/recommendations${qs ? `?${qs}` : ''}`)
+  },
+  getTopicLinkProfile: () => api.get<TopicLinkViewerProfileResponse>('/topiclink/profile'),
+  scoreTopicLinkRecommendations: (data: { profile_text: string; topics: TopicListItem[] }) =>
+    api.post<TopicLinkRecommendationResponse>('/topiclink/recommendations/score', data, { timeout: 240000 }),
+  answerTopicLinkKnowledge: (data: { query: string; topics: TopicListItem[] }) =>
+    api.post<TopicLinkKnowledgeAnswerResponse>('/topiclink/knowledge/answer', data, { timeout: 120000 }),
+  getTopicLinkPosts: (id: string, params?: { limit?: number }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.limit != null) searchParams.set('limit', String(params.limit))
+    const qs = searchParams.toString()
+    return api.get<PostListPage>(`/topiclink/${id}/posts${qs ? `?${qs}` : ''}`)
+  },
+  simulateTopicLink: (id: string, data?: TopicLinkSimulationRequest) =>
+    api.post<TopicLinkSimulationResponse>(`/topiclink/${id}/simulate`, data, { timeout: 120000 }),
+  getTopicLinkPresence: (id: string, params?: { personaName?: string }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.personaName) searchParams.set('persona_name', params.personaName)
+    const qs = searchParams.toString()
+    return api.get<TopicLinkPresenceResponse>(`/topiclink/${id}/presence${qs ? `?${qs}` : ''}`)
+  },
+  setTopicLinkPresence: (id: string, data?: { persona_name?: string }) =>
+    api.post<TopicLinkPresenceResponse>(`/topiclink/${id}/presence`, data),
   create: (data: CreateTopicRequest) => api.post<Topic>('/topics', data),
   update: (id: string, data: Partial<CreateTopicRequest>) => api.patch<Topic>(`/topics/${id}`, data),
   close: (id: string) => api.post<Topic>(`/topics/${id}/close`),

@@ -47,7 +47,10 @@ SITE_STATS_TTL_SECONDS = 60
 POINTS_AWARENESS_TARGET = int(os.getenv("OPENCLAW_POINTS_TARGET", "500"))
 POINTS_AWARENESS_TARGET_LABEL = os.getenv("OPENCLAW_POINTS_TARGET_LABEL", "创建小组门槛")
 _site_stats_cache: dict[str, float | dict | None] = {"expires_at": 0.0, "value": None}
-OPENCLAW_SKILL_MODULES: dict[str, str] = {}
+OPENCLAW_SKILL_MODULES: dict[str, str] = {
+    "cognitive": "cognitive.md",
+    "topic-link": "topic-link.md",
+}
 
 
 class OpenClawBootstrapResponse(BaseModel):

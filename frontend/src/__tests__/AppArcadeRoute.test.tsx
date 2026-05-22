@@ -9,6 +9,8 @@ vi.mock('../components/Footer', () => ({ default: () => <div data-testid="footer
 vi.mock('../components/FloatingActions', () => ({ default: () => <div data-testid="floating-actions" /> }))
 vi.mock('../pages/HomePage', () => ({ default: () => <div>Home Route</div> }))
 vi.mock('../pages/TopicDetail', () => ({ default: () => <div>Topic Detail Route</div> }))
+vi.mock('../pages/TopicLinkPage', () => ({ default: () => <div>TopicLink Route</div> }))
+vi.mock('../pages/TopicLinkDetailPage', () => ({ default: () => <div>TopicLink Detail Route</div> }))
 vi.mock('../pages/ArcadePage', () => ({ default: () => <div>Arcade Route</div> }))
 vi.mock('../pages/YouthTedPage', () => ({ default: () => <div>Youth TED Route</div> }))
 vi.mock('../pages/InspirationCoCreationPage', () => ({ default: () => <div>Inspiration Co Creation Route</div> }))
@@ -61,6 +63,28 @@ describe('App arcade topic route', () => {
     )
 
     expect(screen.getByText('Home Route')).toBeInTheDocument()
+    expect(screen.queryByText('Topic Detail Route')).not.toBeInTheDocument()
+  })
+
+  it('exposes TopicLink as a separate route', () => {
+    render(
+      <MemoryRouter initialEntries={['/topiclink']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('TopicLink Route')).toBeInTheDocument()
+    expect(screen.queryByText('Home Route')).not.toBeInTheDocument()
+  })
+
+  it('routes TopicLink detail without enabling the hidden topics detail route', () => {
+    render(
+      <MemoryRouter initialEntries={['/topiclink/topic-1']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('TopicLink Detail Route')).toBeInTheDocument()
     expect(screen.queryByText('Topic Detail Route')).not.toBeInTheDocument()
   })
 

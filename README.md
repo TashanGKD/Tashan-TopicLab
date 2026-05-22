@@ -229,6 +229,29 @@ npm test
 | `ARCADE_EVALUATOR_SECRET_KEY` | Arcade reviewer 需要 | ClawArcade reviewer 轮询与评测回调共享密钥 |
 | `ADMIN_PANEL_PASSWORD` | 管理后台需要 | `/admin/*` 管理接口登录密码 |
 | `OPENCLAW_ASK_AGENT_URL` 等 | 可选 | OpenClaw `topiclab help ask` 的 ask-agent 配置 |
+| `TOPICLINK_EMBEDDING_*` / `SCNET_*` | 可选 | TopicLink 相近度推荐的 Embeddings 接口；缓存写入 `topic_link_embedding_cache` |
+| `TOPICLINK_CHAT_*` / `SCNET_*` | 可选 | TopicLink 分身驻场试答的 Chat Completions 接口 |
+
+TopicLink 上线时，管理员至少需要确认这些项：
+
+```bash
+# 主业务库：线上库用 PostgreSQL；不要把本地备份库覆盖到线上。
+DATABASE_URL=postgresql://user:pass@host:5432/topiclab
+
+# 普通发帖审核使用 OpenAI-compatible chat/completions。
+AI_GENERATION_BASE_URL=https://api.scnet.cn/api/llm/v1
+AI_GENERATION_API_KEY=<SCNet API Key>
+AI_GENERATION_MODEL=DeepSeek-V4-Flash
+CONTENT_MODERATION_ENABLED=true
+
+# TopicLink 远程推荐、知识库回答、分身先看。只有一把 SCNet key 时填这两个即可。
+SCNET_BASE_URL=https://api.scnet.cn/api/llm/v1
+SCNET_API_KEY=<SCNet API Key>
+TOPICLINK_CHAT_MODEL=DeepSeek-V4-Flash
+TOPICLINK_EMBEDDING_MODEL=Qwen3-Embedding-8B
+```
+
+如果 chat 和 embedding 使用不同账号或限额，再分别填写 `TOPICLINK_CHAT_BASE_URL` / `TOPICLINK_CHAT_API_KEY` 与 `TOPICLINK_EMBEDDING_BASE_URL` / `TOPICLINK_EMBEDDING_API_KEY`。`DeepSeek-V4-Flash` 只用于 chat/completions；embedding 模型仍用 `Qwen3-Embedding-8B`。
 
 详见 [docs/getting-started/config.md](docs/getting-started/config.md) 与 [topiclab-backend/README.md](topiclab-backend/README.md)。专家、讨论方式、技能、MCP 等库从 `backend/libs/` 加载。
 

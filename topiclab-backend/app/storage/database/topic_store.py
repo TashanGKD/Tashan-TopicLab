@@ -1177,6 +1177,24 @@ def _init_topic_tables_sqlite(session) -> None:
         session.execute(text("ALTER TABLE topics ADD COLUMN metadata TEXT"))
     if not _sqlite_has_column(session, "posts", "metadata"):
         session.execute(text("ALTER TABLE posts ADD COLUMN metadata TEXT"))
+    # Some local/backup SQLite files were produced without the original primary
+    # key constraints. The write paths rely on ON CONFLICT(id/topic_id), so add
+    # equivalent unique indexes without rebuilding user data tables.
+    session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_id_unique ON posts(id)"))
+    session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_discussion_runs_topic_id_unique ON discussion_runs(topic_id)"))
+    session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_topic_moderator_configs_topic_id_unique ON topic_moderator_configs(topic_id)"))
+    session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_post_inbox_messages_message_reply_unique ON post_inbox_messages(message_type, reply_post_id)"))
+    session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_post_like_inbox_messages_post_actor_unique ON post_like_inbox_messages(post_id, actor_user_id)"))
+
+
+def _ensure_sqlite_conflict_indexes(session) -> None:
+    if session.bind.dialect.name != "sqlite":
+        return
+    session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_id_unique ON posts(id)"))
+    session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_discussion_runs_topic_id_unique ON discussion_runs(topic_id)"))
+    session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_topic_moderator_configs_topic_id_unique ON topic_moderator_configs(topic_id)"))
+    session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_post_inbox_messages_message_reply_unique ON post_inbox_messages(message_type, reply_post_id)"))
+    session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_post_like_inbox_messages_post_actor_unique ON post_like_inbox_messages(post_id, actor_user_id)"))
 
 
 def init_topic_tables() -> None:
@@ -2657,35 +2675,43 @@ def set_discussion_status(topic_id: str, status: str, *, turns_count: int | None
         )
         if topic_result.rowcount == 0:
             return None
-        session.execute(
+        run_payload = {
+            "topic_id": topic_id,
+            "status": status,
+            "turns_count": turns_count or 0,
+            "cost_usd": cost_usd,
+            "completed_at": completed_at,
+            "updated_at": now,
+            "discussion_summary": discussion_summary or "",
+            "discussion_history": discussion_history or "",
+        }
+        run_result = session.execute(
             text("""
-                INSERT INTO discussion_runs (
-                    topic_id, status, turns_count, cost_usd, completed_at,
-                    updated_at, discussion_summary, discussion_history
-                ) VALUES (
-                    :topic_id, :status, :turns_count, :cost_usd, :completed_at,
-                    :updated_at, :discussion_summary, :discussion_history
-                )
-                ON CONFLICT (topic_id) DO UPDATE SET
-                    status = EXCLUDED.status,
-                    turns_count = EXCLUDED.turns_count,
-                    cost_usd = EXCLUDED.cost_usd,
-                    completed_at = EXCLUDED.completed_at,
-                    updated_at = EXCLUDED.updated_at,
-                    discussion_summary = EXCLUDED.discussion_summary,
-                    discussion_history = EXCLUDED.discussion_history
+                UPDATE discussion_runs
+                SET status = :status,
+                    turns_count = :turns_count,
+                    cost_usd = :cost_usd,
+                    completed_at = :completed_at,
+                    updated_at = :updated_at,
+                    discussion_summary = :discussion_summary,
+                    discussion_history = :discussion_history
+                WHERE topic_id = :topic_id
             """),
-            {
-                "topic_id": topic_id,
-                "status": status,
-                "turns_count": turns_count or 0,
-                "cost_usd": cost_usd,
-                "completed_at": completed_at,
-                "updated_at": now,
-                "discussion_summary": discussion_summary or "",
-                "discussion_history": discussion_history or "",
-            },
+            run_payload,
         )
+        if run_result.rowcount == 0:
+            session.execute(
+                text("""
+                    INSERT INTO discussion_runs (
+                        topic_id, status, turns_count, cost_usd, completed_at,
+                        updated_at, discussion_summary, discussion_history
+                    ) VALUES (
+                        :topic_id, :status, :turns_count, :cost_usd, :completed_at,
+                        :updated_at, :discussion_summary, :discussion_history
+                    )
+                """),
+                run_payload,
+            )
     _invalidate_read_cache(topic_id=topic_id, invalidate_topic_lists=True)
     return get_topic(topic_id)
 
@@ -3377,6 +3403,7 @@ def create_post_like_inbox_message(
 def upsert_post(post: dict) -> dict:
     created_at = post.get("created_at") or utc_now().isoformat()
     with get_db_session() as session:
+        _ensure_sqlite_conflict_indexes(session)
         existing = session.execute(
             text("SELECT status FROM posts WHERE id = :post_id LIMIT 1"),
             {"post_id": post["id"]},
@@ -3778,6 +3805,7 @@ def set_topic_moderator_config(topic_id: str, config: dict, *, session=None) -> 
         ctx = get_db_session()
         session = ctx.__enter__()
     try:
+        _ensure_sqlite_conflict_indexes(session)
         session.execute(
             text("""
                 INSERT INTO topic_moderator_configs (
