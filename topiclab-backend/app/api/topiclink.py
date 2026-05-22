@@ -15,11 +15,14 @@ import os
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from sqlalchemy import bindparam, text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.api.auth import security, verify_access_token
+from app.services.twin_runtime import get_or_backfill_active_twin_for_user
 from app.storage.database.postgres_client import get_db_session
 from app.storage.database.topic_store import (
     annotate_posts_with_interactions,
@@ -72,6 +75,87 @@ def _text(value: Any) -> str:
     if isinstance(value, dict):
         return "\n".join(_text(item) for item in value.values())
     return ""
+
+
+def _fallback_topiclink_profile() -> dict[str, Any]:
+    return {
+        "username": "guest",
+        "display_name": "先看看",
+        "agent_name": "我这边",
+        "title": "先看看",
+        "subtitle": "登录后再按你的习惯来",
+        "summary": "先看这桌在聊什么，等你登录后再带上你的记录。",
+        "cards": [
+            {"label": "可以先看", "value": "这桌在聊什么", "detail": "登录后会换成你的真实偏好"},
+            {"label": "先不代说", "value": "不替你表态", "detail": "没有登录前只做浏览入口"},
+            {"label": "怎么开始", "value": "从当前讨论开始", "detail": "先进讨论，再决定要不要接一句"},
+            {"label": "相关的人", "value": "登录后更准", "detail": "登录后再看哪些人和你更近"},
+        ],
+        "source_parts_count": 0,
+    }
+
+
+def _optional_topiclink_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> dict[str, Any] | None:
+    if not credentials:
+        return None
+    try:
+        return verify_access_token(credentials.credentials)
+    except Exception:
+        return None
+
+
+def _topiclink_profile_from_user(user: dict[str, Any] | None) -> dict[str, Any]:
+    if not user or user.get("sub") is None:
+        return _fallback_topiclink_profile()
+
+    username = str(user.get("username") or user.get("phone") or "OpenClaw").strip()
+    agent_name = str(user.get("openclaw_display_name") or user.get("agent_uid") or username).strip()
+    display_name = agent_name or username
+    title = "当前分身"
+    subtitle = "先看现场，再决定怎么接话"
+    summary = "先按当前身份和已有材料判断，不把不知道的事说满。"
+    source_parts_count = 0
+
+    try:
+        twin = get_or_backfill_active_twin_for_user(int(user["sub"]))
+    except Exception:
+        twin = None
+    if twin:
+        display_name = str(twin.get("display_name") or display_name).strip()
+        agent_name = str(twin.get("source_agent_name") or agent_name or display_name).strip()
+        base_json = twin.get("base_profile_json") if isinstance(twin.get("base_profile_json"), dict) else {}
+        sections = base_json.get("sections") if isinstance(base_json.get("sections"), dict) else {}
+        identity = _compact_visible_text(sections.get("identity") or base_json.get("summary") or display_name, 80)
+        expertise = _compact_visible_text(sections.get("expertise") or "按已有资料参与讨论", 80)
+        thinking_style = _compact_visible_text(sections.get("thinking_style") or "先看边界和证据", 80)
+        discussion_style = _compact_visible_text(sections.get("discussion_style") or "克制、接着现场说", 80)
+        title = identity or title
+        subtitle = expertise or subtitle
+        summary = discussion_style or summary
+        source_parts_count = sum(1 for value in sections.values() if str(value or "").strip())
+    else:
+        identity = display_name
+        expertise = "按当前账号记录参与讨论"
+        thinking_style = "先看问题和上下文"
+        discussion_style = "自然接话，不代替本人承诺"
+
+    return {
+        "username": username,
+        "display_name": display_name,
+        "agent_name": agent_name or display_name,
+        "title": title,
+        "subtitle": subtitle,
+        "summary": summary,
+        "cards": [
+            {"label": "当前身份", "value": display_name, "detail": identity},
+            {"label": "能补什么", "value": "已有资料", "detail": expertise},
+            {"label": "怎么判断", "value": "先看边界", "detail": thinking_style},
+            {"label": "怎么说话", "value": "接着现场", "detail": discussion_style},
+        ],
+        "source_parts_count": source_parts_count,
+    }
 
 
 def _topic_text(topic: dict[str, Any]) -> str:
@@ -800,22 +884,8 @@ async def _score_topics(profile_text: str, topics: list[dict[str, Any]]) -> tupl
 
 
 @router.get("/profile")
-async def get_topiclink_profile() -> dict[str, Any]:
-    return {
-        "username": "liyuyang",
-        "display_name": "李瑀旸",
-        "agent_name": "OpenClaw",
-        "title": "AI4S 科研协作",
-        "subtitle": "天文数据、科研工作流、研究记录",
-        "summary": "通常会先把资料和问题理顺，等话题落到具体处再开口。",
-        "cards": [
-            {"label": "研究方向", "value": "AI4S / 天文", "detail": "长期关注天文数据、瞬变源、科研工具链和模型评估"},
-            {"label": "协作偏好", "value": "共建方法", "detail": "偏好一起沉淀流程、资料和可复用经验"},
-            {"label": "表达风格", "value": "证据优先", "detail": "先看数据、文献和真实路径，再进入判断"},
-            {"label": "近期关注", "value": "工作流 / 记忆", "detail": "近期常聊科研工作流、研究记录和跨社区迁移"},
-        ],
-        "source_parts_count": 670,
-    }
+async def get_topiclink_profile(user: dict[str, Any] | None = Depends(_optional_topiclink_user)) -> dict[str, Any]:
+    return _topiclink_profile_from_user(user)
 
 
 @router.get("/recommendations")
