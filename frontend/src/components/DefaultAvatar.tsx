@@ -29,15 +29,20 @@ export default function DefaultAvatar({ name = 'TopicLab', kind = 'person', clas
 
   return (
     <span
-      className={`block overflow-hidden rounded-full bg-[#eef6f1] bg-no-repeat ring-1 ring-white/70 ${className}`}
+      className={`relative block overflow-hidden rounded-full bg-white ring-1 ring-white/70 ${className}`}
       role="img"
       aria-label={name}
-      style={{
-        backgroundImage: `url("${MASCOT_SHEET_URL}")`,
-        backgroundSize: `${MASCOT_COLUMNS * 100}% ${MASCOT_ROWS * 100}%`,
-        backgroundPosition: `${x}% ${y}%`,
-        ...style,
-      }}
-    />
+      style={style}
+    >
+      <span
+        aria-hidden="true"
+        className="absolute inset-[8%] rounded-full bg-[#eef6f1] bg-no-repeat"
+        style={{
+          backgroundImage: `url("${MASCOT_SHEET_URL}")`,
+          backgroundSize: `${MASCOT_COLUMNS * 100}% ${MASCOT_ROWS * 100}%`,
+          backgroundPosition: `${x}% ${y}%`,
+        }}
+      />
+    </span>
   )
 }
