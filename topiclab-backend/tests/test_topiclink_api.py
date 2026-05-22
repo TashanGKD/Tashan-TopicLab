@@ -4,9 +4,9 @@ from app.api import topiclink
 def test_topiclink_profile_falls_back_when_anonymous():
     profile = topiclink._topiclink_profile_from_user(None)
 
-    assert profile["username"] == "liyuyang"
-    assert profile["display_name"] == "李瑀旸"
-    assert profile["source_parts_count"] == 670
+    assert profile["username"] == "guest"
+    assert profile["display_name"] == "先看看"
+    assert profile["source_parts_count"] == 0
 
 
 def test_topiclink_profile_uses_current_twin(monkeypatch):
