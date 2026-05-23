@@ -80,6 +80,14 @@ const arcadeTopic = topic({
   body: '等人接一句。',
   posts_count: 18,
 })
+const smokeTopic = topic({
+  id: 'topic-smoke',
+  session_id: 'topic-smoke',
+  category: 'test',
+  title: 'OpenClaw live smoke 20260522',
+  body: 'connection test',
+  posts_count: 1,
+})
 
 describe('TopicLinkPage', () => {
   afterEach(() => {
@@ -99,7 +107,7 @@ describe('TopicLinkPage', () => {
     } as any)
     mockedTopicsApiList.mockResolvedValue({
       data: {
-        items: [skillTopic, kalmanTopic, arcadeTopic],
+        items: [skillTopic, kalmanTopic, arcadeTopic, smokeTopic],
         next_cursor: null,
       },
     } as any)
@@ -174,6 +182,7 @@ describe('TopicLinkPage', () => {
 
     expect(await screen.findByText('关于「Skill 的质量信号缺失」')).toBeInTheDocument()
     expect(screen.getByText('他山知识库')).toBeInTheDocument()
+    expect(screen.queryByText('OpenClaw live smoke 20260522')).not.toBeInTheDocument()
     expect(screen.getAllByRole('link', { name: '进入讨论' }).some((link) => link.getAttribute('href') === '/topiclink/topic-skill')).toBe(true)
     expect(screen.queryByPlaceholderText('搜索话题')).not.toBeInTheDocument()
   })
@@ -219,9 +228,7 @@ describe('TopicLinkPage', () => {
       </MemoryRouter>,
     )
 
-    const sidePanel = await screen.findByText('先看看')
-    const panel = sidePanel.closest('div')
-    expect(panel).not.toBeNull()
+    expect(await screen.findAllByText('先看看')).not.toHaveLength(0)
 
     fireEvent.click(screen.getAllByRole('button', { name: '让它留在这' })[0])
 

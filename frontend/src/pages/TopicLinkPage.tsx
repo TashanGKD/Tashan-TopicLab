@@ -68,6 +68,8 @@ const TOPIC_PLAZA_CATEGORIES: TopicCategory[] = [
 ]
 const TOPIC_PLAZA_CATEGORY_IDS = new Set(TOPIC_PLAZA_CATEGORIES.map((category) => category.id))
 const HIDDEN_TOPIC_CATEGORY_ID_SET = new Set<string>(HIDDEN_TOPIC_CATEGORY_IDS)
+const TOPICLINK_EXCLUDED_TOPIC_CATEGORY_IDS = new Set(['test'])
+const TOPICLINK_EXCLUDED_TOPIC_TITLE_RE = /(live smoke|connection test|probe topic|smoke test)/i
 
 function getStageWidths(stageWidth: number) {
   if (stageWidth <= 0) {
@@ -116,6 +118,14 @@ function isYouthTedTopic(topic: TopicListItem) {
     topic.metadata?.topic_link?.openclaw_digest?.description,
   ].filter(Boolean).join('\n')
   return /青年\s*TED|Youth\s*TED|youth[-_\s]?ted/i.test(text)
+}
+
+function isTopicLinkPlazaCandidate(topic: TopicListItem) {
+  const categoryId = (topic.category ?? '').trim().toLowerCase()
+  if (TOPICLINK_EXCLUDED_TOPIC_CATEGORY_IDS.has(categoryId)) return false
+  const titleAndBody = [topic.title, topic.body].filter(Boolean).join('\n')
+  if (TOPICLINK_EXCLUDED_TOPIC_TITLE_RE.test(titleAndBody)) return false
+  return true
 }
 
 function getDisplayCategoryId(topic: TopicListItem, fallbackCategory = 'plaza') {
@@ -239,7 +249,7 @@ function groupTopicsByCategory(categoryPages: Record<string, CategoryTopicPage>)
 
 function buildInitialCategoryPages(items: TopicListItem[], nextCursor: string | null): Record<string, CategoryTopicPage> {
   const categoryIds = new Set<string>()
-  const grouped = items.reduce<Record<string, TopicListItem[]>>((acc, topic) => {
+  const grouped = items.filter(isTopicLinkPlazaCandidate).reduce<Record<string, TopicListItem[]>>((acc, topic) => {
     const categoryId = getDisplayCategoryId(topic)
     categoryIds.add(categoryId)
     acc[categoryId] = acc[categoryId] ?? []
@@ -291,8 +301,8 @@ const OUTER_TOPIC_LAYOUT = [
 
 function getTopicConnectionNeed(role: string) {
   const normalizedRole = role.trim()
-  if (!normalizedRole || normalizedRole === '合适的人') {
-    return '也在等一位合适的人接一句'
+  if (!normalizedRole || normalizedRole === '合适的人' || normalizedRole === '能接一句的人') {
+    return '也在等人接一句'
   }
   if (normalizedRole.endsWith('的人')) {
     return `也在等一位${normalizedRole}接一句`
@@ -302,7 +312,7 @@ function getTopicConnectionNeed(role: string) {
 
 function getTopicEntryAngle(role: string) {
   const normalizedRole = role.trim()
-  if (!normalizedRole || normalizedRole === '合适的人') {
+  if (!normalizedRole || normalizedRole === '合适的人' || normalizedRole === '能接一句的人') {
     return '先看看大家聊到哪一步'
   }
   if (normalizedRole.endsWith('的人')) {
@@ -313,7 +323,7 @@ function getTopicEntryAngle(role: string) {
 
 function getCompactRoleLabel(role: string) {
   const normalizedRole = role.trim()
-  if (!normalizedRole || normalizedRole === '合适的人') return '可接话'
+  if (!normalizedRole || normalizedRole === '合适的人' || normalizedRole === '能接一句的人') return '可接话'
   return normalizedRole.replace(/的人$/, '')
 }
 
@@ -669,9 +679,9 @@ function TopicPlazaMap({
               type="button"
               onClick={onOpenConnections}
               className="absolute left-1/2 top-[8%] z-30 -translate-x-1/2 rounded-full border border-white/72 bg-[#fffdf8]/72 px-3 py-1.5 text-xs font-medium text-[#2f8586] shadow-[0_10px_24px_rgba(35,48,44,0.12)] backdrop-blur-2xl transition hover:bg-[#fffdf8]/88 focus:outline-none focus:ring-2 focus:ring-[#8fcac5]"
-              aria-label="查看和我相关的人"
+              aria-label={personalized ? '查看和我相关的人' : '查看这桌相关的人'}
             >
-              和我相关的人 · 点头像看是谁
+              {personalized ? '和我相关的人' : '这桌相关的人'} · 点头像看是谁
             </button>
           ) : null}
 
@@ -702,27 +712,31 @@ function TopicPlazaMap({
           <div className="topiclink-focus-card absolute left-1/2 top-1/2 z-50 w-[460px] -translate-x-1/2 -translate-y-1/2 rounded-[1.45rem] border-2 border-[#f39c32] bg-[#fffaf2] px-7 py-6 text-center shadow-[0_34px_84px_rgba(44,61,55,0.28)] outline-none backdrop-blur-md">
             <div className="pointer-events-none absolute inset-[-0.55rem] -z-10 rounded-[1.75rem] border border-[#f3b35c]/35 opacity-80 topiclink-focus-halo" />
             <div className="flex items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={onOpenConnections}
-                className="flex -space-x-2 rounded-full bg-[#eef6f2] px-2.5 py-1.5 ring-1 ring-[#cfe2da] transition hover:-translate-y-0.5 hover:bg-[#e4f2ed] focus:outline-none focus:ring-2 focus:ring-[#8fcac5]"
-                aria-label="查看这桌有哪些人在"
-              >
-                {people.slice(0, 4).map((person, index) => (
-                  <div key={`${person.name}-${index}`} className="h-[44px] w-[44px] overflow-hidden rounded-full bg-[#edf3ef] ring-2 ring-white shadow-[0_8px_16px_rgba(38,48,43,0.12)]">
-                    <DefaultAvatar name={getParticipantDisplayName(person) || `P${index + 1}`} kind={person.openclaw ? 'openclaw' : 'person'} className="h-full w-full animate-topic-avatar-breathe" />
-                  </div>
-                ))}
-              </button>
+              {people.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={onOpenConnections}
+                  className="flex -space-x-2 rounded-full bg-[#eef6f2] px-2.5 py-1.5 ring-1 ring-[#cfe2da] transition hover:-translate-y-0.5 hover:bg-[#e4f2ed] focus:outline-none focus:ring-2 focus:ring-[#8fcac5]"
+                  aria-label="查看这桌有哪些人在"
+                >
+                  {people.slice(0, 4).map((person, index) => (
+                    <div key={`${person.name}-${index}`} className="h-[44px] w-[44px] overflow-hidden rounded-full bg-[#edf3ef] ring-2 ring-white shadow-[0_8px_16px_rgba(38,48,43,0.12)]">
+                      <DefaultAvatar name={getParticipantDisplayName(person) || `P${index + 1}`} kind={person.openclaw ? 'openclaw' : 'person'} className="h-full w-full animate-topic-avatar-breathe" />
+                    </div>
+                  ))}
+                </button>
+              ) : (
+                <span className="rounded-full bg-[#eef6f2] px-3 py-2 text-xs font-medium text-[#6f8279] ring-1 ring-[#cfe2da]">公共线索</span>
+              )}
               <div className="relative grid h-12 w-12 shrink-0 place-items-center rounded-full bg-[#f39c32] text-base font-semibold text-white shadow-[0_10px_24px_rgba(217,134,36,0.28)]">
                 <span className="absolute inset-0 rounded-full bg-[#f39c32] animate-topic-score-pulse" />
                 <span className="relative text-[11px]">正聊</span>
               </div>
             </div>
-            <p className="mt-3 text-sm font-medium text-[#2f8586]">这桌和你有关</p>
+            <p className="mt-3 text-sm font-medium text-[#2f8586]">{personalized ? '这桌和你有关' : '这桌正在被讨论'}</p>
             <h2 className="mt-2 line-clamp-2 font-serif text-[1.55rem] font-semibold leading-tight text-[#17231f]">{getTopicPlazaPanelTitle(selectedTopic)}</h2>
             <p className="mx-auto mt-3 max-w-[21rem] text-sm leading-6 text-[#65716b]">
-              这里有人正在聊你熟悉的事，{connectionNeed}。
+              {personalized ? `这里有人正在聊你熟悉的事，${connectionNeed}。` : `这里有人正在聊这件事，${connectionNeed}。`}
             </p>
             <div className="mt-3 flex flex-wrap justify-center gap-2 text-xs text-[#61716a]">
               <span className="rounded-full bg-[#edf6f2] px-3 py-1.5 ring-1 ring-[#d8e7df]">{selectedCrowdCount} 人在看</span>
@@ -867,7 +881,6 @@ function TopicSideConnectionPanel({
   viewerProfile?: TopicViewerProfile
   personalized: boolean
 }) {
-  const crowdCount = getTopicCrowdCount(topic)
   const recommendation = getTopicRecommendation(topic)
   const profileCards = getProfileSignalCards(topic, viewerProfile)
   const previewTurn = simulation?.turns?.[0]
@@ -875,17 +888,19 @@ function TopicSideConnectionPanel({
   const detailPath = getTopicDetailPath(topic, viewerProfile)
   const primaryActionLabel = detailPath.startsWith('/inspiration-co-creation') ? '进入共创' : '进入讨论'
   const people = dedupeParticipants(getConnectionParticipants(topic)).slice(0, 4)
-  const crowdLabel = crowdCount > 99 ? '99+' : String(crowdCount)
+  const crowdLabel = people.length > 0
+    ? `${people.length} 人在附近`
+    : (topic.posts_count && topic.posts_count > 0 ? `${topic.posts_count} 条回应` : '暂无明确在场')
 
   return (
     <aside className="w-full max-w-full self-start overflow-hidden rounded-2xl border border-white/72 bg-[#fffaf2]/72 p-4 shadow-[0_24px_64px_rgba(38,48,43,0.22)] ring-1 ring-[#9fc4b7]/35 backdrop-blur-2xl xl:sticky xl:top-6">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <div className="h-[48px] w-[48px] shrink-0 overflow-hidden rounded-full bg-[#edf3ef] ring-2 ring-white shadow-[0_10px_20px_rgba(38,48,43,0.13)]">
-            <DefaultAvatar name={viewerProfile?.agentName ?? '我这边'} kind="openclaw" className="h-full w-full" />
+            <DefaultAvatar name={viewerProfile?.agentName ?? '先看看'} kind="openclaw" className="h-full w-full" />
           </div>
           <div className="min-w-0">
-            <p className="text-xs font-medium text-[#6f8580]">我这边</p>
+            <p className="text-xs font-medium text-[#6f8580]">{viewerProfile ? '我这边' : '先看看'}</p>
             <h2 className="mt-1 font-serif text-lg font-semibold leading-snug text-[#171d1a]">{viewerProfile?.title ?? '先看看'}</h2>
             <p className="mt-1 text-xs text-[#6d7772]">{viewerProfile?.subtitle ?? (personalized ? '先旁听，再接一句' : '登录后再按你的习惯来')}</p>
           </div>
@@ -901,7 +916,7 @@ function TopicSideConnectionPanel({
             <p className="truncate text-xs font-semibold text-[#25302d]">这桌现在</p>
             <p className="mt-0.5 truncate text-[11px] text-[#69756f]">{getTopicEntryAngle(recommendation.role)}</p>
           </div>
-          <span className="shrink-0 rounded-full bg-[#dff2f1] px-2.5 py-1 text-[11px] font-medium text-[#2f8586]">可能有关 {recommendation.total}</span>
+          <span className="shrink-0 rounded-full bg-[#dff2f1] px-2.5 py-1 text-[11px] font-medium text-[#2f8586]">{personalized ? `可能有关 ${recommendation.total}` : '公共线索'}</span>
         </div>
         <div className="mt-3 space-y-2">
           {recommendation.breakdown.map((item) => {
@@ -926,7 +941,7 @@ function TopicSideConnectionPanel({
 
       <div className="mt-4 flex items-center justify-between">
         <h3 className="font-serif text-base font-semibold text-[#1d2421]">这桌有哪些人在</h3>
-        <span className="text-xs text-[#81908a]">{crowdLabel} 人在附近</span>
+        <span className="text-xs text-[#81908a]">{crowdLabel}</span>
       </div>
 
       {people.length > 0 ? (
@@ -1254,7 +1269,7 @@ export default function TopicLinkPage() {
 
   const useLiyuyangProfile = isTopicLinkSurface && shouldUseLiyuyangTopicLinkProfile(currentUser)
   const viewerProfile = isTopicLinkSurface ? (useLiyuyangProfile ? LIYUYANG_TOPIC_VIEWER_PROFILE : remoteViewerProfile) : undefined
-  const hasPersonalizedProfile = isTopicLinkSurface && Boolean(currentUser || viewerProfile)
+  const hasPersonalizedProfile = isTopicLinkSurface && Boolean(viewerProfile)
   const semanticSkillQuery = ''
   const listSearchQuery = isTopicLinkSurface ? '' : searchQuery
   const topicListPageSize = INITIAL_TOPIC_PAGE_SIZE
@@ -1363,6 +1378,7 @@ export default function TopicLinkPage() {
         limit: PAGE_SIZE,
       })
       const nextItems = res.data.items
+        .filter(isTopicLinkPlazaCandidate)
         .map((topic) => normalizeTopicCategory(topic, categoryId))
         .filter((topic) => categoryId !== YOUTH_TED_CATEGORY_ID || isYouthTedTopic(topic))
       setCategoryPages((prev) => ({
@@ -1399,6 +1415,7 @@ export default function TopicLinkPage() {
         const nextItems = [
           ...current.items,
           ...res.data.items
+            .filter(isTopicLinkPlazaCandidate)
             .map((topic) => normalizeTopicCategory(topic, categoryId))
             .filter((topic) => categoryId !== YOUTH_TED_CATEGORY_ID || isYouthTedTopic(topic))
             .filter((item) => !current.items.some((existing) => existing.id === item.id)),

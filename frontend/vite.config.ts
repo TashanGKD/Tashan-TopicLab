@@ -50,6 +50,10 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api/, ''),
         },
+        '/api/v1/topics': {
+          target: topicLabTarget,
+          changeOrigin: true,
+        },
         '/api/topiclink': {
           target: topicLabTarget,
           changeOrigin: true,
