@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BASE_URL="${TOPICLAB_BASE_URL:-https://world.tashan.chat}"
 BIND_KEY="${TOPICLAB_BIND_KEY:-}"
+ALLOW_WRITES="${TOPICLAB_LIVE_SMOKE_ALLOW_WRITES:-0}"
 KEEP_CLI_HOME="${KEEP_CLI_HOME:-1}"
 RETRY_LIMIT="${TOPICLAB_SMOKE_RETRIES:-2}"
 SMOKE_STRICT="${TOPICLAB_SMOKE_STRICT:-0}"
@@ -29,6 +30,7 @@ Options:
   --base-url <url>     TopicLab base URL. Default: $BASE_URL
   --media-file <path>  Media file for topiclab media upload.
   --help-request <txt> Prompt used for topiclab help ask.
+  --allow-writes       Run write-dependent checks against the target service.
   --keep-cli-home      Keep temporary TOPICLAB_CLI_HOME after run. Default.
   --clean-cli-home     Delete temporary TOPICLAB_CLI_HOME on success/failure.
   -h, --help           Show this help.
@@ -53,6 +55,10 @@ while [[ $# -gt 0 ]]; do
       HELP_REQUEST="${2:-}"
       shift 2
       ;;
+    --allow-writes)
+      ALLOW_WRITES=1
+      shift
+      ;;
     --keep-cli-home)
       KEEP_CLI_HOME=1
       shift
@@ -73,12 +79,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$BIND_KEY" ]]; then
+if [[ "$ALLOW_WRITES" == "1" && -z "$BIND_KEY" ]]; then
   echo "Missing bind key. Use --bind-key or TOPICLAB_BIND_KEY." >&2
   exit 1
 fi
 
-if ! command -v topiclab >/dev/null 2>&1; then
+if [[ "$ALLOW_WRITES" == "1" ]] && ! command -v topiclab >/dev/null 2>&1; then
   echo "Missing topiclab binary in PATH." >&2
   exit 1
 fi
@@ -281,6 +287,84 @@ NODE
 
 log "using TOPICLAB_CLI_HOME=$TOPICLAB_CLI_HOME"
 log "results will be written under $RESULTS_DIR"
+
+if [[ "$ALLOW_WRITES" != "1" ]]; then
+  log "running read-only live smoke; set TOPICLAB_LIVE_SMOKE_ALLOW_WRITES=1 or pass --allow-writes for write checks"
+  node - "$BASE_URL" "$SUMMARY_FILE" <<'NODE'
+const fs = require("fs");
+const baseUrl = process.argv[2].replace(/\/+$/, "");
+const summaryFile = process.argv[3];
+const checks = [
+  { name: "health", path: "/health", expectText: false },
+  { name: "openclaw_skill", path: "/api/v1/openclaw/skill.md", expectText: true },
+  { name: "cli_manifest", path: "/api/v1/openclaw/cli-manifest", expectJson: true },
+  { name: "cli_policy_pack", path: "/api/v1/openclaw/cli-policy-pack", expectJson: true },
+];
+
+async function main() {
+  const results = [];
+  for (const check of checks) {
+    const startedAt = Date.now();
+    try {
+      const response = await fetch(`${baseUrl}${check.path}`, {
+        method: "GET",
+        headers: { Accept: check.expectText ? "text/plain,*/*" : "application/json,*/*" },
+      });
+      const body = await response.text();
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      if (check.expectJson) {
+        JSON.parse(body || "{}");
+      }
+      if (check.expectText && body.trim().length === 0) {
+        throw new Error("empty response");
+      }
+      results.push({
+        name: check.name,
+        status: "passed",
+        path: check.path,
+        status_code: response.status,
+        duration_ms: Date.now() - startedAt,
+      });
+    } catch (error) {
+      results.push({
+        name: check.name,
+        status: "failed",
+        path: check.path,
+        error: error instanceof Error ? error.message : String(error),
+        duration_ms: Date.now() - startedAt,
+      });
+    }
+  }
+
+  const counts = results.reduce((acc, item) => {
+    acc[item.status] = (acc[item.status] || 0) + 1;
+    return acc;
+  }, {});
+  const summary = {
+    ok: (counts.failed || 0) === 0,
+    mode: "read_only",
+    base_url: baseUrl,
+    counts,
+    cases: results,
+  };
+  fs.writeFileSync(summaryFile, `${JSON.stringify(summary, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify(summary)}\n`);
+  if (!summary.ok) {
+    process.exit(1);
+  }
+}
+
+main().catch((error) => {
+  process.stderr.write(`[live-smoke] read-only smoke failed: ${error instanceof Error ? error.stack || error.message : String(error)}\n`);
+  process.exit(1);
+});
+NODE
+  log "summary written to $SUMMARY_FILE"
+  log "read-only live smoke passed"
+  exit 0
+fi
 
 run_case session_ensure 0 session ensure --base-url "$BASE_URL" --bind-key "$BIND_KEY"
 assert_json session_ensure 'data.ok === true && typeof data.agent_uid === "string" && data.agent_uid.length > 0' "session ensure did not return ok=true with agent_uid"

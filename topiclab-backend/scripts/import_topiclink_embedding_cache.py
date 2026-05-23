@@ -10,9 +10,11 @@ from __future__ import annotations
 import argparse
 import gzip
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Iterable
+from urllib.parse import urlparse
 
 from sqlalchemy import text
 
@@ -20,8 +22,16 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.api.topiclink import _ensure_embedding_cache_table
-from app.storage.database.postgres_client import get_db_session
+
+def _is_safe_target() -> bool:
+    url = os.getenv("DATABASE_URL", "")
+    if not url:
+        return True
+    parsed = urlparse(url)
+    if parsed.scheme.startswith("sqlite"):
+        return True
+    host = (parsed.hostname or "").lower()
+    return host in {"", "localhost", "127.0.0.1", "::1"} or host.endswith(".local")
 
 
 def _iter_jsonl(path: Path) -> Iterable[dict[str, Any]]:
@@ -76,6 +86,9 @@ def _normalize_row(row: dict[str, Any], *, line_number: int) -> dict[str, Any]:
 def _upsert_batch(rows: list[dict[str, Any]]) -> None:
     if not rows:
         return
+    from app.api.topiclink import _ensure_embedding_cache_table
+    from app.storage.database.postgres_client import get_db_session
+
     with get_db_session() as session:
         _ensure_embedding_cache_table(session)
         session.execute(
@@ -119,15 +132,33 @@ def import_cache(path: Path, *, batch_size: int) -> int:
     return total
 
 
+def validate_cache(path: Path) -> int:
+    total = 0
+    for line_number, row in enumerate(_iter_jsonl(path), start=1):
+        _normalize_row(row, line_number=line_number)
+        total += 1
+    return total
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Import TopicLink embedding cache JSONL(.gz).")
     parser.add_argument("path", type=Path, help="Path to topiclink_embedding_cache_*.jsonl or .jsonl.gz")
     parser.add_argument("--batch-size", type=int, default=200, help="Rows per database upsert batch")
+    parser.add_argument("--execute", action="store_true", help="Actually import rows into the configured database")
     args = parser.parse_args()
     if args.batch_size < 1:
         raise SystemExit("--batch-size must be >= 1")
     if not args.path.exists():
         raise SystemExit(f"file not found: {args.path}")
+    if not args.execute:
+        row_count = validate_cache(args.path)
+        print(f"DRY RUN: validated {row_count} rows. Pass --execute to import/update the cache table.")
+        return
+    if not _is_safe_target() and os.getenv("TOPICLAB_ALLOW_PRODUCTION_DB_WRITES") != "1":
+        raise SystemExit(
+            "Refusing to import into a non-local database. Set TOPICLAB_ALLOW_PRODUCTION_DB_WRITES=1 "
+            "only for an intentional production cache import."
+        )
     total = import_cache(args.path, batch_size=args.batch_size)
     print(f"imported_or_updated={total}")
 

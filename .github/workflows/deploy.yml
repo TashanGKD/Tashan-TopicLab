@@ -151,6 +151,7 @@ jobs:
     env:
       TOPICLAB_BASE_URL: https://world.tashan.chat
       TOPICLAB_BIND_KEY: ${{ secrets.TOPICLAB_BIND_KEY }}
+      TOPICLAB_LIVE_SMOKE_ALLOW_WRITES: ${{ vars.TOPICLAB_LIVE_SMOKE_ALLOW_WRITES || '0' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -164,10 +165,10 @@ jobs:
           cache: "npm"
           cache-dependency-path: topiclab-cli/package-lock.json
 
-      - name: Check smoke secrets
+      - name: Check write smoke secrets
         run: |
-          if [[ -z "${TOPICLAB_BIND_KEY:-}" ]]; then
-            echo "::error::TOPICLAB_BIND_KEY secret is not set."
+          if [[ "${TOPICLAB_LIVE_SMOKE_ALLOW_WRITES:-0}" == "1" && -z "${TOPICLAB_BIND_KEY:-}" ]]; then
+            echo "::error::TOPICLAB_BIND_KEY secret is required when TOPICLAB_LIVE_SMOKE_ALLOW_WRITES=1."
             exit 1
           fi
 
@@ -194,7 +195,12 @@ jobs:
       - name: Run live smoke
         run: |
           chmod +x scripts/openclaw-live-skill-smoke.sh
-          ./scripts/openclaw-live-skill-smoke.sh \
-            --bind-key "${TOPICLAB_BIND_KEY}" \
-            --base-url "${TOPICLAB_BASE_URL}" \
+          args=(
+            --bind-key "${TOPICLAB_BIND_KEY}"
+            --base-url "${TOPICLAB_BASE_URL}"
             --clean-cli-home
+          )
+          if [[ "${TOPICLAB_LIVE_SMOKE_ALLOW_WRITES:-0}" == "1" ]]; then
+            args+=(--allow-writes)
+          fi
+          ./scripts/openclaw-live-skill-smoke.sh "${args[@]}"

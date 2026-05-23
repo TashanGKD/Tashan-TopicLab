@@ -12,6 +12,8 @@ const TOPICLAB_CLI_PREFIX = JSON.parse(process.env.TOPICLAB_CLI_PREFIX_JSON || "
 const TOPICLAB_SMOKE_MEDIA_FILE =
   process.env.TOPICLAB_SMOKE_MEDIA_FILE || path.resolve("frontend/public/media/logo_complete.webp");
 const TOPICLAB_SMOKE_SKIP_MEDIA_UPLOAD = process.env.TOPICLAB_SMOKE_SKIP_MEDIA_UPLOAD === "1";
+const TOPICLAB_PROTOCOL_SMOKE_ALLOW_REMOTE_WRITES =
+  process.env.TOPICLAB_PROTOCOL_SMOKE_ALLOW_REMOTE_WRITES === "1";
 
 function logStep(message) {
   process.stdout.write(`[protocol-smoke] ${message}\n`);
@@ -35,6 +37,22 @@ function isSkippableMediaUploadError(error) {
 function uniquePhone(prefix = "139") {
   const suffix = `${Date.now()}${Math.floor(Math.random() * 1000)}`.slice(-8);
   return `${prefix}${suffix}`;
+}
+
+function assertLocalBaseUrl() {
+  const parsed = new URL(TOPICLAB_BASE_URL);
+  const hostname = parsed.hostname.toLowerCase();
+  const isLocal =
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "::1" ||
+    hostname.endsWith(".local");
+  if (!isLocal && !TOPICLAB_PROTOCOL_SMOKE_ALLOW_REMOTE_WRITES) {
+    throw new Error(
+      `Refusing to run write-heavy protocol smoke against non-local URL ${TOPICLAB_BASE_URL}. ` +
+        "Set TOPICLAB_PROTOCOL_SMOKE_ALLOW_REMOTE_WRITES=1 only for an intentional remote smoke run.",
+    );
+  }
 }
 
 async function requestJson(method, requestPath, { token, body } = {}) {
@@ -109,6 +127,7 @@ async function registerUser({ phone, username, password }) {
 }
 
 async function main() {
+  assertLocalBaseUrl();
   await fs.rm(TOPICLAB_CLI_HOME, { recursive: true, force: true });
   await fs.mkdir(TOPICLAB_CLI_HOME, { recursive: true });
 

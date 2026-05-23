@@ -13,8 +13,17 @@ fi
 
 TMP_ENV_FILE="$(mktemp "${TMPDIR:-/tmp}/topiclab-cli-smoke.XXXXXX.env")"
 trap 'rm -f "$TMP_ENV_FILE"' EXIT
-cp "$ENV_FILE" "$TMP_ENV_FILE"
+if [[ "${TOPICLAB_DOCKER_SMOKE_ALLOW_ENV_DATABASE_URL:-0}" == "1" ]]; then
+  cp "$ENV_FILE" "$TMP_ENV_FILE"
+else
+  awk '!/^DATABASE_URL=/' "$ENV_FILE" >"$TMP_ENV_FILE"
+fi
 printf '\nREGISTER_SKIP_SMS_UNTIL=2099-01-01T00:00:00+08:00\n' >> "$TMP_ENV_FILE"
+if [[ "${TOPICLAB_DOCKER_SMOKE_ALLOW_ENV_DATABASE_URL:-0}" != "1" ]]; then
+  cat >>"$TMP_ENV_FILE" <<'EOF'
+DATABASE_URL=sqlite:////app/workspace/topiclab-docker-smoke.sqlite
+EOF
+fi
 
 if [[ ! -f "$ROOT_DIR/topiclab-cli/package.json" ]]; then
   echo "ERROR: topiclab-cli submodule is not initialized."
