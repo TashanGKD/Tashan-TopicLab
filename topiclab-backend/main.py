@@ -81,10 +81,15 @@ async def lifespan(app: FastAPI):
                 ensure_site_feedback_schema()
             except Exception as e2:
                 logging.getLogger(__name__).warning("site_feedback schema ensure failed (will retry on first feedback): %s", e2)
+            try:
+                topiclink_router.start_topiclink_metadata_worker()
+            except Exception as e2:
+                logging.getLogger(__name__).warning("TopicLink metadata worker start skipped: %s", e2)
         except Exception as e:
             logging.getLogger(__name__).warning(f"Auth tables init skipped: {e}")
 
     yield
+    await topiclink_router.stop_topiclink_metadata_worker()
     await close_shared_async_clients()
 
 app = FastAPI(

@@ -231,6 +231,7 @@ npm test
 | `OPENCLAW_ASK_AGENT_URL` 等 | 可选 | OpenClaw `topiclab help ask` 的 ask-agent 配置 |
 | `TOPICLINK_EMBEDDING_*` / `SCNET_*` | 可选 | TopicLink 相近度推荐的 Embeddings 接口；缓存写入 `topic_link_embedding_cache` |
 | `TOPICLINK_CHAT_*` / `SCNET_*` | 可选 | TopicLink 分身驻场试答的 Chat Completions 接口 |
+| `TOPICLINK_METADATA_BACKGROUND_*` | 可选 | TopicLink 上线后慢速补齐旧话题连接信息；只写 `topics.metadata.topic_link` |
 
 TopicLink 上线时，管理员至少需要确认这些项：
 
@@ -249,9 +250,15 @@ SCNET_BASE_URL=https://api.scnet.cn/api/llm/v1
 SCNET_API_KEY=<SCNet API Key>
 TOPICLINK_CHAT_MODEL=DeepSeek-V4-Flash
 TOPICLINK_EMBEDDING_MODEL=Qwen3-Embedding-8B
+TOPICLINK_METADATA_AUTOFILL=1
+TOPICLINK_METADATA_BACKGROUND_AUTOFILL=1
+TOPICLINK_METADATA_BACKGROUND_MAX_PER_PASS=10
+TOPICLINK_METADATA_BACKGROUND_INTERVAL_SECONDS=300
 ```
 
 如果 chat 和 embedding 使用不同账号或限额，再分别填写 `TOPICLINK_CHAT_BASE_URL` / `TOPICLINK_CHAT_API_KEY` 与 `TOPICLINK_EMBEDDING_BASE_URL` / `TOPICLINK_EMBEDDING_API_KEY`。`DeepSeek-V4-Flash` 只用于 chat/completions；embedding 模型仍用 `Qwen3-Embedding-8B`。
+
+TopicLink 后台补齐会在后端启动后延迟约 20 秒开始，每轮默认最多处理 10 个缺少 `metadata.topic_link` 的旧话题，每 5 分钟跑一轮，并在每次语言模型调用后等待 4 秒。它不会全库一次性重建，也不会改 `updated_at`，所以不会把旧话题重新顶到原话题广场前面；需要紧急关闭时设 `TOPICLINK_METADATA_BACKGROUND_AUTOFILL=0`。
 
 详见 [docs/getting-started/config.md](docs/getting-started/config.md) 与 [topiclab-backend/README.md](topiclab-backend/README.md)。专家、讨论方式、技能、MCP 等库从 `backend/libs/` 加载。
 

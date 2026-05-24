@@ -36,10 +36,7 @@ import { toast } from '../utils/toast'
 import { isArcadeTopic } from '../utils/arcade'
 import { isVideoMediaSrc, resolveTopicImageSrc } from '../utils/topicImage'
 import { useThrottledCallback, useThrottledCallbackByKey } from '../hooks/useThrottledCallback'
-import {
-  LIYUYANG_TOPIC_VIEWER_PROFILE,
-  TopicViewerProfile,
-} from '../data/topicViewerProfiles'
+import { LIYUYANG_TOPIC_VIEWER_PROFILE } from '../data/topicViewerProfiles'
 import { buildLocalTopicLinkSimulation, cleanTopicVisibleText, getTopicLinkDebugUser } from '../topicLink/topicLinkModel'
 import { buildTopicLinkSkillSearchText } from '../topicLink/topicLinkSkill'
 import logo2050 from '../assets/2050-logo.webp'
@@ -123,8 +120,13 @@ const DETAIL_TOPIC_LINK_CATEGORY_ROLES: Record<string, { title: string; descript
     description: '适合直接补资源、给建议或一起推进。',
     kind: 'peer',
   },
+  news: {
+    title: '看过相关材料的人',
+    description: '适合补充上下文、相关材料或自己的判断。',
+    kind: 'source',
+  },
   plaza: {
-    title: '有人一起想想',
+    title: '能接一句的人',
     description: '先把眼前这件事说清楚，再看下一步。',
     kind: 'peer',
   },
@@ -184,37 +186,15 @@ function buildDerivedTopicLink(topic: Topic | null): TopicLinkMetadata | null {
 
   const role = getDetailTopicRole(topic)
   const creatorName = topic.creator_name?.trim()
-  const participants: TopicLinkParticipant[] = [
-    creatorName
-      ? {
-          name: creatorName,
-          role: topic.creator_auth_type === 'openclaw_key' ? '发起与整理' : role.title,
-          status: 'starter',
-          openclaw: topic.creator_auth_type === 'openclaw_key',
-          fit: 86,
-        }
-      : {
-          name: '发起人',
-          role: role.title,
-          status: 'starter',
-          fit: 82,
-        },
-    {
-      name: '我这边',
-      role: '整理资料与共识',
-      status: 'digesting',
-      openclaw: true,
-      fit: 84,
-    },
-  ]
-  if ((topic.posts_count ?? 0) > 0) {
-    participants.push({
-      name: `${topic.posts_count} 条回应`,
-      role: '已有回应',
-      status: 'responded',
-      fit: 78,
-    })
-  }
+  const participants: TopicLinkParticipant[] = creatorName
+    ? [{
+        name: creatorName,
+        role: topic.creator_auth_type === 'openclaw_key' ? '发起与整理' : role.title,
+        status: 'starter',
+        openclaw: topic.creator_auth_type === 'openclaw_key',
+        fit: 86,
+      }]
+    : []
 
   return {
     connection_mode: 'openclaw_link',
@@ -275,14 +255,13 @@ function getTopicLink(topic: Topic | null): TopicLinkMetadata | null {
 function getTopicLinkParticipants(topicLink: TopicLinkMetadata | null, topic?: Topic | null): TopicLinkParticipant[] {
   const participants = topicLink?.participants
   if (Array.isArray(participants) && participants.length > 0) {
-    return participants.slice(0, 6)
+    return participants.filter((person) => isConcreteTopicLinkParticipant(person, topic)).slice(0, 6)
   }
   const role = topic ? getDetailTopicRole(topic) : DETAIL_TOPIC_LINK_CATEGORY_ROLES.plaza
   const creatorName = topic?.creator_name?.trim()
-  return [
-    { name: creatorName || '发起人', role: role.title, status: 'starter', openclaw: topic?.creator_auth_type === 'openclaw_key', fit: 86 },
-    { name: '我这边', role: '先看再说', status: 'digesting', openclaw: true, fit: 84 },
-  ]
+  return creatorName
+    ? [{ name: creatorName, role: role.title, status: 'starter', openclaw: topic?.creator_auth_type === 'openclaw_key', fit: 86 }]
+    : []
 }
 
 function getParticipantName(person: TopicLinkParticipant) {
@@ -291,6 +270,16 @@ function getParticipantName(person: TopicLinkParticipant) {
     return '我这边'
   }
   return rawName || '参与者'
+}
+
+function isConcreteTopicLinkParticipant(person: TopicLinkParticipant, topic?: Topic | null) {
+  const name = cleanTopicLinkPersonName(person.name)
+  if (!name) return false
+  if (name === '我这边') return false
+  if (/^\d+\s*条回应$/.test(name)) return false
+  if (name === '有人一起想想' || name === '合适的人') return false
+  if (name === '发起人' && !topic?.creator_name?.trim()) return false
+  return true
 }
 
 function cleanTopicLinkPersonName(name: string | null | undefined) {
@@ -365,7 +354,7 @@ function TopicLinkRoundtableGuide({
             <div className="mt-4 flex flex-wrap gap-2">
               {wanted.slice(0, 2).map((item, index) => (
                 <span key={`${item.title}-${index}`} className="rounded-full border border-[#d7e8df] bg-[#f4faf6] px-3 py-1 text-xs text-[#53675f]">
-                  {cleanTopicVisibleText(item.title || '有人能补一句')}
+                  {cleanTopicVisibleText(item.title || '能接一句的人')}
                 </span>
               ))}
             </div>
@@ -437,22 +426,20 @@ function TopicLinkInvitePanel({
   topic,
   topicExperts,
   posts,
-  viewerProfile,
   onUsePrompt,
 }: {
   topic: Topic
   topicExperts: TopicExpert[]
   posts: Post[]
-  viewerProfile: TopicViewerProfile | null
   onUsePrompt: (text: string) => void
 }) {
   const [query, setQuery] = useState('')
   const topicLink = getTopicLink(topic)
   if (!topicLink) return null
-  const wanted = topicLink.wanted ?? []
   const participants = getTopicLinkParticipants(topicLink, topic)
   const topicTitle = cleanTopicVisibleText(topic.title || '这个话题')
   const queryText = query.trim().toLowerCase()
+  const concreteParticipants = participants.filter((person) => isConcreteTopicLinkParticipant(person, topic))
   const postAuthors = posts
     .filter((post) => post.author?.trim() && post.body?.trim() && post.body.trim() !== '-')
     .map((post, index) => ({
@@ -466,23 +453,14 @@ function TopicLinkInvitePanel({
     }))
   const rawCandidates: InviteCandidate[] = [
     ...postAuthors,
-    ...participants.map((person, index) => ({
+    ...concreteParticipants.map((person, index) => ({
       id: `participant-${getParticipantName(person)}-${index}`,
       name: getParticipantName(person),
       role: cleanTopicVisibleText(person.role || '已经在附近'),
-      note: person.fit != null ? '已经说过几句，可以继续聊' : '可以看看他的回应',
+      note: person.status === 'starter' ? '这桌是他先开的' : '可以看看他的回应',
       kind: person.openclaw ? 'openclaw' as const : 'person' as const,
       source: person.status === 'starter' ? '开了这桌' : '在场',
       score: Number(person.fit ?? 72),
-    })),
-    ...wanted.map((item, index) => ({
-      id: `wanted-${item.title}-${index}`,
-      name: item.title || '合适的人',
-      role: '想找',
-      note: item.description || '可以带来一点新材料',
-      kind: 'person' as const,
-      source: '想找',
-      score: 86 - index * 5,
     })),
     ...topicExperts
       .filter((expert) => expert.source !== 'preset' || expert.origin_type === 'digital_twin')
@@ -495,15 +473,6 @@ function TopicLinkInvitePanel({
       source: '可请来',
       score: 76 - index,
     })),
-    ...(viewerProfile ? [{
-      id: `viewer-${viewerProfile.handle}`,
-      name: viewerProfile.agentName,
-      role: viewerProfile.title,
-      note: viewerProfile.summary,
-      kind: 'openclaw' as const,
-      source: '我这边',
-      score: 90,
-    }] : []),
   ]
   const seen = new Set<string>()
   const candidates = rawCandidates
@@ -562,7 +531,9 @@ function TopicLinkInvitePanel({
       </div>
 
       {candidates.length === 0 ? (
-        <p className="mt-3 rounded-2xl bg-[#f2f7f3] px-3 py-2 text-sm text-[#6c7771]">暂时没找到，换个关键词试试。</p>
+        <p className="mt-3 rounded-2xl bg-[#f2f7f3] px-3 py-2 text-sm text-[#6c7771]">
+          {queryText ? '暂时没找到，换个关键词试试。' : '这桌还没人接话，先进讨论区看看。'}
+        </p>
       ) : null}
     </section>
   )
@@ -1085,6 +1056,11 @@ export default function TopicLinkDetailPage() {
       const res = await topicExpertsApi.list(topicId)
       setTopicExperts(res.data)
     } catch (err) {
+      if (isTopicLinkRoute) {
+        console.warn('TopicLink experts unavailable, continuing without invite suggestions.', err)
+        setTopicExperts([])
+        return
+      }
       handleApiError(err, '加载专家列表失败')
     }
   }
@@ -2049,7 +2025,7 @@ export default function TopicLinkDetailPage() {
               ) : posts.length === 0 ? (
                 <div className="rounded-[1.2rem] border border-[#dbe8e1] bg-[#fbfdfb] px-4 py-5 text-sm text-[#65756e]">
                   <p className="font-medium text-[#25302d]">还没有人开口</p>
-                  <p className="mt-1 text-xs leading-5 text-[#78857f]">可以先写一句问题、补一条资料，或请一位合适的人来看。</p>
+                  <p className="mt-1 text-xs leading-5 text-[#78857f]">可以先写一句问题、补一条资料，或请人来看。</p>
                 </div>
               ) : (
                 <div className={isTopicLinkRoute ? 'topiclink-thread-surface animate-fade-in rounded-[1.35rem] border border-[#d7e6df] bg-[#f4faf6] py-2 shadow-[0_18px_42px_rgba(42,59,49,0.08)]' : undefined}>
@@ -2305,7 +2281,6 @@ export default function TopicLinkDetailPage() {
               topic={topic}
               topicExperts={topicExperts}
               posts={posts}
-              viewerProfile={topicLinkViewerProfile}
               onUsePrompt={handleUseTopicLinkPrompt}
             />
             <TopicLinkInspirationBridge

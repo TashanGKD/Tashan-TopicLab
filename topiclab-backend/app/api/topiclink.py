@@ -7,6 +7,8 @@ the TopicLink surface without changing the normal topic plaza behavior.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import hashlib
 import json
 import logging
@@ -25,6 +27,7 @@ from app.api.auth import security, verify_access_token
 from app.services.twin_runtime import get_or_backfill_active_twin_for_user
 from app.storage.database.postgres_client import get_db_session
 from app.storage.database.topic_store import (
+    _invalidate_read_cache,
     annotate_posts_with_interactions,
     get_topic,
     list_topics,
@@ -39,7 +42,82 @@ DEFAULT_EMBEDDING_MODEL = "Qwen3-Embedding-8B"
 DEFAULT_CHAT_MODEL = "MiniMax-M2.5"
 DEFAULT_EMBEDDING_BATCH_SIZE = 3
 DEFAULT_EMBEDDING_TEXT_CHARS = 2000
+DEFAULT_METADATA_BACKFILL_BATCH_SIZE = 8
+DEFAULT_METADATA_BACKGROUND_INTERVAL_SECONDS = 300.0
+DEFAULT_METADATA_BACKGROUND_INITIAL_DELAY_SECONDS = 20.0
+DEFAULT_METADATA_BACKGROUND_LLM_DELAY_SECONDS = 4.0
+DEFAULT_METADATA_BACKGROUND_MAX_PER_PASS = 10
+DEFAULT_METADATA_BACKGROUND_PAGE_SIZE = 50
 _embedding_cache_ready = False
+_metadata_worker_task: asyncio.Task | None = None
+_metadata_worker_stop: asyncio.Event | None = None
+_metadata_worker_cursor: str | None = None
+
+TOPICLINK_EXCLUDED_CATEGORIES = {"test"}
+TOPICLINK_EXCLUDED_TITLE_MARKERS = (
+    "live smoke",
+    "connection test",
+    "probe topic",
+    "smoke test",
+)
+
+TOPICLINK_CATEGORY_ROLES: dict[str, dict[str, str]] = {
+    "research": {
+        "title": "能补材料的人",
+        "description": "适合补充论文、报告、案例或可验证资料。",
+        "kind": "source",
+    },
+    "news": {
+        "title": "看过相关材料的人",
+        "description": "适合补充上下文、相关材料或自己的判断。",
+        "kind": "source",
+    },
+    "thought": {
+        "title": "愿意反驳的人",
+        "description": "适合提出反例、边界条件和不同解释。",
+        "kind": "counterpoint",
+    },
+    "thinking": {
+        "title": "愿意反驳的人",
+        "description": "适合提出反例、边界条件和不同解释。",
+        "kind": "counterpoint",
+    },
+    "product": {
+        "title": "有实践经验的人",
+        "description": "适合带来真实项目、落地细节和协作经验。",
+        "kind": "practice",
+    },
+    "app": {
+        "title": "有实践经验的人",
+        "description": "适合从使用场景和落地路径切入。",
+        "kind": "practice",
+    },
+    "application": {
+        "title": "有实践经验的人",
+        "description": "适合从使用场景和落地路径切入。",
+        "kind": "practice",
+    },
+    "arcade": {
+        "title": "愿意挑战题目的人",
+        "description": "适合先读题面，看别人怎么走，再换一种解法试试。",
+        "kind": "practice",
+    },
+    "request": {
+        "title": "能回应需求的人",
+        "description": "适合直接补资源、给建议或一起推进。",
+        "kind": "peer",
+    },
+    "needs": {
+        "title": "能回应需求的人",
+        "description": "适合直接补资源、给建议或一起推进。",
+        "kind": "peer",
+    },
+    "inspiration": {
+        "title": "能回应需求的人",
+        "description": "适合直接补资源、给建议或一起推进。",
+        "kind": "peer",
+    },
+}
 
 
 class TopicLinkScoreRequest(BaseModel):
@@ -178,10 +256,13 @@ def _safe_get_topic(topic_id: str | None) -> dict[str, Any] | None:
     if not topic_id:
         return None
     try:
-        return get_topic(topic_id)
+        topic = get_topic(topic_id)
     except SQLAlchemyError:
         logger.info("TopicLink skipped topic lookup because topic storage is not ready")
         return None
+    if not isinstance(topic, dict):
+        return topic
+    return _backfill_topiclink_metadata([topic], max_updates=1)[0]
 
 
 def _safe_list_topics(limit: int) -> list[dict[str, Any]]:
@@ -191,7 +272,12 @@ def _safe_list_topics(limit: int) -> list[dict[str, Any]]:
         logger.info("TopicLink skipped recommendations because topic storage is not ready")
         return []
     items = page.get("items", []) if isinstance(page, dict) else []
-    return [item for item in items if isinstance(item, dict)]
+    candidates = [
+        item
+        for item in items
+        if isinstance(item, dict) and (_topiclink_has_metadata(item) or _topiclink_is_autofill_candidate(item))
+    ]
+    return _backfill_topiclink_metadata(candidates)
 
 
 def _hash_embedding(text: str) -> list[float]:
@@ -554,6 +640,493 @@ def _compact_visible_text(value: Any, limit: int = 900) -> str:
     if len(text_value) <= limit:
         return text_value
     return f"{text_value[:limit - 1]}…"
+
+
+def _topiclink_metadata_autofill_enabled() -> bool:
+    return os.getenv("TOPICLINK_METADATA_AUTOFILL", "1").strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _topiclink_background_autofill_enabled() -> bool:
+    if not _topiclink_metadata_autofill_enabled():
+        return False
+    return os.getenv("TOPICLINK_METADATA_BACKGROUND_AUTOFILL", "1").strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _topiclink_metadata_backfill_batch_size() -> int:
+    raw_value = os.getenv("TOPICLINK_METADATA_BACKFILL_BATCH_SIZE", str(DEFAULT_METADATA_BACKFILL_BATCH_SIZE))
+    try:
+        return max(0, min(24, int(raw_value)))
+    except ValueError:
+        return DEFAULT_METADATA_BACKFILL_BATCH_SIZE
+
+
+def _topiclink_int_env(name: str, default: int, *, low: int, high: int) -> int:
+    raw_value = os.getenv(name, str(default)).strip()
+    try:
+        return max(low, min(high, int(raw_value)))
+    except ValueError:
+        return default
+
+
+def _topiclink_float_env(name: str, default: float, *, low: float, high: float) -> float:
+    raw_value = os.getenv(name, str(default)).strip()
+    try:
+        return max(low, min(high, float(raw_value)))
+    except ValueError:
+        return default
+
+
+def _topiclink_background_page_size() -> int:
+    return _topiclink_int_env("TOPICLINK_METADATA_BACKGROUND_PAGE_SIZE", DEFAULT_METADATA_BACKGROUND_PAGE_SIZE, low=10, high=100)
+
+
+def _topiclink_background_max_per_pass() -> int:
+    return _topiclink_int_env("TOPICLINK_METADATA_BACKGROUND_MAX_PER_PASS", DEFAULT_METADATA_BACKGROUND_MAX_PER_PASS, low=0, high=30)
+
+
+def _topiclink_background_interval_seconds() -> float:
+    return _topiclink_float_env(
+        "TOPICLINK_METADATA_BACKGROUND_INTERVAL_SECONDS",
+        DEFAULT_METADATA_BACKGROUND_INTERVAL_SECONDS,
+        low=30.0,
+        high=3600.0,
+    )
+
+
+def _topiclink_background_initial_delay_seconds() -> float:
+    return _topiclink_float_env(
+        "TOPICLINK_METADATA_BACKGROUND_INITIAL_DELAY_SECONDS",
+        DEFAULT_METADATA_BACKGROUND_INITIAL_DELAY_SECONDS,
+        low=0.0,
+        high=600.0,
+    )
+
+
+def _topiclink_background_llm_delay_seconds() -> float:
+    return _topiclink_float_env(
+        "TOPICLINK_METADATA_BACKGROUND_LLM_DELAY_SECONDS",
+        DEFAULT_METADATA_BACKGROUND_LLM_DELAY_SECONDS,
+        low=0.0,
+        high=60.0,
+    )
+
+
+def _topiclink_role_for_topic(topic: dict[str, Any]) -> dict[str, str]:
+    category = str(topic.get("category") or "plaza").strip().lower()
+    return TOPICLINK_CATEGORY_ROLES.get(
+        category,
+        {
+            "title": "能接一句的人",
+            "description": "先把眼前这件事说清楚，再看下一步。",
+            "kind": "peer",
+        },
+    )
+
+
+def _topiclink_is_autofill_candidate(topic: dict[str, Any]) -> bool:
+    category = str(topic.get("category") or "").strip().lower()
+    if category in TOPICLINK_EXCLUDED_CATEGORIES:
+        return False
+    title = str(topic.get("title") or "").strip().lower()
+    if any(marker in title for marker in TOPICLINK_EXCLUDED_TITLE_MARKERS):
+        return False
+    return bool(str(topic.get("id") or "").strip() and (str(topic.get("title") or "").strip() or str(topic.get("body") or "").strip()))
+
+
+def _topiclink_has_metadata(topic: dict[str, Any]) -> bool:
+    metadata = topic.get("metadata") if isinstance(topic.get("metadata"), dict) else {}
+    topic_link = metadata.get("topic_link") if isinstance(metadata.get("topic_link"), dict) else None
+    return bool(topic_link)
+
+
+def _topiclink_creator_participant(topic: dict[str, Any], role: dict[str, str]) -> list[dict[str, Any]]:
+    creator_name = str(topic.get("creator_name") or "").strip()
+    if not creator_name:
+        return []
+    if creator_name in {"我这边", "有人一起想想", "合适的人"}:
+        return []
+    is_openclaw = str(topic.get("creator_auth_type") or "").strip() == "openclaw_key" or "openclaw" in creator_name.lower()
+    return [
+        {
+            "name": creator_name,
+            "role": "开了这桌" if is_openclaw else role["title"],
+            "status": "starter",
+            "openclaw": is_openclaw,
+            "fit": 72,
+        }
+    ]
+
+
+def _derive_topiclink_metadata(topic: dict[str, Any]) -> dict[str, Any]:
+    role = _topiclink_role_for_topic(topic)
+    category = str(topic.get("category") or "plaza").strip() or "plaza"
+    posts_count = int(topic.get("posts_count") or 0)
+    return {
+        "version": 1,
+        "source": "topiclink_autofill",
+        "connection_mode": "openclaw_link",
+        "table_state": "active" if posts_count > 0 else "seeking",
+        "participants": _topiclink_creator_participant(topic, role),
+        "wanted": [
+            {
+                "kind": role["kind"],
+                "title": role["title"],
+                "description": role["description"],
+                "source": "topic_category",
+            }
+        ],
+        "angles": [
+            {
+                "id": "read",
+                "title": "先了解一下",
+                "description": "先把大家说到哪一步理清楚。",
+                "kind": "co_read",
+            },
+            {
+                "id": "source",
+                "title": "补一条材料",
+                "description": "带来案例、数据或可验证材料。",
+                "kind": "source",
+            },
+            {
+                "id": "reply",
+                "title": "接着说一句",
+                "description": "从经验、反例或下一步建议接上。",
+                "kind": role["kind"],
+            },
+        ],
+        "profile_signals": {
+            "field": category,
+            "need": role["title"],
+            "status": "已经有人在聊" if posts_count > 0 else "等第一句回应",
+        },
+        "openclaw_digest": _compact_visible_text(topic.get("body") or topic.get("title") or "", 220),
+    }
+
+
+def _merge_topiclink_metadata(topic: dict[str, Any]) -> dict[str, Any] | None:
+    if _topiclink_has_metadata(topic) or not _topiclink_is_autofill_candidate(topic):
+        return None
+    metadata = topic.get("metadata") if isinstance(topic.get("metadata"), dict) else {}
+    merged = dict(metadata)
+    merged["topic_link"] = _derive_topiclink_metadata(topic)
+    return merged
+
+
+def _merge_topiclink_metadata_payload(topic: dict[str, Any], topic_link: dict[str, Any]) -> dict[str, Any] | None:
+    if _topiclink_has_metadata(topic) or not _topiclink_is_autofill_candidate(topic):
+        return None
+    metadata = topic.get("metadata") if isinstance(topic.get("metadata"), dict) else {}
+    merged = dict(metadata)
+    merged["topic_link"] = topic_link
+    return merged
+
+
+def _persist_topiclink_metadata(topic_id: str, metadata: dict[str, Any]) -> dict[str, Any] | None:
+    """Persist TopicLink sidecar metadata without changing the topic timeline."""
+
+    topic_id = str(topic_id or "").strip()
+    if not topic_id:
+        return None
+    payload = json.dumps(metadata, ensure_ascii=False)
+    try:
+        with get_db_session() as session:
+            if session.bind.dialect.name == "sqlite":
+                result = session.execute(
+                    text("UPDATE topics SET metadata = :metadata WHERE id = :topic_id"),
+                    {"topic_id": topic_id, "metadata": payload},
+                )
+            else:
+                result = session.execute(
+                    text("UPDATE topics SET metadata = CAST(:metadata AS JSONB) WHERE id = :topic_id"),
+                    {"topic_id": topic_id, "metadata": payload},
+                )
+            if result.rowcount == 0:
+                return None
+    except Exception:
+        logger.info("TopicLink metadata persist skipped for topic %s", topic_id, exc_info=True)
+        return None
+    _invalidate_read_cache(topic_id=topic_id, invalidate_topic_lists=True)
+    return get_topic(topic_id)
+
+
+def _topiclink_chat_config() -> tuple[str, str, str] | None:
+    api_key = os.getenv("TOPICLINK_CHAT_API_KEY") or os.getenv("SCNET_API_KEY") or os.getenv("MINIMAX_API_KEY")
+    if not api_key:
+        return None
+    base_url = (os.getenv("TOPICLINK_CHAT_BASE_URL") or os.getenv("SCNET_BASE_URL") or "https://api.scnet.cn/api/llm/v1").rstrip("/")
+    model = os.getenv("TOPICLINK_CHAT_MODEL") or DEFAULT_CHAT_MODEL
+    return base_url, api_key, model
+
+
+def _clean_topiclink_label(value: Any, fallback: str, limit: int) -> str:
+    text_value = _compact_visible_text(value, limit)
+    banned = ("模型", "向量", "embedding", "Embedding", "缓存", "推荐分", "画像", "AI助手", "作为AI", "作为 AI")
+    if not text_value or any(word in text_value for word in banned):
+        return fallback
+    return text_value
+
+
+async def _try_remote_topiclink_metadata(topic: dict[str, Any]) -> dict[str, Any] | None:
+    config = _topiclink_chat_config()
+    if not config:
+        return None
+    base_url, api_key, model = config
+    role = _topiclink_role_for_topic(topic)
+    title = _compact_visible_text(topic.get("title"), 180)
+    body = _compact_visible_text(topic.get("body"), 1200)
+    category = _compact_visible_text(topic.get("category"), 40)
+    posts_count = int(topic.get("posts_count") or 0)
+    prompt = f"""请把下面这个 TopicLab 话题整理成 TopicLink 广场里可用的“这桌需要谁来接”的侧边信息。
+
+只输出 JSON，不要 Markdown。不要写模型、向量、推荐、缓存、画像、系统、AI 助手。语气要像产品里的自然短句，不要客服腔。
+
+话题标题：{title}
+分类：{category or "广场"}
+已有回应数：{posts_count}
+话题正文：{body}
+
+输出格式：
+{{
+  "wanted_title": "6 个汉字以内，说明这桌需要谁",
+  "wanted_description": "18 个汉字以内，说明怎么接上",
+  "angles": [
+    {{"title": "6 个汉字以内", "description": "18 个汉字以内"}},
+    {{"title": "6 个汉字以内", "description": "18 个汉字以内"}},
+    {{"title": "6 个汉字以内", "description": "18 个汉字以内"}}
+  ],
+  "digest": "60 个汉字以内，概括这桌正在聊什么"
+}}
+"""
+    try:
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            response = await client.post(
+                f"{base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}"},
+                json={
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": "你只负责把讨论话题整理成自然、克制、可读的 TopicLink 侧边信息。"},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "temperature": 0.25,
+                    "max_tokens": 500,
+                    "response_format": {"type": "json_object"},
+                },
+            )
+            response.raise_for_status()
+            payload = response.json()
+    except Exception:
+        logger.info("TopicLink metadata LLM fallback used", exc_info=True)
+        return None
+
+    content = ""
+    try:
+        choices = payload.get("choices") if isinstance(payload, dict) else None
+        first = choices[0] if isinstance(choices, list) and choices else {}
+        message = first.get("message") if isinstance(first, dict) else None
+        content = str(message.get("content") if isinstance(message, dict) else first.get("text") or "")
+    except Exception:
+        content = ""
+    parsed = _parse_chat_json(content)
+    if not parsed:
+        return None
+
+    fallback = _derive_topiclink_metadata(topic)
+    wanted_title = _clean_topiclink_label(parsed.get("wanted_title"), role["title"], 18)
+    wanted_description = _clean_topiclink_label(parsed.get("wanted_description"), role["description"], 36)
+    raw_angles = parsed.get("angles") if isinstance(parsed.get("angles"), list) else []
+    angles: list[dict[str, str]] = []
+    for index, item in enumerate(raw_angles[:3]):
+        if not isinstance(item, dict):
+            continue
+        fallback_angle = fallback["angles"][min(index, len(fallback["angles"]) - 1)]
+        angles.append(
+            {
+                "id": str(fallback_angle.get("id") or f"angle-{index + 1}"),
+                "title": _clean_topiclink_label(item.get("title"), str(fallback_angle.get("title") or "接着说"), 18),
+                "description": _clean_topiclink_label(
+                    item.get("description"),
+                    str(fallback_angle.get("description") or "从当前讨论接上。"),
+                    36,
+                ),
+                "kind": str(fallback_angle.get("kind") or role["kind"]),
+            }
+        )
+    if len(angles) < 3:
+        angles.extend(fallback["angles"][len(angles):])
+
+    metadata = dict(fallback)
+    metadata["source"] = "topiclink_llm_autofill"
+    metadata["wanted"] = [
+        {
+            "kind": role["kind"],
+            "title": wanted_title,
+            "description": wanted_description,
+            "source": "topiclink_background",
+        }
+    ]
+    metadata["angles"] = angles[:3]
+    metadata["profile_signals"] = {
+        **fallback["profile_signals"],
+        "need": wanted_title,
+    }
+    metadata["openclaw_digest"] = _clean_topiclink_label(parsed.get("digest"), fallback["openclaw_digest"], 120)
+    return metadata
+
+
+def _backfill_topiclink_metadata(topics: list[dict[str, Any]], max_updates: int | None = None) -> list[dict[str, Any]]:
+    if not _topiclink_metadata_autofill_enabled():
+        return topics
+    budget = _topiclink_metadata_backfill_batch_size() if max_updates is None else max(0, min(24, max_updates))
+    if budget <= 0:
+        return topics
+
+    updated_topics: list[dict[str, Any]] = []
+    writes = 0
+    for topic in topics:
+        if not isinstance(topic, dict):
+            updated_topics.append(topic)
+            continue
+        next_metadata = _merge_topiclink_metadata(topic)
+        if next_metadata is None or writes >= budget:
+            updated_topics.append(topic)
+            continue
+        topic_id = str(topic.get("id") or "").strip()
+        updated = _persist_topiclink_metadata(topic_id, next_metadata)
+        if isinstance(updated, dict):
+            updated_topics.append(updated)
+        else:
+            local_topic = dict(topic)
+            local_topic["metadata"] = next_metadata
+            updated_topics.append(local_topic)
+        writes += 1
+    if writes:
+        logger.info("TopicLink metadata autofill wrote %s topic(s)", writes)
+    return updated_topics
+
+
+async def _sleep_until_topiclink_worker_tick(seconds: float) -> bool:
+    stop_event = _metadata_worker_stop
+    if stop_event is None:
+        await asyncio.sleep(seconds)
+        return True
+    try:
+        await asyncio.wait_for(stop_event.wait(), timeout=max(0.0, seconds))
+    except asyncio.TimeoutError:
+        return True
+    return False
+
+
+async def _build_background_topiclink_metadata(topic: dict[str, Any]) -> dict[str, Any]:
+    llm_metadata = await _try_remote_topiclink_metadata(topic)
+    return llm_metadata or _derive_topiclink_metadata(topic)
+
+
+async def _run_topiclink_metadata_background_pass() -> dict[str, int]:
+    global _metadata_worker_cursor
+
+    if not _topiclink_background_autofill_enabled():
+        return {"scanned": 0, "written": 0}
+
+    page_size = _topiclink_background_page_size()
+    max_writes = _topiclink_background_max_per_pass()
+    if max_writes <= 0:
+        return {"scanned": 0, "written": 0}
+
+    scanned = 0
+    written = 0
+    pages_seen = 0
+    cursor = _metadata_worker_cursor
+    max_pages = max(1, math.ceil(max_writes * 3 / page_size) + 2)
+
+    while written < max_writes and pages_seen < max_pages:
+        try:
+            page = list_topics(limit=page_size, cursor=cursor)
+        except SQLAlchemyError:
+            logger.info("TopicLink metadata background pass skipped because topic storage is not ready")
+            return {"scanned": scanned, "written": written}
+        except Exception:
+            logger.info("TopicLink metadata background pass failed", exc_info=True)
+            return {"scanned": scanned, "written": written}
+
+        items = page.get("items", []) if isinstance(page, dict) else []
+        next_cursor = page.get("next_cursor") if isinstance(page, dict) else None
+        pages_seen += 1
+        if not items:
+            cursor = None
+            break
+
+        for topic in items:
+            if written >= max_writes:
+                break
+            if not isinstance(topic, dict):
+                continue
+            scanned += 1
+            if _topiclink_has_metadata(topic) or not _topiclink_is_autofill_candidate(topic):
+                continue
+            topic_link = await _build_background_topiclink_metadata(topic)
+            merged = _merge_topiclink_metadata_payload(topic, topic_link)
+            if merged is None:
+                continue
+            topic_id = str(topic.get("id") or "").strip()
+            if _persist_topiclink_metadata(topic_id, merged):
+                written += 1
+                await _sleep_until_topiclink_worker_tick(_topiclink_background_llm_delay_seconds())
+
+        cursor = str(next_cursor or "").strip() or None
+        if cursor is None:
+            break
+
+    _metadata_worker_cursor = cursor
+    if written:
+        logger.info("TopicLink metadata background pass wrote %s topic(s) after scanning %s", written, scanned)
+    return {"scanned": scanned, "written": written}
+
+
+async def _topiclink_metadata_worker_loop() -> None:
+    if not await _sleep_until_topiclink_worker_tick(_topiclink_background_initial_delay_seconds()):
+        return
+    while _metadata_worker_stop is not None and not _metadata_worker_stop.is_set():
+        try:
+            await _run_topiclink_metadata_background_pass()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.info("TopicLink metadata background worker iteration failed", exc_info=True)
+        if not await _sleep_until_topiclink_worker_tick(_topiclink_background_interval_seconds()):
+            return
+
+
+def start_topiclink_metadata_worker() -> None:
+    global _metadata_worker_task, _metadata_worker_stop
+    if not _topiclink_background_autofill_enabled():
+        logger.info("TopicLink metadata background worker disabled")
+        return
+    if _metadata_worker_task and not _metadata_worker_task.done():
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        logger.info("TopicLink metadata background worker skipped because no event loop is running")
+        return
+    _metadata_worker_stop = asyncio.Event()
+    _metadata_worker_task = loop.create_task(_topiclink_metadata_worker_loop())
+    logger.info("TopicLink metadata background worker started")
+
+
+async def stop_topiclink_metadata_worker() -> None:
+    global _metadata_worker_task, _metadata_worker_stop
+    task = _metadata_worker_task
+    stop_event = _metadata_worker_stop
+    _metadata_worker_task = None
+    _metadata_worker_stop = None
+    if stop_event is not None:
+        stop_event.set()
+    if task is not None and not task.done():
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
 
 
 def _fallback_simulation(topic: dict[str, Any], persona: str, provider_status: str = "unconfigured", message: str | None = None) -> dict[str, Any]:

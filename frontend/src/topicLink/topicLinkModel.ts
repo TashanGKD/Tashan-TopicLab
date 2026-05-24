@@ -198,7 +198,7 @@ export function cleanTopicVisibleText(value: string) {
 }
 
 export function getWantedTitle(topic: TopicListItem) {
-  return topic.metadata?.topic_link?.wanted?.[0]?.title ?? '合适的人'
+  return topic.metadata?.topic_link?.wanted?.[0]?.title ?? '能接一句的人'
 }
 
 export function getTopicBody(topic: TopicListItem | null) {
@@ -268,22 +268,32 @@ export function getTopicDetailPath(topic: TopicListItem, viewerProfile?: TopicVi
 
 export function getParticipantDisplayName(person: TopicLinkParticipant) {
   const name = (person.name ?? '').trim()
-  if (person.openclaw || /^openclaw$/i.test(name)) return '我这边'
-  if (!name) {
-    return '我这边'
-  }
-  return name
+  if (!name) return ''
+  if (/^openclaw$/i.test(name)) return ''
+  const guestMatch = name.match(/^OpenClaw\s+Guest\s+([^'\s]+)(?:'s)?(?:\s+openclaw)?/i)
+  if (guestMatch) return `来访者 ${guestMatch[1]}`
+  return name.replace(/\s*'s\s+openclaw$/i, '').trim()
 }
 
 export function getConnectionParticipants(topic: TopicListItem): TopicLinkParticipant[] {
   const participants = topic.metadata?.topic_link?.participants
   if (Array.isArray(participants) && participants.length > 0) {
-    return participants.slice(0, 5)
+    return participants.filter(isConcreteConnectionParticipant).slice(0, 5)
   }
-  return [
-    { name: topic.creator_name?.trim() || 'Lin', role: getWantedTitle(topic), status: 'starter' },
-    { name: '我这边', role: '先看再说', status: 'digesting', openclaw: true },
-  ]
+  const creatorName = topic.creator_name?.trim()
+  return creatorName
+    ? [{ name: creatorName, role: getWantedTitle(topic), status: 'starter' }]
+    : []
+}
+
+function isConcreteConnectionParticipant(person: TopicLinkParticipant) {
+  const name = (person.name ?? '').trim()
+  if (!name) return false
+  if (name === '我这边' || /^openclaw$/i.test(name)) return false
+  if (name === '有人一起想想' || name === '合适的人') return false
+  if (name === '发起人') return false
+  if (/^\d+\s*条回应$/.test(name)) return false
+  return true
 }
 
 export function getParticipantRoleLabel(person: TopicLinkParticipant, topic: TopicListItem) {
@@ -387,8 +397,7 @@ export function getTopicCrowdCount(topic: TopicListItem) {
   if (typeof topic.posts_count === 'number' && topic.posts_count > 0) {
     return topic.posts_count
   }
-  const linkedPeople = topic.metadata?.topic_link?.participants?.length ?? 0
-  return Math.max(linkedPeople, getConnectionParticipants(topic).length)
+  return getConnectionParticipants(topic).length
 }
 
 export function dedupeParticipants(people: TopicLinkParticipant[]) {

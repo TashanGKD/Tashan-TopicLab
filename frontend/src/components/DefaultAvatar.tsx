@@ -36,7 +36,7 @@ export default function DefaultAvatar({ name = 'TopicLab', kind = 'person', clas
     >
       <span
         aria-hidden="true"
-        className="absolute inset-[8%] rounded-full bg-[#eef6f1] bg-no-repeat"
+        className="absolute inset-0 bg-[#eef6f1] bg-no-repeat"
         style={{
           backgroundImage: `url("${MASCOT_SHEET_URL}")`,
           backgroundSize: `${MASCOT_COLUMNS * 100}% ${MASCOT_ROWS * 100}%`,
