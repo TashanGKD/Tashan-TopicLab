@@ -2,7 +2,7 @@
 
 This directory contains product-level documentation for the integrated TopicLab stack. For Resonnet implementation details, see [../backend/docs/README.md](../backend/docs/README.md).
 
-Current release documented here: `1.10.0` (2026-05-09). Keep [../CHANGELOG.md](../CHANGELOG.md), root READMEs, and the nearest feature/config document in sync when the runtime surface changes.
+Current release documented here: `1.14.0` (2026-05-24), exposed as the product concept [他山世界 2.0](features/tashan-world-2.md). Keep [../CHANGELOG.md](../CHANGELOG.md), root READMEs, and the nearest feature/config document in sync when the runtime surface changes.
 
 ## Directory Structure
 
@@ -12,6 +12,7 @@ docs/
 ├── architecture/        # System design and performance
 ├── features/            # Feature flows and specs
 ├── api/                 # External API references
+├── legal/               # User-facing legal drafts and launch checklists
 └── design/              # UI/UX design system
 ```
 
@@ -55,6 +56,7 @@ docs/
 | [points-system.md](features/points-system.md) | Points system: wallet, ledger, settlement rules, surfaces, and current mismatches |
 | [share-flow-sequence.md](features/share-flow-sequence.md) | Share flow sequence diagrams (expert / moderator mode library) |
 | [request-category.md](features/request-category.md) | Request category for publishing requests and resource matching |
+| [tashan-world-2.md](features/tashan-world-2.md) | 他山世界 2.0 product concept mapped to `1.14.0` |
 
 ## API Reference
 
@@ -62,6 +64,12 @@ docs/
 |----------|-------------|
 | [academic-literature-api-overview.md](api/academic-literature-api-overview.md) | Literature (Academic) tab read-only API |
 | [aminer-open-api-limits.md](api/aminer-open-api-limits.md) | AMiner Open Platform free-tier API |
+
+## Legal Drafts
+
+| Document | Description |
+|----------|-------------|
+| [user-agreement.md](legal/user-agreement.md) | Draft user service agreement covering 他山世界公开页面、OpenClaw、SkillHub、WorldWeave、Arcade、AI 功能、隐私边界和上线检查项 |
 
 ## Design System
 

@@ -182,6 +182,98 @@
     48% { opacity: 0.28; }
     to { transform: rotate(360deg); opacity: 0.16; }
   }
+
+  @keyframes thinkingEnter {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 18px, 0);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
+  @keyframes thinkingLogoFloat {
+    0%, 100% {
+      transform: translate3d(0, 0, 0) scale(1);
+      filter: saturate(1);
+    }
+    50% {
+      transform: translate3d(0, -10px, 0) scale(1.018);
+      filter: saturate(1.08);
+    }
+  }
+
+  @keyframes thinkingOrbit {
+    0%, 100% {
+      transform: translate3d(0, 0, 0) scale(1);
+      opacity: 0.42;
+    }
+    50% {
+      transform: translate3d(24px, -18px, 0) scale(1.12);
+      opacity: 0.68;
+    }
+  }
+
+  @keyframes thinkingRailFlow {
+    from {
+      transform: translateY(-16%);
+    }
+    to {
+      transform: translateY(16%);
+    }
+  }
+
+  @keyframes thinkingSheen {
+    0% {
+      transform: translateX(-140%) skewX(-16deg);
+      opacity: 0;
+    }
+    35% {
+      opacity: 0.18;
+    }
+    100% {
+      transform: translateX(140%) skewX(-16deg);
+      opacity: 0;
+    }
+  }
+
+  @keyframes thinkingPageReveal {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 10px, 0);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
+  @keyframes thinkingArrivalWash {
+    0% {
+      transform: translate3d(-18%, -10%, 0) rotate(-10deg);
+      opacity: 0.34;
+    }
+    72% {
+      opacity: 0.05;
+    }
+    100% {
+      transform: translate3d(42%, 8%, 0) rotate(-10deg);
+      opacity: 0;
+    }
+  }
+
+  @keyframes thinkingPillarRise {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 12px, 0);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
   
   .animate-spin {
     animation: spin 0.8s linear infinite;
@@ -237,6 +329,152 @@
   .animate-topic-radar-sweep {
     animation: topicRadarSweep 44s linear infinite;
     will-change: transform, opacity;
+  }
+
+  .thinking-enter {
+    animation: thinkingEnter 520ms ease both;
+  }
+
+  .thinking-enter-delay {
+    animation: thinkingEnter 680ms ease 120ms both;
+  }
+
+  .thinking-logo {
+    animation: thinkingLogoFloat 7s ease-in-out infinite;
+  }
+
+  .thinking-page-shell {
+    animation: thinkingPageReveal 520ms ease both;
+  }
+
+  .thinking-hero-section {
+    isolation: isolate;
+  }
+
+  .thinking-hero-section::after {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.08), transparent 34%);
+    opacity: 0.82;
+  }
+
+  .thinking-hero-section > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .thinking-arrival-wash {
+    pointer-events: none;
+    position: absolute;
+    inset: -30% -24%;
+    z-index: 0;
+    background: linear-gradient(105deg, transparent 18%, rgba(255, 255, 255, 0.18) 44%, transparent 68%);
+    animation: thinkingArrivalWash 1400ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .thinking-orbit {
+    pointer-events: none;
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(38px);
+    animation: thinkingOrbit 10s ease-in-out infinite;
+  }
+
+  .thinking-orbit-a {
+    right: 8%;
+    top: 10%;
+    width: 16rem;
+    height: 16rem;
+    background: rgba(34, 211, 238, 0.12);
+  }
+
+  .thinking-orbit-b {
+    left: 4%;
+    bottom: 14%;
+    width: 12rem;
+    height: 12rem;
+    background: rgba(59, 130, 246, 0.10);
+    animation-delay: -4s;
+  }
+
+  .thinking-rail-glow {
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(90deg, transparent 0%, rgba(34, 211, 238, 0.08) 50%, transparent 100%),
+      repeating-linear-gradient(90deg, transparent 0 72px, rgba(148, 163, 184, 0.06) 72px 73px);
+    mask-image: linear-gradient(180deg, transparent 0%, black 18%, black 82%, transparent 100%);
+    animation: thinkingRailFlow 9s ease-in-out infinite alternate;
+  }
+
+  .thinking-active-panel {
+    position: relative;
+  }
+
+  .thinking-active-panel::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: -1px;
+    width: 7rem;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(103, 232, 249, 0.95), rgba(103, 232, 249, 0));
+    box-shadow: 0 0 24px rgba(103, 232, 249, 0.45);
+  }
+
+  .thinking-stage {
+    transform: translateZ(0);
+  }
+
+  .thinking-stage:hover {
+    transform: translate3d(0, -2px, 0);
+  }
+
+  .thinking-link-sheen {
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+    opacity: 0;
+  }
+
+  .group:hover .thinking-link-sheen,
+  .group:focus-visible .thinking-link-sheen {
+    animation: thinkingSheen 820ms ease both;
+  }
+
+  .thinking-pillar {
+    opacity: 0;
+    animation: thinkingPillarRise 560ms ease both;
+  }
+
+  .thinking-pillar:nth-child(1) {
+    animation-delay: 180ms;
+  }
+
+  .thinking-pillar:nth-child(2) {
+    animation-delay: 280ms;
+  }
+
+  .thinking-pillar:nth-child(3) {
+    animation-delay: 380ms;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .thinking-page-shell,
+    .thinking-enter,
+    .thinking-enter-delay,
+    .thinking-logo,
+    .thinking-orbit,
+    .thinking-rail-glow,
+    .thinking-arrival-wash,
+    .thinking-pillar {
+      animation: none !important;
+    }
   }
 
   @keyframes cardSpecularSweep {

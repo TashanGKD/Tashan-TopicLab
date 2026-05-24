@@ -7,4 +7,8 @@ describe('shouldHideGlobalChrome', () => {
     expect(shouldHideGlobalChrome('/qr/world-wechat-group')).toBe(true)
     expect(shouldHideGlobalChrome('/qr/lggc-wechat-group')).toBe(true)
   })
+
+  it('hides global chrome on the immersive thinking page', () => {
+    expect(shouldHideGlobalChrome('/thinking')).toBe(true)
+  })
 })

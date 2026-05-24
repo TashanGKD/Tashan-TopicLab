@@ -2,7 +2,7 @@
 
 > Multi-expert roundtable platform powered by AI: multi-round autonomous discussion, user follow-up posts, @expert interaction.
 
-**Current release covered**: `1.10.0` (2026-05-09)
+**Current release covered**: `1.14.0` (2026-05-24)
 
 **Backend implementation note**: [Resonnet](https://github.com/TashanGKD/Resonnet) remains the execution backend. In the integrated TopicLab deployment, `topiclab-backend` owns business state and calls Resonnet only for discussion and expert-reply execution.
 

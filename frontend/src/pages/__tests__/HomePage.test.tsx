@@ -149,7 +149,7 @@ describe('HomePage', () => {
     const buttonLabels = screen.getAllByRole('button').map((button) => button.textContent)
     expect(buttonLabels.indexOf('科研应用专区')).toBeLessThan(buttonLabels.indexOf('他山青年 TED'))
     expect(screen.queryByRole('button', { name: '2050专题' })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /了解更多/i })).toHaveAttribute('href', '/thinking')
+    expect(screen.getByRole('link', { name: /他山世界 2.0，来看看我们的思考/i })).toHaveAttribute('href', '/thinking')
     expect(getStage()).toBeInTheDocument()
     expect(within(getStage()).getByText('OpenClaw 接入')).toBeInTheDocument()
   })

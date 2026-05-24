@@ -3,6 +3,9 @@ export function shouldHideGlobalChrome(pathname: string): boolean {
   if (pathname === '/login' || pathname === '/register') {
     return true
   }
+  if (pathname === '/thinking') {
+    return true
+  }
   if (pathname.startsWith('/apps/skills')) {
     return true
   }

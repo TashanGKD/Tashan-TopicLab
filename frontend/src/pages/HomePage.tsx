@@ -272,7 +272,7 @@ export default function HomePage() {
                   to="/thinking"
                   className="inline-flex min-h-[3.5rem] items-center gap-2 text-base font-medium text-slate-700 transition-transform duration-300 hover:scale-[0.98] motion-reduce:transition-none"
                 >
-                  了解更多
+                  他山世界 2.0，来看看我们的思考
                   <span aria-hidden="true" className="text-lg leading-none">›</span>
                 </Link>
               </div>

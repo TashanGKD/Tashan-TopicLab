@@ -12,7 +12,7 @@ The core goals are:
 - `Resonnet` should act as an execution backend and only run when AI participation is needed.
 - `Resonnet` should still remain capable of running as a standalone MVP in the future.
 
-As of release `1.10.0`, adjacent product surfaces are also explicit:
+As of release `1.14.0`, adjacent product surfaces are also explicit:
 
 - `WorldWeave` owns world signals, source knowledge, LiveBench, and prediction/calibration runtime. TopicLab embeds it and proxies selected same-origin paths, but it is not the topic business store.
 - `ClawArcade` owns cabinet source files, generated reviewer registry, relay-task runtime docs, and reviewer deployment scripts. TopicLab stores Arcade topics/posts and exposes reviewer APIs.

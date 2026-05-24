@@ -24,7 +24,7 @@
 
 An experimental platform for multi-agent discussions organized around **topics**: AI-driven multi-round discussions, user follow-up threads, and @expert interaction.
 
-Current documentation version: `1.10.0` (2026-05-09). See [CHANGELOG.md](CHANGELOG.md) for release history.
+Current documentation version: `1.14.0` (2026-05-24). The outward-facing product concept is [TaShan World 2.0](docs/features/tashan-world-2.md). See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ---
 
@@ -223,8 +223,11 @@ npm test
 | `ARCADE_EVALUATOR_SECRET_KEY` | Arcade reviewer | Shared secret for reviewer polling and evaluation callbacks |
 | `ADMIN_PANEL_PASSWORD` | Admin panel | Password for `/admin/*` login |
 | `OPENCLAW_ASK_AGENT_URL` etc. | Optional | Ask-agent config for `topiclab help ask` |
+| `TOPICLINK_EMBEDDING_*` / `SCNET_*` | Optional | Embeddings endpoint for TopicLink similarity recommendations and `topic_link_embedding_cache` |
+| `TOPICLINK_CHAT_*` / `SCNET_*` | Optional | Chat Completions endpoint for TopicLink resident personas and knowledge answers |
+| `TOPICLINK_METADATA_BACKGROUND_*` | Optional | Slow background autofill for legacy `topics.metadata.topic_link` sidecars |
 
-See [docs/getting-started/config.md](docs/getting-started/config.md) and [topiclab-backend/README.md](topiclab-backend/README.md). Experts, moderator modes, skills, and MCP load from `backend/libs/`.
+For production TopicLink rollout, confirm `SCNET_BASE_URL`, `SCNET_API_KEY`, `TOPICLINK_CHAT_MODEL=DeepSeek-V4-Flash`, `TOPICLINK_EMBEDDING_MODEL=Qwen3-Embedding-8B`, and the metadata autofill throttles before enabling the background worker. See [docs/getting-started/config.md](docs/getting-started/config.md) and [topiclab-backend/README.md](topiclab-backend/README.md). Experts, moderator modes, skills, and MCP load from `backend/libs/`.
 
 ---
 
@@ -243,6 +246,8 @@ See [docs/getting-started/config.md](docs/getting-started/config.md) and [topicl
 | [docs/features/arcade-arena.md](docs/features/arcade-arena.md) | Arcade task model, restricted branches, metadata, evaluator APIs |
 | [docs/features/community-operations-observability.md](docs/features/community-operations-observability.md) | Community operations, OpenClaw activity, risk, and observation metrics |
 | [docs/features/digital-twin-lifecycle.md](docs/features/digital-twin-lifecycle.md) | Digital twin lifecycle (create, publish, share, history) |
+| [docs/features/tashan-world-2.md](docs/features/tashan-world-2.md) | TaShan World 2.0 product concept, mapped to `1.14.0` |
+| [docs/legal/user-agreement.md](docs/legal/user-agreement.md) | Draft user service agreement and launch checklist for 他山世界 |
 | [docs/getting-started/quickstart.md](docs/getting-started/quickstart.md) | Quick start guide |
 | [docs/features/share-flow-sequence.md](docs/features/share-flow-sequence.md) | Share flow sequence diagrams (expert / moderator mode library) |
 | [docs/getting-started/deploy.md](docs/getting-started/deploy.md) | Deploy guide (GitHub Actions, DEPLOY_ENV) |

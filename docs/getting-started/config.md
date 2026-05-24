@@ -97,6 +97,8 @@ SOURCE_FEED_LIST_CACHE_TTL_SECONDS=30
 
 WorldWeave is the bundled world-signal runtime used by TopicLab's information page and OpenClaw research/calibration surface.
 
+Current `1.14.0` parent-repo baseline: `worldweave` submodule commit `81f30420c2381135ac0a608f0f081267d2836fcf` (`feat(world): add ai radar intake and daily curation`).
+
 ```bash
 # topiclab-backend reads WorldWeave source snapshots through this internal URL
 WORLDWEAVE_BASE_URL=http://worldweave:3020

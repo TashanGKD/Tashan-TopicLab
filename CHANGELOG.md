@@ -9,6 +9,114 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - No unreleased changes yet.
 
+## [1.14.0] - 2026-05-24
+
+Product concept: 他山世界 2.0.
+
+### Added
+
+**TopicLab**
+
+- Added TopicLink plaza/detail surfaces, persona discussion modules, profile-aware behavior, similarity recommendations, resident answers, and backend metadata autofill for legacy topics through a slow background worker that only writes `topics.metadata.topic_link`.
+- Added a user-facing legal draft and launch checklist under `docs/legal/user-agreement.md`.
+
+### Changed
+
+**TopicLab**
+
+- Advanced the bundled `worldweave` submodule to `81f30420c2381135ac0a608f0f081267d2836fcf` for AI radar intake and daily curation updates.
+- TopicLink production deployment now documents SCNet shared credentials, chat/embedding model separation, metadata autofill throttles, and migration-safe embedding cache behavior.
+- OpenClaw and TopicLab smoke helpers now default away from production writes unless an explicit write opt-in is provided.
+
+### Fixed
+
+**TopicLab**
+
+- TopicLink no longer renders fake nearby participants when live data is empty, and default avatars remain uncropped.
+- Live OpenClaw and CLI smoke scripts avoid inheriting production database or write-capable endpoints by default.
+
+### Docs
+
+- Released the TopicLink, WorldWeave daily curation, legal draft, and smoke-hardening updates as `1.14.0`.
+- Defined 他山世界 2.0 as the outward-facing concept for the `1.14.0` product surface.
+- Synced root READMEs, doc index, architecture release markers, deployment guide, config guide, and env notes to the current TopicLink and WorldWeave deployment surface.
+- Commit range: `9c0f7ee..62472c4`.
+
+## [1.13.0] - 2026-05-22
+
+### Added
+
+**TopicLab**
+
+- Added the 灵感共创队 demand-tracking flow, including public clue walls, detail and submit pages, staged assistant refreshes, public-title generation, interest/sharing actions, admin delete support, and markdown detail rendering.
+- Added site asset update support for WeChat group QR codes, including QR upload pages and the local `wechat-group-qr-updater` skill workflow.
+- Added Youth TED poster carousel integration on the activity surface.
+
+### Changed
+
+**TopicLab**
+
+- Inspiration demand stages now treat the legacy demand-stage field explicitly as compatibility data while newer public clue fields become editable.
+- Updated inspiration co-creation visual assets, detail styling, footer QR presentation, homepage order, and related site copy.
+
+### Fixed
+
+**TopicLab**
+
+- Inspiration submission and detail flows now accept short demand submissions, restore feedback and next-stage suggestions, hide internal stage summaries, normalize path-stage progression, prevent prompt leakage in public summaries, preserve private-detail visibility, route signup intents without clues, scroll submitted clues to the top, and cache public clue overviews.
+- Feedback floating buttons were disabled where they no longer matched the current site flow.
+
+### Docs
+
+- Synced inspiration, QR asset, and public clue configuration into the active documentation set.
+- Commit range: `f913fa3..9c0f7ee`.
+
+## [1.12.0] - 2026-05-18
+
+### Changed
+
+**TopicLab**
+
+- Advanced bundled `worldweave` submodule baselines through the v2 launch pointer, mounted-navigation fix, flattened source embed shell, sanitized signal metadata, and Xia skill rollout.
+- The navigation and homepage copy now present the information surface as WorldWeave instead of a generic info link.
+
+### Fixed
+
+**TopicLab**
+
+- WorldWeave embedded routes stay under the mounted path, source embeds render with a flatter shell, and mounted-route checks now run in CI.
+
+### Docs
+
+- Commit range: `b46abf8..f913fa3`.
+
+## [1.11.0] - 2026-05-13
+
+### Added
+
+**TopicLab**
+
+- Added Youth TED activity publishing support, cached activity pages, question-bubble refinements, and the local `youth-ted-activity-publisher` skill workflow.
+- Added homepage information-column entries plus WorldWeave and Youth TED home cards.
+
+### Changed
+
+**TopicLab**
+
+- Advanced ClawArcade integration through reviewer Docker deployment, supported-source filtering, GPU-cabinet exclusion, retry handling, relay-history loading, and legacy reviewer shutdown during deploy.
+- Advanced the bundled `worldweave` submodule through refresh persistence and monitor-database separation.
+
+### Fixed
+
+**TopicLab**
+
+- Arcade deployment no longer starts stale reviewer processes, no longer attempts unsupported GPU cabinets on the CPU reviewer, and filters review queues to sources supported by the active reviewer.
+- WorldWeave refresh and dashboard signal flows were stabilized, including separate monitor database configuration.
+
+### Docs
+
+- Commit range: `7017b75..b46abf8`.
+
 ## [1.10.0] - 2026-05-09
 
 ### Added
