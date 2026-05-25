@@ -22,6 +22,7 @@ from app.storage.database.inspiration_store import (
     create_demand,
     delete_demand,
     get_demand_by_slug,
+    list_admin_demands_page,
     list_public_demands_page,
     set_demand_interest,
     update_demand_private,
@@ -124,6 +125,20 @@ def list_demands(
         offset=offset,
         include_interest=include_interest,
         include_overview=should_include_overview,
+    )
+
+
+@router.get("/admin/demands")
+def list_admin_demands(
+    include_private: bool = True,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    _user: dict = Depends(_require_admin),
+):
+    return list_admin_demands_page(
+        limit=limit,
+        offset=offset,
+        include_private=include_private,
     )
 
 

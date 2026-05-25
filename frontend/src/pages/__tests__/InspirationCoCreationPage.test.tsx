@@ -109,6 +109,14 @@ vi.mock('../../api/client', async () => {
   }
 })
 
+vi.mock('../../api/auth', async () => {
+  const actual = await vi.importActual<typeof import('../../api/auth')>('../../api/auth')
+  return {
+    ...actual,
+    refreshCurrentUserProfile: vi.fn(() => Promise.resolve(actual.tokenManager.getUser())),
+  }
+})
+
 function renderPage() {
   return render(
     <MemoryRouter>
@@ -134,6 +142,7 @@ describe('InspirationCoCreationPage', () => {
       'href',
       '/inspiration-co-creation/submit',
     )
+    expect(screen.queryByRole('link', { name: '管理员线索入口' })).not.toBeInTheDocument()
     expect(screen.getByText('真实问题提出者')).toBeInTheDocument()
     expect(screen.getByText('AI 应用开发者')).toBeInTheDocument()
     expect(screen.getByText('项目验证志愿者')).toBeInTheDocument()
@@ -302,5 +311,26 @@ describe('InspirationCoCreationPage', () => {
 
     expect(screen.queryByRole('button', { name: /显示需求 01 完整信息/ })).not.toBeInTheDocument()
     expect(screen.queryByText('18773233131')).not.toBeInTheDocument()
+  })
+
+  it('shows the hidden admin clue entrance only to admins', async () => {
+    localStorage.setItem('auth_token', 'admin-token')
+    localStorage.setItem(
+      'auth_user',
+      JSON.stringify({
+        id: 1,
+        phone: 'admin',
+        username: '管理员',
+        is_admin: true,
+        created_at: '2026-05-18T00:00:00Z',
+      }),
+    )
+
+    renderPage()
+
+    expect(await screen.findByRole('link', { name: '管理员线索入口' })).toHaveAttribute(
+      'href',
+      '/inspiration-co-creation/admin/needs',
+    )
   })
 })

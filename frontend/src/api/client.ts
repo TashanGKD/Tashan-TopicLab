@@ -696,6 +696,7 @@ export interface InspirationDemand {
   slug: string
   clue_number?: number | null
   status: string
+  allow_public?: boolean
   /**
    * @deprecated Legacy demand-level stage kept for older records and fallback UI.
    * Use path_progress and update stage_key/stage_status for current stage display.
@@ -981,6 +982,21 @@ export const inspirationApi = {
     if (params?.offset != null) searchParams.set('offset', String(params.offset))
     const qs = searchParams.toString()
     return api.get<InspirationDemandListResponse>(`v1/inspiration/demands${qs ? `?${qs}` : ''}`, {
+      signal: options?.signal,
+    })
+  },
+  listAdminDemands: (
+    params?: { includePrivate?: boolean; limit?: number; offset?: number },
+    options?: { signal?: AbortSignal },
+  ) => {
+    const searchParams = new URLSearchParams()
+    if (params?.includePrivate != null) {
+      searchParams.set('include_private', params.includePrivate ? 'true' : 'false')
+    }
+    if (params?.limit != null) searchParams.set('limit', String(params.limit))
+    if (params?.offset != null) searchParams.set('offset', String(params.offset))
+    const qs = searchParams.toString()
+    return api.get<InspirationDemandListResponse>(`v1/inspiration/admin/demands${qs ? `?${qs}` : ''}`, {
       signal: options?.signal,
     })
   },

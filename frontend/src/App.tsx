@@ -31,6 +31,7 @@ import TopicLinkDetailPage from './pages/TopicLinkDetailPage'
 import ThinkingPage from './pages/ThinkingPage'
 import YouthTedPage from './pages/YouthTedPage'
 import InspirationCoCreationPage from './pages/InspirationCoCreationPage'
+import InspirationAdminNeedsPage from './pages/InspirationAdminNeedsPage'
 import InspirationSubmitPage from './pages/InspirationSubmitPage'
 import InspirationNeedDetailPage from './pages/InspirationNeedDetailPage'
 import WechatGroupQrPage from './pages/WechatGroupQrPage'
@@ -70,6 +71,7 @@ function App() {
             <Route path="/source-feed/:section" element={<SourceFeedPage />} />
             <Route path="/youth-ted" element={<YouthTedPage />} />
             <Route path="/inspiration-co-creation" element={<InspirationCoCreationPage />} />
+            <Route path="/inspiration-co-creation/admin/needs" element={<InspirationAdminNeedsPage />} />
             <Route path="/inspiration-co-creation/submit" element={<InspirationSubmitPage />} />
             <Route path="/inspiration-co-creation/needs/:slug" element={<InspirationNeedDetailPage />} />
             <Route path="/wechat-group-qr" element={<Navigate to="/qr/lggc-wechat-group" replace />} />

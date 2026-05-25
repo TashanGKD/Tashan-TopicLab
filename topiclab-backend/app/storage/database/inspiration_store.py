@@ -1279,6 +1279,111 @@ def list_public_demands_page(
         return payload
 
 
+def _count_admin_demands(session) -> int:
+    row = session.execute(
+        text(
+            """
+            SELECT COUNT(*) AS total
+            FROM inspiration_demands
+            """
+        )
+    ).first()
+    return int(row.total or 0) if row else 0
+
+
+def _fetch_admin_demand_rows(session, *, limit: int, offset: int):
+    return session.execute(
+        text(
+            """
+            WITH latest_updates AS (
+                SELECT demand_id, MAX(updated_at) AS latest_update_at
+                FROM inspiration_demand_updates
+                GROUP BY demand_id
+            )
+            SELECT d.id, d.slug, d.clue_number, d.status, d.stage, d.owner_user_id,
+                   d.allow_public, d.public_title, d.public_summary, d.public_tags,
+                   d.public_stuck, d.private_json, d.llm_review_json, d.assistant_status,
+                   d.assistant_snapshot_json, d.assistant_version, d.assistant_latest_run_id,
+                   d.assistant_updated_at, d.assistant_error_message, d.claim_token,
+                   d.claimed_at, d.redaction_method, d.redaction_status, d.redaction_notes,
+                   d.created_at, d.updated_at,
+                   COALESCE(l.latest_update_at, d.updated_at, d.created_at) AS latest_update_at
+            FROM inspiration_demands d
+            LEFT JOIN latest_updates l ON l.demand_id = d.id
+            ORDER BY latest_update_at DESC, d.clue_number ASC, d.slug ASC
+            LIMIT :limit OFFSET :offset
+            """
+        ),
+        {"limit": limit, "offset": offset},
+    ).fetchall()
+
+
+def _serialize_admin_demand_items(session, rows, *, include_private: bool) -> list[dict[str, Any]]:
+    demand_ids = [row.id for row in rows]
+    updates_by_demand: dict[str, list[dict[str, Any]]] = {}
+    if demand_ids:
+        update_rows = session.execute(
+            text(
+                """
+                SELECT id, demand_id, week_label, summary, progress, blockers, next_steps,
+                       stage_key, stage_status, emotion_note, artifacts_json, visibility, created_at, updated_at
+                FROM inspiration_demand_updates
+                WHERE demand_id IN :demand_ids
+                ORDER BY updated_at DESC, created_at DESC
+                """
+            ).bindparams(bindparam("demand_ids", expanding=True)),
+            {"demand_ids": demand_ids},
+        ).fetchall()
+        for update in update_rows:
+            updates_by_demand.setdefault(update.demand_id, []).append(
+                _serialize_update(update, include_private_artifacts=True)
+            )
+
+    items = []
+    for row in rows:
+        updates = updates_by_demand.get(row.id, [])
+        assistant = _serialize_assistant(row)
+        item = {
+            **_serialize_public(row),
+            "allow_public": bool(getattr(row, "allow_public", False)),
+            "can_view_private": True,
+            "can_update": True,
+            "updates": updates,
+            "path_progress": _build_path_progress(row, updates),
+            "assistant": assistant,
+            "llm_review": assistant["snapshot"] or _json_loads(row.llm_review_json, {}),
+            "interest": _serialize_interest_for_demand(session, row.id, user=None),
+        }
+        if include_private:
+            item["private"] = _json_loads(row.private_json, {})
+        items.append(item)
+    return items
+
+
+def list_admin_demands_page(
+    *,
+    limit: int = 50,
+    offset: int = 0,
+    include_private: bool = True,
+) -> dict[str, Any]:
+    normalized_limit = max(1, min(int(limit), 100))
+    normalized_offset = max(0, int(offset))
+    with get_db_session() as session:
+        ensure_inspiration_schema_and_seed_for_session(session)
+        total = _count_admin_demands(session)
+        rows = _fetch_admin_demand_rows(session, limit=normalized_limit, offset=normalized_offset)
+        items = _serialize_admin_demand_items(session, rows, include_private=include_private)
+        next_offset = normalized_offset + len(items)
+        return {
+            "list": items,
+            "limit": normalized_limit,
+            "offset": normalized_offset,
+            "total": total,
+            "has_more": next_offset < total,
+            "next_offset": next_offset if next_offset < total else None,
+        }
+
+
 def get_demand_by_slug(slug: str, *, user: dict[str, Any] | None = None, include_private: bool = False) -> dict[str, Any] | None:
     with get_db_session() as session:
         ensure_inspiration_schema_and_seed_for_session(session)

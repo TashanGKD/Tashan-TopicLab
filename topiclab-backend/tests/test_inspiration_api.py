@@ -251,6 +251,57 @@ def test_inspiration_private_submission_is_hidden_until_claimed(client):
     assert private_detail.json()["demand"]["private"]["contact"] == "private@example.com"
 
 
+def test_inspiration_admin_demand_list_includes_private_rows_and_requires_admin(client, monkeypatch):
+    test_client, auth_module = client
+    monkeypatch.setenv("ADMIN_USER_IDS", "1")
+    payload = {
+        "submitter_name": "隐藏提出者",
+        "participation_mode": "我有一个真实问题，需要拆解初步方案",
+        "contact": "hidden@example.com",
+        "problem": "我想提交一条只给管理员看的灵感共创线索。",
+        "category": "生活效率 / 个人工作流",
+        "current_blockers": "不希望先公开",
+        "note": "管理员先看。",
+        "allow_public": False,
+    }
+    created = test_client.post("/api/v1/inspiration/demands", json=payload)
+    assert created.status_code == 200
+    slug = created.json()["demand"]["slug"]
+
+    anonymous = test_client.get("/api/v1/inspiration/admin/demands?limit=50")
+    assert anonymous.status_code == 401
+
+    user_token = auth_module.create_jwt_token(2, "13800138002")
+    forbidden = test_client.get(
+        "/api/v1/inspiration/admin/demands?limit=50",
+        headers={"Authorization": f"Bearer {user_token}"},
+    )
+    assert forbidden.status_code == 403
+
+    admin_token = auth_module.create_jwt_token(1, "13800138000", is_admin=True)
+    listed = test_client.get(
+        "/api/v1/inspiration/admin/demands?limit=50&include_private=true",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+
+    assert listed.status_code == 200
+    payload = listed.json()
+    private_item = next(item for item in payload["list"] if item["slug"] == slug)
+    assert private_item["status"] == "private"
+    assert private_item["allow_public"] is False
+    assert private_item["can_view_private"] is True
+    assert private_item["private"]["contact"] == "hidden@example.com"
+    assert private_item["private"]["problem"] == "我想提交一条只给管理员看的灵感共创线索。"
+
+    without_private = test_client.get(
+        "/api/v1/inspiration/admin/demands?limit=50&include_private=false",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert without_private.status_code == 200
+    compact_item = next(item for item in without_private.json()["list"] if item["slug"] == slug)
+    assert "private" not in compact_item
+
+
 def test_inspiration_admin_can_view_private_and_create_update(client, monkeypatch):
     test_client, auth_module = client
     monkeypatch.setenv("ADMIN_USER_IDS", "1")

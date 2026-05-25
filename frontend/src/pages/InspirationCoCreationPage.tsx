@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { inspirationApi, type InspirationDemand, type InspirationDemandOverview } from '../api/client'
+import { refreshCurrentUserProfile, tokenManager, type User } from '../api/auth'
 
 const SUBMISSION_PATH = '/inspiration-co-creation/submit'
 const POSTER_URL = '/media/inspiration-co-creation/poster.webp'
@@ -524,6 +525,7 @@ function DemandCard({ need, index }: DemandCardProps) {
 }
 
 export default function InspirationCoCreationPage() {
+  const [currentUser, setCurrentUser] = useState<User | null>(() => tokenManager.getUser())
   const [demands, setDemands] = useState<InspirationDemand[]>(fallbackDemands)
   const [overview, setOverview] = useState<DemandOverviewData>(() => buildDemandOverview(fallbackDemands))
   const [pagination, setPagination] = useState<{ total: number; hasMore: boolean; nextOffset: number | null }>({
@@ -538,6 +540,22 @@ export default function InspirationCoCreationPage() {
     () => distributeIntoMasonryColumns(sortDemandsByLatestUpdate(demands), masonryColumnCount),
     [demands, masonryColumnCount],
   )
+
+  useEffect(() => {
+    let cancelled = false
+    if (!tokenManager.get()) {
+      setCurrentUser(null)
+      return () => {
+        cancelled = true
+      }
+    }
+    refreshCurrentUserProfile().then((user) => {
+      if (!cancelled) setCurrentUser(user)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -634,6 +652,14 @@ export default function InspirationCoCreationPage() {
                 填写需求/想法表单
                 <span aria-hidden="true" className="ml-2 text-base leading-none">›</span>
               </a>
+              {currentUser?.is_admin ? (
+                <Link
+                  to="/inspiration-co-creation/admin/needs"
+                  className="inline-flex min-h-11 items-center justify-center rounded-full border border-teal-700/30 bg-white px-5 py-2.5 text-sm font-semibold text-teal-800 transition hover:-translate-y-0.5 hover:border-teal-700/60"
+                >
+                  管理员线索入口
+                </Link>
+              ) : null}
             </div>
             <div
               className="mt-4 max-w-xl text-sm font-medium leading-7 text-slate-500"
