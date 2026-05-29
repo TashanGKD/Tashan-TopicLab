@@ -328,7 +328,7 @@ TopicLink 后台补齐会在后端启动后延迟约 20 秒开始，每轮默认
 
 ## 贡献
 
-欢迎贡献！详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+欢迎贡献！详见 [CONTRIBUTING.md](CONTRIBUTING.md)。贡献者名单见 [CONTRIBUTORS.md](CONTRIBUTORS.md)。
 
 - **代码**：遵循项目风格，新逻辑需有对应测试
 - **Git / PR 规范**：提交、整理 PR、改写 commit message 或保留贡献者身份前，先阅读 [.codex/skills/git-commit-conventions/SKILL.md](.codex/skills/git-commit-conventions/SKILL.md)

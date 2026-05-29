@@ -295,7 +295,7 @@ See [backend/docs/api-reference.md](backend/docs/api-reference.md), [docs/archit
 
 ## Contributing
 
-Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).
+Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md). See [CONTRIBUTORS.md](CONTRIBUTORS.md) for the contributor list.
 
 - **Code**: Follow project style; new logic needs tests
 - **Git / PR conventions**: Before committing, cleaning up PR history, rewriting commit messages, or preserving a contributor identity, read [.codex/skills/git-commit-conventions/SKILL.md](.codex/skills/git-commit-conventions/SKILL.md)
