@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react'
+import mascotSheetUrl from '../assets/capybara-mascots.webp'
 
 type DefaultAvatarProps = {
   name?: string
@@ -10,7 +11,7 @@ type DefaultAvatarProps = {
 const MASCOT_COLUMNS = 9
 const MASCOT_ROWS = 6
 const MASCOT_COUNT = MASCOT_COLUMNS * MASCOT_ROWS
-const MASCOT_SHEET_URL = `${import.meta.env.BASE_URL}media/capybara-mascots.png`
+const MASCOT_SHEET_URL = mascotSheetUrl
 
 function hashName(value: string) {
   return Array.from(value).reduce((sum, char, index) => sum + char.charCodeAt(0) * (index + 7), 0)

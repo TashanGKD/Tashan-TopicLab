@@ -28,3 +28,18 @@ describe('nginx OpenClaw proxy ownership', () => {
     },
   )
 })
+
+describe('nginx static asset caching', () => {
+  it.each([
+    ['nginx.conf', 'location /topic-lab/assets/'],
+    ['nginx.root.conf', 'location /assets/'],
+  ])(
+    'serves hashed Vite assets with immutable browser caching in %s',
+    (path, assetLocation) => {
+      const config = readFrontendFile(path)
+
+      expect(config).toContain(assetLocation)
+      expect(config).toContain('Cache-Control "public, max-age=31536000, immutable"')
+    },
+  )
+})

@@ -187,6 +187,21 @@ describe('TopicLinkPage', () => {
     expect(screen.queryByPlaceholderText('搜索话题')).not.toBeInTheDocument()
   })
 
+  it('loads the plaza map from a bundled webp asset', async () => {
+    render(
+      <MemoryRouter initialEntries={['/topiclink']}>
+        <TopicLinkPage />
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('关于「Skill 的质量信号缺失」')
+
+    const mapImage = document.querySelector('.topiclink-plaza-surface img')
+    expect(mapImage).not.toBeNull()
+    expect(mapImage?.getAttribute('src')).toMatch(/topic-plaza-map.*\.webp$/)
+    expect(mapImage?.getAttribute('src')).not.toBe('/media/topic-plaza-map.png')
+  })
+
   it('shows knowledge search results without replacing the selected table until clicked', async () => {
     render(
       <MemoryRouter initialEntries={['/topiclink']}>

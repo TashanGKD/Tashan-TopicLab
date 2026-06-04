@@ -44,6 +44,7 @@ import {
 import { TopicPlazaSidebar } from '../topicLink/TopicPlazaSidebar'
 import { TOPIC_LINK_SKILL_SEARCH_HINTS } from '../topicLink/topicLinkSkill'
 import { useTopicLinkRecommendations } from '../topicLink/useTopicLinkRecommendations'
+import topicPlazaMapUrl from '../assets/topic-plaza-map.webp'
 
 const PAGE_SIZE = 20
 const INITIAL_TOPIC_PAGE_SIZE = 80
@@ -583,7 +584,7 @@ function TopicPlazaMap({
       <div className="relative h-[calc(100vh-6.5rem)] min-h-[45rem]">
         <div className="pointer-events-none absolute inset-0">
           <img
-            src="/media/topic-plaza-map.png"
+            src={topicPlazaMapUrl}
             alt=""
             className="h-full w-full object-cover opacity-[0.98] saturate-[1.13] contrast-[1.07] brightness-[0.98]"
           />
