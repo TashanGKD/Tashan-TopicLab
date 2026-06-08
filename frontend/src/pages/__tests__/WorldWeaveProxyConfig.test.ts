@@ -25,6 +25,7 @@ describe('WorldWeave nginx proxy config', () => {
     expect(config).toContain('location = /signals')
     expect(config).toContain('location /signals/')
     expect(config).toContain('location /source-knowledge')
+    expect(config).toContain('location /demo/')
     expect(config).toContain('location = /daily')
     expect(config).toContain('location /daily/')
     expect(config).toContain('location = /livebench')

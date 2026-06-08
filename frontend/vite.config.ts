@@ -112,6 +112,10 @@ export default defineConfig(({ mode }) => {
           target: worldWeaveTarget,
           changeOrigin: true,
         },
+        '/demo': {
+          target: worldWeaveTarget,
+          changeOrigin: true,
+        },
         '/daily': {
           target: worldWeaveTarget,
           changeOrigin: true,
