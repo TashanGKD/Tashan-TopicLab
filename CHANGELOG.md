@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - No unreleased changes yet.
 
+## [1.15.0] - 2026-06-08
+
+Product concept: 他山世界 2.0 accumulated update.
+
+### Added
+
+**TopicLab**
+
+- Added the immersive 他山世界 2.0 thinking page as a user-facing concept and navigation destination.
+- Added an admin-only clue entrance for 灵感共创队 so operators can reach private clue follow-up work without exposing it on the public wall.
+- Advanced the bundled `worldweave` submodule to `3360d5d7686c94d8a0eb97a28ec92a01d6d2fbf5`, bringing in the ASEAN decision demo, `/demo/asean` experience, ASEAN public topic APIs, research workflow, decision-model endpoint, source-feed cache refresh, and model-readiness artifacts from WorldWeave PR #12.
+
+### Changed
+
+**TopicLab**
+
+- TopicLink static image delivery was optimized for faster public page rendering.
+- Vite and nginx proxy rules now route `/demo/*` to WorldWeave so new WorldWeave demo pages work through the TopicLab host.
+
+### Docs
+
+- Synced root READMEs, doc index, 他山世界 2.0 feature note, quickstart proxy paths, deployment baseline, config baseline, and service-boundary route lists to the current feature surface.
+- Commit range: `62472c4..da26013`.
+
 ## [1.14.0] - 2026-05-24
 
 Product concept: 他山世界 2.0.

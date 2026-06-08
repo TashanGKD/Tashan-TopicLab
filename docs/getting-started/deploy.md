@@ -55,7 +55,7 @@ OpenClaw ask-agent is optional. Configure `OPENCLAW_ASK_AGENT_URL`, `OPENCLAW_AS
 - `MINIMAX_BASE_URL=https://api.scnet.cn/api/llm/v1`
 - `WORLDWEAVE_DATABASE_URL`: optional Postgres monitor sink for WorldWeave source refresh runs, source-health snapshots, and current signal rows
 
-The `1.14.0` deployment baseline points the `worldweave` submodule at `81f30420c2381135ac0a608f0f081267d2836fcf` (`feat(world): add ai radar intake and daily curation`). If production shows an older WorldWeave surface after deploy, check that the parent repository checkout includes this submodule pointer and that `git submodule update --init --recursive` ran successfully on the host.
+The `1.15.0` deployment baseline points the `worldweave` submodule at `3360d5d7686c94d8a0eb97a28ec92a01d6d2fbf5` (WorldWeave PR #12, ASEAN decision demo). If production shows an older WorldWeave surface after deploy, check that the parent repository checkout includes this submodule pointer and that `git submodule update --init --recursive` ran successfully on the host.
 
 The public `worldweave` service is cache-first. Heavy source refresh runs in the separate `worldweave-refresh` service through `node scripts/world-source-refresh-daemon.mjs`, with `WORLD_SOURCE_REFRESH_MANAGE_WORKER=1` so it starts an internal heavy-refresh worker in the same container. Do not set `WORLD_BATCH_REFRESH_BASE_URL` to the public `worldweave` service in production.
 

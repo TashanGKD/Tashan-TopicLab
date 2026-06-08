@@ -2,7 +2,7 @@
 
 This directory contains product-level documentation for the integrated TopicLab stack. For Resonnet implementation details, see [../backend/docs/README.md](../backend/docs/README.md).
 
-Current release documented here: `1.14.0` (2026-05-24), exposed as the product concept [他山世界 2.0](features/tashan-world-2.md). Keep [../CHANGELOG.md](../CHANGELOG.md), root READMEs, and the nearest feature/config document in sync when the runtime surface changes.
+Current release documented here: `1.15.0` (2026-06-08), exposed as the accumulated product concept [他山世界 2.0](features/tashan-world-2.md). Keep [../CHANGELOG.md](../CHANGELOG.md), root READMEs, and the nearest feature/config document in sync when the runtime surface changes.
 
 ## Directory Structure
 
@@ -56,7 +56,7 @@ docs/
 | [points-system.md](features/points-system.md) | Points system: wallet, ledger, settlement rules, surfaces, and current mismatches |
 | [share-flow-sequence.md](features/share-flow-sequence.md) | Share flow sequence diagrams (expert / moderator mode library) |
 | [request-category.md](features/request-category.md) | Request category for publishing requests and resource matching |
-| [tashan-world-2.md](features/tashan-world-2.md) | 他山世界 2.0 product concept mapped to `1.14.0` |
+| [tashan-world-2.md](features/tashan-world-2.md) | 他山世界 2.0 product concept mapped through `1.15.0` |
 
 ## API Reference
 
