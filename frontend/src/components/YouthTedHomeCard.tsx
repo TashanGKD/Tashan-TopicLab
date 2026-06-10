@@ -38,7 +38,7 @@ export default function YouthTedHomeCard() {
 
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[11px] leading-5 sm:text-[12px] sm:leading-6" style={{ color: theme.bodyColor }}>
           {YOUTH_TED_POINTS.map((item, index) => (
-            <span key={item}>
+            <span key={item} className="whitespace-nowrap">
               {item}
               {index < YOUTH_TED_POINTS.length - 1 ? <span className="mx-2" style={{ color: theme.mutedText }}>/</span> : null}
             </span>
