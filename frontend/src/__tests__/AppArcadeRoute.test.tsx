@@ -99,7 +99,7 @@ describe('App arcade topic route', () => {
     expect(screen.getByText('Youth TED Route')).toBeInTheDocument()
   })
 
-  it('routes the Challenge Cup topic page without global chrome', () => {
+  it('routes the Challenge Cup topic page with global chrome', () => {
     render(
       <MemoryRouter initialEntries={['/challenge-cup-topic']}>
         <App />
@@ -107,9 +107,9 @@ describe('App arcade topic route', () => {
     )
 
     expect(screen.getByText('Challenge Cup Topic Route')).toBeInTheDocument()
-    expect(screen.queryByTestId('top-nav')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('footer')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('floating-actions')).not.toBeInTheDocument()
+    expect(screen.getByTestId('top-nav')).toBeInTheDocument()
+    expect(screen.getByTestId('footer')).toBeInTheDocument()
+    expect(screen.getByTestId('floating-actions')).toBeInTheDocument()
   })
 
   it('routes the inspiration co-creation page', () => {

@@ -12,7 +12,7 @@ describe('shouldHideGlobalChrome', () => {
     expect(shouldHideGlobalChrome('/thinking')).toBe(true)
   })
 
-  it('hides global chrome on the Challenge Cup topic page', () => {
-    expect(shouldHideGlobalChrome('/challenge-cup-topic')).toBe(true)
+  it('keeps global chrome on the Challenge Cup topic page', () => {
+    expect(shouldHideGlobalChrome('/challenge-cup-topic')).toBe(false)
   })
 })
