@@ -274,6 +274,35 @@
       transform: translate3d(0, 0, 0);
     }
   }
+
+  @keyframes challengeHeroRise {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 18px, 0);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
+  @keyframes challengeQuestionStream {
+    from {
+      transform: translate3d(0, 0, 0);
+    }
+    to {
+      transform: translate3d(calc(-33.333% - 0.66rem), 0, 0);
+    }
+  }
+
+  @keyframes challengeQuestionStreamReverse {
+    from {
+      transform: translate3d(calc(-33.333% - 0.66rem), 0, 0);
+    }
+    to {
+      transform: translate3d(0, 0, 0);
+    }
+  }
   
   .animate-spin {
     animation: spin 0.8s linear infinite;
@@ -341,6 +370,65 @@
 
   .thinking-logo {
     animation: thinkingLogoFloat 7s ease-in-out infinite;
+  }
+
+  .challenge-hero-copy {
+    animation: challengeHeroRise 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .challenge-hero-questions {
+    animation: challengeHeroRise 720ms cubic-bezier(0.22, 1, 0.36, 1) 120ms both;
+  }
+
+  .challenge-question-stream {
+    mask-image: linear-gradient(90deg, #000 0, #000 94%, transparent 100%);
+  }
+
+  .challenge-question-stream-row {
+    display: flex;
+    width: max-content;
+    gap: 0.9rem;
+    animation: challengeQuestionStream 42s linear infinite;
+    will-change: transform;
+  }
+
+  .challenge-question-stream-row:nth-child(1) {
+    margin-left: 1.4rem;
+  }
+
+  .challenge-question-stream-row:nth-child(2) {
+    margin-left: -2.6rem;
+    opacity: 0.82;
+  }
+
+  .challenge-question-stream-row:nth-child(3) {
+    margin-left: 3.2rem;
+    opacity: 0.7;
+  }
+
+  .challenge-question-stream-row-reverse {
+    animation-name: challengeQuestionStreamReverse;
+    animation-duration: 48s;
+  }
+
+  .challenge-question-stream-row-slow {
+    animation-duration: 56s;
+  }
+
+  .challenge-question-stream:hover .challenge-question-stream-row {
+    animation-play-state: paused;
+  }
+
+  .challenge-question-text {
+    display: inline-flex;
+    align-items: center;
+    min-height: 3.1rem;
+    white-space: nowrap;
+    padding: 0.4rem 0.18rem;
+    color: rgba(15, 23, 42, 0.72);
+    font-size: 1.14rem;
+    line-height: 1.35;
+    text-shadow: 0 10px 34px rgba(14, 165, 233, 0.18);
   }
 
   .thinking-page-shell {
@@ -472,7 +560,10 @@
     .thinking-orbit,
     .thinking-rail-glow,
     .thinking-arrival-wash,
-    .thinking-pillar {
+    .thinking-pillar,
+    .challenge-hero-copy,
+    .challenge-hero-questions,
+    .challenge-question-stream-row {
       animation: none !important;
     }
   }
