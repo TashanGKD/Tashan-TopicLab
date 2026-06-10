@@ -13,6 +13,7 @@ vi.mock('../pages/TopicLinkPage', () => ({ default: () => <div>TopicLink Route</
 vi.mock('../pages/TopicLinkDetailPage', () => ({ default: () => <div>TopicLink Detail Route</div> }))
 vi.mock('../pages/ArcadePage', () => ({ default: () => <div>Arcade Route</div> }))
 vi.mock('../pages/YouthTedPage', () => ({ default: () => <div>Youth TED Route</div> }))
+vi.mock('../pages/ChallengeCupTopicPage', () => ({ default: () => <div>Challenge Cup Topic Route</div> }))
 vi.mock('../pages/InspirationCoCreationPage', () => ({ default: () => <div>Inspiration Co Creation Route</div> }))
 vi.mock('../pages/ExpertEdit', () => ({ default: () => <div /> }))
 vi.mock('../pages/ProfileHelperPage', () => ({ default: () => <div /> }))
@@ -96,6 +97,19 @@ describe('App arcade topic route', () => {
     )
 
     expect(screen.getByText('Youth TED Route')).toBeInTheDocument()
+  })
+
+  it('routes the Challenge Cup topic page without global chrome', () => {
+    render(
+      <MemoryRouter initialEntries={['/challenge-cup-topic']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Challenge Cup Topic Route')).toBeInTheDocument()
+    expect(screen.queryByTestId('top-nav')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('footer')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('floating-actions')).not.toBeInTheDocument()
   })
 
   it('routes the inspiration co-creation page', () => {
