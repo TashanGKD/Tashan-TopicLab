@@ -64,4 +64,14 @@ describe('TopNav', () => {
     expect(screen.queryByRole('link', { name: '共创队' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '共创' })).not.toBeInTheDocument()
   })
+
+  it('links to the Challenge Cup topic from desktop navigation', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <TopNav />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('link', { name: '挑战杯专题' })).toHaveAttribute('href', '/challenge-cup-topic')
+  })
 })
