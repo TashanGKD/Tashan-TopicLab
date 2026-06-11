@@ -8,19 +8,19 @@ const actionCards = [
   {
     eyebrow: 'TopicLab',
     title: '发起一个科学问题',
-    body: 'Science 题目、挑战杯题目、自选问题，都能成为他山世界里的公开话题。',
+    body: '无论是Science题目、挑战杯任务还是自选课题，都能在他山世界发起公开讨论。',
     prompt: `接入 ${OPENCLAW_SKILL_URL}\n围绕“为什么存在黑洞？”发起他山世界话题，请天文、物理方向的数字分身列出资料和疑问。`,
   },
   {
     eyebrow: '世界脉络',
     title: '定制前沿日报',
-    body: '每天固定整理一批资料，用来跟踪前沿 AI、科学发现和地缘动态。',
+    body: '每天为你整理前沿AI、科学发现与地缘动态精选资讯',
     prompt: `接入 ${WORLDWEAVE_SKILL_URL}\n每天早上 8 点整理前沿 AI 动态，分成模型进展、AI4S、工具链和地缘政治。`,
   },
   {
     eyebrow: 'SkillHub',
     title: '构建领域 Skill',
-    body: '把资料来源、判断标准和输出格式写清楚，后面的人也能复用。',
+    body: '将资料来源、判断标准和输出格式明确写入，后续参与者也能复用该方法。',
     prompt: `接入 ${OPENCLAW_SKILL_URL}\n围绕“AI 会重新定义化学吗？”写一个领域 skill，规定资料来源、输出格式和评测方式。`,
   },
   {
@@ -33,43 +33,43 @@ const actionCards = [
 
 const gatewayCards = [
   {
-    eyebrow: 'Inspiration Co-creation',
-    title: '周五，灵感共创队',
-    body: '周五聚在一起处理真实题目。有人带需求，有人带代码，也有人只是带一个没想明白的问题。',
-    href: '/inspiration-co-creation',
-    image: '/media/inspiration-co-creation/poster.webp',
-    imageAlt: '灵感共创队活动海报',
-    meta: '每周五',
-    cta: '进入灵感共创队',
-  },
-  {
     eyebrow: 'Youth TED',
     title: '周三，他山青年 TED',
-    body: '周三聊前沿模型、Agent 工具和 AI4S。偏分享，也会落到手上的题目。',
+    body: '周三讨论前沿模型、Agent工具和AI4S，既分享知识，也聚焦实际问题。',
     href: '/youth-ted',
     image: youthTedPosterUrl,
     imageAlt: '他山青年 TED 活动海报',
     meta: '每周三 20:00',
     cta: '进入青年 TED',
   },
+  {
+    eyebrow: 'Inspiration Co-creation',
+    title: '周五，灵感共创队',
+    body: '周五聚在一起处理真实题目，大家带上需求、代码或未解的问题，一起解决真实挑战。',
+    href: '/inspiration-co-creation',
+    image: '/media/inspiration-co-creation/poster.webp',
+    imageAlt: '灵感共创队活动海报',
+    meta: '每周五',
+    cta: '进入灵感共创队',
+  },
 ]
 
 const questionSamples = [
   {
     title: '为什么存在黑洞？',
-    body: '观测证据和引力理论之间，仍有许多追问空间。',
+    body: '观测证据和引力理论之间仍有许多问题需要探索。',
   },
   {
     title: '宇宙由什么构成？',
-    body: '暗物质、暗能量、普通物质，各自有哪些证据。',
+    body: '暗物质、暗能量和普通物质各自的证据有哪些？',
   },
   {
     title: 'AI 会重新定义化学吗？',
-    body: '分子发现、实验设计和知识表示，都会被 AI 改写一部分。',
+    body: '分子发现、实验设计与知识表示都将被AI重塑。',
   },
   {
     title: '能量存储还差什么？',
-    body: '材料路线、成本和场景，哪一项最卡脖子。',
+    body: '材料路线、成本与应用场景中，哪一项最为关键。',
   },
   {
     title: '能预测下一次流行病吗？',
@@ -81,11 +81,11 @@ const questionSamples = [
   },
   {
     title: '拓扑量子计算能实现吗？',
-    body: '理论很漂亮，工程距离仍然现实。',
+    body: '理论虽优美，但工程实现仍面临现实挑战。',
   },
   {
     title: 'DNA 能存储信息吗？',
-    body: '保存时间、读写速度和成本，是绕不过去的账。',
+    body: '保存时间、读写速度与成本是必须考量的因素。',
   },
 ]
 
@@ -242,13 +242,13 @@ export default function ChallengeCupTopicPage() {
           <div className="challenge-hero-copy flex min-w-0 flex-col justify-center">
             <p className="text-xs font-semibold uppercase tracking-[0.26em] text-sky-700">Challenge Cup Topic</p>
             <h1 className="mt-5 max-w-3xl text-5xl font-semibold leading-[1.02] text-slate-950 sm:whitespace-nowrap sm:text-6xl lg:text-[4.55rem]">
-              虾的公众科学
+              挑战杯公众科学
             </h1>
             <p className="mt-6 max-w-xl text-2xl leading-9 text-slate-800 sm:text-[2rem] sm:leading-[1.35]">
-              真实问题，比工具更难得。
+              真实问题比工具更难找
             </p>
             <p className="mt-5 max-w-xl text-base leading-8 text-slate-600">
-              赛题六月底开始。Science 的 <span className="font-semibold text-slate-800">125 个前沿问题</span> 是一张题单，也欢迎带挑战杯里正在碰到的真实问题。我们关心的是问题能不能被看清楚、被讨论、被验证。
+              赛题将于六月底开始。Science期刊的<span className="font-semibold text-slate-800">125个前沿问题</span>组成一份题单，也欢迎带上你在挑战杯中遇到的真实问题。我们更关注问题是否清晰、讨论是否充分，以及验证是否有效。
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <a
@@ -278,7 +278,7 @@ export default function ChallengeCupTopicPage() {
         <SectionHeading
           eyebrow="工具接入"
           title="几个留下材料和过程的工具"
-          body="TopicLab、世界脉络、SkillHub 和 Arcade，分别承接话题、信源、方法和任务。"
+          body="TopicLab、世界脉络、SkillHub 和 Arcade 分别对应话题讨论、信息追踪、方法沉淀与任务实践。"
         />
 
         <div className="mt-10 grid min-w-0 gap-4 md:grid-cols-2">
@@ -298,7 +298,7 @@ export default function ChallengeCupTopicPage() {
           <div className="grid gap-8 lg:grid-cols-[0.88fr_1.12fr] lg:items-start">
             <SectionHeading
               eyebrow="科学问题样例"
-              title="问题从这些地方长出来"
+              title="好问题都这么来的"
               body="一段材料、一个疑问、一个实验想法，都可能成为讨论的起点。"
             />
             <div className="flex min-w-0 gap-3 overflow-x-auto pb-3 [scrollbar-width:thin]">
@@ -320,8 +320,8 @@ export default function ChallengeCupTopicPage() {
       <section id="weekly-discussion" className="mx-auto max-w-6xl px-5 py-14 sm:px-6 lg:px-8 lg:py-20">
         <SectionHeading
           eyebrow="每周讨论"
-          title="周三聊前沿，周五聊卡点"
-          body="有人带论文，有人带代码，也有人带一个没想明白的问题。形式不重要，问题要真实。"
+          title="周三前沿分享，周五难题攻关"
+          body="大家带着论文、代码或未解的问题参与讨论。形式不重要，关键问题是真实的。"
         />
         <ActivityGatewaySection />
       </section>
