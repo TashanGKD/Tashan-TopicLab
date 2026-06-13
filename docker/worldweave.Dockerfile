@@ -33,10 +33,11 @@ COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/src ./src
 COPY --from=builder /app/docs ./docs
 COPY --from=builder /app/research ./research
+COPY --from=builder /app/.cache/asean-training ./.seed-cache/asean-training
 COPY --from=builder /app/next.config.ts ./next.config.ts
 
 RUN mkdir -p .cache
 
 EXPOSE 3020
 
-CMD ["node", "scripts/world-start.mjs"]
+CMD ["sh", "-lc", "if [ -d /app/.seed-cache ]; then mkdir -p /app/.cache && cp -an /app/.seed-cache/. /app/.cache/; fi; node scripts/world-start.mjs"]
