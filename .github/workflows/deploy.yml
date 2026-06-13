@@ -97,6 +97,10 @@ jobs:
               fi
               sleep 2
             done
+            if ! docker compose exec -T worldweave sh -lc "WORLD_HEALTH_BASE_URL=http://127.0.0.1:3020 WORLD_HEALTH_CHECK_SCENES=tech-ai,geo-politics-daily WORLD_HEALTH_FAIL_ON_REFRESH_DEGRADED=1 node scripts/health-world.mjs"; then
+              echo "::warning::WorldWeave scene freshness health check failed. Check the worldweave-refresh logs and source refresh status."
+              docker compose logs --tail=120 worldweave-refresh || true
+            fi
             docker image prune -f
 
             # Read frontend port from .env (default 3000); trim whitespace/CRLF to avoid nginx config issues
