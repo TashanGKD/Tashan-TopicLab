@@ -8,6 +8,8 @@ const CONFIG_PATHS = [
   'nginx.conf',
 ] as const
 
+const WORLDWEAVE_DOCKERFILE_PATH = join(process.cwd(), '..', 'docker', 'worldweave.Dockerfile')
+
 function readConfig(path: (typeof CONFIG_PATHS)[number]) {
   return readFileSync(join(process.cwd(), path), 'utf-8')
 }
@@ -34,5 +36,13 @@ describe('WorldWeave nginx proxy config', () => {
     expect(config).toContain('proxy_set_header Host $http_host;')
     expect(config).not.toContain('host.docker.internal:5000')
     expect(config).not.toContain('host.docker.internal:3020')
+  })
+
+  it('seeds reviewed WorldWeave ASEAN model artifacts into the cache volume', () => {
+    const dockerfile = readFileSync(WORLDWEAVE_DOCKERFILE_PATH, 'utf-8')
+
+    expect(dockerfile).toContain('COPY --from=builder /app/.cache/asean-training ./.seed-cache/asean-training')
+    expect(dockerfile).toContain('cp -an /app/.seed-cache/. /app/.cache/')
+    expect(dockerfile).toContain('node scripts/world-start.mjs')
   })
 })
