@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { youthTedApi, type YouthTedActivity } from '../api/client'
+import { ProgramHero, ProgramSectionHeading } from '../components/publicProgram'
 
 const DETAILS_URL = 'https://mp.weixin.qq.com/s/KcXyglqEuaJ5PKMDLN1n1A'
 const PAST_ACTIVITIES_URL = 'https://tashan.ac.cn/homepage/activities'
@@ -234,29 +235,6 @@ function sortActivitiesNewestFirst(items: YouthTedActivity[]): YouthTedActivity[
   })
 }
 
-function SectionHeading({
-  eyebrow,
-  title,
-  action,
-  children,
-}: {
-  eyebrow: string
-  title: string
-  action?: ReactNode
-  children: ReactNode
-}) {
-  return (
-    <div className="max-w-3xl">
-      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-600">{eyebrow}</p>
-      <div className="mt-3 flex items-end gap-3">
-        <h2 className="text-3xl font-semibold leading-tight text-slate-950 sm:text-4xl">{title}</h2>
-        {action}
-      </div>
-      {children == null ? null : <p className="mt-5 text-base leading-8 text-slate-600">{children}</p>}
-    </div>
-  )
-}
-
 function ActivityScheduleItem({ item }: { item: YouthTedActivity }) {
   const questions = getActivityQuestions(item).slice(0, 10)
   const activityDate = splitActivityDate(getActivityDate(item))
@@ -400,87 +378,31 @@ export default function YouthTedPage() {
 
   return (
     <div className="bg-[#f6f8fb] text-slate-950">
-      <section
+      <ProgramHero
         id="concept"
-        className="relative isolate overflow-hidden border-b border-slate-200/70 bg-[#f8fbff] px-5 py-16 sm:px-8 lg:px-10 lg:py-20"
-      >
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,251,255,0.92)_55%,rgba(241,247,252,0.96)_100%)]"
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 right-0 -z-10 w-[66%] bg-[repeating-linear-gradient(150deg,rgba(2,132,199,0.12)_0_1px,transparent_1px_26px)] opacity-60 [mask-image:linear-gradient(to_left,black_0%,rgba(0,0,0,0.72)_42%,transparent_88%)]"
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute bottom-0 left-0 right-0 -z-10 h-40 bg-[linear-gradient(160deg,transparent_0_18%,rgba(2,132,199,0.10)_18.4%,transparent_19.2%_42%,rgba(15,118,110,0.08)_42.4%,transparent_43.2%_100%)] opacity-80"
-        />
-        <div className="relative mx-auto grid w-full max-w-6xl gap-10 lg:grid-cols-[minmax(0,0.92fr)_minmax(18rem,0.58fr)] lg:items-center lg:gap-16">
-          <div className="max-w-3xl">
-            <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
-              <h1 className="text-4xl font-semibold leading-tight text-slate-950 sm:text-5xl">
-                他山青年
-                <span className="ml-1 inline-block -translate-y-[0.9em] text-[0.42em] font-semibold leading-none text-slate-500">
-                  ®
-                </span>
-                <span className="ml-3">TED</span>
-              </h1>
-              <a
-                href={DETAILS_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="mb-1 inline-flex items-center gap-1 text-sm font-medium text-slate-500 transition hover:text-slate-800"
-              >
-                详情介绍
-                <span aria-hidden="true" className="text-base leading-none">›</span>
-              </a>
-            </div>
-            <p className="mt-5 max-w-2xl font-serif text-xl italic leading-9 text-slate-800 sm:text-2xl">
-              面向 AI 时代青年行动者的公益交流与共创计划。
-            </p>
-            <p className="mt-4 max-w-xl text-base leading-8 text-slate-600">
-              让正在行动的青年人被看见。让真实问题、早期项目和可复用方法在持续交流中被连接、验证、放大。
-            </p>
-            <div className="mt-7 flex flex-wrap items-center gap-3">
-              <a
-                href={SUBMISSION_FORM_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex min-h-11 items-center justify-center rounded-full bg-sky-700 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_16px_34px_rgba(2,132,199,0.22)] transition hover:-translate-y-0.5 hover:bg-sky-800"
-              >
-                提交真实问题 / 申请成为分享者
-                <span aria-hidden="true" className="ml-2 text-base leading-none">›</span>
-              </a>
-              <a
-                href={DETAILS_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex min-h-11 items-center justify-center rounded-full border border-sky-200 bg-white/70 px-5 py-2.5 text-sm font-semibold text-sky-800 backdrop-blur transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-white"
-              >
-                查看详情介绍
-              </a>
-            </div>
-            <div
-              className="mt-4 max-w-xl text-sm font-medium leading-7 text-slate-500"
-              aria-label="适合参与的人群"
-            >
-              {builderTypes.map((type, index) => (
-                <span key={type}>
-                  <span className="text-slate-700">{type}</span>
-                  {index < builderTypes.length - 1 ? <span className="mx-2 text-sky-500/70">/</span> : null}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <ActivityHeroCarousel activities={sortedActivities} status={activityStatus} />
-        </div>
-      </section>
+        accent="sky"
+        title={
+          <>
+            他山青年
+            <span className="ml-1 inline-block -translate-y-[0.9em] text-[0.42em] font-semibold leading-none text-slate-500">
+              ®
+            </span>
+            <span className="ml-3">TED</span>
+          </>
+        }
+        subtitle="面向 AI 时代青年行动者的公益交流与共创计划。"
+        body="让正在行动的青年人被看见。让真实问题、早期项目和可复用方法在持续交流中被连接、验证、放大。"
+        primaryCta={{ href: SUBMISSION_FORM_URL, label: '提交真实问题 / 申请成为分享者', external: true }}
+        secondaryCta={{ href: DETAILS_URL, label: '查看详情介绍', external: true, variant: 'secondary' }}
+        audience={builderTypes}
+        audienceLabel="适合参与的人群"
+        side={<ActivityHeroCarousel activities={sortedActivities} status={activityStatus} />}
+      />
 
       <section className="bg-white px-5 py-20 sm:px-8 lg:py-24">
         <div className="mx-auto w-full max-w-6xl">
-          <SectionHeading
+          <ProgramSectionHeading
+            accent="sky"
             eyebrow="ACTIVITIES"
             title="活动日程"
             action={
@@ -498,7 +420,7 @@ export default function YouthTedPage() {
             <span className="font-semibold text-slate-800">每周三晚八点线上持续交流</span>
             <span className="mx-2 text-slate-300">/</span>
             <span className="font-semibold text-slate-800">不定时北京线下活动</span>
-          </SectionHeading>
+          </ProgramSectionHeading>
           <div className="mt-10 space-y-8">
             {sortedActivities.map((item) => (
               <ActivityScheduleItem key={item.id} item={item} />

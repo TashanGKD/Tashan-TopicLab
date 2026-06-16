@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { inspirationApi, type InspirationDemand, type InspirationDemandOverview } from '../api/client'
 import { refreshCurrentUserProfile, tokenManager, type User } from '../api/auth'
+import { ProgramHero, ProgramPosterFrame } from '../components/publicProgram'
 
 const SUBMISSION_PATH = '/inspiration-co-creation/submit'
 const POSTER_URL = '/media/inspiration-co-creation/poster.webp'
@@ -621,68 +622,26 @@ export default function InspirationCoCreationPage() {
 
   return (
     <div className="bg-[#f6f9f8] text-slate-950">
-      <section className="relative isolate overflow-hidden border-b border-teal-100/80 bg-[#f8fcfb] px-5 py-14 sm:px-8 lg:px-10 lg:py-20">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(245,251,250,0.92)_58%,rgba(237,247,245,0.96)_100%)]"
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 right-0 -z-10 w-[58%] bg-[repeating-linear-gradient(145deg,rgba(13,148,136,0.12)_0_1px,transparent_1px_28px)] opacity-60 [mask-image:linear-gradient(to_left,black_0%,rgba(0,0,0,0.68)_44%,transparent_88%)]"
-        />
-        <div className="relative mx-auto grid w-full max-w-6xl gap-10 lg:grid-cols-[minmax(0,0.92fr)_minmax(18rem,0.58fr)] lg:items-center lg:gap-16">
-          <div className="max-w-3xl">
-            <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
-              <h1 className="text-4xl font-semibold leading-tight text-slate-950 sm:text-5xl">
-                灵感共创队
-              </h1>
-              <span className="mb-1 text-sm font-medium text-teal-700">AI+X 共创线索验证</span>
-            </div>
-            <p className="mt-5 max-w-2xl font-serif text-xl italic leading-9 text-slate-800 sm:text-2xl">
-              别让 AI+X 想法只停在聊天框里。
-            </p>
-            <p className="mt-4 max-w-xl text-base leading-8 text-slate-600">
-              你可以带来一个明确需求、一个还没成形的想法，也可以只是先报名参与；我们把这些线索放到同一个现场，找到能一起拆解、验证和推进的人。
-            </p>
-            <div className="mt-7 flex flex-wrap items-center gap-3">
-              <a
-                href={SUBMISSION_PATH}
-                className="inline-flex min-h-11 items-center justify-center rounded-full bg-teal-700 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_16px_34px_rgba(13,148,136,0.22)] transition hover:-translate-y-0.5 hover:bg-teal-800"
-              >
-                填写需求/想法表单
-                <span aria-hidden="true" className="ml-2 text-base leading-none">›</span>
-              </a>
-              {currentUser?.is_admin ? (
-                <Link
-                  to="/inspiration-co-creation/admin/needs"
-                  className="inline-flex min-h-11 items-center justify-center rounded-full border border-teal-700/30 bg-white px-5 py-2.5 text-sm font-semibold text-teal-800 transition hover:-translate-y-0.5 hover:border-teal-700/60"
-                >
-                  管理员线索入口
-                </Link>
-              ) : null}
-            </div>
-            <div
-              className="mt-4 max-w-xl text-sm font-medium leading-7 text-slate-500"
-              aria-label="适合参与的人群"
-            >
-              {builderTypes.map((type, index) => (
-                <span key={type}>
-                  <span className="text-slate-700">{type}</span>
-                  {index < builderTypes.length - 1 ? <span className="mx-2 text-teal-500/70">/</span> : null}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <figure className="mx-auto w-full max-w-[23rem] overflow-hidden rounded-[var(--radius-md)] border border-white/80 bg-white shadow-[0_28px_80px_rgba(15,118,110,0.16)] lg:max-w-none">
+      <ProgramHero
+        accent="teal"
+        eyebrow="AI+X 共创线索验证"
+        title="灵感共创队"
+        subtitle="别让 AI+X 想法只停在聊天框里。"
+        body="你可以带来一个明确需求、一个还没成形的想法，也可以只是先报名参与；我们把这些线索放到同一个现场，找到能一起拆解、验证和推进的人。"
+        primaryCta={{ href: SUBMISSION_PATH, label: '填写需求/想法表单' }}
+        secondaryCta={currentUser?.is_admin ? { href: '/inspiration-co-creation/admin/needs', label: '管理员线索入口', variant: 'secondary' } : undefined}
+        audience={builderTypes}
+        audienceLabel="适合参与的人群"
+        side={
+          <ProgramPosterFrame accent="teal" label="灵感共创队活动海报">
             <img
               src={POSTER_URL}
               alt="灵感共创队活动海报"
               className="h-full w-full object-cover"
             />
-          </figure>
-        </div>
-      </section>
+          </ProgramPosterFrame>
+        }
+      />
 
       <section id="needs" className="bg-white px-5 py-20 sm:px-8 lg:py-24">
         <div className="mx-auto w-full max-w-6xl">

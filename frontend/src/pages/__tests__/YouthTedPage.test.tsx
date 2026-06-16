@@ -49,6 +49,11 @@ describe('YouthTedPage', () => {
 
     const audience = screen.getByLabelText('适合参与的人群')
     const primaryCta = screen.getByRole('link', { name: /提交真实问题/ })
+    expect(screen.getByRole('heading', { name: /他山青年/ })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '查看详情介绍' })).toHaveAttribute(
+      'href',
+      'https://mp.weixin.qq.com/s/KcXyglqEuaJ5PKMDLN1n1A',
+    )
     expect(audience.textContent?.replace(/\s+/g, '')).toBe(
       '青年科研者/人工智能开发者/早期创业者/科创团队/内容创作者/跨学科实践者',
     )

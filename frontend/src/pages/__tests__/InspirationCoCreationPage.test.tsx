@@ -143,6 +143,8 @@ describe('InspirationCoCreationPage', () => {
       '/inspiration-co-creation/submit',
     )
     expect(screen.queryByRole('link', { name: '管理员线索入口' })).not.toBeInTheDocument()
+    expect(screen.getByText('AI+X 共创线索验证')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: '灵感共创队活动海报' }).closest('[aria-label="灵感共创队活动海报"]')).toBeInTheDocument()
     expect(screen.getByText('真实问题提出者')).toBeInTheDocument()
     expect(screen.getByText('AI 应用开发者')).toBeInTheDocument()
     expect(screen.getByText('项目验证志愿者')).toBeInTheDocument()

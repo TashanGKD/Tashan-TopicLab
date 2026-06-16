@@ -1,4 +1,10 @@
 import youthTedPosterUrl from '../assets/tashan-youth-ted-poster.webp'
+import {
+  ProgramFeatureCard,
+  ProgramGatewayCard,
+  ProgramHero,
+  ProgramSectionHeading,
+} from '../components/publicProgram'
 
 const SCIENCE_PDF_URL = 'https://www.science.org/cms/asset/b09620dc-2937-45bd-9c29-3ea07c1f4a04/sjtu-booklet.pdf'
 const OPENCLAW_SKILL_URL = 'https://world.tashan.chat/api/v1/openclaw/skill.md'
@@ -140,24 +146,6 @@ const frameworks = [
   },
 ]
 
-function SectionHeading({
-  eyebrow,
-  title,
-  body,
-}: {
-  eyebrow: string
-  title: string
-  body?: string
-}) {
-  return (
-    <div className="max-w-3xl">
-      <p className="text-sm font-medium text-sky-700">{eyebrow}</p>
-      <h2 className="mt-3 text-3xl font-semibold leading-tight text-slate-950 sm:text-4xl">{title}</h2>
-      {body ? <p className="mt-4 text-base leading-8 text-slate-600">{body}</p> : null}
-    </div>
-  )
-}
-
 const questionRows = [
   [questionSamples[0], questionSamples[2], questionSamples[4], questionSamples[6]],
   [questionSamples[1], questionSamples[3], questionSamples[5], questionSamples[7]],
@@ -197,98 +185,51 @@ function QuestionStream() {
   )
 }
 
-function ActivityGatewaySection() {
-  return (
-    <div className="mt-10 grid gap-4 lg:grid-cols-2">
-      {gatewayCards.map((card) => (
-        <a
-          key={card.href}
-          href={card.href}
-          aria-label={card.cta}
-          className="group grid min-w-0 overflow-hidden rounded-[var(--radius-lg)] border border-slate-200 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:border-sky-200 hover:shadow-[0_24px_64px_rgba(15,23,42,0.10)] sm:grid-cols-[minmax(0,0.84fr)_minmax(0,1.16fr)]"
-        >
-          <div className="min-h-[18rem] overflow-hidden bg-slate-100 sm:min-h-[22rem]">
-            <img
-              src={card.image}
-              alt={card.imageAlt}
-              className="h-full w-full object-cover object-top transition duration-500 group-hover:scale-[1.02]"
-            />
-          </div>
-          <div className="flex min-w-0 flex-col justify-between p-6 sm:p-7">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">{card.eyebrow}</p>
-              <div className="mt-4 flex flex-wrap items-center gap-3">
-                <h2 className="text-3xl font-semibold leading-tight text-slate-950">{card.title}</h2>
-                <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700">{card.meta}</span>
-              </div>
-              <p className="mt-4 text-base leading-8 text-slate-600">{card.body}</p>
-            </div>
-            <span className="mt-8 inline-flex w-fit items-center gap-2 rounded-[var(--radius-md)] bg-slate-950 px-4 py-2 text-sm font-medium text-white transition group-hover:bg-sky-700">
-              {card.cta}
-              <span aria-hidden="true" className="transition group-hover:translate-x-1">→</span>
-            </span>
-          </div>
-        </a>
-      ))}
-    </div>
-  )
-}
-
 export default function ChallengeCupTopicPage() {
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900">
-      <section className="bg-white">
-        <div className="mx-auto grid max-w-7xl gap-10 px-5 py-16 sm:px-6 lg:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] lg:px-8 lg:py-20 xl:gap-14">
-          <div className="challenge-hero-copy flex min-w-0 flex-col justify-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.26em] text-sky-700">Challenge Cup Topic</p>
-            <h1 className="mt-5 max-w-3xl text-5xl font-semibold leading-[1.02] text-slate-950 sm:whitespace-nowrap sm:text-6xl lg:text-[4.55rem]">
-              挑战杯公众科学
-            </h1>
-            <p className="mt-6 max-w-xl text-2xl leading-9 text-slate-800 sm:text-[2rem] sm:leading-[1.35]">
-              真实问题比工具更难找
-            </p>
-            <p className="mt-5 max-w-xl text-base leading-8 text-slate-600">
-              赛题将于六月底开始。Science期刊的<span className="font-semibold text-slate-800">125个前沿问题</span>组成一份题单，也欢迎带上你在挑战杯中遇到的真实问题。我们更关注问题是否清晰、讨论是否充分，以及验证是否有效。
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <a
-                href="#tools"
-                className="inline-flex min-h-11 items-center justify-center rounded-[var(--radius-md)] bg-slate-950 px-5 text-sm font-medium text-white transition hover:-translate-y-0.5 hover:bg-slate-800 hover:shadow-lg"
-              >
-                查看工具接入
-              </a>
-              <a
-                href={SCIENCE_PDF_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex min-h-11 items-center justify-center rounded-[var(--radius-md)] border border-slate-300 bg-white px-5 text-sm font-medium text-slate-700 transition hover:border-sky-300 hover:text-sky-700"
-              >
-                查看 Science 125 PDF
-              </a>
-            </div>
-          </div>
-
+      <ProgramHero
+        accent="slate"
+        eyebrow="Challenge Cup Topic"
+        title="挑战杯公众科学"
+        subtitle="真实问题比工具更难找"
+        body={
+          <>
+            赛题将于六月底开始。Science期刊的
+            <span className="font-semibold text-slate-800">125个前沿问题</span>
+            组成一份题单，也欢迎带上你在挑战杯中遇到的真实问题。我们更关注问题是否清晰、讨论是否充分，以及验证是否有效。
+          </>
+        }
+        primaryCta={{ href: '#tools', label: '查看工具接入' }}
+        secondaryCta={{ href: SCIENCE_PDF_URL, label: '查看 Science 125 PDF', external: true, variant: 'secondary' }}
+        side={
           <div className="challenge-hero-questions min-w-0 self-center">
             <QuestionStream />
           </div>
-        </div>
-      </section>
+        }
+      />
 
       <section id="tools" className="mx-auto max-w-6xl px-5 py-14 sm:px-6 lg:px-8 lg:py-20">
-        <SectionHeading
+        <ProgramSectionHeading
+          accent="slate"
           eyebrow="工具接入"
           title="几个留下材料和过程的工具"
-          body="TopicLab、世界脉络、SkillHub 和 Arcade 分别对应话题讨论、信息追踪、方法沉淀与任务实践。"
-        />
+        >
+          TopicLab、世界脉络、SkillHub 和 Arcade 分别对应话题讨论、信息追踪、方法沉淀与任务实践。
+        </ProgramSectionHeading>
 
         <div className="mt-10 grid min-w-0 gap-4 md:grid-cols-2">
           {actionCards.map((card) => (
-            <article key={card.title} className="min-w-0 rounded-[var(--radius-lg)] border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:border-sky-200 hover:shadow-lg">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">{card.eyebrow}</p>
-              <h3 className="mt-3 text-xl font-semibold text-slate-950">{card.title}</h3>
-              <p className="mt-3 text-sm leading-7 text-slate-600">{card.body}</p>
+            <ProgramFeatureCard
+              key={card.title}
+              accent="slate"
+              eyebrow={card.eyebrow}
+              title={card.title}
+              body={card.body}
+              className="p-6 shadow-sm"
+            >
               <pre className="mt-5 max-w-full whitespace-pre-wrap break-all rounded-[var(--radius-md)] border border-slate-200 bg-slate-50 p-4 font-mono text-xs leading-6 text-slate-600">{card.prompt}</pre>
-            </article>
+            </ProgramFeatureCard>
           ))}
         </div>
       </section>
@@ -296,21 +237,24 @@ export default function ChallengeCupTopicPage() {
       <section className="border-y border-slate-200/80 bg-white">
         <div className="mx-auto max-w-6xl px-5 py-14 sm:px-6 lg:px-8 lg:py-20">
           <div className="grid gap-8 lg:grid-cols-[0.88fr_1.12fr] lg:items-start">
-            <SectionHeading
+            <ProgramSectionHeading
+              accent="slate"
               eyebrow="科学问题样例"
               title="好问题都这么来的"
-              body="一段材料、一个疑问、一个实验想法，都可能成为讨论的起点。"
-            />
+            >
+              一段材料、一个疑问、一个实验想法，都可能成为讨论的起点。
+            </ProgramSectionHeading>
             <div className="flex min-w-0 gap-3 overflow-x-auto pb-3 [scrollbar-width:thin]">
               {questionSamples.map((question, index) => (
-                <article
+                <ProgramFeatureCard
                   key={question.title}
-                  className="min-h-[13rem] w-[17rem] shrink-0 rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50 p-5 sm:w-[19rem]"
+                  accent="slate"
+                  eyebrow={String(index + 1).padStart(2, '0')}
+                  title={question.title}
+                  body={question.body}
+                  className="min-h-[13rem] w-[17rem] shrink-0 bg-slate-50 sm:w-[19rem]"
                 >
-                  <span className="text-xs font-semibold text-sky-700">{String(index + 1).padStart(2, '0')}</span>
-                  <h3 className="mt-2 text-lg font-semibold leading-7 text-slate-950">{question.title}</h3>
-                  <p className="mt-2 text-sm leading-7 text-slate-600">{question.body}</p>
-                </article>
+                </ProgramFeatureCard>
               ))}
             </div>
           </div>
@@ -318,34 +262,52 @@ export default function ChallengeCupTopicPage() {
       </section>
 
       <section id="weekly-discussion" className="mx-auto max-w-6xl px-5 py-14 sm:px-6 lg:px-8 lg:py-20">
-        <SectionHeading
+        <ProgramSectionHeading
+          accent="slate"
           eyebrow="每周讨论"
           title="周三前沿分享，周五难题攻关"
-          body="大家带着论文、代码或未解的问题参与讨论。形式不重要，关键问题是真实的。"
-        />
-        <ActivityGatewaySection />
+        >
+          大家带着论文、代码或未解的问题参与讨论。形式不重要，关键问题是真实的。
+        </ProgramSectionHeading>
+        <div className="mt-10 grid gap-4 lg:grid-cols-2">
+          {gatewayCards.map((card) => (
+            <ProgramGatewayCard
+              key={card.href}
+              accent="slate"
+              eyebrow={card.eyebrow}
+              title={card.title}
+              body={card.body}
+              href={card.href}
+              image={card.image}
+              imageAlt={card.imageAlt}
+              meta={card.meta}
+              cta={card.cta}
+            />
+          ))}
+        </div>
       </section>
 
       <section className="border-t border-slate-200/80 bg-white">
         <div className="mx-auto max-w-6xl px-5 py-14 sm:px-6 lg:px-8 lg:py-20">
-          <SectionHeading
+          <ProgramSectionHeading
+            accent="slate"
             eyebrow="可参考的项目"
             title="别人已经踩过一些路"
-            body="这里放的是拆题样本。它们呈现了问题提出、资料检索和结果验证的过程。"
-          />
+          >
+            这里放的是拆题样本。它们呈现了问题提出、资料检索和结果验证的过程。
+          </ProgramSectionHeading>
           <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {frameworks.map((framework) => (
-              <a
+              <ProgramFeatureCard
                 key={framework.name}
                 href={framework.href}
-                target="_blank"
-                rel="noreferrer"
-                className="min-w-0 rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50 p-5 transition hover:-translate-y-1 hover:border-sky-200 hover:bg-white hover:shadow-lg"
-              >
-                <span className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">{framework.meta}</span>
-                <strong className="mt-3 block text-lg font-semibold leading-7 text-slate-950">{framework.name}</strong>
-                <span className="mt-3 block text-sm leading-7 text-slate-600">{framework.body}</span>
-              </a>
+                external
+                accent="slate"
+                eyebrow={framework.meta}
+                title={framework.name}
+                body={framework.body}
+                className="bg-slate-50 hover:bg-white"
+              />
             ))}
           </div>
         </div>
