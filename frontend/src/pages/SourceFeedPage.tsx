@@ -57,17 +57,12 @@ const WORLDWEAVE_FRONTEND_URL =
   import.meta.env.VITE_WORLDWEAVE_FRONTEND_URL || '/worldweave/'
 const WORLDWEAVE_FRAME_URL = WORLDWEAVE_FRONTEND_URL.replace(/\/?$/, '/')
 const WORLDWEAVE_LOCAL_PORT = import.meta.env.WORLDWEAVE_PORT || '5000'
-const WORLDWEAVE_FRAME_MIN_HEIGHT = 1280
-const WORLDWEAVE_FRAME_HEIGHT_PADDING = 32
 
 type WorldWeaveStatus = 'checking' | 'ready' | 'unavailable'
 
 function WorldWeaveSourceFrame() {
   const frameRef = useRef<HTMLIFrameElement | null>(null)
   const [worldWeaveStatus, setWorldWeaveStatus] = useState<WorldWeaveStatus>('ready')
-  const [worldWeaveFrameHeight, setWorldWeaveFrameHeight] = useState(
-    WORLDWEAVE_FRAME_MIN_HEIGHT,
-  )
 
   useEffect(() => {
     const frame = frameRef.current
@@ -87,78 +82,61 @@ function WorldWeaveSourceFrame() {
     const frame = frameRef.current
     if (!frame) return
 
-    let animationFrameId = 0
-    let resizeObserver: ResizeObserver | null = null
-    let intervalId = 0
+    let attachedDocument: Document | null = null
+    let detachFrameWheel: (() => void) | null = null
 
-    const resizeFrame = () => {
-      window.cancelAnimationFrame(animationFrameId)
-      animationFrameId = window.requestAnimationFrame(() => {
-        const doc = frame.contentDocument ?? frame.contentWindow?.document
-        const body = doc?.body
-        const html = doc?.documentElement
-        if (!doc || !body || !html) return
-
-        html.style.overflow = 'hidden'
-        body.style.overflow = 'hidden'
-
-        const currentHeight =
-          frame.getBoundingClientRect().height || WORLDWEAVE_FRAME_MIN_HEIGHT
-        const measuredContentHeight = Math.max(
-          body.scrollHeight,
-          body.offsetHeight,
-          html.scrollHeight,
-          html.offsetHeight,
-        )
-        const nextHeight =
-          measuredContentHeight <= currentHeight + 4
-            ? currentHeight
-            : Math.max(
-                WORLDWEAVE_FRAME_MIN_HEIGHT,
-                measuredContentHeight + WORLDWEAVE_FRAME_HEIGHT_PADDING,
-              )
-
-        setWorldWeaveFrameHeight((currentHeight) =>
-          nextHeight > currentHeight + 8 ? nextHeight : currentHeight,
-        )
-      })
-    }
-
-    const attachObserver = () => {
+    const allowFrameScroll = () => {
       const doc = frame.contentDocument ?? frame.contentWindow?.document
-      const body = doc?.body
-      if (!body) return
+      if (!doc) return
 
-      if (typeof ResizeObserver !== 'undefined') {
-        resizeObserver?.disconnect()
-        resizeObserver = new ResizeObserver(resizeFrame)
-        resizeObserver.observe(body)
+      if (attachedDocument === doc) return
+
+      detachFrameWheel?.()
+      attachedDocument = doc
+
+      const handleFrameWheel = (event: WheelEvent) => {
+        const win = doc.defaultView
+        if (!win) return
+
+        const beforeY = win.scrollY
+        win.scrollBy({
+          top: event.deltaY,
+          left: event.deltaX,
+          behavior: 'instant',
+        })
+
+        if (win.scrollY !== beforeY) {
+          event.preventDefault()
+          event.stopPropagation()
+        }
       }
-      resizeFrame()
+
+      doc.addEventListener('wheel', handleFrameWheel, { passive: false })
+      detachFrameWheel = () => {
+        doc.removeEventListener('wheel', handleFrameWheel)
+      }
     }
 
-    frame.addEventListener('load', attachObserver)
-    attachObserver()
-    intervalId = window.setInterval(resizeFrame, 1500)
+    frame.addEventListener('load', allowFrameScroll)
+    allowFrameScroll()
+    const intervalId = window.setInterval(allowFrameScroll, 1500)
 
     return () => {
-      window.cancelAnimationFrame(animationFrameId)
       window.clearInterval(intervalId)
-      resizeObserver?.disconnect()
-      frame.removeEventListener('load', attachObserver)
+      detachFrameWheel?.()
+      frame.removeEventListener('load', allowFrameScroll)
     }
   }, [worldWeaveStatus])
 
   return (
-    <div className="min-h-[calc(100vh-64px)] bg-[#f3f7fb]">
+    <div className="h-[calc(100dvh-3.5rem)] min-h-[560px] overflow-hidden bg-[#f3f7fb]">
       {worldWeaveStatus === 'ready' ? (
         <iframe
           ref={frameRef}
           title="世界脉络"
           src={WORLDWEAVE_FRAME_URL}
-          className="block w-full border-0"
-          scrolling="no"
-          style={{ height: `${worldWeaveFrameHeight}px` }}
+          className="block h-full w-full border-0"
+          scrolling="auto"
           loading="eager"
           onError={() => setWorldWeaveStatus('unavailable')}
         />

@@ -90,82 +90,37 @@ describe('SourceFeedPage', () => {
     const frame = await screen.findByTitle('世界脉络')
     expect(frame).toBeInTheDocument()
     expect(frame.getAttribute('src')).toBe('/worldweave/')
-    expect(frame).toHaveStyle({ height: '1280px' })
-    expect(frame).toHaveAttribute('scrolling', 'no')
+    expect(frame).toHaveClass('h-full', 'w-full')
+    expect(frame).not.toHaveStyle({ transform: 'scale(0.85)' })
+    expect(frame).toHaveAttribute('scrolling', 'auto')
     expect(screen.queryByText('Trends')).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '世界脉络' })).not.toBeInTheDocument()
     expect(mockedSourceFeedApiList).not.toHaveBeenCalled()
   })
 
-  it('does not grow the WorldWeave iframe from viewport-derived document height', async () => {
-    const originalRequestAnimationFrame = window.requestAnimationFrame
-    const originalCancelAnimationFrame = window.cancelAnimationFrame
-    Object.defineProperty(window, 'requestAnimationFrame', {
+  it('keeps the WorldWeave iframe scrollable inside the viewport', async () => {
+    renderSourceFeed()
+
+    const frame = (await screen.findByTitle('世界脉络')) as HTMLIFrameElement
+    const iframeDocument = document.implementation.createHTMLDocument('世界脉络')
+
+    Object.defineProperty(frame, 'contentDocument', {
       configurable: true,
-      value: (callback: FrameRequestCallback) => {
-        callback(0)
-        return 1
-      },
+      get: () => iframeDocument,
     })
-    Object.defineProperty(window, 'cancelAnimationFrame', {
+    Object.defineProperty(frame, 'contentWindow', {
       configurable: true,
-      value: vi.fn(),
+      get: () => ({ document: iframeDocument }),
     })
 
-    try {
-      renderSourceFeed()
+    fireEvent.load(frame)
 
-      const frame = (await screen.findByTitle('世界脉络')) as HTMLIFrameElement
-      const iframeDocument =
-        document.implementation.createHTMLDocument('世界脉络')
-
-      Object.defineProperty(frame, 'contentDocument', {
-        configurable: true,
-        get: () => iframeDocument,
-      })
-      Object.defineProperty(frame, 'contentWindow', {
-        configurable: true,
-        get: () => ({ document: iframeDocument }),
-      })
-
-      const viewportHeight = () =>
-        Number.parseInt(frame.style.height || '0', 10)
-      for (const element of [
-        iframeDocument.body,
-        iframeDocument.documentElement,
-      ]) {
-        Object.defineProperty(element, 'scrollHeight', {
-          configurable: true,
-          get: viewportHeight,
-        })
-        Object.defineProperty(element, 'offsetHeight', {
-          configurable: true,
-          get: viewportHeight,
-        })
-      }
-
-      fireEvent.load(frame)
-
-      await waitFor(() => {
-        expect(frame).toHaveStyle({ height: '1280px' })
-      })
-
-      fireEvent.load(frame)
-      fireEvent.load(frame)
-
-      await waitFor(() => {
-        expect(frame).toHaveStyle({ height: '1280px' })
-      })
-    } finally {
-      Object.defineProperty(window, 'requestAnimationFrame', {
-        configurable: true,
-        value: originalRequestAnimationFrame,
-      })
-      Object.defineProperty(window, 'cancelAnimationFrame', {
-        configurable: true,
-        value: originalCancelAnimationFrame,
-      })
-    }
+    await waitFor(() => {
+      expect(frame).toHaveClass('h-full', 'w-full')
+      expect(frame).not.toHaveStyle({ transform: 'scale(0.85)' })
+      expect(iframeDocument.documentElement.style.overflowY).toBe('')
+      expect(iframeDocument.body.style.overflowY).toBe('')
+    })
   })
 
   it('shows a readable WorldWeave outage state when the iframe fails to load', async () => {
