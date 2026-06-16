@@ -258,7 +258,7 @@ export function getTopicDetailPath(topic: TopicListItem, viewerProfile?: TopicVi
   const topicLink = topic.metadata?.topic_link as (NonNullable<TopicListItem['metadata']>['topic_link'] & { detail_path?: unknown }) | undefined
   const detailPath = typeof topicLink?.detail_path === 'string' ? topicLink.detail_path.trim() : ''
   if (detailPath) {
-    return detailPath
+    return detailPath.replace(/^\/?topics\//, '/topiclink/')
   }
   const debugQuery = import.meta.env.DEV && viewerProfile?.username === LIYUYANG_TOPIC_VIEWER_PROFILE.username
     ? `?debug_user=${LIYUYANG_TOPIC_VIEWER_PROFILE.username}`
