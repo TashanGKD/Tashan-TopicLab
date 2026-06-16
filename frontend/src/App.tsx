@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import TopNav from './components/TopNav'
 import Footer from './components/Footer'
@@ -42,12 +43,34 @@ import AppErrorBoundary from './components/AppErrorBoundary'
 import FloatingActions from './components/FloatingActions'
 import { shouldHideGlobalChrome } from './utils/layoutChrome'
 
+export function getWorldWeaveSceneRedirectPath(pathname: string, search: string) {
+  if (pathname !== '/') return null
+
+  const scene = new URLSearchParams(search).get('scene')
+  if (scene === 'asean' || scene === 'southeast-asia') {
+    return '/worldweave/demo/asean'
+  }
+
+  return null
+}
+
 function App() {
   const location = useLocation()
+  const worldWeaveSceneRedirectPath = getWorldWeaveSceneRedirectPath(location.pathname, location.search)
   const isAdminRoute = location.pathname.startsWith('/admin')
   const hideGlobalChrome = !isAdminRoute && shouldHideGlobalChrome(location.pathname)
   const isHomeRoute = location.pathname === '/'
   const isTopicLinkRoute = location.pathname === '/topiclink' || location.pathname.startsWith('/topiclink/')
+
+  useEffect(() => {
+    if (worldWeaveSceneRedirectPath) {
+      window.location.replace(worldWeaveSceneRedirectPath)
+    }
+  }, [worldWeaveSceneRedirectPath])
+
+  if (worldWeaveSceneRedirectPath) {
+    return null
+  }
 
   return (
     <AppErrorBoundary>

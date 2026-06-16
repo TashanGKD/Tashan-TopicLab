@@ -2,7 +2,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import App from '../App'
+import App, { getWorldWeaveSceneRedirectPath } from '../App'
 
 vi.mock('../components/TopNav', () => ({ default: () => <div data-testid="top-nav" /> }))
 vi.mock('../components/Footer', () => ({ default: () => <div data-testid="footer" /> }))
@@ -120,5 +120,11 @@ describe('App arcade topic route', () => {
     )
 
     expect(screen.getByText('Inspiration Co Creation Route')).toBeInTheDocument()
+  })
+
+  it('maps root ASEAN scene links to the mounted WorldWeave route', () => {
+    expect(getWorldWeaveSceneRedirectPath('/', '?scene=asean')).toBe('/worldweave/demo/asean')
+    expect(getWorldWeaveSceneRedirectPath('/', '?scene=southeast-asia')).toBe('/worldweave/demo/asean')
+    expect(getWorldWeaveSceneRedirectPath('/info/source', '?scene=asean')).toBeNull()
   })
 })
