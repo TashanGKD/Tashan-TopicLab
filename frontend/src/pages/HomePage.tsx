@@ -110,6 +110,7 @@ export default function HomePage() {
       controls: [
         { id: 'research-apps-zone', label: '科研应用专区', to: '/apps' },
         { id: 'youth-ted', label: '他山青年 TED', entryId: 'youth-ted', to: '/youth-ted' },
+        { id: 'challenge-cup-topic', label: '2026挑战杯专题', to: '/challenge-cup-topic' },
         { id: 'inspiration-co-creation', label: '灵感共创队', entryId: 'inspiration-co-creation', to: '/inspiration-co-creation' },
       ],
     },

@@ -107,6 +107,7 @@ describe('HomePage', () => {
         <Route path="/arcade" element={<div>Arcade Route</div>} />
         <Route path="/info/source" element={<div>World Context Route</div>} />
         <Route path="/youth-ted" element={<div>Youth TED Route</div>} />
+        <Route path="/challenge-cup-topic" element={<div>Challenge Cup Route</div>} />
         <Route path="/inspiration-co-creation" element={<div>Inspiration Co Creation Route</div>} />
         <Route path="/thinking" element={<div>Thinking Route</div>} />
       </Routes>
@@ -144,10 +145,12 @@ describe('HomePage', () => {
     expect(getEntryButton('春招季')).toBeDisabled()
     expect(screen.queryByRole('button', { name: '科研 Skills 专区' })).not.toBeInTheDocument()
     expect(getEntryButton('他山青年 TED')).toBeEnabled()
+    expect(getEntryButton('2026挑战杯专题')).toBeEnabled()
     expect(getEntryButton('灵感共创队')).toBeEnabled()
     expect(getEntryButton('科研应用专区')).toBeEnabled()
     const buttonLabels = screen.getAllByRole('button').map((button) => button.textContent)
     expect(buttonLabels.indexOf('科研应用专区')).toBeLessThan(buttonLabels.indexOf('他山青年 TED'))
+    expect(buttonLabels.indexOf('2026挑战杯专题')).toBeLessThan(buttonLabels.indexOf('灵感共创队'))
     expect(screen.queryByRole('button', { name: '2050专题' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /他山世界 2.0，来看看我们的思考/i })).toHaveAttribute('href', '/thinking')
     expect(getStage()).toBeInTheDocument()
@@ -179,6 +182,14 @@ describe('HomePage', () => {
     fireEvent.click(getEntryButton('他山青年 TED'))
 
     expect(screen.getByText('Youth TED Route')).toBeInTheDocument()
+  })
+
+  it('opens the 2026 challenge cup topic from the education ecosystem group', () => {
+    renderHomePage()
+
+    fireEvent.click(getEntryButton('2026挑战杯专题'))
+
+    expect(screen.getByText('Challenge Cup Route')).toBeInTheDocument()
   })
 
   it('opens the inspiration co-creation card from the education ecosystem group', () => {
