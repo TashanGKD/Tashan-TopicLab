@@ -181,9 +181,13 @@ export function ProgramHero({
   body,
   primaryCta,
   secondaryCta,
+  extraCtas = [],
   audience,
   audienceLabel,
   side,
+  topMedia,
+  topMediaClassName,
+  sideClassName = '',
   id,
 }: {
   accent: ProgramAccent
@@ -193,13 +197,18 @@ export function ProgramHero({
   body: ReactNode
   primaryCta?: ProgramCta
   secondaryCta?: ProgramCta
+  extraCtas?: ProgramCta[]
   audience?: string[]
   audienceLabel?: string
   side: ReactNode
+  topMedia?: ReactNode
+  topMediaClassName?: string
+  sideClassName?: string
   id?: string
 }) {
   const styles = stylesFor(accent)
   const label = getTextLabel(title)
+  const topMediaClasses = topMediaClassName ?? 'relative mx-auto mb-12 w-full max-w-6xl sm:mb-14 lg:mb-16'
 
   return (
     <section
@@ -213,6 +222,11 @@ export function ProgramHero({
         aria-hidden="true"
         className={`pointer-events-none absolute inset-y-0 right-0 -z-10 w-[62%] opacity-60 [mask-image:linear-gradient(to_left,black_0%,rgba(0,0,0,0.68)_44%,transparent_88%)] ${styles.heroPattern}`}
       />
+      {topMedia ? (
+        <div className={topMediaClasses}>
+          {topMedia}
+        </div>
+      ) : null}
       <div className="relative mx-auto grid w-full max-w-6xl gap-10 lg:grid-cols-[minmax(0,0.92fr)_minmax(18rem,0.58fr)] lg:items-center lg:gap-16">
         <div className="max-w-3xl">
           {eyebrow ? (
@@ -227,15 +241,18 @@ export function ProgramHero({
             </p>
           ) : null}
           <p className="mt-4 max-w-xl text-base leading-8 text-slate-600">{body}</p>
-          {primaryCta || secondaryCta ? (
+          {primaryCta || secondaryCta || extraCtas.length ? (
             <div className="mt-7 flex flex-wrap items-center gap-3">
               {primaryCta ? <ProgramCtaLink accent={accent} cta={primaryCta} /> : null}
               {secondaryCta ? <ProgramCtaLink accent={accent} cta={{ ...secondaryCta, variant: secondaryCta.variant ?? 'secondary' }} /> : null}
+              {extraCtas.map((cta) => (
+                <ProgramCtaLink key={`${cta.href}-${cta.label}`} accent={accent} cta={cta} />
+              ))}
             </div>
           ) : null}
           {audience ? <ProgramAudienceStrip accent={accent} items={audience} label={audienceLabel} /> : null}
         </div>
-        <div className="min-w-0">{side}</div>
+        <div className={['min-w-0', sideClassName].filter(Boolean).join(' ')}>{side}</div>
       </div>
     </section>
   )

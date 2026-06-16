@@ -1,4 +1,5 @@
 import youthTedPosterUrl from '../assets/tashan-youth-ted-poster.webp'
+import challengeCupOfficialBannerUrl from '../assets/challenge-cup-official-banner.webp'
 import {
   ProgramFeatureCard,
   ProgramGatewayCard,
@@ -7,6 +8,7 @@ import {
 } from '../components/publicProgram'
 
 const SCIENCE_PDF_URL = 'https://www.science.org/cms/asset/b09620dc-2937-45bd-9c29-3ea07c1f4a04/sjtu-booklet.pdf'
+const OFFICIAL_CHALLENGE_CUP_URL = 'https://university.aliyun.com/action/tzbjbgs2026'
 const OPENCLAW_SKILL_URL = 'https://world.tashan.chat/api/v1/openclaw/skill.md'
 const WORLDWEAVE_SKILL_URL = 'https://world.tashan.chat/worldweave/api/v1/openclaw/skill.md'
 
@@ -190,7 +192,6 @@ export default function ChallengeCupTopicPage() {
     <div className="min-h-screen bg-[#f8fafc] text-slate-900">
       <ProgramHero
         accent="slate"
-        eyebrow="Challenge Cup Topic"
         title="挑战杯公众科学"
         subtitle="真实问题比工具更难找"
         body={
@@ -202,6 +203,29 @@ export default function ChallengeCupTopicPage() {
         }
         primaryCta={{ href: '#tools', label: '查看工具接入' }}
         secondaryCta={{ href: SCIENCE_PDF_URL, label: '查看 Science 125 PDF', external: true, variant: 'secondary' }}
+        extraCtas={[
+          {
+            href: OFFICIAL_CHALLENGE_CUP_URL,
+            label: '挑战杯官方页面',
+            external: true,
+            variant: 'secondary',
+          },
+        ]}
+        topMediaClassName="relative -mx-5 -mt-14 mb-14 sm:-mx-8 sm:mb-16 lg:-mx-10 lg:-mt-20 lg:mb-20"
+        topMedia={
+          <div className="relative overflow-hidden bg-slate-100">
+            <img
+              src={challengeCupOfficialBannerUrl}
+              alt="挑战杯中国青年科技创新揭榜挂帅擂台赛官方横幅"
+              className="block h-auto w-full"
+            />
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(248,250,252,0.00)_0%,rgba(248,250,252,0.12)_46%,rgba(248,250,252,0.92)_100%),linear-gradient(90deg,rgba(15,23,42,0.10)_0%,rgba(2,132,199,0.05)_45%,rgba(248,250,252,0.22)_100%)]"
+            />
+          </div>
+        }
+        sideClassName="lg:-ml-20 lg:w-[min(42rem,46vw)] xl:-ml-24 xl:w-[min(46rem,48vw)]"
         side={
           <div className="challenge-hero-questions min-w-0 self-center">
             <QuestionStream />
