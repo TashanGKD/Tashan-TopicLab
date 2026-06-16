@@ -34,6 +34,7 @@ type HomeEntryControl = {
 type HomeEntryGroup = {
   id: string
   label: string
+  controlLayout?: 'paired'
   controls: HomeEntryControl[]
 }
 
@@ -107,10 +108,11 @@ export default function HomePage() {
     {
       id: 'popular-science',
       label: '科教生态',
+      controlLayout: 'paired',
       controls: [
         { id: 'research-apps-zone', label: '科研应用专区', to: '/apps' },
-        { id: 'youth-ted', label: '他山青年 TED', entryId: 'youth-ted', to: '/youth-ted' },
         { id: 'challenge-cup-topic', label: '2026挑战杯专题', to: '/challenge-cup-topic' },
+        { id: 'youth-ted', label: '他山青年 TED', entryId: 'youth-ted', to: '/youth-ted' },
         { id: 'inspiration-co-creation', label: '灵感共创队', entryId: 'inspiration-co-creation', to: '/inspiration-co-creation' },
       ],
     },
@@ -285,8 +287,16 @@ export default function HomePage() {
                       <p className="text-[12px] font-semibold uppercase tracking-[0.22em] text-slate-400">
                         {group.label}
                       </p>
-                      <div className="flex flex-wrap gap-2.5">
-                        {group.controls.map((control) => {
+                      <div
+                        aria-label={`${group.label}入口`}
+                        className={group.controlLayout === 'paired' ? 'flex flex-col gap-2.5' : 'flex flex-wrap gap-2.5'}
+                      >
+                        {(group.controlLayout === 'paired'
+                          ? [group.controls.slice(0, 2), group.controls.slice(2)]
+                          : [group.controls]
+                        ).map((controlRow, rowIndex) => (
+                          <div key={`${group.id}-row-${rowIndex}`} className="flex flex-nowrap gap-2.5">
+                            {controlRow.map((control) => {
                           const targetIndex = control.entryId == null
                             ? -1
                             : homeEntryItems.findIndex((item) => item.id === control.entryId)
@@ -298,7 +308,10 @@ export default function HomePage() {
                               key={control.id}
                               type="button"
                               onClick={isDisabled ? undefined : () => handleHomeEntryControlClick(control)}
-                              className="rounded-full border px-4 py-2 text-sm transition-all duration-300 motion-reduce:transition-none disabled:cursor-not-allowed disabled:hover:scale-100"
+                              className={[
+                                'rounded-full border px-4 py-2 text-sm transition-all duration-300 motion-reduce:transition-none disabled:cursor-not-allowed disabled:hover:scale-100',
+                                group.controlLayout === 'paired' ? 'whitespace-nowrap' : '',
+                              ].filter(Boolean).join(' ')}
                               style={{
                                 borderColor: isActive ? activeTheme.activeEdge : 'rgba(203, 213, 225, 0.95)',
                                 backgroundColor: isActive ? activeTheme.actionBackground : 'rgba(255,255,255,0.58)',
@@ -314,7 +327,9 @@ export default function HomePage() {
                               {control.label}
                             </button>
                           )
-                        })}
+                            })}
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ))}
