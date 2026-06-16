@@ -217,7 +217,7 @@ export default function ChallengeCupTopicPage() {
             <img
               src={challengeCupOfficialBannerUrl}
               alt="挑战杯中国青年科技创新揭榜挂帅擂台赛官方横幅"
-              className="block h-auto w-full"
+              className="block h-[8.75rem] w-full object-cover object-center sm:h-auto"
             />
             <div
               aria-hidden="true"
