@@ -186,6 +186,41 @@ def upsert_site_image_asset(
         )
 
 
+def get_site_image_asset_metadata(key: str) -> dict[str, str | None] | None:
+    with get_db_session() as session:
+        ensure_site_assets_schema_and_seed_for_session(session)
+        row = session.execute(
+            text(
+                """
+                SELECT key, mime_type, expires_at, source_filename, created_at, updated_at
+                FROM site_assets
+                WHERE key = :key
+                LIMIT 1
+                """
+            ),
+            {"key": key},
+        ).first()
+        if not row:
+            return None
+        values = row._mapping
+        return {
+            "key": str(values["key"]),
+            "mime_type": values["mime_type"] or WEBP_MIME_TYPE,
+            "expires_at": _to_iso(values["expires_at"]),
+            "source_filename": values["source_filename"],
+            "created_at": _to_iso(values["created_at"]),
+            "updated_at": _to_iso(values["updated_at"]),
+        }
+
+
+def _to_iso(value) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return value.isoformat()
+
+
 def get_site_image_asset(key: str) -> tuple[bytes, str] | None:
     with _CACHE_LOCK:
         cached = _ASSET_CACHE.get(key)

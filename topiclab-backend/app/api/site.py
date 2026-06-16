@@ -16,6 +16,7 @@ from app.storage.database.site_assets_store import (
     WEBP_MIME_TYPE,
     WECHAT_GROUP_QR_KEY,
     get_site_image_asset,
+    get_site_image_asset_metadata,
     upsert_site_image_asset,
 )
 
@@ -69,6 +70,18 @@ def _serve_site_image_asset(key: str, *, include_body: bool) -> Response:
     )
 
 
+def _site_asset_metadata_response(key: str) -> dict[str, object]:
+    normalized = _validate_site_asset_key(key)
+    metadata = get_site_image_asset_metadata(normalized)
+    if metadata is None:
+        raise HTTPException(status_code=404, detail="Site asset not found")
+    return {
+        **metadata,
+        "url": _site_asset_url(normalized),
+        "legacy_urls": _legacy_urls_for_key(normalized),
+    }
+
+
 def _convert_upload_to_webp(payload: bytes) -> tuple[bytes, int, int]:
     if not payload:
         raise HTTPException(status_code=400, detail="Image file is required")
@@ -109,6 +122,11 @@ def head_site_asset_by_key(key: str):
     return _serve_site_image_asset(key, include_body=False)
 
 
+@router.get("/assets/{key}")
+def get_site_asset_metadata_by_key(key: str):
+    return _site_asset_metadata_response(key)
+
+
 @router.post("/assets/{key}")
 async def upload_site_asset_by_key(
     key: str,
@@ -127,17 +145,13 @@ async def upload_site_asset_by_key(
         expires_at=expires_at,
         source_filename=image.filename,
     )
+    metadata = _site_asset_metadata_response(normalized)
     return {
         "ok": True,
-        "key": normalized,
-        "mime_type": WEBP_MIME_TYPE,
+        **metadata,
         "width": width,
         "height": height,
         "webp_bytes": len(image_webp),
-        "expires_at": expires_at,
-        "source_filename": image.filename,
-        "url": _site_asset_url(normalized),
-        "legacy_urls": _legacy_urls_for_key(normalized),
     }
 
 

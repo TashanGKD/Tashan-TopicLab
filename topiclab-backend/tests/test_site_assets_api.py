@@ -92,6 +92,31 @@ def test_site_asset_can_be_served_by_key(client):
     assert response.content == updated
 
 
+def test_site_asset_metadata_includes_latest_update_time(client):
+    test_client, site_assets_store = client
+    updated = b"RIFF\x18\x00\x00\x00WEBPVP8 \x0c\x00\x00\x00generic"
+
+    site_assets_store.upsert_site_image_asset(
+        key="wechat-group-qr",
+        image_webp=updated,
+        mime_type="image/webp",
+        expires_at="2026-05-26T00:00:00+08:00",
+        source_filename="wechat-qr.webp",
+    )
+
+    response = test_client.get("/api/v1/site/assets/wechat-group-qr")
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["key"] == "wechat-group-qr"
+    assert payload["mime_type"] == "image/webp"
+    assert payload["expires_at"] == "2026-05-26T00:00:00+08:00"
+    assert payload["source_filename"] == "wechat-qr.webp"
+    assert payload["updated_at"]
+    assert payload["url"] == "/api/v1/site/assets/wechat-group-qr.webp"
+    assert payload["legacy_urls"] == ["/api/v1/site/wechat-group-qr.webp"]
+
+
 def test_lggc_wechat_group_qr_serves_seeded_webp_by_key(client):
     test_client, _ = client
 
@@ -123,6 +148,7 @@ def test_upload_key_can_upload_site_asset_by_key(client):
     assert payload["height"] == 16
     assert payload["url"] == "/api/v1/site/assets/wechat-group-qr.webp"
     assert payload["legacy_urls"] == ["/api/v1/site/wechat-group-qr.webp"]
+    assert payload["updated_at"]
 
     image_response = test_client.get("/api/v1/site/assets/wechat-group-qr.webp")
     assert image_response.status_code == 200, image_response.text

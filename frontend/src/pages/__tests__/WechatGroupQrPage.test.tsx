@@ -11,7 +11,17 @@ describe('WechatGroupQrPage', () => {
     vi.unstubAllGlobals()
   })
 
-  it('renders the dedicated LGGC QR poster from the backend asset endpoint', () => {
+  it('renders the dedicated LGGC QR poster from the backend asset endpoint', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ updated_at: '2026-05-28T16:03:32Z' }),
+        }),
+      ),
+    )
+
     render(
       <MemoryRouter initialEntries={['/qr/lggc-wechat-group']}>
         <WechatGroupQrPage assetKey="lggc-wechat-group" title="灵感共创队群聊二维码" />
@@ -24,10 +34,26 @@ describe('WechatGroupQrPage', () => {
       '/api/v1/site/assets/lggc-wechat-group.webp',
     )
     expect(screen.queryByRole('button', { name: '上传更新二维码' })).not.toBeInTheDocument()
+    expect(await screen.findByLabelText('二维码最近更新时间')).toHaveTextContent(
+      '最近一次二维码图片更新时间：2026/05/29 00:03:32',
+    )
   })
 
   it('uses the query key to upload and refresh the current QR image', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve({ ok: true, status: 200 }))
+    const fetchMock = vi.fn((_url: string, options?: RequestInit) => {
+      if (options?.method === 'POST') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ updated_at: '2026-05-29T00:03:32+08:00' }),
+        })
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ updated_at: '2026-05-28T16:03:32Z' }),
+      })
+    })
     vi.stubGlobal('fetch', fetchMock)
     vi.spyOn(Date, 'now').mockReturnValue(12345)
 
@@ -52,5 +78,8 @@ describe('WechatGroupQrPage', () => {
       '/api/v1/site/assets/wechat-group-qr.webp?v=12345',
     )
     expect(screen.getByText('已更新二维码')).toBeInTheDocument()
+    expect(screen.getByLabelText('二维码最近更新时间')).toHaveTextContent(
+      '最近一次二维码图片更新时间：2026/05/29 00:03:32',
+    )
   })
 })

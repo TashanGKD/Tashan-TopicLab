@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useLocation } from 'react-router-dom'
 
 type WechatGroupQrPageProps = {
@@ -11,9 +11,33 @@ type UploadState = {
   message: string
 }
 
+type AssetMetadata = {
+  updated_at?: string | null
+}
+
 function buildAssetUrl(assetKey: string, version: number): string {
   const baseUrl = `${import.meta.env.BASE_URL}api/v1/site/assets/${assetKey}.webp`
   return version ? `${baseUrl}?v=${version}` : baseUrl
+}
+
+function buildAssetMetadataUrl(assetKey: string): string {
+  return `${import.meta.env.BASE_URL}api/v1/site/assets/${assetKey}`
+}
+
+function formatUpdatedAt(value: string | null): string {
+  if (!value) return '读取中...'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(date)
 }
 
 export default function WechatGroupQrPage({ assetKey, title }: WechatGroupQrPageProps) {
@@ -21,8 +45,39 @@ export default function WechatGroupQrPage({ assetKey, title }: WechatGroupQrPage
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
   const uploadKey = useMemo(() => new URLSearchParams(location.search).get('key')?.trim() ?? '', [location.search])
   const [imageVersion, setImageVersion] = useState(0)
+  const [assetUpdatedAt, setAssetUpdatedAt] = useState<string | null>(null)
+  const [metadataFailed, setMetadataFailed] = useState(false)
   const [uploadState, setUploadState] = useState<UploadState>({ status: 'idle', message: '' })
   const qrPosterUrl = buildAssetUrl(assetKey, imageVersion)
+  const updatedAtText = metadataFailed && !assetUpdatedAt ? '读取失败' : formatUpdatedAt(assetUpdatedAt)
+
+  useEffect(() => {
+    let cancelled = false
+    setAssetUpdatedAt(null)
+    setMetadataFailed(false)
+
+    async function loadAssetMetadata() {
+      try {
+        const response = await fetch(buildAssetMetadataUrl(assetKey))
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`)
+        }
+        const metadata = (await response.json()) as AssetMetadata
+        if (!cancelled) {
+          setAssetUpdatedAt(metadata.updated_at ?? null)
+        }
+      } catch {
+        if (!cancelled) {
+          setMetadataFailed(true)
+        }
+      }
+    }
+
+    void loadAssetMetadata()
+    return () => {
+      cancelled = true
+    }
+  }, [assetKey])
 
   async function handleImageSelected(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
@@ -46,6 +101,9 @@ export default function WechatGroupQrPage({ assetKey, title }: WechatGroupQrPage
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`)
       }
+      const metadata = (await response.json()) as AssetMetadata
+      setAssetUpdatedAt(metadata.updated_at ?? null)
+      setMetadataFailed(false)
       setImageVersion(Date.now())
       setUploadState({ status: 'success', message: '已更新二维码' })
     } catch {
@@ -67,7 +125,7 @@ export default function WechatGroupQrPage({ assetKey, title }: WechatGroupQrPage
           decoding="async"
         />
         {uploadKey ? (
-          <div className="fixed bottom-5 left-1/2 flex -translate-x-1/2 flex-col items-center gap-2">
+          <div className="fixed bottom-14 left-1/2 flex -translate-x-1/2 flex-col items-center gap-2">
             <input
               ref={uploadInputRef}
               type="file"
@@ -94,6 +152,12 @@ export default function WechatGroupQrPage({ assetKey, title }: WechatGroupQrPage
             ) : null}
           </div>
         ) : null}
+        <p
+          aria-label="二维码最近更新时间"
+          className="fixed bottom-3 left-1/2 w-[min(92vw,560px)] -translate-x-1/2 text-center text-xs font-semibold text-red-400"
+        >
+          最近一次二维码图片更新时间：{updatedAtText}
+        </p>
       </section>
     </main>
   )
