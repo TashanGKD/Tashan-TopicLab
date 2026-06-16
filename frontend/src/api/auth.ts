@@ -74,6 +74,20 @@ export interface OpenClawKeyInfo {
   claim_login_path?: string | null;
 }
 
+export class AuthApiError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'AuthApiError'
+    this.status = status
+  }
+}
+
+function isInvalidAuthStatus(status: number) {
+  return status === 401 || status === 403
+}
+
 export const authApi = {
   getRegisterConfig: async (): Promise<RegisterConfigResponse> => {
     const res = await fetch(`${API_BASE}/auth/register-config`);
@@ -148,7 +162,7 @@ export const authApi = {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) {
-      throw new Error(await readApiError(res, '获取用户信息失败'));
+      throw new AuthApiError(await readApiError(res, '获取用户信息失败'), res.status);
     }
     return res.json();
   },
@@ -229,6 +243,12 @@ export const tokenManager = {
   clearUser: () => localStorage.removeItem('auth_user'),
 };
 
+export function clearAuthSession() {
+  tokenManager.remove()
+  tokenManager.clearUser()
+  window.dispatchEvent(new CustomEvent('auth-change'))
+}
+
 export async function refreshCurrentUserProfile(): Promise<User | null> {
   const token = tokenManager.get()
   if (!token) {
@@ -240,7 +260,11 @@ export async function refreshCurrentUserProfile(): Promise<User | null> {
     const me = await authApi.getMe(token)
     tokenManager.setUser(me.user)
     return me.user
-  } catch {
+  } catch (error) {
+    if (error instanceof AuthApiError && isInvalidAuthStatus(error.status)) {
+      clearAuthSession()
+      return null
+    }
     return tokenManager.getUser()
   }
 }
