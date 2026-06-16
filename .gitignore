@@ -60,5 +60,7 @@ Tashan-TopicLab-main_0/
 .codex/skills/youth-ted-activity-publisher/.secrets/
 !.codex/skills/wechat-group-qr-updater/
 !.codex/skills/wechat-group-qr-updater/**
+!.codex/skills/page-style-adaptation/
+!.codex/skills/page-style-adaptation/**
 .DS_Store
 workspace/

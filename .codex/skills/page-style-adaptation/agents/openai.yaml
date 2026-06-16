@@ -1,0 +1,4 @@
+interface:
+  display_name: "Page Style Adaptation"
+  short_description: "Adapt existing pages to a host design system."
+  default_prompt: "Use this skill to align an existing page or embedded app with its host visual system, including responsive layout and browser verification."
