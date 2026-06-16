@@ -57,6 +57,7 @@ Tashan-TopicLab-main_0/
 !.codex/skills/git-commit-conventions/**
 !.codex/skills/youth-ted-activity-publisher/
 !.codex/skills/youth-ted-activity-publisher/**
+.codex/skills/youth-ted-activity-publisher/.secrets/
 !.codex/skills/wechat-group-qr-updater/
 !.codex/skills/wechat-group-qr-updater/**
 .DS_Store

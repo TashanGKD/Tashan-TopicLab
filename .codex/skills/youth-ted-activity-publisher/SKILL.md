@@ -13,7 +13,69 @@ The default user request may contain only one poster image. In that case, do not
 
 The canonical backend is `topiclab-backend`, not `backend`. The frontend activity list reads `GET /api/v1/youth-ted/activities`; do not edit the frontend fallback poster or fallback activity unless the user explicitly asks.
 
+## Local Secrets
+
+Tencent Meeting tools require `TENCENT_MEETING_TOKEN`. Prefer the environment variable when it is already present. For local automations in this repo, a non-git-tracked fallback may exist at:
+
+```bash
+.codex/skills/youth-ted-activity-publisher/.secrets/tencent-meeting.env
+```
+
+When the token is not already exported, load it before Tencent Meeting calls:
+
+```bash
+set -a
+source .codex/skills/youth-ted-activity-publisher/.secrets/tencent-meeting.env
+set +a
+```
+
+Never print this file, include it in generated reports, copy it into tracked files, or commit it.
+
 ## Workflow
+
+### Weekly Thursday Replay Update
+
+Use this path for the recurring Thursday automation that updates the latest completed Wednesday 20:00 Youth TED replay.
+
+1. Treat the target event as the latest completed Wednesday 20:00 Asia/Shanghai slot:
+
+```bash
+topiclab-backend/.venv/bin/python .codex/skills/youth-ted-activity-publisher/scripts/plan_latest_wednesday_activity.py \
+  --poster /absolute/path/to/current-week-poster.png
+```
+
+If the weekly automation does not have a current poster path, do not reuse an older poster and do not guess from unrelated images. Continue with Tencent Meeting discovery and transcript saving when possible, then report that the database upsert is blocked until the current poster image is provided.
+
+2. Discover the ended meeting and records:
+   - Call `convert_timestamp` first because the automation is scheduled from relative time.
+   - Query `get_user_ended_meetings` for the Wednesday 19:30-23:45 window.
+   - Query `get_records_list` for the discovered `meeting_id` or recurring meeting code `49237646949`.
+   - Select the main Wednesday 20:00 cloud recording and the `文字转写` record.
+   - Use `get_record_addresses` on both `meeting_record_id` values to capture `recording_url` and `transcript_url` when available.
+   - Preserve and report all `X-Tc-Trace` / `rpcUuid` values.
+
+3. Save transcript data locally before extraction:
+
+```bash
+topiclab-backend/.venv/bin/python .codex/skills/youth-ted-activity-publisher/scripts/save_tencent_transcript.py \
+  --slug youth-ted-YYYY-MM-DD \
+  --meeting-id 11337785712281941677 \
+  --record-file-id <transcript_record_file_id>
+```
+
+4. Generate `workspace/youth-ted/content/{slug}.content.json` from the local transcript, following the data contract:
+   - 8-10 question-style `topics`.
+   - 3-6 `interest_points`.
+   - `meeting.recording_url`, `meeting.transcript_url`, cloud `record_file_id`, and transcript `record_file_id`.
+   - `transcript.available=true`, paragraph count, local artifact paths, and trace fields.
+   - No full transcript text in DB.
+
+5. Upsert only when the current poster is available:
+   - Convert the poster to `workspace/youth-ted/posters/{slug}.webp`.
+   - Use `label=往期回顾`, `sort_order=10`, and increment older activities by 10.
+   - Verify `/api/v1/youth-ted/activities` and `/api/v1/youth-ted/activities/{slug}/poster.webp`.
+
+6. If any required step cannot complete, report the exact blocker and the local artifacts already written. Never silently skip transcript saving or database verification.
 
 ### Poster-Only Default Path
 
