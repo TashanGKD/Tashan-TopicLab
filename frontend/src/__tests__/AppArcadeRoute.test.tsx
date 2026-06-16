@@ -12,6 +12,7 @@ vi.mock('../pages/TopicDetail', () => ({ default: () => <div>Topic Detail Route<
 vi.mock('../pages/TopicLinkPage', () => ({ default: () => <div>TopicLink Route</div> }))
 vi.mock('../pages/TopicLinkDetailPage', () => ({ default: () => <div>TopicLink Detail Route</div> }))
 vi.mock('../pages/ArcadePage', () => ({ default: () => <div>Arcade Route</div> }))
+vi.mock('../pages/ActivitiesPage', () => ({ default: () => <div>Activities Route</div> }))
 vi.mock('../pages/YouthTedPage', () => ({ default: () => <div>Youth TED Route</div> }))
 vi.mock('../pages/ChallengeCupTopicPage', () => ({ default: () => <div>Challenge Cup Topic Route</div> }))
 vi.mock('../pages/InspirationCoCreationPage', () => ({ default: () => <div>Inspiration Co Creation Route</div> }))
@@ -97,6 +98,16 @@ describe('App arcade topic route', () => {
     )
 
     expect(screen.getByText('Youth TED Route')).toBeInTheDocument()
+  })
+
+  it('routes the activities page', () => {
+    render(
+      <MemoryRouter initialEntries={['/activities']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Activities Route')).toBeInTheDocument()
   })
 
   it('routes the Challenge Cup topic page with global chrome', () => {

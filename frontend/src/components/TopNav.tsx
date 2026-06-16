@@ -53,25 +53,18 @@ const mobileTabs = [
     ),
   },
   {
-    to: '/youth-ted',
-    label: 'TED',
-    match: (path: string) => path.startsWith('/youth-ted'),
+    to: '/activities',
+    label: '活动',
+    match: (path: string) =>
+      path.startsWith('/activities') ||
+      path.startsWith('/youth-ted') ||
+      path.startsWith('/challenge-cup-topic') ||
+      path.startsWith('/inspiration-co-creation'),
     icon: (
       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M5 7.75h14M8.5 4.75v6M15.5 4.75v6" />
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M6.75 10.75h10.5A1.75 1.75 0 0119 12.5v4.75A1.75 1.75 0 0117.25 19H6.75A1.75 1.75 0 015 17.25V12.5a1.75 1.75 0 011.75-1.75Z" />
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8.5 15h7" />
-      </svg>
-    ),
-  },
-  {
-    to: '/inspiration-co-creation',
-    label: '灵感共创',
-    match: (path: string) => path.startsWith('/inspiration-co-creation'),
-    icon: (
-      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7.25 8.75h9.5M7.25 12h6.5M6.75 19.25l2.5-3h7A2.75 2.75 0 0019 13.5v-6A2.75 2.75 0 0016.25 4.75H7.75A2.75 2.75 0 005 7.5v6a2.75 2.75 0 002.75 2.75" />
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15.75 10.75l1.25 1.25 2.25-2.5" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M6.75 5.25h10.5A2.25 2.25 0 0119.5 7.5v9.75a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 17.25V7.5a2.25 2.25 0 012.25-2.25Z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 3.75v3M16 3.75v3M4.75 9h14.5" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8.25 12.5h2.25M13.5 12.5h2.25M8.25 15.75h2.25" />
       </svg>
     ),
   },
@@ -313,23 +306,6 @@ export default function TopNav() {
                 />
               </Link>
             ))}
-            <Link
-              to="/profile-helper"
-              className="relative text-sm font-serif font-medium transition-all whitespace-nowrap py-2 group"
-              style={{
-                color: location.pathname.startsWith('/profile-helper') ? 'var(--color-dark)' : 'var(--color-gray)',
-              }}
-            >
-              数字分身
-              <span
-                className={`absolute bottom-0 left-0 h-0.5 transition-all duration-300 ${
-                  location.pathname.startsWith('/profile-helper') ? 'w-full' : 'w-0 group-hover:w-full'
-                }`}
-                style={{
-                  background: 'var(--color-dark)',
-                }}
-              />
-            </Link>
             {user ? (
               <div>
                 <button

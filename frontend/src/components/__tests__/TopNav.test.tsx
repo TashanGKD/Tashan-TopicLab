@@ -52,7 +52,7 @@ describe('TopNav', () => {
     expect(screen.queryByRole('link', { name: '信息' })).not.toBeInTheDocument()
   })
 
-  it('labels the inspiration route differently for desktop and mobile navigation', () => {
+  it('keeps activity pages behind one mobile activity tab', () => {
     render(
       <MemoryRouter initialEntries={['/inspiration-co-creation']}>
         <TopNav />
@@ -60,7 +60,10 @@ describe('TopNav', () => {
     )
 
     expect(screen.getByRole('link', { name: '灵感共创队' })).toHaveAttribute('href', '/inspiration-co-creation')
-    expect(screen.getByRole('link', { name: '灵感共创' })).toHaveAttribute('href', '/inspiration-co-creation')
+    expect(screen.getByRole('link', { name: '活动' })).toHaveAttribute('href', '/activities')
+    expect(screen.getByRole('link', { name: '活动' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.queryByRole('link', { name: 'TED' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '灵感共创' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '共创队' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '共创' })).not.toBeInTheDocument()
   })
@@ -73,5 +76,15 @@ describe('TopNav', () => {
     )
 
     expect(screen.getByRole('link', { name: '挑战杯专题' })).toHaveAttribute('href', '/challenge-cup-topic')
+  })
+
+  it('hides the digital twin link from the public navigation bar', () => {
+    render(
+      <MemoryRouter initialEntries={['/topiclink']}>
+        <TopNav />
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByRole('link', { name: '数字分身' })).not.toBeInTheDocument()
   })
 })

@@ -29,6 +29,7 @@ import TopicDetail from './pages/TopicDetail'
 import TopicLinkPage from './pages/TopicLinkPage'
 import TopicLinkDetailPage from './pages/TopicLinkDetailPage'
 import ThinkingPage from './pages/ThinkingPage'
+import ActivitiesPage from './pages/ActivitiesPage'
 import YouthTedPage from './pages/YouthTedPage'
 import ChallengeCupTopicPage from './pages/ChallengeCupTopicPage'
 import InspirationCoCreationPage from './pages/InspirationCoCreationPage'
@@ -70,6 +71,7 @@ function App() {
             <Route path="/info/:section" element={<SourceFeedPage />} />
             <Route path="/source-feed" element={<Navigate to="/info/source" replace />} />
             <Route path="/source-feed/:section" element={<SourceFeedPage />} />
+            <Route path="/activities" element={<ActivitiesPage />} />
             <Route path="/youth-ted" element={<YouthTedPage />} />
             <Route path="/challenge-cup-topic" element={<ChallengeCupTopicPage />} />
             <Route path="/inspiration-co-creation" element={<InspirationCoCreationPage />} />
