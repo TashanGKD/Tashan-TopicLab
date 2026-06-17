@@ -83,16 +83,22 @@ function WorldWeaveSourceFrame() {
     if (!frame) return
 
     let attachedDocument: Document | null = null
-    let detachFrameWheel: (() => void) | null = null
+    let detachFrameScroll: (() => void) | null = null
 
     const allowFrameScroll = () => {
-      const doc = frame.contentDocument ?? frame.contentWindow?.document
+      let doc: Document | null = null
+      try {
+        doc = frame.contentDocument ?? frame.contentWindow?.document ?? null
+      } catch {
+        doc = null
+      }
       if (!doc) return
 
       if (attachedDocument === doc) return
 
-      detachFrameWheel?.()
+      detachFrameScroll?.()
       attachedDocument = doc
+      let lastTouchY: number | null = null
 
       const handleFrameWheel = (event: WheelEvent) => {
         const win = doc.defaultView
@@ -111,9 +117,44 @@ function WorldWeaveSourceFrame() {
         }
       }
 
+      const handleFrameTouchStart = (event: TouchEvent) => {
+        lastTouchY = event.touches[0]?.clientY ?? null
+      }
+
+      const handleFrameTouchMove = (event: TouchEvent) => {
+        const win = doc.defaultView
+        const touchY = event.touches[0]?.clientY
+        if (!win || touchY === undefined || lastTouchY === null) return
+
+        const deltaY = lastTouchY - touchY
+        const beforeY = win.scrollY
+        win.scrollBy({
+          top: deltaY,
+          behavior: 'instant',
+        })
+        lastTouchY = touchY
+
+        if (win.scrollY !== beforeY) {
+          event.preventDefault()
+          event.stopPropagation()
+        }
+      }
+
+      const handleFrameTouchEnd = () => {
+        lastTouchY = null
+      }
+
       doc.addEventListener('wheel', handleFrameWheel, { passive: false })
-      detachFrameWheel = () => {
+      doc.addEventListener('touchstart', handleFrameTouchStart, { passive: true })
+      doc.addEventListener('touchmove', handleFrameTouchMove, { passive: false })
+      doc.addEventListener('touchend', handleFrameTouchEnd)
+      doc.addEventListener('touchcancel', handleFrameTouchEnd)
+      detachFrameScroll = () => {
         doc.removeEventListener('wheel', handleFrameWheel)
+        doc.removeEventListener('touchstart', handleFrameTouchStart)
+        doc.removeEventListener('touchmove', handleFrameTouchMove)
+        doc.removeEventListener('touchend', handleFrameTouchEnd)
+        doc.removeEventListener('touchcancel', handleFrameTouchEnd)
       }
     }
 
@@ -123,19 +164,19 @@ function WorldWeaveSourceFrame() {
 
     return () => {
       window.clearInterval(intervalId)
-      detachFrameWheel?.()
+      detachFrameScroll?.()
       frame.removeEventListener('load', allowFrameScroll)
     }
   }, [worldWeaveStatus])
 
   return (
-    <div className="h-[calc(100dvh-3.5rem)] min-h-[560px] overflow-hidden bg-[#f3f7fb]">
+    <div className="h-[calc(100dvh-3.5rem)] min-h-[560px] overflow-auto overscroll-contain bg-[#f3f7fb] [-webkit-overflow-scrolling:touch]">
       {worldWeaveStatus === 'ready' ? (
         <iframe
           ref={frameRef}
           title="世界脉络"
           src={WORLDWEAVE_FRAME_URL}
-          className="block h-full w-full border-0"
+          className="block h-full w-full border-0 touch-pan-y"
           scrolling="auto"
           loading="eager"
           onError={() => setWorldWeaveStatus('unavailable')}

@@ -117,9 +117,60 @@ describe('SourceFeedPage', () => {
 
     await waitFor(() => {
       expect(frame).toHaveClass('h-full', 'w-full')
+      expect(frame).toHaveClass('touch-pan-y')
+      expect(frame.parentElement).toHaveClass('overflow-auto', 'overscroll-contain')
       expect(frame).not.toHaveStyle({ transform: 'scale(0.85)' })
       expect(iframeDocument.documentElement.style.overflowY).toBe('')
       expect(iframeDocument.body.style.overflowY).toBe('')
+    })
+  })
+
+  it('forwards mobile touch drags to the WorldWeave iframe document', async () => {
+    renderSourceFeed()
+
+    const frame = (await screen.findByTitle('世界脉络')) as HTMLIFrameElement
+    const iframeDocument = document.implementation.createHTMLDocument('世界脉络')
+    const frameWindow = {
+      document: iframeDocument,
+      scrollY: 0,
+      scrollBy: vi.fn(({ top }: ScrollToOptions) => {
+        frameWindow.scrollY += Number(top ?? 0)
+      }),
+    } as unknown as Window & typeof globalThis
+
+    Object.defineProperty(iframeDocument, 'defaultView', {
+      configurable: true,
+      get: () => frameWindow,
+    })
+    Object.defineProperty(frame, 'contentDocument', {
+      configurable: true,
+      get: () => iframeDocument,
+    })
+    Object.defineProperty(frame, 'contentWindow', {
+      configurable: true,
+      get: () => frameWindow,
+    })
+
+    fireEvent.load(frame)
+
+    const touchStart = new Event('touchstart', { bubbles: true, cancelable: true })
+    Object.defineProperty(touchStart, 'touches', {
+      value: [{ clientY: 420 }],
+    })
+    iframeDocument.dispatchEvent(touchStart)
+
+    const touchMove = new Event('touchmove', { bubbles: true, cancelable: true })
+    Object.defineProperty(touchMove, 'touches', {
+      value: [{ clientY: 300 }],
+    })
+    iframeDocument.dispatchEvent(touchMove)
+
+    await waitFor(() => {
+      expect(frameWindow.scrollBy).toHaveBeenCalledWith({
+        top: 120,
+        behavior: 'instant',
+      })
+      expect(touchMove.defaultPrevented).toBe(true)
     })
   })
 
