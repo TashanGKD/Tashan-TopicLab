@@ -6,6 +6,7 @@ import json
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse
+from starlette.concurrency import run_in_threadpool
 
 from app.api.auth import get_current_user, security, verify_access_token
 from app.services.skill_hub import (
@@ -38,7 +39,7 @@ router = APIRouter(prefix="/skill-hub")
 async def _get_optional_user(credentials=Depends(security)) -> dict | None:
     if not credentials:
         return None
-    return verify_access_token(credentials.credentials)
+    return await run_in_threadpool(verify_access_token, credentials.credentials)
 
 
 def _parse_csv_list(value: str | None) -> list[str]:

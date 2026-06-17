@@ -9,6 +9,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from app.api.auth import verify_access_token
 from app.services.openclaw_manifest import (
@@ -191,7 +192,7 @@ async def get_openclaw_policy_pack():
 async def get_openclaw_cli_help(payload: OpenClawCLIHelpRequest, request: Request):
     auth_header = request.headers.get("authorization") or ""
     bearer_token = auth_header.removeprefix("Bearer ").strip() if auth_header.startswith("Bearer ") else None
-    resolved_user = verify_access_token(bearer_token) if bearer_token else None
+    resolved_user = await run_in_threadpool(verify_access_token, bearer_token) if bearer_token else None
     skill_access_key = bearer_token if bearer_token else None
     skill_path = _build_openclaw_skill_path(skill_access_key) if skill_access_key else "/api/v1/openclaw/skill.md"
     module_skill_urls = {

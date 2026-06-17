@@ -790,9 +790,9 @@ async def get_openclaw_skill_markdown(
                     headers=build_openclaw_key_invalid_headers(),
                 )
             raw_key = payload.access_token
-            resolved_user = verify_access_token(raw_key)
+            resolved_user = await run_in_threadpool(verify_access_token, raw_key)
         else:
-            resolved_user = verify_access_token(key)
+            resolved_user = await run_in_threadpool(verify_access_token, key)
             if not resolved_user:
                 return PlainTextResponse(
                     "Invalid OpenClaw key.\n",

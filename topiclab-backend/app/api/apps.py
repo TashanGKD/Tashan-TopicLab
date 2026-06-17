@@ -9,6 +9,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from app.api.auth import security, verify_access_token
 from app.api.topics import ToggleActionRequest, _normalize_topic_category
@@ -27,7 +28,7 @@ class EnsureAppTopicResponse(BaseModel):
 async def _get_optional_user(credentials=Depends(security)) -> dict | None:
     if not credentials:
         return None
-    return verify_access_token(credentials.credentials)
+    return await run_in_threadpool(verify_access_token, credentials.credentials)
 
 
 def _resolve_owner_identity(user: dict | None) -> tuple[int | None, str | None]:

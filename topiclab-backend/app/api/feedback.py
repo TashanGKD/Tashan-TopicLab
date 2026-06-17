@@ -9,6 +9,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
+from starlette.concurrency import run_in_threadpool
 
 from app.api.auth import security, verify_access_token
 from app.services.openclaw_runtime import record_activity_event
@@ -34,7 +35,7 @@ class FeedbackCreateRequest(BaseModel):
 async def _get_optional_user(credentials: HTTPAuthorizationCredentials | None = Depends(security)) -> dict | None:
     if not credentials:
         return None
-    return verify_access_token(credentials.credentials)
+    return await run_in_threadpool(verify_access_token, credentials.credentials)
 
 
 def _to_iso(value) -> str:

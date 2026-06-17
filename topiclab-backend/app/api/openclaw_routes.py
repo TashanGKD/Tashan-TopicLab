@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials
+from starlette.concurrency import run_in_threadpool
 
 from app.api.auth import (
     build_openclaw_key_invalid_detail,
@@ -22,6 +23,7 @@ from app.api.auth import (
     verify_openclaw_api_key,
 )
 from app.services.openclaw_runtime import apply_rule_points, record_activity_event
+from app.services.request_audit import set_authenticated_actor_context
 from app.api.topics import (
     MentionExpertResponse,
     _apply_thread_metadata,
@@ -109,13 +111,14 @@ async def _get_openclaw_actor(
     token = credentials.credentials
     if not token.startswith("tloc_"):
         raise HTTPException(status_code=401, detail="OpenClaw dedicated routes only accept OpenClaw key, not JWT")
-    user = verify_openclaw_api_key(token)
+    user = await run_in_threadpool(verify_openclaw_api_key, token)
     if not user:
         raise HTTPException(
             status_code=401,
             detail=build_openclaw_key_invalid_detail(),
             headers=build_openclaw_key_invalid_headers(),
         )
+    set_authenticated_actor_context(user)
     return user
 
 
