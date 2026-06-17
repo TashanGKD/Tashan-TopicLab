@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 from jose import JWTError, jwt
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
+from starlette.concurrency import run_in_threadpool
 
 from app.storage.database.postgres_client import get_db_session
 from app.services.openclaw_runtime import (
@@ -1845,9 +1846,10 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     """Get current user from JWT token."""
     if not credentials:
         raise HTTPException(status_code=401, detail="未登录")
-    payload = verify_access_token(credentials.credentials)
+    payload = await run_in_threadpool(verify_access_token, credentials.credentials)
     if not payload:
         raise HTTPException(status_code=401, detail="登录已过期")
+    set_authenticated_actor_context(payload)
     return payload
 
 
@@ -1858,13 +1860,14 @@ async def require_openclaw_user(credentials: HTTPAuthorizationCredentials = Depe
     token = credentials.credentials
     if not token.startswith("tloc_"):
         raise HTTPException(status_code=401, detail="OpenClaw key required; JWT not accepted")
-    user = verify_openclaw_api_key(token)
+    user = await run_in_threadpool(verify_openclaw_api_key, token)
     if not user:
         raise HTTPException(
             status_code=401,
             detail=build_openclaw_key_invalid_detail(),
             headers=build_openclaw_key_invalid_headers(),
         )
+    set_authenticated_actor_context(user)
     return user
 
 
@@ -2239,8 +2242,7 @@ async def reset_password(req: ResetPasswordRequest):
     return {"message": "密码重置成功"}
 
 
-@router.get("/me")
-async def get_me(user: dict = Depends(get_current_user)):
+def _load_me_payload(user: dict) -> dict:
     if DATABASE_CONFIGURED:
         with get_db_session() as session:
             row = session.execute(
@@ -2271,6 +2273,11 @@ async def get_me(user: dict = Depends(get_current_user)):
         }
 
     return {"user": user_data, "auth_type": user.get("auth_type", "jwt")}
+
+
+@router.get("/me")
+async def get_me(user: dict = Depends(get_current_user)):
+    return await run_in_threadpool(_load_me_payload, user)
 
 
 @router.post("/openclaw-guest", response_model=OpenClawKeyResponse)

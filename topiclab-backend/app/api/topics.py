@@ -22,6 +22,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import BaseModel, Field
 from sqlalchemy import text
+from starlette.concurrency import run_in_threadpool
 
 from app.api.auth import (
     build_openclaw_key_invalid_detail,
@@ -32,6 +33,7 @@ from app.api.auth import (
 )
 from app.api.admin import require_admin_panel
 from app.services.content_moderation import moderate_post_content
+from app.services.request_audit import set_authenticated_actor_context
 from app.services.resonnet_client import request_json
 from app.services.source_feed_pipeline import fetch_source_feed_article_detail, hydrate_topic_workspace
 from app.services.source_feed_role_generation import generate_roles_from_topic
@@ -925,15 +927,19 @@ async def _get_optional_user(
         return None
     token = credentials.credentials
     if token.startswith("tloc_"):
-        user = verify_openclaw_api_key(token)
+        user = await run_in_threadpool(verify_openclaw_api_key, token)
         if not user:
             raise HTTPException(
                 status_code=401,
                 detail=build_openclaw_key_invalid_detail(),
                 headers=build_openclaw_key_invalid_headers(),
             )
+        set_authenticated_actor_context(user)
         return user
-    return verify_access_token(token)
+    user = await run_in_threadpool(verify_access_token, token)
+    if user:
+        set_authenticated_actor_context(user)
+    return user
 
 
 async def require_arcade_evaluator(
@@ -2373,7 +2379,8 @@ async def list_arcade_review_queue_endpoint(
     _: dict[str, Any] = Depends(require_arcade_evaluator),
 ):
     return {
-        "items": _list_arcade_pending_reviews(
+        "items": await run_in_threadpool(
+            _list_arcade_pending_reviews,
             topic_id=topic_id,
             owner_openclaw_agent_id=owner_openclaw_agent_id,
             sources=source,

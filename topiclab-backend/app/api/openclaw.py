@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from sqlalchemy import text
+from starlette.concurrency import run_in_threadpool
 
 from app.api.auth import (
     OPENCLAW_AUTH_RECOVERY_ACTION,
@@ -37,6 +38,7 @@ from app.services.openclaw_runtime import (
     revoke_openclaw_key,
     unbind_openclaw_agent_from_user,
 )
+from app.services.request_audit import set_authenticated_actor_context
 from app.api.topics import TOPIC_CATEGORIES, _normalize_topic_category, get_topic_category_profile
 from app.storage.database.postgres_client import get_db_session
 from app.storage.database.topic_store import get_source_pic_url_by_topic_ids, list_topics
@@ -73,13 +75,15 @@ async def _get_optional_user(
     if not credentials:
         return None
     token = credentials.credentials
-    user = verify_access_token(token)
+    user = await run_in_threadpool(verify_access_token, token)
     if token.startswith("tloc_") and not user:
         raise HTTPException(
             status_code=401,
             detail=build_openclaw_key_invalid_detail(),
             headers=build_openclaw_key_invalid_headers(),
         )
+    if user:
+        set_authenticated_actor_context(user)
     return user
 
 
@@ -268,13 +272,7 @@ def _get_cached_site_stats() -> dict:
     return stats
 
 
-@router.get("/home")
-async def get_openclaw_home(
-    topic_limit: int = Query(default=10, ge=1, le=50),
-    category: str | None = Query(default=None),
-    user: dict | None = Depends(_get_optional_user),
-):
-    normalized_category = _normalize_topic_category(category)
+def _load_openclaw_home_payload(*, normalized_category: str | None, topic_limit: int, user: dict | None) -> dict:
     try:
         topics_page = list_topics(category=normalized_category, limit=topic_limit)
         latest_topics = topics_page["items"]
@@ -346,15 +344,29 @@ async def get_openclaw_home(
     }
 
 
-@router.get("/openclaw/topics")
-async def search_openclaw_topics(
+@router.get("/home")
+async def get_openclaw_home(
+    topic_limit: int = Query(default=10, ge=1, le=50),
     category: str | None = Query(default=None),
-    q: str | None = Query(default=None, description="Search topic title/body"),
-    cursor: str | None = Query(default=None),
-    limit: int = Query(default=20, ge=1, le=100),
     user: dict | None = Depends(_get_optional_user),
 ):
     normalized_category = _normalize_topic_category(category)
+    return await run_in_threadpool(
+        _load_openclaw_home_payload,
+        normalized_category=normalized_category,
+        topic_limit=topic_limit,
+        user=user,
+    )
+
+
+def _search_openclaw_topics_payload(
+    *,
+    normalized_category: str | None,
+    q: str | None,
+    cursor: str | None,
+    limit: int,
+    user: dict | None,
+) -> dict:
     user_id = int(user["sub"]) if user and user.get("sub") is not None else None
     auth_type = user.get("auth_type") if user else None
     payload = list_topics(
@@ -383,6 +395,25 @@ async def search_openclaw_topics(
         ],
         "next_cursor": payload.get("next_cursor"),
     }
+
+
+@router.get("/openclaw/topics")
+async def search_openclaw_topics(
+    category: str | None = Query(default=None),
+    q: str | None = Query(default=None, description="Search topic title/body"),
+    cursor: str | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+    user: dict | None = Depends(_get_optional_user),
+):
+    normalized_category = _normalize_topic_category(category)
+    return await run_in_threadpool(
+        _search_openclaw_topics_payload,
+        normalized_category=normalized_category,
+        q=q,
+        cursor=cursor,
+        limit=limit,
+        user=user,
+    )
 
 
 @router.get("/user/me")

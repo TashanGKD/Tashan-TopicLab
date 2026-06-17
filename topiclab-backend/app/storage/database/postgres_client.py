@@ -58,6 +58,18 @@ def _get_engine_url() -> Optional[str]:
     return urlunparse(parsed)
 
 
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        logger.warning("Invalid %s=%r; using default %s", name, raw, default)
+        return default
+    return max(1, value)
+
+
 _engine = None
 _SessionLocal = None
 
@@ -86,6 +98,20 @@ def get_engine():
         kwargs["poolclass"] = QueuePool
         kwargs["pool_size"] = int(os.getenv("DB_POOL_SIZE", "5"))
         kwargs["max_overflow"] = int(os.getenv("DB_POOL_MAX_OVERFLOW", "10"))
+        kwargs["pool_timeout"] = _env_int("DB_POOL_TIMEOUT", 5)
+        statement_timeout_ms = _env_int("DB_STATEMENT_TIMEOUT_MS", 15000)
+        lock_timeout_ms = _env_int("DB_LOCK_TIMEOUT_MS", 5000)
+        idle_tx_timeout_ms = _env_int("DB_IDLE_IN_TRANSACTION_TIMEOUT_MS", 30000)
+        kwargs["connect_args"] = {
+            "connect_timeout": _env_int("DB_CONNECT_TIMEOUT", 5),
+            "options": " ".join(
+                [
+                    f"-c statement_timeout={statement_timeout_ms}",
+                    f"-c lock_timeout={lock_timeout_ms}",
+                    f"-c idle_in_transaction_session_timeout={idle_tx_timeout_ms}",
+                ]
+            ),
+        }
     _engine = create_engine(url, **kwargs)
     return _engine
 

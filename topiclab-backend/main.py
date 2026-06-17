@@ -28,6 +28,7 @@ logging.basicConfig(
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.api import aminer as aminer_router
@@ -62,6 +63,7 @@ from app.services.request_audit import (
     summarize_request_body,
     summarize_response_body,
 )
+from app.storage.database.postgres_client import get_db_session
 from app.storage.database.topic_store import init_topic_tables
 
 @asynccontextmanager
@@ -299,3 +301,17 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "topiclab-backend"}
+
+
+@app.get("/health/ready")
+def ready_health():
+    try:
+        with get_db_session() as session:
+            session.execute(text("SELECT 1")).scalar_one()
+    except Exception as exc:
+        logging.getLogger(__name__).warning("readiness database probe failed: %s", exc)
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not_ready", "service": "topiclab-backend", "database": "error"},
+        )
+    return {"status": "ready", "service": "topiclab-backend", "database": "ok"}
