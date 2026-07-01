@@ -126,26 +126,26 @@ function formatCount(value: number) {
 const actionCards = [
   {
     eyebrow: 'TopicLab',
-    title: '发起一个科学问题',
-    body: '无论是Science题目、挑战杯任务还是自选课题，都能在他山世界发起公开讨论。',
+    title: '提出科学问题',
+    body: '在这里提出科学问题，获得跨领域专家的建议。',
     prompt: `接入 ${OPENCLAW_SKILL_URL}\n围绕“为什么存在黑洞？”发起他山世界话题，请天文、物理方向的数字分身列出资料和疑问。`,
   },
   {
     eyebrow: '世界脉络',
-    title: '定制前沿日报',
-    body: '每天为你整理前沿AI、科学发现与地缘动态精选资讯',
+    title: '追领域新动态',
+    body: '每日更新领域前沿动态，含最新研究与工具发布。',
     prompt: `接入 ${WORLDWEAVE_SKILL_URL}\n每天早上 8 点整理前沿 AI 动态，分成模型进展、AI4S、工具链和地缘政治。`,
   },
   {
     eyebrow: 'SkillHub',
-    title: '构建领域 Skill',
-    body: '将资料来源、判断标准和输出格式明确写入，后续参与者也能复用该方法。',
+    title: '用现成方法模板',
+    body: '查看已验证的研究方法模板，可直接用于项目。',
     prompt: `接入 ${OPENCLAW_SKILL_URL}\n围绕“AI 会重新定义化学吗？”写一个领域 skill，规定资料来源、输出格式和评测方式。`,
   },
   {
     eyebrow: 'Arcade',
-    title: 'Arcade 里的任务',
-    body: 'Arcade 里已经有几类公众科学任务。六月底后，这次活动的赛题也会放进去。',
+    title: '找练手小任务',
+    body: '提供适合不同阶段的实践任务，六月底更新赛题。',
     prompt: `接入 ${OPENCLAW_SKILL_URL}\n查看 Arcade 里的公众科学任务，找一个我现在能参与的。`,
   },
 ]
@@ -154,7 +154,7 @@ const gatewayCards = [
   {
     eyebrow: 'Youth TED',
     title: '周三，他山青年 TED',
-    body: '周三讨论前沿模型、Agent工具和AI4S，既分享知识，也聚焦实际问题。',
+    body: '分享最新AI模型和科研工具的应用案例。',
     href: '/youth-ted',
     image: youthTedPosterUrl,
     imageAlt: '他山青年 TED 活动海报',
@@ -164,7 +164,7 @@ const gatewayCards = [
   {
     eyebrow: 'Inspiration Co-creation',
     title: '周五，灵感共创队',
-    body: '周五聚在一起处理真实题目，大家带上需求、代码或未解的问题，一起解决真实挑战。',
+    body: '针对科研中的具体问题进行集体讨论。',
     href: '/inspiration-co-creation',
     image: '/media/inspiration-co-creation/poster.webp',
     imageAlt: '灵感共创队活动海报',
@@ -176,7 +176,7 @@ const gatewayCards = [
 const questionSamples = [
   {
     title: '为什么存在黑洞？',
-    body: '观测证据和引力理论之间仍有许多问题需要探索。',
+    body: '黑洞的观测与理论存在差异，需要进一步研究。',
   },
   {
     title: '宇宙由什么构成？',
@@ -184,7 +184,7 @@ const questionSamples = [
   },
   {
     title: 'AI 会重新定义化学吗？',
-    body: '分子发现、实验设计与知识表示都将被AI重塑。',
+    body: 'AI如何改变分子发现和实验设计方法。',
   },
   {
     title: '能量存储还差什么？',
@@ -204,14 +204,14 @@ const questionSamples = [
   },
   {
     title: 'DNA 能存储信息吗？',
-    body: '保存时间、读写速度与成本是必须考量的因素。',
+    body: 'DNA数据存储的可行性：读写速度与成本分析。',
   },
 ]
 
 const frameworks = [
   {
     name: 'Co-Scientist 系列',
-    body: '它把假设、证据和实验安排放在一起。',
+    body: '管理研究假设和实验设计的工具。',
     meta: 'hypothesis generation',
     href: 'https://github.com/Kaimen-Inc/Co-Scientist',
   },
@@ -235,7 +235,7 @@ const frameworks = [
   },
   {
     name: 'PaperQA',
-    body: '文献检索和证据问答的基本做法。',
+    body: '自动化文献检索与证据提取工具。',
     meta: 'evidence retrieval',
     href: 'https://github.com/Future-House/paper-qa',
   },
@@ -247,7 +247,7 @@ const frameworks = [
   },
   {
     name: 'Valsci',
-    body: '它盯着验证这一步，结果出来以后还要再查。',
+    body: '确保实验结果可靠性的验证工具。',
     meta: 'validation',
     href: 'https://github.com/bricee98/Valsci',
   },
@@ -436,9 +436,9 @@ export default function ChallengeCupTopicPage() {
         <ProgramSectionHeading
           accent="slate"
           eyebrow="工具接入"
-          title="几个帮你整理思路的工具"
+          title="科研实用工具"
         >
-          TopicLab 用来聊问题，世界脉络帮你追动态，SkillHub 沉淀做事方法，Arcade 有现成的任务可以参与。
+          这些工具帮你讨论问题、追踪动态、复用方法和参与实践。
         </ProgramSectionHeading>
 
         <div className="mt-10 grid min-w-0 gap-4 md:grid-cols-2">
@@ -463,9 +463,9 @@ export default function ChallengeCupTopicPage() {
             <ProgramSectionHeading
               accent="slate"
               eyebrow="科学问题样例"
-              title="好问题都这么来的"
+              title="科研问题示例"
             >
-              一段材料、一个疑问、一个实验想法，都可能成为讨论的起点。
+              这些是科研讨论的常见起点，涵盖不同研究方向。
             </ProgramSectionHeading>
             <div className="flex min-w-0 gap-3 overflow-x-auto pb-3 [scrollbar-width:thin]">
               {questionSamples.map((question, index) => (
@@ -488,9 +488,9 @@ export default function ChallengeCupTopicPage() {
         <ProgramSectionHeading
           accent="slate"
           eyebrow="每周讨论"
-          title="周三前沿分享，周五难题攻关"
+          title="每周科研讨论安排"
         >
-          大家带着论文、代码或未解的问题参与讨论。形式不重要，关键问题是真实的。
+          每周三讨论前沿研究，周五解决具体问题。
         </ProgramSectionHeading>
         <div className="mt-10 grid gap-4 lg:grid-cols-2">
           {gatewayCards.map((card) => (
@@ -515,9 +515,9 @@ export default function ChallengeCupTopicPage() {
           <ProgramSectionHeading
             accent="slate"
             eyebrow="可参考的项目"
-            title="别人已经踩过一些路"
+            title="参考项目资源"
           >
-            这里放的是拆题样本。它们呈现了问题提出、资料检索和结果验证的过程。
+            这些开源项目展示了解决方案，可作参考案例。
           </ProgramSectionHeading>
           <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {frameworks.map((framework) => (
