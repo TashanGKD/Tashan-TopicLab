@@ -1,9 +1,18 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import ChallengeCupTopicPage from '../ChallengeCupTopicPage'
 
 describe('ChallengeCupTopicPage', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: false, json: () => Promise.resolve({}) })))
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.unstubAllGlobals()
+  })
+
   it('renders as a native site page instead of an iframe microsite', () => {
     const { container } = render(<ChallengeCupTopicPage />)
 
@@ -22,6 +31,46 @@ describe('ChallengeCupTopicPage', () => {
     expect(screen.getByText('科学问题样例')).toBeInTheDocument()
     expect(screen.getByText('Open Deep Research')).toBeInTheDocument()
     expect(screen.getByText('工具接入')).toBeInTheDocument()
+    expect(screen.getByText('Agent4S 专栏')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Agent4S：人工智能驱动的科研范式革命' })).toBeInTheDocument()
+    expect(screen.queryByText('这组公众号文章来自他山主页 Agent4S 板块，覆盖数据规范、记忆与工具、OpenClaw 运行过程、科研第五范式和实验科学闭环。')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '查看专辑' })).toHaveAttribute('href', 'https://mp.weixin.qq.com/mp/appmsgalbum?__biz=MzkyNjY0NjI3NA==&action=getalbum&album_id=4525736241471864843')
+    expect(screen.getByRole('heading', { name: 'Agent4S｜实验科学重构：从人为决策逐渐走向智能闭环' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Agent4S｜实验科学重构：从人为决策逐渐走向智能闭环' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Agent4S 文章列表')).toHaveClass('overflow-x-auto')
+    expect(screen.getByRole('link', { name: /Agent4S｜实验科学重构/ })).toHaveClass('w-[13.5rem]')
+    expect(screen.getByText('阅读 214')).toBeInTheDocument()
     expect(screen.getByText('每周讨论')).toBeInTheDocument()
+  })
+
+  it('hydrates Agent4S articles from the shared database API', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          articles: [
+            {
+              msgid: 'shared-db',
+              title: 'Agent4S｜共享数据库实时文章',
+              cover_url: 'https://example.com/shared.jpg',
+              link: 'https://mp.weixin.qq.com/s/shared-db',
+              published_at: '2026-07-01T10:00:00+08:00',
+              read_count: 88,
+              like_count: 9,
+            },
+          ],
+        }),
+      })),
+    )
+
+    render(<ChallengeCupTopicPage />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Agent4S｜共享数据库实时文章' })).toBeInTheDocument()
+    })
+    expect(screen.getByText('阅读 88')).toBeInTheDocument()
+    expect(screen.getByText('点赞 9')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Agent4S｜共享数据库实时文章' })).toHaveAttribute('src', 'https://example.com/shared.jpg')
   })
 })

@@ -34,6 +34,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from app.api import aminer as aminer_router
 from app.api import apps as apps_router
 from app.api import admin as admin_router
+from app.api import agent4s as agent4s_router
 from app.api import auth as auth_router
 from app.api import feedback as feedback_router
 from app.api import inspiration as inspiration_router
@@ -281,6 +282,7 @@ app.include_router(openclaw_dedicated_router.router, prefix="/api/v1", tags=["op
 app.include_router(openclaw_twin_runtime_router.router, prefix="/api/v1", tags=["openclaw-twins"])
 app.include_router(feedback_router.router, prefix="/api/v1", tags=["feedback-v1"])
 app.include_router(site_router.router, prefix="/api/v1", tags=["site-v1"])
+app.include_router(agent4s_router.router, prefix="/api/v1", tags=["agent4s-v1"])
 app.include_router(youth_ted_router.router, prefix="/api/v1", tags=["youth-ted-v1"])
 app.include_router(inspiration_router.router, prefix="/api/v1", tags=["inspiration-v1"])
 app.include_router(admin_router.router, tags=["admin"])

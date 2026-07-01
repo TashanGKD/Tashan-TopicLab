@@ -219,6 +219,7 @@ npm test
 | 变量 | 必需 | 说明 |
 |------|------|------|
 | `DATABASE_URL` | ✓ | TopicLab 主业务数据库 |
+| `TASHAN_HOMEPAGE_DATABASE_URL` | 建议 | 只读连接 `tashanhomepage` 数据库，用于在 TopicLab 挑战杯专题页实时读取 Agent4S 公众号文章 |
 | `JWT_SECRET` | ✓ | TopicLab 账号 JWT 密钥 |
 | `ANTHROPIC_API_KEY` | ✓ | Claude Agent SDK（讨论、专家回复） |
 | `AI_GENERATION_BASE_URL` | ✓ | AI 生成接口 base URL |

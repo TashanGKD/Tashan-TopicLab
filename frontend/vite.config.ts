@@ -80,6 +80,10 @@ export default defineConfig(({ mode }) => {
           target: topicLabTarget,
           changeOrigin: true,
         },
+        '/api/v1/agent4s': {
+          target: topicLabTarget,
+          changeOrigin: true,
+        },
         '/api/v1/youth-ted': {
           target: topicLabTarget,
           changeOrigin: true,

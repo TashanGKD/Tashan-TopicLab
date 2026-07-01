@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import youthTedPosterUrl from '../assets/tashan-youth-ted-poster.webp'
 import challengeCupOfficialBannerUrl from '../assets/challenge-cup-official-banner.webp'
 import {
@@ -11,6 +12,116 @@ const SCIENCE_PDF_URL = 'https://www.science.org/cms/asset/b09620dc-2937-45bd-9c
 const OFFICIAL_CHALLENGE_CUP_URL = 'https://university.aliyun.com/action/tzbjbgs2026'
 const OPENCLAW_SKILL_URL = 'https://world.tashan.chat/api/v1/openclaw/skill.md'
 const WORLDWEAVE_SKILL_URL = 'https://world.tashan.chat/worldweave/api/v1/openclaw/skill.md'
+const AGENT4S_WECHAT_ALBUM_URL = 'https://mp.weixin.qq.com/mp/appmsgalbum?__biz=MzkyNjY0NjI3NA==&action=getalbum&album_id=4525736241471864843'
+
+type Agent4SWechatArticle = {
+  msgid: string
+  title: string
+  coverUrl: string
+  link: string
+  publishedAt: string
+  readCount: number | null
+  likeCount?: number | null
+}
+
+type Agent4SWechatApiArticle = {
+  msgid?: unknown
+  title?: unknown
+  cover_url?: unknown
+  link?: unknown
+  published_at?: unknown
+  read_count?: unknown
+  like_count?: unknown
+}
+
+const agent4sWechatFallbackArticles: Agent4SWechatArticle[] = [
+  {
+    msgid: '2247485930',
+    title: 'Agent4S｜实验科学重构：从人为决策逐渐走向智能闭环',
+    coverUrl: 'https://mmbiz.qpic.cn/sz_mmbiz_jpg/qRKI1DmoqOAIYnSROEAqqYD7rQewLiabBHLDXkgXy5adbCl49bTybXIZPYdxpH1icJp2rwRHjwr3K34Sv0smicAmS23XUia67vZArx8G8VZSRqo/0?wx_fmt=jpeg',
+    link: 'http://mp.weixin.qq.com/s?__biz=MzkyNjY0NjI3NA==&mid=2247485930&idx=1&sn=03b503b1ff7bf3445e15af6d82975b8f&chksm=c2356087f542e99147fce693e65f8d8c3f0fa74057f543ec07f81114a1796bada8df9cca60fe#rd',
+    publishedAt: '2026-06-15T17:04:57+08:00',
+    readCount: 214,
+  },
+  {
+    msgid: '2247485805',
+    title: 'Agent4S｜科研第五范式革命：从人类认知中心到人机共生系统',
+    coverUrl: 'https://mmbiz.qpic.cn/mmbiz_jpg/qRKI1DmoqOB3IdlEGmddjps4SCQdH5dw9WnPrBIibgSALw8W86Mib0DHxYG08S4akDicAKqxrOBJH9EwnGQkIqGQHV0p8OC02uQ97Vp006Vyt4/0?wx_fmt=jpeg',
+    link: 'http://mp.weixin.qq.com/s?__biz=MzkyNjY0NjI3NA==&mid=2247485805&idx=1&sn=8a6bdbeee106c43e1003f19dc2f9a025&chksm=c2356000f542e9160e11463609a31983cc78ab974ca8ed46a3837a7fd4d37236f91f362593cf#rd',
+    publishedAt: '2026-05-28T01:36:05+08:00',
+    readCount: 2723,
+  },
+  {
+    msgid: '2247485794',
+    title: 'Agent4S｜智能体框架举例：OpenClaw 的运行过程是什么',
+    coverUrl: 'https://mmbiz.qpic.cn/mmbiz_jpg/qRKI1DmoqOBNqEZ32yMicNkUWeBrXQTOjUUxb1e8g466UdGvkXYViaZ7r3c1NUxK2UmJKCgWGHSumy4zyTFD8YDB4UaC3gdTtxKsb1IvYougQ/0?wx_fmt=jpeg',
+    link: 'http://mp.weixin.qq.com/s?__biz=MzkyNjY0NjI3NA==&mid=2247485794&idx=1&sn=02b63c97671037dc18e365f22e0b27bc&chksm=c235600ff542e9194f4ea6e9ae77edde42106702688accc884cce8b0b2183250c3e4a1a83d04#rd',
+    publishedAt: '2026-05-22T05:14:55+08:00',
+    readCount: 261,
+  },
+  {
+    msgid: '2247485791',
+    title: 'Agent4S｜从LLM到Agent：记忆与工具',
+    coverUrl: 'https://mmbiz.qpic.cn/mmbiz_jpg/qRKI1DmoqOD88cO94hgK7ib9YAicP7NWibo1vk43jO72guvxRo3icCwCoHSrW5icgmeIT0IgS10VzjMgmFg26jkpiap5MB85UzDFO1M6pSZsWt3XI/0?wx_fmt=jpeg',
+    link: 'http://mp.weixin.qq.com/s?__biz=MzkyNjY0NjI3NA==&mid=2247485791&idx=1&sn=c89c4fa09f4cedf0a871eda665781192&chksm=c2356032f542e924603e2532ac09ed29f91ea6b0ec810c72c3328f646a9e5854318291169b76#rd',
+    publishedAt: '2026-05-19T05:42:00+08:00',
+    readCount: 256,
+  },
+  {
+    msgid: '2247485775',
+    title: 'Agent4S｜科研数据规范为什么需要重写：第五科研范式下的数据、上下文与闭环',
+    coverUrl: 'https://mmbiz.qpic.cn/sz_mmbiz_jpg/qRKI1DmoqOCll9j7b4D02YyfGMpZMvTjQy9q3FticbUjC88swY0Ddpu9Ghvia5lAdibk29wCicUibxK1SFfr3ZbiaOtYadRnHKckzwThTobibuOibOg/0?wx_fmt=jpeg',
+    link: 'http://mp.weixin.qq.com/s?__biz=MzkyNjY0NjI3NA==&mid=2247485775&idx=1&sn=3ccca3cf78e0bf6f8d9f42def55b466a&chksm=c2356022f542e934028ad6aa2c34b95ee7f1bdf615e4252e2921812d9bd657add7c780b86529#rd',
+    publishedAt: '2026-05-17T23:46:45+08:00',
+    readCount: 1435,
+  },
+]
+
+function readString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function readNullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
+}
+
+function normalizeAgent4SArticle(article: Agent4SWechatApiArticle): Agent4SWechatArticle | null {
+  const msgid = readString(article.msgid)
+  const title = readString(article.title)
+  const coverUrl = readString(article.cover_url)
+  const link = readString(article.link)
+  const publishedAt = readString(article.published_at)
+
+  if (!msgid || !title || !coverUrl || !link) return null
+
+  return {
+    msgid,
+    title,
+    coverUrl,
+    link,
+    publishedAt,
+    readCount: readNullableNumber(article.read_count),
+    likeCount: readNullableNumber(article.like_count),
+  }
+}
+
+function formatDate(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+
+  return date.toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+}
+
+function formatCount(value: number) {
+  if (value >= 10000) return `${(value / 10000).toFixed(value >= 100000 ? 0 : 1)}万`
+  return String(value)
+}
 
 const actionCards = [
   {
@@ -188,6 +299,30 @@ function QuestionStream() {
 }
 
 export default function ChallengeCupTopicPage() {
+  const [agent4sArticles, setAgent4sArticles] = useState<Agent4SWechatArticle[]>(agent4sWechatFallbackArticles)
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    fetch(`${import.meta.env.BASE_URL}api/v1/agent4s/wechat-articles`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Agent4S articles unavailable')
+        return response.json()
+      })
+      .then((payload) => {
+        if (!payload || typeof payload !== 'object' || !Array.isArray(payload.articles)) return
+        const articles = payload.articles
+          .map((article: Agent4SWechatApiArticle) => normalizeAgent4SArticle(article))
+          .filter((article: Agent4SWechatArticle | null): article is Agent4SWechatArticle => article !== null)
+        if (articles.length > 0) setAgent4sArticles(articles)
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return
+      })
+
+    return () => controller.abort()
+  }, [])
+
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900">
       <ProgramHero
@@ -198,7 +333,7 @@ export default function ChallengeCupTopicPage() {
           <>
             赛题将于六月底开始。Science期刊的
             <span className="font-semibold text-slate-800">125个前沿问题</span>
-            组成一份题单，也欢迎带上你在挑战杯中遇到的真实问题。我们更关注问题是否清晰、讨论是否充分，以及验证是否有效。
+            组成一份题单，也欢迎带上你在挑战杯中遇到的真实问题。我们更在意问题有没有说清楚、大家能不能聊透，以及结果能不能落地。
           </>
         }
         primaryCta={{ href: '#tools', label: '查看工具接入' }}
@@ -233,13 +368,77 @@ export default function ChallengeCupTopicPage() {
         }
       />
 
+      <section className="border-b border-slate-200/80 bg-white">
+        <div className="mx-auto max-w-6xl px-5 py-14 sm:px-6 lg:px-8 lg:py-20">
+          <ProgramSectionHeading
+            accent="slate"
+            eyebrow="Agent4S 专栏"
+            title="Agent4S：人工智能驱动的科研范式革命"
+            action={
+              <a
+                href={AGENT4S_WECHAT_ALBUM_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center rounded-[var(--radius-md)] border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-sky-300 hover:text-sky-700"
+              >
+                查看专辑
+              </a>
+            }
+          />
+
+          <div
+            aria-label="Agent4S 文章列表"
+            className="mt-10 flex gap-3 overflow-x-auto pb-3 [scrollbar-width:thin] md:grid md:grid-cols-2 md:gap-4 md:overflow-visible md:pb-0 xl:grid-cols-5"
+          >
+            {agent4sArticles.map((article) => (
+              <a
+                key={article.msgid}
+                href={article.link}
+                target="_blank"
+                rel="noreferrer"
+                className="group flex w-[13.5rem] shrink-0 flex-col overflow-hidden rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50 transition hover:-translate-y-1 hover:border-sky-300 hover:bg-white hover:shadow-lg hover:shadow-sky-100/70 md:w-auto md:min-w-0"
+              >
+                <div className="h-24 overflow-hidden bg-slate-100 md:h-auto md:aspect-[16/10]">
+                  <img
+                    src={article.coverUrl}
+                    alt={article.title}
+                    className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+                <div className="flex flex-1 flex-col p-3 md:p-4">
+                  <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500">
+                    {formatDate(article.publishedAt) ? <span>{formatDate(article.publishedAt)}</span> : null}
+                    {article.readCount !== null ? (
+                      <>
+                        <span aria-hidden="true">/</span>
+                        <span>阅读 {formatCount(article.readCount)}</span>
+                      </>
+                    ) : null}
+                    {article.likeCount !== null && article.likeCount !== undefined ? (
+                      <>
+                        <span aria-hidden="true">/</span>
+                        <span>点赞 {formatCount(article.likeCount)}</span>
+                      </>
+                    ) : null}
+                  </div>
+                  <h3 className="mt-3 text-xs font-semibold leading-5 text-slate-950 md:text-sm md:leading-6">{article.title}</h3>
+                  <span className="mt-auto pt-4 text-sm font-medium text-sky-700 md:pt-5">阅读原文</span>
+                </div>
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+
       <section id="tools" className="mx-auto max-w-6xl px-5 py-14 sm:px-6 lg:px-8 lg:py-20">
         <ProgramSectionHeading
           accent="slate"
           eyebrow="工具接入"
-          title="几个留下材料和过程的工具"
+          title="几个帮你整理思路的工具"
         >
-          TopicLab、世界脉络、SkillHub 和 Arcade 分别对应话题讨论、信息追踪、方法沉淀与任务实践。
+          TopicLab 用来聊问题，世界脉络帮你追动态，SkillHub 沉淀做事方法，Arcade 有现成的任务可以参与。
         </ProgramSectionHeading>
 
         <div className="mt-10 grid min-w-0 gap-4 md:grid-cols-2">
