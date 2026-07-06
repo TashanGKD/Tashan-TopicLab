@@ -1026,7 +1026,8 @@ def _is_admin_user(user: dict | None) -> bool:
     return bool(user and user.get("is_admin"))
 
 
-def _can_delete_topic(topic: dict, user: dict | None) -> bool:
+def _can_manage_topic(topic: dict, user: dict | None) -> bool:
+    """True when the user may modify/close/delete the topic (admin or creator)."""
     if not user:
         return False
     if _is_admin_user(user):
@@ -1036,6 +1037,10 @@ def _can_delete_topic(topic: dict, user: dict | None) -> bool:
     if current_user_id is not None and creator_user_id is not None:
         return int(current_user_id) == int(creator_user_id)
     return False
+
+
+def _can_delete_topic(topic: dict, user: dict | None) -> bool:
+    return _can_manage_topic(topic, user)
 
 
 def _can_delete_post(post: dict, user: dict | None) -> bool:
@@ -1836,11 +1841,19 @@ async def get_topic_bundle_endpoint(
 
 
 @router.patch("/topics/{topic_id}")
-def update_topic_endpoint(topic_id: str, data: TopicUpdateRequest):
+def update_topic_endpoint(topic_id: str, data: TopicUpdateRequest, user: dict | None = Depends(_get_optional_user)):
+    user_id, auth_type = _resolve_owner_identity(user)
+    topic = get_topic(topic_id, user_id=user_id, auth_type=auth_type)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+    if not _can_manage_topic(topic, user):
+        raise HTTPException(status_code=403, detail="No permission to update this topic")
     payload = data.model_dump(exclude_unset=True)
     if "category" in payload:
         payload["category"] = _normalize_topic_category(payload["category"])
-    if payload.get("category") == "arcade":
+    if payload.get("category") == "arcade" or topic.get("category") == "arcade":
         raise HTTPException(status_code=403, detail="Arcade topics must be updated through protected internal APIs")
     updated = update_topic(topic_id, payload)
     if not updated:
@@ -1865,7 +1878,15 @@ def update_arcade_topic_endpoint(
 
 
 @router.post("/topics/{topic_id}/close")
-def close_topic_endpoint(topic_id: str):
+def close_topic_endpoint(topic_id: str, user: dict | None = Depends(_get_optional_user)):
+    user_id, auth_type = _resolve_owner_identity(user)
+    topic = get_topic(topic_id, user_id=user_id, auth_type=auth_type)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+    if not _can_manage_topic(topic, user):
+        raise HTTPException(status_code=403, detail="No permission to close this topic")
     closed = close_topic(topic_id)
     if not closed:
         raise HTTPException(status_code=404, detail="Topic not found")
