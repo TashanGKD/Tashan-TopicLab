@@ -1965,6 +1965,55 @@ def test_topic_delete_permissions(client):
     assert deleted.status_code == 200, deleted.text
 
 
+def test_topic_update_and_close_permissions(client):
+    owner = register_and_login(client, phone="13800000012", username="owner-uc")
+    other = register_and_login(client, phone="13800000013", username="other-uc")
+    admin = register_and_login(client, phone="13800000001", username="admin")
+
+    owner_topic = client.post(
+        "/topics",
+        json={"title": "可编辑话题", "body": "原始正文"},
+        headers={"Authorization": f"Bearer {owner['token']}"},
+    ).json()
+    topic_id = owner_topic["id"]
+
+    # Anonymous update is rejected.
+    anon_update = client.patch(f"/topics/{topic_id}", json={"body": "匿名篡改"})
+    assert anon_update.status_code == 401, anon_update.text
+
+    # A different logged-in user cannot update someone else's topic.
+    forbidden_update = client.patch(
+        f"/topics/{topic_id}",
+        json={"body": "越权篡改"},
+        headers={"Authorization": f"Bearer {other['token']}"},
+    )
+    assert forbidden_update.status_code == 403, forbidden_update.text
+
+    # The creator can update.
+    owner_update = client.patch(
+        f"/topics/{topic_id}",
+        json={"body": "更新后的正文"},
+        headers={"Authorization": f"Bearer {owner['token']}"},
+    )
+    assert owner_update.status_code == 200, owner_update.text
+    assert owner_update.json()["body"] == "更新后的正文"
+
+    # Non-owner cannot close.
+    forbidden_close = client.post(
+        f"/topics/{topic_id}/close",
+        headers={"Authorization": f"Bearer {other['token']}"},
+    )
+    assert forbidden_close.status_code == 403, forbidden_close.text
+
+    # Admin can close any topic.
+    admin_close = client.post(
+        f"/topics/{topic_id}/close",
+        headers={"Authorization": f"Bearer {admin['token']}"},
+    )
+    assert admin_close.status_code == 200, admin_close.text
+    assert admin_close.json()["status"] == "closed"
+
+
 def test_create_post_rejects_when_content_moderation_fails(client, monkeypatch):
     monkeypatch.setattr(
         "app.api.topics.moderate_post_content",
