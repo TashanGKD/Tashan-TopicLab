@@ -62,10 +62,14 @@ function createToastElement(message: string, type: ToastType = 'info') {
     font-family: 'Noto Serif SC', serif;
   `
 
-  toast.innerHTML = `
-    <span style="font-size: 14px; font-weight: 500;">${icons[type]}</span>
-    <span>${message}</span>
-  `
+  const iconSpan = document.createElement('span')
+  iconSpan.style.cssText = 'font-size: 14px; font-weight: 500;'
+  iconSpan.textContent = icons[type]
+
+  const messageSpan = document.createElement('span')
+  messageSpan.textContent = message
+
+  toast.append(iconSpan, messageSpan)
 
   // Add slide-in animation
   const style = document.createElement('style')
