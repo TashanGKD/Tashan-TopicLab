@@ -23,12 +23,6 @@ vi.mock('./profileHelperApi', async () => {
   }
 })
 
-vi.mock('../../api/client', () => ({
-  PROFILE_HELPER_MODELS: [
-    { value: 'qwen3', label: 'Qwen 3' },
-  ],
-}))
-
 vi.mock('../../api/auth', () => ({
   tokenManager: {
     get: vi.fn(),
@@ -97,6 +91,17 @@ describe('ChatWindow', () => {
     expect(localStorage.getItem('tashan_profile_session_id')).toBe('session-1')
   })
 
+  it('does not expose model selection in the digital twin chat window', async () => {
+    renderChatWindow()
+
+    await waitFor(() => {
+      expect(mockedGetOrCreateSession).toHaveBeenCalled()
+    })
+
+    expect(screen.queryByTitle('选择模型')).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  })
+
   it('restores cached history from localStorage and clears initial input text', async () => {
     localStorage.setItem('tashan_session_id', 'session-restore')
     localStorage.setItem(
@@ -140,7 +145,7 @@ describe('ChatWindow', () => {
       'session-1',
       '建立我的分身',
       expect.any(Function),
-      'qwen3',
+      undefined,
     )
 
     const textarea = container.querySelector('.chat-textarea') as HTMLTextAreaElement
@@ -186,7 +191,7 @@ describe('ChatWindow', () => {
         'session-1',
         '继续',
         expect.any(Function),
-        'qwen3',
+        undefined,
       )
     })
 

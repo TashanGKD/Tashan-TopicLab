@@ -10,7 +10,6 @@ import {
   getProfile,
 } from './profileHelperApi'
 import type { Block, ChatMessage } from './types'
-import { PROFILE_HELPER_MODELS } from '../../api/client'
 import { refreshCurrentUserProfile, tokenManager, User } from '../../api/auth'
 import { toast } from '../../utils/toast'
 
@@ -73,7 +72,6 @@ export function ChatWindow() {
   const [loading, setLoading] = useState(false)
   const [initialized, setInitialized] = useState(false)
   const [currentUser, setCurrentUser] = useState<User | null>(null)
-  const [selectedModel, setSelectedModel] = useState<string>(PROFILE_HELPER_MODELS[0]?.value ?? '')
   const [isComposing, setIsComposing] = useState(false)
   const messagesViewportRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -265,7 +263,7 @@ export function ChatWindow() {
           }
           return next
         })
-      }, selectedModel || undefined)
+      }, undefined)
       await fetchProfile(sessionId)
     } catch (e) {
       clearTimeout(slowTimer)
@@ -337,7 +335,7 @@ export function ChatWindow() {
             }
             return next
           })
-        }, selectedModel || undefined)
+        }, undefined)
         await fetchProfile(sessionId)
       } catch (e) {
         const errText = `请求失败: ${e instanceof Error ? e.message : String(e)}`
@@ -356,7 +354,7 @@ export function ChatWindow() {
         setLoading(false)
       }
     },
-    [sessionId, loading, selectedModel, requireCurrentUser, fetchProfile]
+    [sessionId, loading, requireCurrentUser, fetchProfile]
   )
 
   const handleReset = async () => {
@@ -532,18 +530,6 @@ export function ChatWindow() {
                     {isLocked ? '请点击上方选项作答' : isInitial ? '点击发送开始建立分身' : 'Enter 发送 · Shift+Enter 换行'}
                   </span>
                   <div className="chat-hint-actions">
-                    <select
-                      className="model-select-single"
-                      value={selectedModel}
-                      onChange={(e) => setSelectedModel(e.target.value)}
-                      title="选择模型"
-                    >
-                      {PROFILE_HELPER_MODELS.map((m) => (
-                        <option key={m.value} value={m.value}>
-                          {m.label}
-                        </option>
-                      ))}
-                    </select>
                     <button
                       type="button"
                       className="chat-action-btn"
