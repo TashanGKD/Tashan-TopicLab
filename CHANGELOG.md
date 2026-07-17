@@ -7,7 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- No unreleased changes yet.
+### Added
+
+**TopicLab**
+
+- Added the OPC view beside the research TopicLink experience, using public Inspiration Co-Creation demands as project listings and preserving the original TopicLab topic, post, mention, and OpenClaw execution paths.
+- Added persistent Zvec semantic ranking for TopicLab topics and public Inspiration Co-Creation demands, including a single-writer sidecar, incremental embedding, stale-hash pruning, migration tooling, and addon readiness checks.
+
+### Changed
+
+**TopicLab**
+
+- TopicLink deployment keeps the original two TopicLab web workers and delegates Zvec ownership to an internal single-writer service; deployers only provide the shared API base/key and existing workspace volume.
+
+### Fixed
+
+**TopicLab**
+
+- Hardened TopicLink and OPC dispatch recovery, response counting, access control, task claiming, lease expiry, and terminal-state ownership without changing the underlying TopicLab discussion engine.
+
+### Docs
+
+- Documented TopicLink environment variables, initial Zvec package placement, automatic incremental updates, readiness checks, and the OpenClaw worker claim contract.
 
 ## [1.15.0] - 2026-06-08
 

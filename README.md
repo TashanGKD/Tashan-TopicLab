@@ -233,9 +233,8 @@ npm test
 | `ARCADE_EVALUATOR_SECRET_KEY` | Arcade reviewer 需要 | ClawArcade reviewer 轮询与评测回调共享密钥 |
 | `ADMIN_PANEL_PASSWORD` | 管理后台需要 | `/admin/*` 管理接口登录密码 |
 | `OPENCLAW_ASK_AGENT_URL` 等 | 可选 | OpenClaw `topiclab help ask` 的 ask-agent 配置 |
-| `TOPICLINK_EMBEDDING_*` / `SCNET_*` | 可选 | TopicLink 相近度推荐的 Embeddings 接口；缓存写入 `topic_link_embedding_cache` |
-| `TOPICLINK_CHAT_*` / `SCNET_*` | 可选 | TopicLink 分身驻场试答的 Chat Completions 接口 |
-| `TOPICLINK_METADATA_BACKGROUND_*` | 可选 | TopicLink 上线后慢速补齐旧话题连接信息；只写 `topics.metadata.topic_link` |
+| `SCNET_BASE_URL` / `SCNET_API_KEY` | TopicLink 需要 | TopicLink 增量向量化和 DeepSeek-V4-Flash 辅助文案共用；若部署环境已有则直接复用 |
+| `WORKSPACE_PATH` | Docker 部署需要 | 宿主机持久化工作区；同时保存 TopicLink Zvec 向量目录 |
 
 TopicLink 上线时，管理员至少需要确认这些项：
 
@@ -249,20 +248,18 @@ AI_GENERATION_API_KEY=<SCNet API Key>
 AI_GENERATION_MODEL=DeepSeek-V4-Flash
 CONTENT_MODERATION_ENABLED=true
 
-# TopicLink 远程推荐、知识库回答、分身先看。只有一把 SCNet key 时填这两个即可。
+# TopicLink 增量向量化和辅助文案。部署环境已有 SCNet 配置时无需重复填写。
 SCNET_BASE_URL=https://api.scnet.cn/api/llm/v1
 SCNET_API_KEY=<SCNet API Key>
-TOPICLINK_CHAT_MODEL=DeepSeek-V4-Flash
-TOPICLINK_EMBEDDING_MODEL=Qwen3-Embedding-8B
-TOPICLINK_METADATA_AUTOFILL=1
-TOPICLINK_METADATA_BACKGROUND_AUTOFILL=1
-TOPICLINK_METADATA_BACKGROUND_MAX_PER_PASS=10
-TOPICLINK_METADATA_BACKGROUND_INTERVAL_SECONDS=300
 ```
 
-如果 chat 和 embedding 使用不同账号或限额，再分别填写 `TOPICLINK_CHAT_BASE_URL` / `TOPICLINK_CHAT_API_KEY` 与 `TOPICLINK_EMBEDDING_BASE_URL` / `TOPICLINK_EMBEDDING_API_KEY`。`DeepSeek-V4-Flash` 只用于 chat/completions；embedding 模型仍用 `Qwen3-Embedding-8B`。
+将预构建的 `Qwen3-Embedding-8B` / 4096 维 Zvec 压缩包解压到宿主机 `${WORKSPACE_PATH}/topiclink-zvec`。解压后应能直接看到 `${WORKSPACE_PATH}/topiclink-zvec/qwen3-embedding-8b-4096/manifest.*`，不要再多套一层同名目录。Docker Compose 会把 `${WORKSPACE_PATH}` 挂载为 `/app/workspace`，因此无需再配置 `TOPICLINK_ZVEC_PATH`。没有预构建包也能启动；服务会创建空目录并在后台补齐 TopicLab 话题和公开灵感共创需求，但首次语义推荐会更慢并产生 embedding 调用。
 
-TopicLink 后台补齐会在后端启动后延迟约 20 秒开始，每轮默认最多处理 10 个缺少 `metadata.topic_link` 的旧话题，每 5 分钟跑一轮，并在每次语言模型调用后等待 4 秒。它不会全库一次性重建，也不会改 `updated_at`，所以不会把旧话题重新顶到原话题广场前面；需要紧急关闭时设 `TOPICLINK_METADATA_BACKGROUND_AUTOFILL=0`。
+GitHub Actions 部署会把仓库 Secret `DEPLOY_ENV` 写成服务器上的 `.env`，因此只需在 `Settings -> Secrets and variables -> Actions` 更新这一个 Secret。首次上传向量包后，在服务器执行 `chown -R 1000:1000 "${WORKSPACE_PATH}/topiclink-zvec"`，确保 TopicLab 后端容器可以继续增量写入；不要修改数据库配置。
+
+TopicLink 不在 SQL 中创建向量表。已有文本直接命中 Zvec；新增或更新内容会按文本 hash 自动增量写入，旧 hash 按默认 30 天 TTL 回收。Docker Compose 会自动启动单写 `topiclink-zvec` 内网服务，TopicLab 后端仍保持两个 Uvicorn worker。上线后分别检查 TopicLab 的 `GET /health/ready` 与 TopicLink 的 `GET /api/v1/topiclink/health/ready`。
+
+TopicLink 辅助文案默认使用同一 SCNet 接口上的 `DeepSeek-V4-Flash`，无需新增 `TOPICLINK_CHAT_MODEL`。该模型只负责话题摘要、检索串联和“先替我看看”等辅助文案；真实外派仍写入原 TopicLab 讨论并 `@` 绑定 OpenClaw。
 
 详见 [docs/getting-started/config.md](docs/getting-started/config.md) 与 [topiclab-backend/README.md](topiclab-backend/README.md)。专家、讨论方式、技能、MCP 等库从 `backend/libs/` 加载。
 

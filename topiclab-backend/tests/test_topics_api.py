@@ -1965,6 +1965,55 @@ def test_topic_delete_permissions(client):
     assert deleted.status_code == 200, deleted.text
 
 
+def test_topic_update_and_close_permissions(client):
+    owner = register_and_login(client, phone="13800000012", username="owner-uc")
+    other = register_and_login(client, phone="13800000013", username="other-uc")
+    admin = register_and_login(client, phone="13800000001", username="admin")
+
+    owner_topic = client.post(
+        "/topics",
+        json={"title": "可编辑话题", "body": "原始正文"},
+        headers={"Authorization": f"Bearer {owner['token']}"},
+    ).json()
+    topic_id = owner_topic["id"]
+
+    # Anonymous update is rejected.
+    anon_update = client.patch(f"/topics/{topic_id}", json={"body": "匿名篡改"})
+    assert anon_update.status_code == 401, anon_update.text
+
+    # A different logged-in user cannot update someone else's topic.
+    forbidden_update = client.patch(
+        f"/topics/{topic_id}",
+        json={"body": "越权篡改"},
+        headers={"Authorization": f"Bearer {other['token']}"},
+    )
+    assert forbidden_update.status_code == 403, forbidden_update.text
+
+    # The creator can update.
+    owner_update = client.patch(
+        f"/topics/{topic_id}",
+        json={"body": "更新后的正文"},
+        headers={"Authorization": f"Bearer {owner['token']}"},
+    )
+    assert owner_update.status_code == 200, owner_update.text
+    assert owner_update.json()["body"] == "更新后的正文"
+
+    # Non-owner cannot close.
+    forbidden_close = client.post(
+        f"/topics/{topic_id}/close",
+        headers={"Authorization": f"Bearer {other['token']}"},
+    )
+    assert forbidden_close.status_code == 403, forbidden_close.text
+
+    # Admin can close any topic.
+    admin_close = client.post(
+        f"/topics/{topic_id}/close",
+        headers={"Authorization": f"Bearer {admin['token']}"},
+    )
+    assert admin_close.status_code == 200, admin_close.text
+    assert admin_close.json()["status"] == "closed"
+
+
 def test_create_post_rejects_when_content_moderation_fails(client, monkeypatch):
     monkeypatch.setattr(
         "app.api.topics.moderate_post_content",
@@ -2142,6 +2191,26 @@ def test_topic_detail_related_proxy_bootstraps_workspace_on_demand(client):
     mode = client.get(f"/topics/{topic_id}/moderator-mode")
     assert mode.status_code == 200, mode.text
     assert mode.json()["mode_id"] == "standard"
+
+
+def test_topic_experts_fall_back_to_local_data_when_resonnet_returns_502(client, monkeypatch):
+    from app.storage.database.topic_store import list_topic_experts
+
+    topic = client.post("/topics", json={"title": "相关人降级", "body": "下游暂不可用"}).json()
+    topic_id = topic["id"]
+    local_experts = list_topic_experts(topic_id)
+
+    async def unavailable_resonnet(*args, **kwargs):
+        request = httpx.Request("POST", "http://resonnet.test/executor/topics/bootstrap")
+        response = httpx.Response(502, request=request)
+        raise httpx.HTTPStatusError("bad gateway", request=request, response=response)
+
+    monkeypatch.setattr("app.api.topics.request_json", unavailable_resonnet)
+
+    response = client.get(f"/topics/{topic_id}/experts")
+
+    assert response.status_code == 200, response.text
+    assert response.json() == local_experts
 
 
 def test_discussion_generated_image_is_served_from_database_after_workspace_file_removed(client):
