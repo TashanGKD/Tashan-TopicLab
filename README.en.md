@@ -226,11 +226,12 @@ npm test
 | `ARCADE_EVALUATOR_SECRET_KEY` | Arcade reviewer | Shared secret for reviewer polling and evaluation callbacks |
 | `ADMIN_PANEL_PASSWORD` | Admin panel | Password for `/admin/*` login |
 | `OPENCLAW_ASK_AGENT_URL` etc. | Optional | Ask-agent config for `topiclab help ask` |
-| `TOPICLINK_EMBEDDING_*` / `SCNET_*` | Optional | Embeddings endpoint for TopicLink similarity recommendations and `topic_link_embedding_cache` |
-| `TOPICLINK_CHAT_*` / `SCNET_*` | Optional | Chat Completions endpoint for TopicLink resident personas and knowledge answers |
-| `TOPICLINK_METADATA_BACKGROUND_*` | Optional | Slow background autofill for legacy `topics.metadata.topic_link` sidecars |
+| `SCNET_BASE_URL` / `SCNET_API_KEY` | TopicLink | Shared by incremental vectorization and DeepSeek-V4-Flash helper copy; reuse existing deployment values when present |
+| `WORKSPACE_PATH` | Docker deployment | Persistent host workspace that also stores the TopicLink Zvec collection |
 
-For production TopicLink rollout, confirm `SCNET_BASE_URL`, `SCNET_API_KEY`, `TOPICLINK_CHAT_MODEL=DeepSeek-V4-Flash`, `TOPICLINK_EMBEDDING_MODEL=Qwen3-Embedding-8B`, and the metadata autofill throttles before enabling the background worker. See [docs/getting-started/config.md](docs/getting-started/config.md) and [topiclab-backend/README.md](topiclab-backend/README.md). Experts, moderator modes, skills, and MCP load from `backend/libs/`.
+For production, reuse or set `SCNET_BASE_URL` and `SCNET_API_KEY`; no additional TopicLink model variable is required. The same endpoint uses `Qwen3-Embedding-8B` for vectors and `DeepSeek-V4-Flash` for helper copy. Extract the prebuilt 4096-dimensional archive into `${WORKSPACE_PATH}/topiclink-zvec`. After extraction, `${WORKSPACE_PATH}/topiclink-zvec/qwen3-embedding-8b-4096/manifest.*` must exist without another nested directory. Docker Compose mounts the workspace at `/app/workspace`, so the default Zvec path works without another environment variable. If the package is absent, the internal single-writer `topiclink-zvec` service creates an empty collection and incrementally embeds TopicLab topics and public Inspiration Co-Creation demands. Existing hashes are reused, changed content is added under a new hash, and stale hashes are pruned by TTL. TopicLab keeps its two web workers; Zvec ownership stays in the internal sidecar. Chat only supports summaries and search copy; real dispatch still posts to the original TopicLab discussion and mentions the bound OpenClaw. Verify the main backend at `GET /health/ready` and the addon at `GET /api/v1/topiclink/health/ready`. See [topiclab-backend/README.md](topiclab-backend/README.md) for the complete rollout and OpenClaw worker contract. Experts, moderator modes, skills, and MCP load from `backend/libs/`.
+
+The deploy workflow writes the repository `DEPLOY_ENV` Actions secret to the server `.env`. After the first archive upload, run `chown -R 1000:1000 "${WORKSPACE_PATH}/topiclink-zvec"` on the host so the backend container can keep the collection updated.
 
 ---
 

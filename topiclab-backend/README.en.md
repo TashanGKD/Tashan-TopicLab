@@ -82,6 +82,8 @@ Loaded from project root `.env`. Required:
 
 `DATABASE_URL` is TopicLab's unified business database; topic, posts, discussion status, and other main business data are persisted here. Resonnet is no longer the main business database.
 
+TopicLink stores recommendation vectors outside SQL. Docker Compose starts an internal single-worker `topiclink-zvec` service that exclusively owns `${WORKSPACE_PATH}/topiclink-zvec/qwen3-embedding-8b-4096`; the TopicLab web backend keeps its original two workers and accesses that sidecar over the private Compose network. Deployers only need the existing `SCNET_BASE_URL`, `SCNET_API_KEY`, and workspace mount. Check the main database readiness at `GET /health/ready` and the addon separately at `GET /api/v1/topiclink/health/ready`. A Zvec outage degrades TopicLink without marking all of TopicLab unready.
+
 `WORKSPACE_BASE` must still be configured for `topiclab-backend` because discussion / `@expert` / topic-scoped executor config requests share the same workspace mount with Resonnet; normal topic creation, posting, list, and status polling do not depend on workspace.
 
 Generated discussion images are stored by `topiclab-backend` in the database after task completion and served as `image/webp`; workspace `shared/generated_images/*` is mainly for runtime artifacts and fallback compatibility.

@@ -77,6 +77,10 @@ async def lifespan(app: FastAPI):
             from app.storage.database.youth_ted_store import ensure_youth_ted_schema_and_seed
             init_auth_tables()
             init_topic_tables()
+            try:
+                topiclink_router.initialize_topiclink_storage()
+            except Exception as e2:
+                logging.getLogger(__name__).warning("TopicLink Zvec initialization failed: %s", e2)
             ensure_site_assets_schema_and_seed()
             ensure_youth_ted_schema_and_seed()
             ensure_inspiration_schema_and_seed()

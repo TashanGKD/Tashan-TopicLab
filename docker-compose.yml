@@ -76,6 +76,7 @@ services:
       - ${ENV_FILE:-.env}
     environment:
       - WORKSPACE_BASE=/app/workspace
+      - TOPICLINK_ZVEC_SERVICE_URL=http://topiclink-zvec:8000
       - TOPICLAB_SYNC_URL=${TOPICLAB_SYNC_URL:-http://topiclab-backend:8000}
       - WORLDWEAVE_BASE_URL=http://worldweave:3020
     extra_hosts:
@@ -93,6 +94,30 @@ services:
       timeout: 20s
       retries: 15
       start_period: 45s
+
+  topiclink-zvec:
+    build:
+      context: ./topiclab-backend
+      args:
+        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-mirrors.aliyun.com}
+    command: ["uvicorn", "app.topiclink_zvec_service:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    env_file:
+      - ${ENV_FILE:-.env}
+    environment:
+      - WORKSPACE_BASE=/app/workspace
+      - TOPICLINK_ZVEC_SERVICE_URL=
+    volumes:
+      - ${WORKSPACE_PATH:-./workspace}:/app/workspace
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=15)\""]
+      interval: 10s
+      timeout: 20s
+      retries: 15
+      start_period: 30s
 
   backend:
     build:

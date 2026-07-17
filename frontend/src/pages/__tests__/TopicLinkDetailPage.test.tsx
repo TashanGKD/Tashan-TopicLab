@@ -3,7 +3,18 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { postsApi, sourceFeedApi, topicExpertsApi, topicsApi } from '../../api/client'
+import { toast } from '../../utils/toast'
 import TopicLinkDetailPage from '../TopicLinkDetailPage'
+
+vi.mock('../../utils/toast', () => ({
+  toast: Object.assign(vi.fn(), {
+    success: vi.fn(),
+    error: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
+  }),
+  showToast: vi.fn(),
+}))
 
 vi.mock('../../components/MentionTextarea', () => ({
   default: ({
@@ -235,6 +246,23 @@ describe('TopicLinkDetailPage', () => {
     await waitFor(() => {
       expect(mockedSetPresence).toHaveBeenCalledWith('topic-1', { persona_name: '我这边' })
     })
+  })
+
+  it('keeps the user out of the topic when resident presence fails', async () => {
+    mockedSetPresence.mockRejectedValueOnce({})
+    renderPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: '先替我看看' }))
+    expect(await screen.findByText('先看大家说到哪里。')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '留在群里' }))
+
+    await waitFor(() => {
+      expect(mockedSetPresence).toHaveBeenCalledWith('topic-1', { persona_name: '我这边' })
+    })
+    expect(screen.getByRole('button', { name: '留在群里' })).toBeInTheDocument()
+    expect(sessionStorage.getItem('topiclink-resident:topic-1')).toBeNull()
+    expect(toast.success).not.toHaveBeenCalledWith('已经留在这桌了，会先看新的回应')
+    expect(toast.error).toHaveBeenCalledWith('分身暂时没派出去，请稍后再试')
   })
 
   it('posts as the debug user through the TopicLink composer', async () => {

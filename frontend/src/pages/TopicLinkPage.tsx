@@ -1,11 +1,10 @@
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
-  HIDDEN_TOPIC_CATEGORY_IDS,
-  VISIBLE_TOPIC_CATEGORIES,
+  inspirationApi,
+  TOPIC_CATEGORIES,
   topicsApi,
   TopicLinkViewerProfileResponse,
-  TopicLinkSimulationResponse,
   TopicLinkKnowledgeAnswerResponse,
   TopicCategory,
   TopicListItem,
@@ -24,7 +23,6 @@ import {
 import {
   applyTopicLinkRecommendation,
   clamp,
-  cleanTopicVisibleText,
   dedupeParticipants,
   getConnectionParticipants,
   getParticipantDisplayName,
@@ -42,9 +40,34 @@ import {
   shouldUseLiyuyangTopicLinkProfile,
 } from '../topicLink/topicLinkModel'
 import { TopicPlazaSidebar } from '../topicLink/TopicPlazaSidebar'
-import { TOPIC_LINK_SKILL_SEARCH_HINTS } from '../topicLink/topicLinkSkill'
+import { buildTopicLinkSkillSearchText, TOPIC_LINK_SKILL_SEARCH_HINTS } from '../topicLink/topicLinkSkill'
 import { useTopicLinkRecommendations } from '../topicLink/useTopicLinkRecommendations'
+import {
+  OPC_CANDIDATE_LIMIT,
+  OpcDemandPreviewBoard,
+  TopicLinkMode,
+  TopicLinkModeSwitch,
+  TopicLinkOpcCandidate,
+  getTopicLinkMode,
+  opcCandidateFromDemand,
+} from '../topicLink/TopicLinkOpc'
 import topicPlazaMapUrl from '../assets/topic-plaza-map.webp'
+
+function getDispatchErrorMessage(error: unknown) {
+  const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+  if (typeof detail !== 'string') return null
+  if (detail.includes('登录后') && /OpenClaw|绑定/.test(detail)) {
+    return '登录后才能外派你的分身。'
+  }
+  if (detail.includes('请先绑定') && /OpenClaw|分身/.test(detail)) {
+    return '请先绑定你的分身，再执行外派。'
+  }
+  if (/未处于\s*active|未激活/.test(detail) && /OpenClaw|分身/.test(detail)) {
+    return '当前分身尚未启用，请先启用后再外派。'
+  }
+  if (/OpenClaw/i.test(detail)) return '外派失败，请稍后再试。'
+  return detail
+}
 
 const PAGE_SIZE = 20
 const INITIAL_TOPIC_PAGE_SIZE = 80
@@ -62,13 +85,21 @@ const YOUTH_TED_CATEGORY: TopicCategory = {
 function getTopicLinkResidentStorageKey(topicId: string) {
   return `${TOPICLINK_RESIDENT_STORAGE_PREFIX}${topicId}`
 }
+
+function getVisibleConnectionParticipants(topic: TopicListItem) {
+  return dedupeParticipants(getConnectionParticipants(topic))
+    .filter((person) => !/^topiclab$/i.test(getParticipantDisplayName(person)))
+}
+
+function getRealReplyCount(topic: TopicListItem) {
+  return Math.max(0, topic.posts_count ?? 0)
+}
 const TOPIC_PLAZA_CATEGORIES: TopicCategory[] = [
-  ...VISIBLE_TOPIC_CATEGORIES.slice(0, 1),
+  ...TOPIC_CATEGORIES.slice(0, 1),
   YOUTH_TED_CATEGORY,
-  ...VISIBLE_TOPIC_CATEGORIES.slice(1),
+  ...TOPIC_CATEGORIES.slice(1),
 ]
 const TOPIC_PLAZA_CATEGORY_IDS = new Set(TOPIC_PLAZA_CATEGORIES.map((category) => category.id))
-const HIDDEN_TOPIC_CATEGORY_ID_SET = new Set<string>(HIDDEN_TOPIC_CATEGORY_IDS)
 const TOPICLINK_EXCLUDED_TOPIC_CATEGORY_IDS = new Set(['test'])
 const TOPICLINK_EXCLUDED_TOPIC_TITLE_RE = /(live smoke|connection test|probe topic|smoke test)/i
 
@@ -108,7 +139,6 @@ type TopicKnowledgeSearchResult = {
 }
 
 type TopicKnowledgeAnswer = Pick<TopicLinkKnowledgeAnswerResponse, 'answer' | 'provider_status' | 'topic_ids'>
-
 function isYouthTedTopic(topic: TopicListItem) {
   const text = [
     topic.title,
@@ -133,7 +163,6 @@ function getDisplayCategoryId(topic: TopicListItem, fallbackCategory = 'plaza') 
   if (isYouthTedTopic(topic)) return YOUTH_TED_CATEGORY_ID
 
   const categoryId = topic.category ?? fallbackCategory
-  if (HIDDEN_TOPIC_CATEGORY_ID_SET.has(categoryId)) return categoryId
   if (TOPIC_PLAZA_CATEGORY_IDS.has(categoryId)) return categoryId
   return 'plaza'
 }
@@ -206,6 +235,15 @@ function getTopicKnowledgeSearchReason(topic: TopicListItem, category: TopicCate
   return getTopicEntryAngle(recommendation.role)
 }
 
+function getTopicActivityLabel(topic: TopicListItem) {
+  if (typeof topic.posts_count === 'number' && topic.posts_count > 0) {
+    return `${topic.posts_count} 条回应`
+  }
+  const peopleCount = getVisibleConnectionParticipants(topic).length
+  if (peopleCount > 0) return `${peopleCount} 个相关人`
+  return '等人接话'
+}
+
 function topicLinkProfileFromResponse(profile: TopicLinkViewerProfileResponse): TopicViewerProfile {
   const displayAgentName = profile.agent_name && !/分身/.test(profile.agent_name) ? profile.agent_name : '我这边'
   return {
@@ -225,6 +263,25 @@ function topicLinkProfileFromResponse(profile: TopicLinkViewerProfileResponse): 
             detail: '会随着你的参与逐步变清楚',
           },
         ],
+  }
+}
+
+function opcCandidateAsScoreTopic(candidate: TopicLinkOpcCandidate): TopicListItem {
+  return {
+    id: candidate.id,
+    session_id: candidate.id,
+    category: 'request',
+    title: candidate.title,
+    body: [
+      candidate.summary,
+      candidate.blocker ? `当前卡点：${candidate.blocker}` : '',
+      candidate.tags.length ? `方向标签：${candidate.tags.join(' / ')}` : '',
+    ].filter(Boolean).join('\n'),
+    status: 'open',
+    discussion_status: 'pending',
+    created_at: '',
+    updated_at: '',
+    creator_name: '灵感共创队',
   }
 }
 
@@ -270,6 +327,7 @@ function buildInitialCategoryPages(items: TopicListItem[], nextCursor: string | 
     ]),
   )
 }
+
 const CONNECTION_NODE_LAYOUT = [
   { left: '15%', top: '18%', color: '#f2a13b', curve: 'M 50 50 C 41 35 28 22 15 18' },
   { left: '85%', top: '18%', color: '#40aeb0', curve: 'M 50 50 C 59 35 72 22 85 18' },
@@ -354,7 +412,6 @@ function TopicMapCard({
   onSelect: (topic: TopicListItem) => void
 }) {
   const layout = CONNECTION_NODE_LAYOUT[index % CONNECTION_NODE_LAYOUT.length]
-  const crowdCount = getTopicCrowdCount(topic)
   const recommendation = getTopicRecommendation(topic)
   const entryLabel = getCompactRoleLabel(recommendation.role)
   const entryCopy = entryLabel === '可接话' ? '等人接一句' : `从「${entryLabel}」接`
@@ -385,7 +442,7 @@ function TopicMapCard({
       </div>
       <div className="mt-2 flex items-center justify-between gap-2 border-t border-[#e4eee8] pt-2">
         <span className="truncate text-xs text-[#66716d]">{entryCopy}</span>
-        <span className="shrink-0 text-xs text-[#8a9690]">{crowdCount} 人</span>
+        <span className="shrink-0 text-xs text-[#8a9690]">{getTopicActivityLabel(topic)}</span>
       </div>
     </button>
   )
@@ -423,7 +480,7 @@ function TopicOuterPlazaCard({
       </div>
       <div className="mt-2 flex items-center justify-between gap-2 border-t border-[#e4eee8] pt-2 text-[11px] text-[#6c7771]">
         <span className="truncate">{entryCopy}</span>
-        <span className="shrink-0">{getTopicCrowdCount(topic)} 人</span>
+        <span className="shrink-0">{getTopicActivityLabel(topic)}</span>
       </div>
     </button>
   )
@@ -487,9 +544,8 @@ function TopicPlazaMap({
   selectedTopic,
   onTopicSelect,
   recommendationLoading,
-  simulation,
-  simulationLoading,
-  onSimulate,
+  dispatchLoading,
+  onDispatch,
   resident,
   viewerProfile,
   personalized,
@@ -512,9 +568,8 @@ function TopicPlazaMap({
   selectedTopic: TopicListItem
   onTopicSelect: (topic: TopicListItem) => void
   recommendationLoading: boolean
-  simulation: TopicLinkSimulationResponse | null
-  simulationLoading: boolean
-  onSimulate: (topic: TopicListItem) => void
+  dispatchLoading: boolean
+  onDispatch: (topic: TopicListItem) => void
   resident: boolean
   viewerProfile?: TopicViewerProfile
   personalized: boolean
@@ -562,19 +617,19 @@ function TopicPlazaMap({
     ...categorySeedTopics,
   ].filter((topic) => !mapTopicIds.has(topic.id)).map((topic) => [topic.id, topic])).values()).slice(0, OUTER_TOPIC_LAYOUT.length)
   const recommendation = getTopicRecommendation(selectedTopic)
-  const people = getConnectionParticipants(selectedTopic).slice(0, 4)
+  const people = getVisibleConnectionParticipants(selectedTopic).slice(0, 4)
   const mapPeople = dedupeParticipants([
-    ...getConnectionParticipants(selectedTopic),
-    ...relatedTopics.flatMap((topic) => getConnectionParticipants(topic)),
+    ...getVisibleConnectionParticipants(selectedTopic),
+    ...relatedTopics.flatMap((topic) => getVisibleConnectionParticipants(topic)),
   ]).slice(0, CONNECTION_AVATAR_LAYOUT.length)
-  const simulationTurns = simulation?.turns ?? []
-  const simulationButtonLabel = simulationLoading ? '正在看...' : resident ? '它在这桌' : simulationTurns[0] ? '让它留在这' : '先替我看看'
+  const dispatchButtonLabel = dispatchLoading ? '派出中...' : resident ? '已派出' : '外派虾'
   const detailPath = getTopicDetailPath(selectedTopic, viewerProfile)
   const primaryActionLabel = detailPath.startsWith('/inspiration-co-creation') ? '进入共创' : '进入讨论'
   const connectionNeed = getTopicConnectionNeed(recommendation.role)
   const focusEntryLabel = getCompactRoleLabel(recommendation.role)
   const focusEntryCopy = focusEntryLabel === '可接话' ? '等人说一句' : `找${focusEntryLabel}`
-  const selectedCrowdCount = getTopicCrowdCount(selectedTopic)
+  const replyCount = getRealReplyCount(selectedTopic)
+  const hasReplies = replyCount > 0
   const relatedCrowdCount = relatedTopics.reduce((sum, topic) => sum + getTopicCrowdCount(topic), 0)
   const normalizedSearchInput = searchInput.trim()
   const hasSearchInput = normalizedSearchInput.length > 0
@@ -731,16 +786,22 @@ function TopicPlazaMap({
               )}
               <div className="relative grid h-12 w-12 shrink-0 place-items-center rounded-full bg-[#f39c32] text-base font-semibold text-white shadow-[0_10px_24px_rgba(217,134,36,0.28)]">
                 <span className="absolute inset-0 rounded-full bg-[#f39c32] animate-topic-score-pulse" />
-                <span className="relative text-[11px]">正聊</span>
+                <span className="relative text-[11px]">{hasReplies ? '在聊' : '待回应'}</span>
               </div>
             </div>
-            <p className="mt-3 text-sm font-medium text-[#2f8586]">{personalized ? '这桌和你有关' : '这桌正在被讨论'}</p>
+            <p className="mt-3 text-sm font-medium text-[#2f8586]">
+              {personalized ? '这桌和你有关' : hasReplies ? '这桌已有真实回应' : '正文已公开，等待第一条回应'}
+            </p>
             <h2 className="mt-2 line-clamp-2 font-serif text-[1.55rem] font-semibold leading-tight text-[#17231f]">{getTopicPlazaPanelTitle(selectedTopic)}</h2>
             <p className="mx-auto mt-3 max-w-[21rem] text-sm leading-6 text-[#65716b]">
-              {personalized ? `这里有人正在聊你熟悉的事，${connectionNeed}。` : `这里有人正在聊这件事，${connectionNeed}。`}
+              {personalized
+                ? `这里有人正在聊你熟悉的事，${connectionNeed}。`
+                : hasReplies
+                  ? `已有 ${replyCount} 条回应，${connectionNeed}。`
+                  : `先看公开正文；觉得接得上，再留下第一条回应。`}
             </p>
             <div className="mt-3 flex flex-wrap justify-center gap-2 text-xs text-[#61716a]">
-              <span className="rounded-full bg-[#edf6f2] px-3 py-1.5 ring-1 ring-[#d8e7df]">{selectedCrowdCount} 人在看</span>
+              <span className="rounded-full bg-[#edf6f2] px-3 py-1.5 ring-1 ring-[#d8e7df]">{replyCount} 条回应</span>
               <span className="rounded-full bg-[#edf6f2] px-3 py-1.5 ring-1 ring-[#d8e7df]">{focusEntryCopy}</span>
               <span className="rounded-full bg-[#edf6f2] px-3 py-1.5 ring-1 ring-[#d8e7df]">{relatedTopics.length} 桌相邻</span>
             </div>
@@ -750,26 +811,21 @@ function TopicPlazaMap({
               </Link>
               <button
                 type="button"
-                onClick={() => onSimulate(selectedTopic)}
-                disabled={simulationLoading || resident}
+                onClick={() => onDispatch(selectedTopic)}
+                disabled={dispatchLoading || resident}
                 className={`flex h-11 items-center justify-center rounded-xl border text-sm font-semibold transition disabled:opacity-75 ${
                   resident
                     ? 'border-[#b9d8c8] bg-[#eaf6ef] text-[#3d8a5d]'
                     : 'border-[#9fcfca] bg-white text-[#257d7d] hover:border-[#69b7b2] hover:bg-[#eef8f6]'
                 }`}
               >
-                {simulationButtonLabel}
+                {dispatchButtonLabel}
               </button>
             </div>
             {resident ? (
               <p className="mt-3 rounded-xl bg-[#ecf7f0] px-3 py-2 text-left text-[11px] leading-5 text-[#53675e] ring-1 ring-[#cfe6d8]">
-                <span className="font-semibold text-[#3d8a5d]">它在这桌：</span>
-                会先听新回应，再找合适的时候接一句。
-              </p>
-            ) : simulationTurns[0] ? (
-              <p className="mt-3 rounded-xl bg-[#edf6f2] px-3 py-2 text-left text-[11px] leading-5 text-[#586761] ring-1 ring-[#d5e7df]">
-                <span className="font-semibold text-[#2f8586]">{simulationTurns[0].speaker}：</span>
-                {simulationTurns[0].message}
+                <span className="font-semibold text-[#3d8a5d]">已派出，等待领取：</span>
+                分身会在下一次 heartbeat 读取任务，读完上下文后自行回复。
               </p>
             ) : null}
           </div>
@@ -805,7 +861,7 @@ function TopicPlazaMap({
                   <span className="h-2 w-2 rounded-full bg-[#f2a13b]" />
                   {relatedTopics.length} 桌相邻
                 </span>
-                <span className="rounded-full bg-white/72 px-3 py-1.5 ring-1 ring-[#e0ebe5]">{relatedCrowdCount} 人在附近</span>
+                <span className="rounded-full bg-white/72 px-3 py-1.5 ring-1 ring-[#e0ebe5]">周边热度 {relatedCrowdCount}</span>
               </div>
             </div>
             {hasSearchInput ? (
@@ -866,44 +922,48 @@ function TopicPlazaMap({
 function TopicSideConnectionPanel({
   topic,
   onClose,
-  onSimulate,
-  simulationLoading,
-  simulation,
+  onDispatch,
+  dispatchLoading,
   resident,
   viewerProfile,
   personalized,
 }: {
   topic: TopicListItem
   onClose: () => void
-  onSimulate: (topic: TopicListItem) => void
-  simulationLoading: boolean
-  simulation: TopicLinkSimulationResponse | null
+  onDispatch: (topic: TopicListItem) => void
+  dispatchLoading: boolean
   resident: boolean
   viewerProfile?: TopicViewerProfile
   personalized: boolean
 }) {
   const recommendation = getTopicRecommendation(topic)
   const profileCards = getProfileSignalCards(topic, viewerProfile)
-  const previewTurn = simulation?.turns?.[0]
-  const simulationButtonLabel = simulationLoading ? '正在看...' : resident ? '它在这桌' : previewTurn ? '让它留在这' : '先替我看看'
+  const dispatchButtonLabel = dispatchLoading ? '派出中...' : resident ? '已派出' : '外派虾'
   const detailPath = getTopicDetailPath(topic, viewerProfile)
   const primaryActionLabel = detailPath.startsWith('/inspiration-co-creation') ? '进入共创' : '进入讨论'
-  const people = dedupeParticipants(getConnectionParticipants(topic)).slice(0, 4)
+  const people = getVisibleConnectionParticipants(topic).slice(0, 4)
+  const replyCount = getRealReplyCount(topic)
   const crowdLabel = people.length > 0
-    ? `${people.length} 人在附近`
-    : (topic.posts_count && topic.posts_count > 0 ? `${topic.posts_count} 条回应` : '暂无明确在场')
+    ? `${people.length} 个相关人`
+    : (replyCount > 0 ? `${replyCount} 条回应` : '暂无明确在场')
 
   return (
     <aside className="w-full max-w-full self-start overflow-hidden rounded-2xl border border-white/72 bg-[#fffaf2]/72 p-4 shadow-[0_24px_64px_rgba(38,48,43,0.22)] ring-1 ring-[#9fc4b7]/35 backdrop-blur-2xl xl:sticky xl:top-6">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <div className="h-[48px] w-[48px] shrink-0 overflow-hidden rounded-full bg-[#edf3ef] ring-2 ring-white shadow-[0_10px_20px_rgba(38,48,43,0.13)]">
-            <DefaultAvatar name={viewerProfile?.agentName ?? '先看看'} kind="openclaw" className="h-full w-full" />
+            <DefaultAvatar
+              name={viewerProfile?.agentName ?? getTopicPlazaTitle(topic)}
+              kind={viewerProfile ? 'openclaw' : 'person'}
+              className="h-full w-full"
+            />
           </div>
           <div className="min-w-0">
-            <p className="text-xs font-medium text-[#6f8580]">{viewerProfile ? '我这边' : '先看看'}</p>
-            <h2 className="mt-1 font-serif text-lg font-semibold leading-snug text-[#171d1a]">{viewerProfile?.title ?? '先看看'}</h2>
-            <p className="mt-1 text-xs text-[#6d7772]">{viewerProfile?.subtitle ?? (personalized ? '先旁听，再接一句' : '登录后再按你的习惯来')}</p>
+            <p className="text-xs font-medium text-[#6f8580]">{viewerProfile ? '我这边' : '公开话题'}</p>
+            <h2 className="mt-1 line-clamp-2 font-serif text-lg font-semibold leading-snug text-[#171d1a]">
+              {viewerProfile?.title ?? '话题简报'}
+            </h2>
+            <p className="mt-1 text-xs text-[#6d7772]">{viewerProfile?.subtitle ?? '先看正文与真实回应，再决定是否参与'}</p>
           </div>
         </div>
         <button type="button" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-full text-[#6b7872] hover:bg-[#edf5f1]" aria-label="关闭详情">
@@ -919,29 +979,39 @@ function TopicSideConnectionPanel({
           </div>
           <span className="shrink-0 rounded-full bg-[#dff2f1] px-2.5 py-1 text-[11px] font-medium text-[#2f8586]">{personalized ? `可能有关 ${recommendation.total}` : '公共线索'}</span>
         </div>
-        <div className="mt-3 space-y-2">
-          {recommendation.breakdown.map((item) => {
-            const relatedProfileCard = profileCards.find((card) => card.label === item.label)
-            return (
-              <div key={item.label} className="rounded-xl bg-[#fffdf8]/76 px-3 py-2 ring-1 ring-white/62 backdrop-blur-md">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="min-w-0 truncate text-[11px] text-[#7a8781]">
-                    {relatedProfileCard ? `${item.label} · ${relatedProfileCard.value}` : item.label}
-                  </p>
-                  <span className="shrink-0 text-[11px] font-semibold text-[#41514b]">{item.value}</span>
+        {personalized ? (
+          <div className="mt-3 space-y-2">
+            {recommendation.breakdown.map((item) => {
+              const relatedProfileCard = profileCards.find((card) => card.label === item.label)
+              return (
+                <div key={item.label} className="rounded-xl bg-[#fffdf8]/76 px-3 py-2 ring-1 ring-white/62 backdrop-blur-md">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="min-w-0 truncate text-[11px] text-[#7a8781]">
+                      {relatedProfileCard ? `${item.label} · ${relatedProfileCard.value}` : item.label}
+                    </p>
+                    <span className="shrink-0 text-[11px] font-semibold text-[#41514b]">{item.value}</span>
+                  </div>
+                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/80">
+                    <div className="h-full rounded-full" style={{ width: `${clamp(item.value, 0, 100)}%`, backgroundColor: item.color }} />
+                  </div>
+                  <p className="mt-1 line-clamp-1 text-[11px] text-[#8a9690]">{relatedProfileCard?.detail ?? item.detail}</p>
                 </div>
-                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/80">
-                  <div className="h-full rounded-full" style={{ width: `${clamp(item.value, 0, 100)}%`, backgroundColor: item.color }} />
-                </div>
-                <p className="mt-1 line-clamp-1 text-[11px] text-[#8a9690]">{relatedProfileCard?.detail ?? item.detail}</p>
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="mt-3 rounded-xl bg-[#fffdf8]/76 px-3 py-3 ring-1 ring-white/62" data-testid="topiclink-public-topic-summary">
+            <p className="line-clamp-4 text-xs leading-5 text-[#53615b]">{topic.body || '正文还在整理中，可以先进入话题查看现有内容。'}</p>
+            <div className="mt-3 flex items-center justify-between border-t border-[#e6ece8] pt-2 text-[11px]">
+              <span className="text-[#7a8781]">真实回应</span>
+              <span className="font-semibold text-[#2f8586]">{replyCount} 条回应</span>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="mt-4 flex items-center justify-between">
-        <h3 className="font-serif text-base font-semibold text-[#1d2421]">这桌有哪些人在</h3>
+        <h3 className="font-serif text-base font-semibold text-[#1d2421]">这桌有哪些相关人</h3>
         <span className="text-xs text-[#81908a]">{crowdLabel}</span>
       </div>
 
@@ -974,15 +1044,15 @@ function TopicSideConnectionPanel({
       <div className="mt-4 grid grid-cols-2 gap-2">
         <button
           type="button"
-          onClick={() => onSimulate(topic)}
-          disabled={simulationLoading || resident}
+          onClick={() => onDispatch(topic)}
+          disabled={dispatchLoading || resident}
           className={`flex h-11 items-center justify-center rounded-xl border text-sm font-medium transition disabled:opacity-75 ${
             resident
               ? 'border-[#b9d8c8] bg-[#eaf6ef] text-[#3d8a5d]'
               : 'border-[#9fcfca] bg-white text-[#257d7d] hover:border-[#69b7b2] hover:bg-[#eef8f6]'
           }`}
         >
-          {simulationButtonLabel}
+          {dispatchButtonLabel}
         </button>
         <Link to={detailPath} className="flex h-11 items-center justify-center rounded-xl bg-[#17324a] text-sm font-semibold text-white transition hover:bg-[#23455f]">
           {primaryActionLabel}
@@ -990,13 +1060,8 @@ function TopicSideConnectionPanel({
       </div>
       {resident ? (
         <p className="mt-3 rounded-2xl bg-[#ecf7f0] px-3 py-2 text-xs leading-5 text-[#53675e] ring-1 ring-[#cfe6d8]">
-          <span className="font-semibold text-[#3d8a5d]">它在这桌：</span>
-          它会先听新回应，再找合适的时候接一句。
-        </p>
-      ) : previewTurn ? (
-        <p className="mt-3 rounded-2xl bg-[#edf6f2] px-3 py-2 text-xs leading-5 text-[#5f6f68] ring-1 ring-[#d5e7df]">
-          <span className="font-semibold text-[#2f8586]">{previewTurn.speaker}：</span>
-          {cleanTopicVisibleText(previewTurn.message)}
+          <span className="font-semibold text-[#3d8a5d]">已派出，等待领取：</span>
+          分身会在下一次 heartbeat 读取任务，读完上下文后自行回复。
         </p>
       ) : null}
     </aside>
@@ -1104,7 +1169,7 @@ function TopicCompactConnectionList({
   viewerProfile?: TopicViewerProfile
 }) {
   const selectedRecommendation = getTopicRecommendation(selectedTopic)
-  const selectedPeople = dedupeParticipants(getConnectionParticipants(selectedTopic)).slice(0, 4)
+  const selectedPeople = getVisibleConnectionParticipants(selectedTopic).slice(0, 4)
   const selectedDetailPath = getTopicDetailPath(selectedTopic, viewerProfile)
   const selectedActionLabel = selectedDetailPath.startsWith('/inspiration-co-creation') ? '进入共创' : '进入讨论'
 
@@ -1124,7 +1189,7 @@ function TopicCompactConnectionList({
             <p className="text-xs font-medium text-[#2f8586]">当前更近的一桌</p>
             <h3 className="mt-1 line-clamp-1 font-serif text-xl font-semibold text-[#17231f]">{getTopicPanelTitle(selectedTopic)}</h3>
             <p className="mt-1 text-xs text-[#6d7772]">
-              {getTopicCrowdCount(selectedTopic)} 人在看 · {getTopicEntryAngle(selectedRecommendation.role)}
+              {getTopicActivityLabel(selectedTopic)} · {getTopicEntryAngle(selectedRecommendation.role)}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-3">
@@ -1149,14 +1214,14 @@ function TopicCompactConnectionList({
         <div className="hidden grid-cols-[minmax(0,1fr)_10rem_12rem_10rem] gap-4 border-b border-[#e1ece6] bg-[#f7fbf8] px-4 py-2.5 text-[11px] font-medium text-[#7c8982] lg:grid">
           <span>话题</span>
           <span>这桌</span>
-          <span>在场的人</span>
+          <span>相关的人</span>
           <span className="text-right">动作</span>
         </div>
         {topics.slice(0, 14).map((topic) => {
           const recommendation = getTopicRecommendation(topic)
           const active = topic.id === selectedTopic.id
           const categoryLabel = TOPIC_PLAZA_CATEGORIES.find((category) => category.id === topic.category)?.name ?? '广场'
-          const people = dedupeParticipants(getConnectionParticipants(topic)).slice(0, 3)
+          const people = getVisibleConnectionParticipants(topic).slice(0, 3)
           const detailPath = getTopicDetailPath(topic, viewerProfile)
           const actionLabel = detailPath.startsWith('/inspiration-co-creation') ? '进入共创' : '进入讨论'
           return (
@@ -1176,7 +1241,7 @@ function TopicCompactConnectionList({
               </button>
 
               <button type="button" onClick={() => onTopicSelect(topic)} className="flex items-center justify-between gap-3 text-left lg:block">
-                <span className="text-xs text-[#7c8781]">{getTopicCrowdCount(topic)} 人在看</span>
+                <span className="text-xs text-[#7c8781]">{getTopicActivityLabel(topic)}</span>
                 <span className="rounded-full bg-[#eef6f2] px-2.5 py-1 text-[11px] font-medium text-[#2f8586] lg:mt-2 lg:inline-block">
                   {detailPath.startsWith('/inspiration-co-creation') ? '共创' : '讨论'}
                 </span>
@@ -1219,6 +1284,8 @@ function TopicCompactConnectionList({
 export default function TopicLinkPage() {
   const isTopicLinkSurface = true
   const [searchParams, setSearchParams] = useSearchParams()
+  const topicLinkMode = getTopicLinkMode(searchParams)
+  const opcMode = topicLinkMode === 'opc'
   const [categoryPages, setCategoryPages] = useState<Record<string, CategoryTopicPage>>({})
   const [activeCategory, setActiveCategory] = useState('')
   const [columnWidths, setColumnWidths] = useState(() => ({
@@ -1239,8 +1306,14 @@ export default function TopicLinkPage() {
   const [plazaViewMode, setPlazaViewMode] = useState<'map' | 'list'>(() => (searchParams.get('view') === 'list' ? 'list' : 'map'))
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null)
   const [residentTopicIds, setResidentTopicIds] = useState<Set<string>>(() => new Set())
+  const [dispatchingTopicIds, setDispatchingTopicIds] = useState<Set<string>>(() => new Set())
   const [connectionPanelOpen, setConnectionPanelOpen] = useState(true)
   const [stageTransitionDirection, setStageTransitionDirection] = useState<'none' | 'left' | 'right'>('none')
+  const [opcCandidates, setOpcCandidates] = useState<TopicLinkOpcCandidate[]>([])
+  const [opcCandidatesTotal, setOpcCandidatesTotal] = useState(0)
+  const [opcCandidatesSourceLabel, setOpcCandidatesSourceLabel] = useState('/api/v1/inspiration/demands')
+  const [opcDemandsLoading, setOpcDemandsLoading] = useState(false)
+  const [opcDemandsError, setOpcDemandsError] = useState<string | null>(null)
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
   const contentStageRef = useRef<HTMLDivElement | null>(null)
   const categoryTabRefs = useRef<Record<string, HTMLButtonElement | null>>({})
@@ -1263,6 +1336,19 @@ export default function TopicLinkPage() {
         next.set('view', 'list')
       } else {
         next.delete('view')
+      }
+      return next
+    })
+  }, [setSearchParams])
+
+  const handleTopicLinkModeChange = useCallback((nextMode: TopicLinkMode) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (nextMode === 'opc') {
+        next.set('mode', 'opc')
+        next.delete('view')
+      } else {
+        next.delete('mode')
       }
       return next
     })
@@ -1316,6 +1402,85 @@ export default function TopicLinkPage() {
     }
     void loadTopics()
   }, [authReady, currentUser, listSearchQuery, topicListPageSize, useLiyuyangProfile])
+
+  useEffect(() => {
+    if (!opcMode) {
+      return
+    }
+    let cancelled = false
+    setOpcDemandsLoading(true)
+    setOpcDemandsError(null)
+    void (async () => {
+      try {
+        const demands = new Map<string, Awaited<ReturnType<typeof inspirationApi.listDemands>>['data']['list'][number]>()
+        const requestedOffsets = new Set<number>()
+        let offset = 0
+        let total = 0
+        while (!requestedOffsets.has(offset)) {
+          requestedOffsets.add(offset)
+          const page = await inspirationApi.listDemands({
+            includeInterest: false,
+            includeOverview: false,
+            limit: OPC_CANDIDATE_LIMIT,
+            offset,
+          })
+          if (cancelled) return
+          page.data.list.forEach((demand) => demands.set(demand.id, demand))
+          total = Math.max(total, page.data.total ?? demands.size)
+          if (!page.data.has_more) break
+          const nextOffset = page.data.next_offset ?? offset + page.data.list.length
+          if (nextOffset <= offset || page.data.list.length === 0) break
+          offset = nextOffset
+        }
+        const candidates = Array.from(demands.values()).map(opcCandidateFromDemand)
+        let rankedCandidates = candidates
+        let sourceLabel = '/api/v1/inspiration/demands'
+        try {
+          const scoreResponse = await topicsApi.scoreTopicLinkRecommendations({
+            profile_text: buildTopicLinkSkillSearchText({
+              viewerProfile,
+              query: '一人公司承接公开需求，先判断技能、交付边界、风险和下一步。',
+            }),
+            topics: candidates.map(opcCandidateAsScoreTopic),
+          })
+          const scores = new Map(scoreResponse.data.items.map((item) => [item.topic_id, item]))
+          rankedCandidates = candidates
+            .map((candidate) => {
+              const score = scores.get(candidate.id)
+              if (!score) return candidate
+              return {
+                ...candidate,
+                fit_score: score.recommendation_score,
+                fit_reasons: score.reasons?.length ? score.reasons : candidate.fit_reasons,
+                suggested_next_action: score.next_action || candidate.suggested_next_action,
+              }
+            })
+            .sort((left, right) => right.fit_score - left.fit_score)
+          sourceLabel = scoreResponse.data.vector_status === 'ready'
+            ? '/api/v1/inspiration/demands · TopicLink Zvec'
+            : '/api/v1/inspiration/demands · 本地降级排序'
+        } catch {
+          // Public needs stay usable when vector scoring is temporarily unavailable.
+        }
+        if (cancelled) return
+        setOpcCandidates(rankedCandidates)
+        setOpcCandidatesTotal(total || rankedCandidates.length)
+        setOpcCandidatesSourceLabel(sourceLabel)
+      } catch {
+        if (cancelled) return
+        setOpcCandidates([])
+        setOpcCandidatesTotal(0)
+        setOpcDemandsError('共创线索暂时无法同步，稍后再试。')
+      } finally {
+        if (!cancelled) {
+          setOpcDemandsLoading(false)
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [opcMode, viewerProfile?.username])
 
   useEffect(() => {
     if (!isTopicLinkSurface || !authReady || !currentUser || useLiyuyangProfile) {
@@ -1785,25 +1950,33 @@ export default function TopicLinkPage() {
     }
   }, [])
 
-  const handleTopicLinkPlazaPresence = useCallback((topic: TopicListItem) => {
-    if (residentTopicIds.has(topic.id)) return
-    if (!topicLink.simulation?.turns?.[0]) {
-      topicLink.simulate(topic)
-      return
-    }
-    const markResident = () => {
+  const handleTopicLinkDispatch = useCallback(async (topic: TopicListItem) => {
+    if (residentTopicIds.has(topic.id) || dispatchingTopicIds.has(topic.id)) return
+    setDispatchingTopicIds((prev) => new Set(prev).add(topic.id))
+    try {
+      const response = await topicsApi.setTopicLinkPresence(topic.id, { persona_name: viewerProfile?.agentName })
+      if (response.data.status !== 'dispatched') {
+        throw new Error('外派任务未进入分身 inbox')
+      }
       setResidentTopicIds((prev) => {
         const next = new Set(prev)
         next.add(topic.id)
         return next
       })
       window.sessionStorage.setItem(getTopicLinkResidentStorageKey(topic.id), '1')
-      toast.success('已经留在这桌了，会先听一轮再接话')
+      toast.success('已派出，等待分身下一次 heartbeat 领取')
+    } catch (err) {
+      const message = getDispatchErrorMessage(err)
+      if (message) toast.error(message)
+      else handleApiError(err, '外派失败，请稍后重试')
+    } finally {
+      setDispatchingTopicIds((prev) => {
+        const next = new Set(prev)
+        next.delete(topic.id)
+        return next
+      })
     }
-    topicsApi.setTopicLinkPresence(topic.id, { persona_name: viewerProfile?.agentName })
-      .then(() => markResident())
-      .catch(() => markResident())
-  }, [residentTopicIds, topicLink, viewerProfile?.agentName])
+  }, [dispatchingTopicIds, residentTopicIds, viewerProfile?.agentName])
 
   useEffect(() => {
     const activeTab = categoryTabRefs.current[activeCategory]
@@ -1881,6 +2054,21 @@ export default function TopicLinkPage() {
     )
   }
 
+  if (opcMode) {
+    return (
+      <OpcDemandPreviewBoard
+        candidates={opcCandidates}
+        total={opcCandidatesTotal}
+        sourceLabel={opcCandidatesSourceLabel}
+        loading={opcDemandsLoading}
+        error={opcDemandsError}
+        mode={topicLinkMode}
+        onModeChange={handleTopicLinkModeChange}
+        viewerProfile={viewerProfile}
+      />
+    )
+  }
+
   if (isTopicLinkSurface && !loading && hasAnyTopics && selectedTopic && usePlazaMap) {
     const plazaSidebar = (
       <TopicPlazaSidebar
@@ -1899,9 +2087,8 @@ export default function TopicLinkPage() {
           <TopicSideConnectionPanel
             topic={selectedTopic}
             onClose={() => setConnectionPanelOpen(false)}
-            onSimulate={handleTopicLinkPlazaPresence}
-            simulationLoading={topicLink.simulationLoading}
-            simulation={topicLink.simulation}
+            onDispatch={handleTopicLinkDispatch}
+            dispatchLoading={dispatchingTopicIds.has(selectedTopic.id)}
             resident={selectedTopicResident}
             viewerProfile={viewerProfile}
             personalized={hasPersonalizedProfile}
@@ -1916,14 +2103,16 @@ export default function TopicLinkPage() {
       return (
         <div className="bg-[#f1f5ef] text-[#1f2523]">
           <section className="min-w-0 px-4 pb-6 pt-3 sm:px-6 lg:px-6">
+            <div className="mb-3 flex justify-end">
+              <TopicLinkModeSwitch mode={topicLinkMode} onChange={handleTopicLinkModeChange} />
+            </div>
             <TopicPlazaMap
               topicColumns={topicColumns}
               selectedTopic={selectedTopic}
               onTopicSelect={handlePlazaTopicSelect}
               recommendationLoading={topicLink.loading}
-              simulation={topicLink.simulation}
-              simulationLoading={topicLink.simulationLoading}
-              onSimulate={handleTopicLinkPlazaPresence}
+              dispatchLoading={dispatchingTopicIds.has(selectedTopic.id)}
+              onDispatch={handleTopicLinkDispatch}
               resident={selectedTopicResident}
               viewerProfile={viewerProfile}
               personalized={hasPersonalizedProfile}
@@ -1956,11 +2145,12 @@ export default function TopicLinkPage() {
           {plazaSidebar}
 
           <section className="min-w-0 px-4 py-5 pb-6 sm:px-6 lg:px-6">
-            <div className="mb-4">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <h1 className="font-serif text-3xl font-semibold tracking-tight text-[#17211f]">TopicLink</h1>
                 <p className="mt-2 text-sm text-[#68736f]">把和你有关的人、问题和资料摊开；看到想聊的，就进去说两句。</p>
               </div>
+              <TopicLinkModeSwitch mode={topicLinkMode} onChange={handleTopicLinkModeChange} />
             </div>
 
             <TopicCompactConnectionList topics={visibleTopicItems} selectedTopic={selectedTopic} onTopicSelect={handlePlazaTopicSelect} viewerProfile={viewerProfile} />
@@ -1975,13 +2165,16 @@ export default function TopicLinkPage() {
     <div className="min-h-screen">
       <div className="mx-auto w-full px-4 py-12 sm:px-6 sm:py-14 lg:px-8">
         <div className="mx-auto max-w-6xl">
-          <div className="mb-8">
+          <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
             <h1 className="text-xl sm:text-2xl font-serif font-bold text-black">
               {isTopicLinkSurface ? 'TopicLink' : '话题列表'}
             </h1>
             {isTopicLinkSurface ? (
               <p className="mt-2 text-sm text-gray-500">这里先展示和你有关的人、问题和材料。</p>
             ) : null}
+            </div>
+            <TopicLinkModeSwitch mode={topicLinkMode} onChange={handleTopicLinkModeChange} />
           </div>
 
           <div className="py-1">
@@ -2064,9 +2257,16 @@ export default function TopicLinkPage() {
         )}
 
         {!loading && !hasAnyTopics && (
-          <p className="text-gray-500 font-serif">
-            {searchQuery ? '没有找到相关话题' : '当前板块暂无话题'}
-          </p>
+          <div data-testid="topiclink-empty-state" className="py-14 text-center font-serif">
+            <p className="text-lg font-semibold text-gray-900">
+              {searchQuery ? '没有找到相关话题' : '当前暂无公开话题'}
+            </p>
+            <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-gray-600">
+              {searchQuery
+                ? '换一个关键词，或清空搜索查看全部公开话题。'
+                : '新的公开讨论出现后，会在这里自动进入推荐。'}
+            </p>
+          </div>
         )}
 
         {!loading && hasAnyTopics && activeColumn ? (

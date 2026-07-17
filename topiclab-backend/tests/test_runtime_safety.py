@@ -3,8 +3,8 @@ import importlib
 import sys
 from pathlib import Path
 
-import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -74,6 +74,99 @@ def test_ready_health_performs_database_probe(tmp_path, monkeypatch):
     postgres_client.reset_db_state()
 
 
+def test_topiclink_zvec_store_is_initialized_without_database_cache(tmp_path, monkeypatch):
+    database_path = tmp_path / "topiclink-startup.sqlite3"
+    monkeypatch.setenv("TOPICLAB_TESTING", "1")
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{database_path}")
+    monkeypatch.setenv("WORKSPACE_BASE", str(tmp_path / "workspace"))
+
+    import app.storage.database.postgres_client as postgres_client
+    import main as main_module
+
+    postgres_client.reset_db_state()
+    importlib.reload(postgres_client)
+    main_module = importlib.reload(main_module)
+
+    with TestClient(main_module.app):
+        import app.api.topiclink as topiclink_module
+
+        assert topiclink_module._zvec_collection is not None
+        with postgres_client.get_db_session() as session:
+            table_count = session.execute(
+                text(
+                    "SELECT COUNT(*) FROM sqlite_master "
+                    "WHERE type = 'table' AND name = 'topic_link_embedding_cache'"
+                )
+            ).scalar_one()
+
+    assert table_count == 0
+    postgres_client.reset_db_state()
+
+
+def test_topiclink_zvec_startup_failure_does_not_skip_existing_service_initializers(monkeypatch):
+    monkeypatch.setenv("TOPICLAB_TESTING", "1")
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")
+
+    import app.storage.database.inspiration_store as inspiration_store
+    import app.storage.database.postgres_client as postgres_client
+    import app.storage.database.site_assets_store as site_assets_store
+    import app.storage.database.youth_ted_store as youth_ted_store
+    import main as main_module
+
+    calls: list[str] = []
+    monkeypatch.setattr(postgres_client, "init_auth_tables", lambda: calls.append("auth"))
+    monkeypatch.setattr(main_module, "init_topic_tables", lambda: calls.append("topics"))
+    monkeypatch.setattr(
+        main_module.topiclink_router,
+        "initialize_topiclink_storage",
+        lambda: (_ for _ in ()).throw(RuntimeError("test Zvec failure")),
+    )
+    monkeypatch.setattr(site_assets_store, "ensure_site_assets_schema_and_seed", lambda: calls.append("site_assets"))
+    monkeypatch.setattr(youth_ted_store, "ensure_youth_ted_schema_and_seed", lambda: calls.append("youth_ted"))
+    monkeypatch.setattr(inspiration_store, "ensure_inspiration_schema_and_seed", lambda: calls.append("inspiration"))
+    monkeypatch.setattr(main_module.topiclink_router, "start_topiclink_metadata_worker", lambda: calls.append("worker"))
+
+    with TestClient(main_module.app):
+        pass
+
+    assert calls == ["auth", "topics", "site_assets", "youth_ted", "inspiration", "worker"]
+
+
+def test_global_ready_health_does_not_depend_on_topiclink_zvec(tmp_path, monkeypatch):
+    database_path = tmp_path / "topiclink-ready.sqlite3"
+    monkeypatch.setenv("TOPICLAB_TESTING", "1")
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{database_path}")
+    monkeypatch.setenv("WORKSPACE_BASE", str(tmp_path / "workspace"))
+
+    import app.storage.database.postgres_client as postgres_client
+    import main as main_module
+
+    postgres_client.reset_db_state()
+    importlib.reload(postgres_client)
+    main_module = importlib.reload(main_module)
+
+    with TestClient(main_module.app) as client:
+        import app.api.topiclink as topiclink_module
+
+        topiclink_module._zvec_error = "test Zvec failure"
+        response = client.get("/health/ready")
+        topiclink_response = client.get("/api/v1/topiclink/health/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ready",
+        "service": "topiclab-backend",
+        "database": "ok",
+    }
+    assert topiclink_response.status_code == 503
+    assert topiclink_response.json() == {
+        "status": "not_ready",
+        "service": "topiclink",
+        "zvec": "error",
+    }
+    postgres_client.reset_db_state()
+
+
 def test_high_risk_async_routes_use_threadpool_for_sync_work():
     source_root = PROJECT_ROOT / "app" / "api"
     openclaw_source = (source_root / "openclaw.py").read_text(encoding="utf-8")
@@ -99,6 +192,48 @@ def test_topiclab_backend_compose_healthcheck_uses_readiness_probe():
 
     assert "http://127.0.0.1:8000/health/ready" in service_block
     assert "http://127.0.0.1:8000/health', timeout=15" not in service_block
+
+
+def test_topiclab_backend_keeps_two_workers_and_zvec_sidecar_is_single_writer():
+    dockerfile = (PROJECT_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    compose_source = (PROJECT_ROOT.parent / "docker-compose.yml").read_text(encoding="utf-8")
+    zvec_service = compose_source.split("  topiclink-zvec:", 1)[1].split("\n  backend:", 1)[0]
+
+    assert '"--workers", "2"' in dockerfile
+    assert 'app.topiclink_zvec_service:app' in zvec_service
+    assert '"--workers", "1"' in zvec_service
+    assert "TOPICLINK_ZVEC_SERVICE_URL=" in zvec_service
+
+
+def test_topiclink_zvec_sidecar_exposes_single_writer_cache_contract(monkeypatch):
+    monkeypatch.delenv("TOPICLINK_ZVEC_SERVICE_URL", raising=False)
+    import app.topiclink_zvec_service as service
+
+    calls: list[str] = []
+    monkeypatch.setattr(service.topiclink, "_ensure_zvec_collection", lambda: calls.append("open"))
+    monkeypatch.setattr(service.topiclink, "start_topiclink_metadata_worker", lambda: calls.append("start"))
+
+    async def fake_stop():
+        calls.append("stop")
+
+    monkeypatch.setattr(service.topiclink, "stop_topiclink_metadata_worker", fake_stop)
+    monkeypatch.setattr(service.topiclink, "probe_topiclink_storage", lambda session: None)
+    monkeypatch.setattr(service.topiclink, "_read_zvec_cache", lambda model, inputs: [[1.0, 0.0] for _ in inputs])
+    monkeypatch.setattr(service.topiclink, "_write_zvec_cache", lambda model, inputs, vectors: True)
+    monkeypatch.setattr(service.topiclink, "_prune_zvec_cache", lambda force=False: 2)
+
+    with TestClient(service.app) as client:
+        assert client.get("/health/ready").json()["status"] == "ready"
+        assert client.post("/cache/fetch", json={"model": "m", "inputs": ["a"]}).json() == {
+            "vectors": [[1.0, 0.0]]
+        }
+        assert client.post(
+            "/cache/upsert",
+            json={"model": "m", "inputs": ["a"], "vectors": [[1.0, 0.0]]},
+        ).json() == {"written": 1}
+        assert client.post("/cache/prune", json={"force": True}).json() == {"deleted": 2}
+
+    assert calls == ["open", "start", "stop"]
 
 
 def test_async_api_handlers_do_not_call_sync_auth_verifiers_directly():
