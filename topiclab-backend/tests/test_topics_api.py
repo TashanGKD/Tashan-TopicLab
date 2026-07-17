@@ -2193,6 +2193,26 @@ def test_topic_detail_related_proxy_bootstraps_workspace_on_demand(client):
     assert mode.json()["mode_id"] == "standard"
 
 
+def test_topic_experts_fall_back_to_local_data_when_resonnet_returns_502(client, monkeypatch):
+    from app.storage.database.topic_store import list_topic_experts
+
+    topic = client.post("/topics", json={"title": "相关人降级", "body": "下游暂不可用"}).json()
+    topic_id = topic["id"]
+    local_experts = list_topic_experts(topic_id)
+
+    async def unavailable_resonnet(*args, **kwargs):
+        request = httpx.Request("POST", "http://resonnet.test/executor/topics/bootstrap")
+        response = httpx.Response(502, request=request)
+        raise httpx.HTTPStatusError("bad gateway", request=request, response=response)
+
+    monkeypatch.setattr("app.api.topics.request_json", unavailable_resonnet)
+
+    response = client.get(f"/topics/{topic_id}/experts")
+
+    assert response.status_code == 200, response.text
+    assert response.json() == local_experts
+
+
 def test_discussion_generated_image_is_served_from_database_after_workspace_file_removed(client):
     topic = client.post("/topics", json={"title": "图片入库", "body": "验证图片"}).json()
     topic_id = topic["id"]

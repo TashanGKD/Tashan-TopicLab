@@ -77,6 +77,7 @@ def test_topiclink_task_schema_requeues_claims_created_before_lease_tokens():
 
     assert "claim_token_hash" in columns
     assert "claim_expires_at" in columns
+    assert "reservation_key" in columns
     assert legacy.status == "pending"
     assert legacy.claimed_at is None
 
@@ -397,6 +398,23 @@ def test_topiclink_dimension_mismatch_is_reported_by_readiness(topiclink_client,
     }
 
 
+def test_topiclink_zvec_schema_requires_all_cache_fields():
+    class FakeSchema:
+        @staticmethod
+        def vector(name):
+            assert name == topiclink.ZVEC_VECTOR_FIELD
+            return SimpleNamespace(dimension=3)
+
+        @staticmethod
+        def field(name):
+            if name == "model":
+                return None
+            return SimpleNamespace(data_type=SimpleNamespace(name="STRING"))
+
+    with pytest.raises(RuntimeError, match="schema is missing field model"):
+        topiclink._assert_zvec_collection_schema(SimpleNamespace(schema=FakeSchema()), 3)
+
+
 def test_topiclink_profile_uses_current_twin(monkeypatch):
     monkeypatch.setattr(
         topiclink,
@@ -434,6 +452,7 @@ def test_topiclink_profile_uses_current_twin(monkeypatch):
 
 
 def test_topiclink_metadata_autofill_preserves_existing_metadata(monkeypatch):
+    monkeypatch.setenv("TOPICLINK_METADATA_AUTOFILL", "1")
     topic = {
         "id": "topic-1",
         "title": "103-瞬变源异常监测接力",
@@ -488,6 +507,8 @@ def test_topiclink_metadata_autofill_skips_test_topics(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_topiclink_background_autofill_uses_llm_metadata_slowly(monkeypatch):
+    monkeypatch.setenv("TOPICLINK_METADATA_AUTOFILL", "1")
+    monkeypatch.setenv("TOPICLINK_METADATA_BACKGROUND_AUTOFILL", "1")
     topics = [
         {
             "id": "topic-1",
@@ -681,8 +702,18 @@ def test_topiclink_dispatch_queues_bound_openclaw_without_posting_for_it(monkeyp
     )
     monkeypatch.setattr(
         topiclink,
+        "_reserve_topiclink_presence_dispatch",
+        lambda topic_id, persona_name, *, user_id, agent_id: (
+            {"topic_id": topic_id, "persona_name": persona_name, "status": "absent"},
+            True,
+        ),
+    )
+    monkeypatch.setattr(
+        topiclink,
         "_upsert_topiclink_presence",
-        lambda topic_id, persona_name, status="resident": presence_updates.append((topic_id, persona_name, status)) or {
+        lambda topic_id, persona_name, *, user_id, agent_id, status="resident": presence_updates.append(
+            (topic_id, persona_name, user_id, agent_id, status)
+        ) or {
             "topic_id": topic_id,
             "persona_name": persona_name,
             "resident": True,
@@ -712,9 +743,38 @@ def test_topiclink_dispatch_queues_bound_openclaw_without_posting_for_it(monkeyp
             },
         }
     ]
-    assert presence_updates == [("topic-1", "科研虾", "dispatched")]
+    assert presence_updates == [("topic-1", "科研虾", 42, 17, "dispatched")]
     assert result["status"] == "dispatched"
     assert result["dispatch_post_id"] == "post-dispatch-1"
+
+
+def test_topiclink_presence_isolated_by_owner_and_bound_agent(topiclink_client, monkeypatch):
+    monkeypatch.setattr(topiclink, "_safe_get_topic", lambda topic_id: {"id": topic_id})
+    first, first_reserved = topiclink._reserve_topiclink_presence_dispatch(
+        "topic-shared",
+        "分身",
+        user_id=41,
+        agent_id=71,
+    )
+    second, second_reserved = topiclink._reserve_topiclink_presence_dispatch(
+        "topic-shared",
+        "分身",
+        user_id=42,
+        agent_id=72,
+    )
+    duplicate, duplicate_reserved = topiclink._reserve_topiclink_presence_dispatch(
+        "topic-shared",
+        "分身",
+        user_id=41,
+        agent_id=71,
+    )
+
+    assert first_reserved is True
+    assert second_reserved is True
+    assert duplicate_reserved is False
+    assert first["status"] == "dispatching"
+    assert second["status"] == "dispatching"
+    assert duplicate["status"] == "dispatching"
 
 
 def test_topiclink_dispatch_post_is_not_counted_or_shown_as_a_real_response(topiclink_client):
@@ -893,7 +953,13 @@ def test_opc_diligence_dispatch_reuses_topic_discussion_and_bound_agent_reply(to
             ),
             {
                 "slug": public_demands[0]["slug"],
-                "snapshot": '{"summary":"共创队分身已识别技术验证缺口","next_step":"先核验可用数据"}',
+                "snapshot": (
+                    '{"summary":"共创队分身已识别技术验证缺口",'
+                    '"next_step":"先核验可用数据",'
+                    '"follow_up_questions":["公开还缺什么证据？"],'
+                    '"private_json":{"contact":"不应外泄"},'
+                    '"stages":{"internal":{"note":"不应外泄"}}}'
+                ),
             },
         )
 
@@ -913,8 +979,12 @@ def test_opc_diligence_dispatch_reuses_topic_discussion_and_bound_agent_reply(to
         "snapshot": {
             "summary": "共创队分身已识别技术验证缺口",
             "next_step": "先核验可用数据",
+            "follow_up_questions": ["公开还缺什么证据？"],
         },
     }
+    serialized_snapshot = str(task["input"]["existing_assistant"])
+    assert "private_json" not in serialized_snapshot
+    assert "不应外泄" not in serialized_snapshot
     discussion_topic_id = task["input"]["discussion_topic_id"]
     dispatch_post_id = task["input"]["dispatch_post_id"]
     assert task["input"]["response_template"] == [
@@ -1011,6 +1081,19 @@ def test_opc_diligence_concurrent_requests_share_one_task_and_dispatch(topiclink
         return original_load(session, demand_slug)
 
     monkeypatch.setattr(topiclink, "_load_public_opc_demand", synchronized_load)
+
+    class NoopLock:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+    monkeypatch.setattr(
+        topiclink,
+        "_topiclink_task_creation_locks",
+        tuple(NoopLock() for _ in range(64)),
+    )
     headers = {"Authorization": f"Bearer {owner['token']}"}
     from fastapi.testclient import TestClient
 
@@ -1052,9 +1135,17 @@ def test_opc_diligence_concurrent_requests_share_one_task_and_dispatch(topiclink
             ),
             {"topic_id": tasks[0]["input"]["discussion_topic_id"]},
         ).scalar_one()
+        reservation_count = session.execute(
+            text(
+                "SELECT COUNT(*) FROM topiclink_agent_tasks "
+                "WHERE reservation_key IS NOT NULL AND source_id = :slug"
+            ),
+            {"slug": slug},
+        ).scalar_one()
 
     assert task_count == 1
     assert dispatch_count == 1
+    assert reservation_count == 1
 
 
 def test_topiclink_agent_task_claim_is_atomic(topiclink_client, monkeypatch):

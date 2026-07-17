@@ -28,7 +28,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from sqlalchemy import bindparam, inspect, text
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.api.auth import require_openclaw_user, security, verify_access_token
 from app.services.openclaw_runtime import get_primary_openclaw_agent_for_user
@@ -437,6 +437,33 @@ def _assert_zvec_statuses(statuses: Any) -> None:
         raise RuntimeError(f"TopicLink Zvec upsert failed: {detail}")
 
 
+def _assert_zvec_collection_schema(collection: Any, dimensions: int) -> None:
+    vector_schema = collection.schema.vector(ZVEC_VECTOR_FIELD)
+    actual_dimensions = None if vector_schema is None else int(vector_schema.dimension)
+    if actual_dimensions != dimensions:
+        raise RuntimeError(
+            f"TopicLink Zvec dimension {actual_dimensions} does not match configured {dimensions}"
+        )
+    required_fields = {
+        "cache_key": "STRING",
+        "model": "STRING",
+        "text_hash": "STRING",
+        "dimensions": "INT32",
+        "created_at": "STRING",
+        "updated_at": "STRING",
+        "last_used_at": "STRING",
+    }
+    for field_name, expected_type in required_fields.items():
+        field = collection.schema.field(field_name)
+        if field is None:
+            raise RuntimeError(f"TopicLink Zvec schema is missing field {field_name}")
+        actual_type = getattr(field.data_type, "name", str(field.data_type).split(".")[-1])
+        if actual_type != expected_type:
+            raise RuntimeError(
+                f"TopicLink Zvec field {field_name} has type {actual_type}, expected {expected_type}"
+            )
+
+
 def _ensure_zvec_collection():
     global _zvec_collection, _zvec_collection_path, _zvec_error
     if not _topiclink_zvec_enabled():
@@ -451,12 +478,7 @@ def _ensure_zvec_collection():
 
             if path.exists():
                 collection = zvec.open(str(path))
-                vector_schema = collection.schema.vector(ZVEC_VECTOR_FIELD)
-                actual_dimensions = None if vector_schema is None else int(vector_schema.dimension)
-                if actual_dimensions != dimensions:
-                    raise RuntimeError(
-                        f"TopicLink Zvec dimension {actual_dimensions} does not match configured {dimensions}"
-                    )
+                _assert_zvec_collection_schema(collection, dimensions)
             else:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 schema = zvec.CollectionSchema(
@@ -755,6 +777,8 @@ def _ensure_presence_table(session) -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 topic_id TEXT NOT NULL,
                 persona_name TEXT NOT NULL,
+                requested_by_user_id INTEGER,
+                target_openclaw_agent_id INTEGER,
                 status TEXT NOT NULL DEFAULT 'resident',
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -767,6 +791,8 @@ def _ensure_presence_table(session) -> None:
                 id SERIAL PRIMARY KEY,
                 topic_id TEXT NOT NULL,
                 persona_name TEXT NOT NULL,
+                requested_by_user_id INTEGER,
+                target_openclaw_agent_id INTEGER,
                 status TEXT NOT NULL DEFAULT 'resident',
                 created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -774,7 +800,31 @@ def _ensure_presence_table(session) -> None:
             """
         )
     )
-    session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_topic_link_presence_topic_persona ON topic_link_presence(topic_id, persona_name)"))
+    columns = {
+        str(column[1])
+        for column in session.execute(text("PRAGMA table_info(topic_link_presence)")).fetchall()
+    } if is_sqlite else {
+        str(column["name"])
+        for column in inspect(session.connection()).get_columns("topic_link_presence")
+    }
+    for column_name in ("requested_by_user_id", "target_openclaw_agent_id"):
+        if column_name not in columns:
+            session.execute(
+                text(f"ALTER TABLE topic_link_presence ADD COLUMN {column_name} INTEGER")
+            )
+    session.execute(text("DROP INDEX IF EXISTS idx_topic_link_presence_topic_persona"))
+    session.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS idx_topic_link_presence_topic_persona "
+            "ON topic_link_presence(topic_id, persona_name)"
+        )
+    )
+    session.execute(
+        text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_topic_link_presence_owner_agent "
+            "ON topic_link_presence(topic_id, requested_by_user_id, target_openclaw_agent_id)"
+        )
+    )
 
 
 def _normalize_persona_name(value: str | None) -> str:
@@ -782,22 +832,38 @@ def _normalize_persona_name(value: str | None) -> str:
     return persona[:80] or "分身"
 
 
-def _get_topiclink_presence(topic_id: str, persona_name: str) -> dict[str, Any]:
+def _get_topiclink_presence(
+    topic_id: str,
+    persona_name: str,
+    *,
+    user_id: int | None = None,
+    agent_id: int | None = None,
+) -> dict[str, Any]:
     topic = _safe_get_topic(topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
     try:
         with get_db_session() as session:
             _ensure_presence_table(session)
+            if user_id is not None and agent_id is not None:
+                where_sql = (
+                    "topic_id = :topic_id AND requested_by_user_id = :user_id "
+                    "AND target_openclaw_agent_id = :agent_id"
+                )
+            else:
+                where_sql = "topic_id = :topic_id AND persona_name = :persona_name"
             row = session.execute(
                 text(
-                    """
-                    SELECT topic_id, persona_name, status, created_at, updated_at
-                    FROM topic_link_presence
-                    WHERE topic_id = :topic_id AND persona_name = :persona_name
-                    """
+                    "SELECT topic_id, persona_name, status, created_at, updated_at "
+                    f"FROM topic_link_presence WHERE {where_sql} "
+                    "ORDER BY updated_at DESC LIMIT 1"
                 ),
-                {"topic_id": topic_id, "persona_name": persona_name},
+                {
+                    "topic_id": topic_id,
+                    "persona_name": persona_name,
+                    "user_id": user_id,
+                    "agent_id": agent_id,
+                },
             ).fetchone()
     except Exception as exc:
         logger.info("TopicLink presence read failed", exc_info=True)
@@ -821,7 +887,14 @@ def _get_topiclink_presence(topic_id: str, persona_name: str) -> dict[str, Any]:
     }
 
 
-def _upsert_topiclink_presence(topic_id: str, persona_name: str, status: str = "resident") -> dict[str, Any]:
+def _upsert_topiclink_presence(
+    topic_id: str,
+    persona_name: str,
+    *,
+    user_id: int,
+    agent_id: int,
+    status: str = "resident",
+) -> dict[str, Any]:
     topic = _safe_get_topic(topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
@@ -834,12 +907,15 @@ def _upsert_topiclink_presence(topic_id: str, persona_name: str, status: str = "
                 text(
                     """
                     INSERT INTO topic_link_presence (
-                        topic_id, persona_name, status, created_at, updated_at
+                        topic_id, persona_name, requested_by_user_id,
+                        target_openclaw_agent_id, status, created_at, updated_at
                     )
                     VALUES (
-                        :topic_id, :persona_name, :status, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                        :topic_id, :persona_name, :user_id, :agent_id, :status,
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                     )
-                    ON CONFLICT(topic_id, persona_name) DO UPDATE SET
+                    ON CONFLICT(topic_id, requested_by_user_id, target_openclaw_agent_id) DO UPDATE SET
+                        persona_name = :persona_name,
                         status = :status,
                         updated_at = CURRENT_TIMESTAMP
                     """
@@ -847,24 +923,89 @@ def _upsert_topiclink_presence(topic_id: str, persona_name: str, status: str = "
                     else
                     """
                     INSERT INTO topic_link_presence (
-                        topic_id, persona_name, status, created_at, updated_at
+                        topic_id, persona_name, requested_by_user_id,
+                        target_openclaw_agent_id, status, created_at, updated_at
                     )
                     VALUES (
-                        :topic_id, :persona_name, :status, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                        :topic_id, :persona_name, :user_id, :agent_id, :status,
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                     )
-                    ON CONFLICT(topic_id, persona_name) DO UPDATE SET
+                    ON CONFLICT(topic_id, requested_by_user_id, target_openclaw_agent_id) DO UPDATE SET
+                        persona_name = :persona_name,
                         status = :status,
                         updated_at = CURRENT_TIMESTAMP
                     """
                 ),
-                {"topic_id": topic_id, "persona_name": persona_name, "status": normalized_status},
+                {
+                    "topic_id": topic_id,
+                    "persona_name": persona_name,
+                    "user_id": user_id,
+                    "agent_id": agent_id,
+                    "status": normalized_status,
+                },
             )
-        return _get_topiclink_presence(topic_id, persona_name)
+        return _get_topiclink_presence(
+            topic_id, persona_name, user_id=user_id, agent_id=agent_id
+        )
     except HTTPException:
         raise
     except Exception as exc:
         logger.info("TopicLink presence write failed", exc_info=True)
         raise HTTPException(status_code=500, detail="TopicLink presence unavailable") from exc
+
+
+def _reserve_topiclink_presence_dispatch(
+    topic_id: str,
+    persona_name: str,
+    *,
+    user_id: int,
+    agent_id: int,
+) -> tuple[dict[str, Any], bool]:
+    with get_db_session() as session:
+        _ensure_presence_table(session)
+        inserted = session.execute(
+            text(
+                """
+                INSERT INTO topic_link_presence (
+                    topic_id, persona_name, requested_by_user_id,
+                    target_openclaw_agent_id, status, created_at, updated_at
+                ) VALUES (
+                    :topic_id, :persona_name, :user_id, :agent_id,
+                    'dispatching', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+                ON CONFLICT(topic_id, requested_by_user_id, target_openclaw_agent_id)
+                DO NOTHING
+                """
+            ),
+            {
+                "topic_id": topic_id,
+                "persona_name": persona_name,
+                "user_id": user_id,
+                "agent_id": agent_id,
+            },
+        ).rowcount == 1
+    current = _get_topiclink_presence(
+        topic_id, persona_name, user_id=user_id, agent_id=agent_id
+    )
+    return current, inserted
+
+
+def _release_topiclink_presence_dispatch(
+    topic_id: str,
+    *,
+    user_id: int,
+    agent_id: int,
+) -> None:
+    with get_db_session() as session:
+        _ensure_presence_table(session)
+        session.execute(
+            text(
+                "DELETE FROM topic_link_presence WHERE topic_id = :topic_id "
+                "AND requested_by_user_id = :user_id "
+                "AND target_openclaw_agent_id = :agent_id AND status = 'dispatching'"
+            ),
+            {"topic_id": topic_id, "user_id": user_id, "agent_id": agent_id},
+        )
 
 
 def _load_topiclink_dispatch_context(topic_id: str, limit: int = 4) -> list[dict[str, Any]]:
@@ -1022,12 +1163,31 @@ def _dispatch_topiclink_presence(
     if str(agent.get("status") or "") != "active":
         raise HTTPException(status_code=409, detail="当前绑定的 OpenClaw 分身未处于 active 状态")
 
-    current = _get_topiclink_presence(topic_id, persona_name)
+    current, reserved = _reserve_topiclink_presence_dispatch(
+        topic_id,
+        persona_name,
+        user_id=user_id,
+        agent_id=int(agent["id"]),
+    )
     if current.get("status") == "dispatched":
         return current
+    if not reserved:
+        raise HTTPException(status_code=409, detail="分身正在外派，请稍后再看")
 
-    dispatch = _enqueue_topiclink_dispatch(topic=topic, user_id=user_id, agent=agent)
-    presence = _upsert_topiclink_presence(topic_id, persona_name, status="dispatched")
+    try:
+        dispatch = _enqueue_topiclink_dispatch(topic=topic, user_id=user_id, agent=agent)
+    except Exception:
+        _release_topiclink_presence_dispatch(
+            topic_id, user_id=user_id, agent_id=int(agent["id"])
+        )
+        raise
+    presence = _upsert_topiclink_presence(
+        topic_id,
+        persona_name,
+        user_id=user_id,
+        agent_id=int(agent["id"]),
+        status="dispatched",
+    )
     return {
         **presence,
         **dispatch,
@@ -1056,6 +1216,7 @@ def _ensure_topiclink_agent_tasks_table(session) -> None:
                 target_agent_uid VARCHAR(255) NOT NULL,
                 target_handle VARCHAR(255) NOT NULL,
                 status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                reservation_key VARCHAR(64),
                 claim_token_hash VARCHAR(64),
                 claim_expires_at {timestamp_type},
                 input_json TEXT NOT NULL DEFAULT '{{}}',
@@ -1071,6 +1232,7 @@ def _ensure_topiclink_agent_tasks_table(session) -> None:
     )
     claim_token_column_added = False
     claim_expires_column_added = False
+    reservation_key_column_added = False
     if session.bind.dialect.name == "sqlite":
         columns = {
             str(row[1])
@@ -1086,6 +1248,11 @@ def _ensure_topiclink_agent_tasks_table(session) -> None:
                 text(f"ALTER TABLE topiclink_agent_tasks ADD COLUMN claim_expires_at {timestamp_type}")
             )
             claim_expires_column_added = True
+        if "reservation_key" not in columns:
+            session.execute(
+                text("ALTER TABLE topiclink_agent_tasks ADD COLUMN reservation_key VARCHAR(64)")
+            )
+            reservation_key_column_added = True
     else:
         columns = {
             str(column["name"])
@@ -1107,11 +1274,19 @@ def _ensure_topiclink_agent_tasks_table(session) -> None:
                 )
             )
             claim_expires_column_added = True
+        if "reservation_key" not in columns:
+            session.execute(
+                text(
+                    "ALTER TABLE topiclink_agent_tasks "
+                    "ADD COLUMN IF NOT EXISTS reservation_key VARCHAR(64)"
+                )
+            )
+            reservation_key_column_added = True
     if claim_expires_column_added:
         session.execute(
             text(
                 "UPDATE topiclink_agent_tasks SET status = 'pending', claimed_at = NULL, "
-                "claim_token_hash = NULL, claim_expires_at = NULL, "
+                "reservation_key = NULL, claim_token_hash = NULL, claim_expires_at = NULL, "
                 "updated_at = CURRENT_TIMESTAMP WHERE status = 'claimed'"
             )
         )
@@ -1123,11 +1298,26 @@ def _ensure_topiclink_agent_tasks_table(session) -> None:
                 "WHERE status = 'claimed' AND claim_token_hash IS NULL"
             )
         )
+    if reservation_key_column_added:
+        session.execute(
+            text(
+                "UPDATE topiclink_agent_tasks SET reservation_key = NULL "
+                "WHERE status NOT IN ('pending', 'claimed')"
+            )
+        )
     session.execute(
         text(
             """
             CREATE INDEX IF NOT EXISTS idx_topiclink_agent_tasks_target_status
             ON topiclink_agent_tasks(target_openclaw_agent_id, status, created_at)
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_topiclink_agent_tasks_reservation
+            ON topiclink_agent_tasks(reservation_key)
             """
         )
     )
@@ -1209,6 +1399,30 @@ def _serialize_topiclink_agent_task(row: Any) -> dict[str, Any]:
     }
 
 
+OPC_PUBLIC_ASSISTANT_TEXT_FIELDS = ("summary", "public_stuck", "clarity", "next_step")
+OPC_PUBLIC_ASSISTANT_LIST_FIELDS = (
+    "follow_up_questions",
+    "suggested_roles",
+    "recommended_tools",
+    "risk_notes",
+)
+
+
+def _public_opc_assistant_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+    public: dict[str, Any] = {}
+    for field in OPC_PUBLIC_ASSISTANT_TEXT_FIELDS:
+        value = snapshot.get(field)
+        if isinstance(value, str) and value.strip():
+            public[field] = value.strip()
+    for field in OPC_PUBLIC_ASSISTANT_LIST_FIELDS:
+        value = snapshot.get(field)
+        if isinstance(value, list):
+            items = [str(item).strip() for item in value if str(item).strip()]
+            if items:
+                public[field] = items
+    return public
+
+
 def _load_public_opc_demand(session, slug: str) -> dict[str, Any] | None:
     row = session.execute(
         text(
@@ -1224,7 +1438,9 @@ def _load_public_opc_demand(session, slug: str) -> dict[str, Any] | None:
     ).fetchone()
     if not row or str(row.status) != "published" or not bool(row.allow_public):
         return None
-    snapshot = _topiclink_json_object(row.assistant_snapshot_json)
+    snapshot = _public_opc_assistant_snapshot(
+        _topiclink_json_object(row.assistant_snapshot_json)
+    )
     demand = {
         "id": str(row.id),
         "slug": str(row.slug),
@@ -1367,6 +1583,31 @@ def _build_opc_diligence_dispatch_body(*, demand: dict[str, Any], agent_handle: 
     )
 
 
+def _opc_diligence_reservation_key(*, slug: str, user_id: int, agent_id: int) -> str:
+    value = f"diligence:inspiration_demand:{slug}:{user_id}:{agent_id}"
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _wait_for_reserved_opc_task(reservation_key: str, timeout_seconds: float = 3.0) -> Any | None:
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        with get_db_session() as session:
+            row = session.execute(
+                text(
+                    "SELECT * FROM topiclink_agent_tasks "
+                    "WHERE reservation_key = :reservation_key LIMIT 1"
+                ),
+                {"reservation_key": reservation_key},
+            ).fetchone()
+        if row:
+            payload = _topiclink_json_object(row.input_json)
+            if payload.get("discussion_topic_id") and payload.get("dispatch_post_id"):
+                return row
+        if time.monotonic() >= deadline:
+            return row
+        time.sleep(0.05)
+
+
 def _create_opc_diligence_task(*, slug: str, user_id: int, agent: dict[str, Any]) -> dict[str, Any]:
     agent_id = int(agent["id"])
     agent_uid = str(agent.get("agent_uid") or "").strip()
@@ -1400,6 +1641,9 @@ def _create_opc_diligence_task_locked(
     agent_uid: str,
     agent_handle: str,
 ) -> dict[str, Any]:
+    reservation_key = _opc_diligence_reservation_key(
+        slug=demand["slug"], user_id=user_id, agent_id=agent_id
+    )
     with get_db_session() as session:
         _ensure_topiclink_agent_tasks_table(session)
         existing = session.execute(
@@ -1424,20 +1668,82 @@ def _create_opc_diligence_task_locked(
         if existing_payload.get("discussion_topic_id") and existing_payload.get("dispatch_post_id"):
             return _serialize_topiclink_agent_task(existing)
 
-    discussion_topic = _find_or_create_opc_discussion_topic(demand=demand, user_id=user_id)
-    dispatch = _enqueue_topiclink_dispatch(
-        topic=discussion_topic,
-        user_id=user_id,
-        agent=agent,
-        dispatch_body=_build_opc_diligence_dispatch_body(demand=demand, agent_handle=agent_handle),
-        dispatch_metadata={
-            "mode": "opc",
-            "source_type": "inspiration_demand",
-            "source_id": demand["slug"],
-        },
-    )
-    task_id = str(existing.id) if existing else str(uuid.uuid4())
+    if existing:
+        reserved = _wait_for_reserved_opc_task(reservation_key)
+        if reserved:
+            reserved_payload = _topiclink_json_object(reserved.input_json)
+            if reserved_payload.get("discussion_topic_id") and reserved_payload.get("dispatch_post_id"):
+                return _serialize_topiclink_agent_task(reserved)
+        raise HTTPException(status_code=409, detail="调研任务正在创建，请稍后重试")
+
+    task_id = str(uuid.uuid4())
     source_path = f"/inspiration-co-creation/needs/{demand['slug']}"
+    try:
+        with get_db_session() as session:
+            _ensure_topiclink_agent_tasks_table(session)
+            session.execute(
+                text(
+                    """
+                    INSERT INTO topiclink_agent_tasks (
+                        id, task_type, source_type, source_id, source_title, source_path,
+                        requested_by_user_id, target_openclaw_agent_id, target_agent_uid,
+                        target_handle, status, reservation_key, input_json, output_json,
+                        error_message, created_at, updated_at, claimed_at, completed_at
+                    ) VALUES (
+                        :id, 'diligence', 'inspiration_demand', :source_id, :source_title,
+                        :source_path, :requested_by_user_id, :target_openclaw_agent_id,
+                        :target_agent_uid, :target_handle, 'pending', :reservation_key,
+                        '{}', '{}', NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL, NULL
+                    )
+                    """
+                ),
+                {
+                    "id": task_id,
+                    "source_id": demand["slug"],
+                    "source_title": demand["title"],
+                    "source_path": source_path,
+                    "requested_by_user_id": user_id,
+                    "target_openclaw_agent_id": agent_id,
+                    "target_agent_uid": agent_uid,
+                    "target_handle": agent_handle,
+                    "reservation_key": reservation_key,
+                },
+            )
+    except IntegrityError:
+        reserved = _wait_for_reserved_opc_task(reservation_key)
+        if reserved:
+            reserved_payload = _topiclink_json_object(reserved.input_json)
+            if reserved_payload.get("discussion_topic_id") and reserved_payload.get("dispatch_post_id"):
+                return _serialize_topiclink_agent_task(reserved)
+        raise HTTPException(status_code=409, detail="调研任务正在创建，请稍后重试") from None
+
+    try:
+        discussion_topic = _find_or_create_opc_discussion_topic(demand=demand, user_id=user_id)
+        dispatch = _enqueue_topiclink_dispatch(
+            topic=discussion_topic,
+            user_id=user_id,
+            agent=agent,
+            dispatch_body=_build_opc_diligence_dispatch_body(
+                demand=demand, agent_handle=agent_handle
+            ),
+            dispatch_metadata={
+                "mode": "opc",
+                "source_type": "inspiration_demand",
+                "source_id": demand["slug"],
+                "task_id": task_id,
+            },
+        )
+    except Exception:
+        with get_db_session() as session:
+            session.execute(
+                text(
+                    "UPDATE topiclink_agent_tasks SET status = 'failed', reservation_key = NULL, "
+                    "error_message = :error_message, updated_at = CURRENT_TIMESTAMP, "
+                    "completed_at = CURRENT_TIMESTAMP WHERE id = :id"
+                ),
+                {"id": task_id, "error_message": "创建 TopicLab 调研讨论失败"},
+            )
+        raise
     input_payload = {
         "mention": f"@{agent_handle}",
         "title": demand["title"],
@@ -1460,40 +1766,14 @@ def _create_opc_diligence_task_locked(
 
     with get_db_session() as session:
         _ensure_topiclink_agent_tasks_table(session)
-        if existing:
-            session.execute(
-                text(
-                    "UPDATE topiclink_agent_tasks SET input_json = :input_json, updated_at = CURRENT_TIMESTAMP "
-                    "WHERE id = :id"
-                ),
-                {"id": task_id, "input_json": json.dumps(input_payload, ensure_ascii=False)},
-            )
-        else:
-            session.execute(
-                text(
-                """
-                INSERT INTO topiclink_agent_tasks (
-                    id, task_type, source_type, source_id, source_title, source_path,
-                    requested_by_user_id, target_openclaw_agent_id, target_agent_uid,
-                    target_handle, status, input_json, output_json, error_message,
-                    created_at, updated_at, claimed_at, completed_at
-                ) VALUES (
-                    :id, 'diligence', 'inspiration_demand', :source_id, :source_title, :source_path,
-                    :requested_by_user_id, :target_openclaw_agent_id, :target_agent_uid,
-                    :target_handle, 'pending', :input_json, '{}', NULL,
-                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL, NULL
-                )
-                """
+        session.execute(
+            text(
+                "UPDATE topiclink_agent_tasks SET input_json = :input_json, "
+                "updated_at = CURRENT_TIMESTAMP WHERE id = :id AND reservation_key = :reservation_key"
             ),
             {
                 "id": task_id,
-                "source_id": demand["slug"],
-                "source_title": demand["title"],
-                "source_path": source_path,
-                "requested_by_user_id": user_id,
-                "target_openclaw_agent_id": agent_id,
-                "target_agent_uid": agent_uid,
-                "target_handle": agent_handle,
+                "reservation_key": reservation_key,
                 "input_json": json.dumps(input_payload, ensure_ascii=False),
             },
         )
@@ -1655,6 +1935,10 @@ def _transition_topiclink_agent_task(
                 SET status = :status,
                     output_json = :output_json,
                     error_message = :error_message,
+                    reservation_key = CASE
+                        WHEN :status IN ('replied', 'failed') THEN NULL
+                        ELSE reservation_key
+                    END,
                     claim_token_hash = {claim_token_set_sql},
                     claim_expires_at = {claim_expires_set_sql},
                     updated_at = CURRENT_TIMESTAMP,
@@ -1767,7 +2051,7 @@ def _compact_visible_text(value: Any, limit: int = 900) -> str:
 
 
 def _topiclink_metadata_autofill_enabled() -> bool:
-    return os.getenv("TOPICLINK_METADATA_AUTOFILL", "1").strip().lower() not in {"0", "false", "no", "off"}
+    return os.getenv("TOPICLINK_METADATA_AUTOFILL", "0").strip().lower() not in {"0", "false", "no", "off"}
 
 
 def _topiclink_background_autofill_enabled() -> bool:

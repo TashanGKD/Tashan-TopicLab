@@ -1439,7 +1439,7 @@ async def _sync_topic_experts_from_resonnet(topic_id: str, authorization: str | 
     try:
         await _ensure_executor_workspace(topic_id)
         experts = await _proxy_to_resonnet("GET", f"/topics/{topic_id}/experts", authorization=authorization)
-    except httpx.RequestError:
+    except httpx.HTTPError:
         return list_topic_experts(topic_id)
     # Only replace experts that were created during topic creation, preserve user-added experts
     replace_topic_experts(topic_id, experts, only_replace_creation_roles=True)

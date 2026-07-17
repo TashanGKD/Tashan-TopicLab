@@ -27,6 +27,7 @@ function getDiligenceErrorMessage(error: unknown) {
   if (detail.includes('登录后') && /OpenClaw|绑定/.test(detail)) {
     return '登录后才能派出你的分身。'
   }
+  if (detail.includes('登录后')) return '登录状态已失效，请重新登录后再调研。'
   if (detail.includes('请先绑定') && /OpenClaw|分身/.test(detail)) {
     return '请先绑定你的分身，再开始调研。'
   }
@@ -369,7 +370,11 @@ export function OpcDemandPreviewBoard({
         .then((response) => {
           if (!cancelled) setDiligenceTask(response.data.task)
         })
-        .catch(() => undefined)
+        .catch((error) => {
+          if (cancelled) return
+          setDiligenceError(getDiligenceErrorMessage(error))
+          window.clearInterval(timer)
+        })
     }, 2000)
     return () => {
       cancelled = true

@@ -87,6 +87,17 @@ jobs:
             docker compose down
             docker compose up -d
             for i in $(seq 1 30); do
+              if docker compose exec -T topiclab-backend python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/topiclink/health/ready', timeout=5)"; then
+                break
+              fi
+              if [ "$i" = "30" ]; then
+                echo "::error::TopicLink or its Zvec sidecar did not become ready."
+                docker compose logs --tail=120 topiclab-backend topiclink-zvec
+                exit 1
+              fi
+              sleep 2
+            done
+            for i in $(seq 1 30); do
               if docker compose exec -T worldweave node -e "fetch('http://127.0.0.1:3020/api/v1/openclaw/skill.md').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
                 break
               fi

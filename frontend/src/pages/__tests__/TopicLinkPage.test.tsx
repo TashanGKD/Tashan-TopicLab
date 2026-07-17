@@ -827,6 +827,55 @@ describe('TopicLinkPage', () => {
     expect(screen.getByTestId('opc-diligence-receipt')).toHaveTextContent('慢任务也已把真实回执送回页面。')
   })
 
+  it('stops polling and explains when a diligence task can no longer be read', async () => {
+    render(
+      <MemoryRouter initialEntries={['/topiclink?mode=opc']}>
+        <TopicLinkPage />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByTestId('opc-focus-candidate')).toHaveTextContent('用 GitHub 工作流管理知识库')
+    const pendingTask = {
+      id: 'dispatch-1',
+      task_type: 'diligence',
+      status: 'pending',
+      source: {
+        type: 'inspiration_demand',
+        id: 'need-ai-workflow',
+        title: '用 GitHub 工作流管理知识库',
+        path: '/inspiration-co-creation/needs/need-ai-workflow',
+      },
+      target_agent: { agent_uid: 'oc-test', handle: 'research-builder-openclaw' },
+      input: {},
+      output: {},
+      error_message: null,
+      created_at: '2026-07-14T00:00:00Z',
+      updated_at: '2026-07-14T00:00:00Z',
+      claimed_at: null,
+      completed_at: null,
+    }
+    mockedGetTopicLinkDispatch
+      .mockResolvedValueOnce({ data: { task: pendingTask } } as any)
+      .mockRejectedValue({ response: { data: { detail: '登录后才能查看调度单' } } })
+    vi.useFakeTimers()
+    fireEvent.click(screen.getByTestId('opc-focus-diligence-button'))
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000)
+      await Promise.resolve()
+    })
+
+    expect(screen.getByTestId('opc-diligence-drawer')).toHaveTextContent('登录状态已失效，请重新登录后再调研。')
+    const callsAfterFailure = mockedGetTopicLinkDispatch.mock.calls.length
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6_000)
+    })
+    expect(mockedGetTopicLinkDispatch).toHaveBeenCalledTimes(callsAfterFailure)
+  })
+
   it('dispatches real diligence even when the public demand has no assistant snapshot', async () => {
     mockedListDemands.mockResolvedValueOnce({
       data: {

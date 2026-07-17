@@ -17,7 +17,7 @@ dependencies = [
     "pillow>=10.0.0",
     "oss2>=2.18.5",
     "tzdata>=2025.2",
-    "zvec>=0.5.1",
+    "zvec==0.5.1",
 ]
 
 [tool.setuptools]
