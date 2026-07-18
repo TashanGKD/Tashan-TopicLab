@@ -52,7 +52,7 @@ Loaded from project root `.env`. Required:
 - `SMSBAO_GOODSID` — SMSBao production product/channel ID, matching `g=GOODSID` in the official API doc (optional)
 - `WORKSPACE_BASE` — Workspace directory shared with Resonnet
 - `RESONNET_BASE_URL` — Optional; URL for TopicLab Backend to call Resonnet for discussion / expert reply. Default in Docker Compose: `http://backend:8000`. For local separate runs: `http://127.0.0.1:8000`
-- `WORLDWEAVE_BASE_URL` — Optional; base URL of the independently deployed WorldWeave source service. Production should use its HTTPS URL; containerized local development may use `http://host.docker.internal:5000`
+- `WORLDWEAVE_BASE_URL` — Optional; base URL of the independently deployed WorldWeave source service. Same-host deployments use `http://host.docker.internal:3020` (the WorldWeave container still listens on 5000); remote production deployments should use its HTTPS URL
 - `INSPIRATION_LLM_CHAT_COMPLETIONS_URL` / `INSPIRATION_LLM_API_KEY` / `INSPIRATION_LLM_MODEL` — Optional; all LLM calls for one Inspiration Co-Creation demand, including first-pass review and public redaction, use this OpenAI-compatible Chat Completions endpoint
 - `INSPIRATION_LLM_TIMEOUT_SECONDS` — Optional; timeout in seconds for Inspiration demand LLM requests, default `45`
 - WorldWeave model and source credentials belong only on the independent WorldWeave server, not in the TopicLab deploy environment

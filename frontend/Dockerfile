@@ -18,7 +18,7 @@ FROM ${NGINX_BASE_IMAGE}
 COPY --from=builder /app/dist /usr/share/nginx/html
 # Use root nginx config when VITE_BASE_PATH is /, else the legacy /topic-lab/ config.
 ARG VITE_BASE_PATH=/
-ENV WORLDWEAVE_UPSTREAM=http://host.docker.internal:5000
+ENV WORLDWEAVE_UPSTREAM=http://host.docker.internal:3020
 ENV NGINX_ENVSUBST_FILTER=^WORLDWEAVE_UPSTREAM$
 ENV NGINX_ENVSUBST_OUTPUT_DIR=/etc/nginx
 COPY nginx.root.conf /tmp/nginx.root.conf.template

@@ -167,7 +167,7 @@ cp .env.example .env   # 填入 API key；backend 优先加载项目根 .env
 ./scripts/docker-compose-local.sh      # 默认执行 up -d --build --force-recreate
 # 前端: http://localhost:3000
 # 后端: http://localhost:8000
-# WorldWeave: 需独立启动，默认 http://localhost:5000
+# WorldWeave: 需独立启动，宿主机默认 http://localhost:3020（容器内仍为 5000）
 ```
 
 需要验证 `topiclab-cli` 与 OpenClaw 协议链路时，优先使用 Docker smoke：

@@ -70,6 +70,17 @@ jobs:
             fi
             echo "$DEPLOY_ENV" > .env
 
+            # The same-host WorldWeave deployment exposes container port 5000
+            # on host port 3020. Migrate only the old default; explicit remote
+            # HTTPS origins and other custom upstreams remain untouched.
+            if grep -Eq '^WORLDWEAVE_(BASE_URL|UPSTREAM)=http://host\.docker\.internal:5000/?\r?$' .env; then
+              echo "::notice::Migrating legacy same-host WorldWeave port 5000 to 3020"
+              sed -i -E \
+                -e 's#^(WORLDWEAVE_BASE_URL=http://host\.docker\.internal):5000/?\r?$#\1:3020#' \
+                -e 's#^(WORLDWEAVE_UPSTREAM=http://host\.docker\.internal):5000/?\r?$#\1:3020#' \
+                .env
+            fi
+
             ZVEC_LOCK="$REPO_DIR/deploy/topiclink-zvec.lock.json"
             ZVEC_MANAGER="$REPO_DIR/scripts/topiclink_zvec_release.py"
             ZVEC_MIN_DOC_COUNT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["min_doc_count"])' "$ZVEC_LOCK")"
@@ -162,6 +173,19 @@ jobs:
               if [ "$i" = "30" ]; then
                 echo "::error::TopicLink or its Zvec sidecar did not become ready."
                 docker compose logs --tail=120 topiclab-backend topiclink-zvec
+                exit 1
+              fi
+              sleep 2
+            done
+            for i in $(seq 1 30); do
+              if docker compose exec -T frontend wget -q -O /dev/null http://127.0.0.1/worldweave/ \
+                && docker compose exec -T frontend wget -q -O /dev/null http://127.0.0.1/info/source; then
+                echo "[deploy] WorldWeave proxy and source page are reachable"
+                break
+              fi
+              if [ "$i" = "30" ]; then
+                echo "::error::Frontend WorldWeave proxy smoke check failed."
+                docker compose logs --tail=120 frontend
                 exit 1
               fi
               sleep 2

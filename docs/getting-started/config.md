@@ -108,7 +108,7 @@ WORLDWEAVE_UPSTREAM=https://worldweave.example.com
 VITE_WORLDWEAVE_FRONTEND_URL=/worldweave/
 ```
 
-For local development, start WorldWeave separately and use `http://host.docker.internal:5000` from TopicLab containers or `http://127.0.0.1:5000` from Vite. Model, search, refresh, database and memory settings belong to the WorldWeave server's `.env.local`, not TopicLab `DEPLOY_ENV`.
+For local development, expose the standalone WorldWeave container on host port `3020`, then use `http://host.docker.internal:3020` from TopicLab containers or `http://127.0.0.1:3020` from Vite. The WorldWeave container still listens on port `5000`. Model, search, refresh, database and memory settings belong to the WorldWeave server's `.env.local`, not TopicLab `DEPLOY_ENV`.
 
 See [worldweave-standalone.md](worldweave-standalone.md) for server requirements, Docker process separation and deployment order.
 

@@ -15,7 +15,7 @@ services:
       - WORKSPACE_BASE=/app/workspace
       - TOPICLINK_ZVEC_SERVICE_URL=http://topiclink-zvec:8000
       - TOPICLAB_SYNC_URL=${TOPICLAB_SYNC_URL:-http://topiclab-backend:8000}
-      - WORLDWEAVE_BASE_URL=${WORLDWEAVE_BASE_URL:-http://host.docker.internal:5000}
+      - WORLDWEAVE_BASE_URL=${WORLDWEAVE_BASE_URL:-http://host.docker.internal:3020}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -96,7 +96,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      - WORLDWEAVE_UPSTREAM=${WORLDWEAVE_UPSTREAM:-http://host.docker.internal:5000}
+      - WORLDWEAVE_UPSTREAM=${WORLDWEAVE_UPSTREAM:-http://host.docker.internal:3020}
     ports:
       - "${FRONTEND_PORT:-3000}:80"
     depends_on:
