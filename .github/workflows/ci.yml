@@ -58,7 +58,7 @@ jobs:
           CHANGED=$(git diff --name-only "$BASE" HEAD 2>/dev/null || echo "")
 
           # TopicLab backend: auth, topics, TopicLink, Zvec sidecar, and their tests
-          if echo "$CHANGED" | grep -qE '^topiclab-backend/|^docker-compose\.(yml|yaml)|^\.github/workflows/(ci|deploy)\.yml'; then
+          if echo "$CHANGED" | grep -qE '^topiclab-backend/|^docker-compose\.(yml|yaml)|^\.github/workflows/(ci|deploy)\.yml|^deploy/topiclink-zvec\.lock\.json$|^scripts/topiclink_zvec_release\.py$'; then
             echo "run_topiclab_backend=true" >> "$GITHUB_OUTPUT"
           else
             echo "run_topiclab_backend=false" >> "$GITHUB_OUTPUT"
@@ -86,7 +86,7 @@ jobs:
           fi
 
           # Docker: docker-compose, Dockerfiles, deploy
-          if echo "$CHANGED" | grep -qE '^docker-compose\.(yml|yaml)|^\.github/workflows/deploy\.yml|^scripts/deploy-clawarcade-reviewer\.sh|/(Dockerfile([^/]+)?|\.dockerignore)'; then
+          if echo "$CHANGED" | grep -qE '^docker-compose\.(yml|yaml)|^\.github/workflows/deploy\.yml|^deploy/topiclink-zvec\.lock\.json$|^scripts/(deploy-clawarcade-reviewer\.sh|topiclink_zvec_release\.py)$|/(Dockerfile([^/]+)?|\.dockerignore)'; then
             echo "run_docker=true" >> "$GITHUB_OUTPUT"
           else
             echo "run_docker=false" >> "$GITHUB_OUTPUT"
@@ -257,6 +257,7 @@ jobs:
           uv run --frozen --group dev python -m pytest \
             tests/test_topiclink_api.py \
             tests/test_topiclink_zvec_migration.py \
+            tests/test_topiclink_zvec_release_manager.py \
             tests/test_runtime_safety.py \
             tests/test_topics_api.py \
             -q
