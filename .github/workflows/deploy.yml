@@ -69,7 +69,12 @@ jobs:
               exit 1
             fi
             echo "$DEPLOY_ENV" > .env
-            printf '\nTOPICLINK_ZVEC_MIN_DOC_COUNT=2386\n' >> .env
+
+            ZVEC_LOCK="$REPO_DIR/deploy/topiclink-zvec.lock.json"
+            ZVEC_MANAGER="$REPO_DIR/scripts/topiclink_zvec_release.py"
+            ZVEC_MIN_DOC_COUNT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["min_doc_count"])' "$ZVEC_LOCK")"
+            ZVEC_EXPECTED_DIMENSIONS="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["expected_dimensions"])' "$ZVEC_LOCK")"
+            printf '\nTOPICLINK_ZVEC_MIN_DOC_COUNT=%s\n' "$ZVEC_MIN_DOC_COUNT" >> .env
 
             WORKSPACE_PATH_VALUE="$(python3 - <<'PY'
             from pathlib import Path
@@ -87,13 +92,21 @@ jobs:
               exit 1
             fi
             if [[ "$WORKSPACE_PATH_VALUE" = /* ]]; then
-              TOPICLINK_ZVEC_DIR="${WORKSPACE_PATH_VALUE%/}/topiclink-zvec/qwen3-embedding-8b-4096"
+              WORKSPACE_HOST_PATH="${WORKSPACE_PATH_VALUE%/}"
             else
-              TOPICLINK_ZVEC_DIR="$REPO_DIR/${WORKSPACE_PATH_VALUE%/}/topiclink-zvec/qwen3-embedding-8b-4096"
+              WORKSPACE_HOST_PATH="$REPO_DIR/${WORKSPACE_PATH_VALUE%/}"
             fi
-            if ! find "$TOPICLINK_ZVEC_DIR" -maxdepth 1 -type f -name 'manifest.*' -print -quit | grep -q .; then
-              echo "::error::TopicLink Zvec package is missing: $TOPICLINK_ZVEC_DIR/manifest.*"
-              echo "Upload and extract the validated package before running this deployment."
+
+            python3 "$ZVEC_MANAGER" prepare --lock "$ZVEC_LOCK" --workspace "$WORKSPACE_HOST_PATH"
+            ZVEC_RELEASE_HOST_PATH="$(python3 "$ZVEC_MANAGER" path --lock "$ZVEC_LOCK" --workspace "$WORKSPACE_HOST_PATH" --kind release-host)"
+            ZVEC_RELEASE_CONTAINER_PATH="$(python3 "$ZVEC_MANAGER" path --lock "$ZVEC_LOCK" --workspace "$WORKSPACE_HOST_PATH" --kind release-container)"
+            if [ "$(id -u)" -eq 0 ]; then
+              chown -R 1000:1000 "$ZVEC_RELEASE_HOST_PATH"
+            else
+              sudo -n chown -R 1000:1000 "$ZVEC_RELEASE_HOST_PATH"
+            fi
+            if ! find "$ZVEC_RELEASE_HOST_PATH" -maxdepth 1 -type f -name 'manifest.*' -print -quit | grep -q .; then
+              echo "::error::Prepared TopicLink Zvec release is missing: $ZVEC_RELEASE_HOST_PATH/manifest.*"
               exit 1
             fi
 
@@ -110,15 +123,32 @@ jobs:
             }
 
             run_with_heartbeat "docker compose build" docker compose build
+            ZVEC_ACTIVE_RESOLVED="$(python3 "$ZVEC_MANAGER" path --lock "$ZVEC_LOCK" --workspace "$WORKSPACE_HOST_PATH" --kind active-resolved)"
             CURRENT_ZVEC_ID="$(docker compose ps -q topiclink-zvec 2>/dev/null || true)"
-            if [ -n "$CURRENT_ZVEC_ID" ] && [ "$(docker inspect -f '{{.State.Running}}' "$CURRENT_ZVEC_ID")" = "true" ]; then
-              docker compose exec -T topiclink-zvec python -c "import json, urllib.request; payload=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=15)); count=int(payload.get('doc_count') or 0); assert count >= 2386, payload; print(payload)"
+            ZVEC_WAS_RUNNING=false
+            if [ -n "$CURRENT_ZVEC_ID" ] \
+              && [ "$(docker inspect -f '{{.State.Running}}' "$CURRENT_ZVEC_ID")" = "true" ] \
+              && [ "$ZVEC_ACTIVE_RESOLVED" = "$ZVEC_RELEASE_HOST_PATH" ]; then
+              ZVEC_WAS_RUNNING=true
+              docker compose exec -T topiclink-zvec python -c "import json, urllib.request; payload=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=15)); count=int(payload.get('doc_count') or 0); assert count >= $ZVEC_MIN_DOC_COUNT, payload; print(payload)"
             else
+              if [ -n "$CURRENT_ZVEC_ID" ] && [ "$(docker inspect -f '{{.State.Running}}' "$CURRENT_ZVEC_ID")" = "true" ]; then
+                ZVEC_WAS_RUNNING=true
+              fi
               docker compose run --rm --no-deps topiclink-zvec \
                 python scripts/validate_topiclink_zvec_collection.py \
-                /app/workspace/topiclink-zvec/qwen3-embedding-8b-4096 \
-                --min-doc-count 2386 \
-                --expected-dimensions 4096
+                "$ZVEC_RELEASE_CONTAINER_PATH" \
+                --min-doc-count "$ZVEC_MIN_DOC_COUNT" \
+                --expected-dimensions "$ZVEC_EXPECTED_DIMENSIONS"
+            fi
+            if [ "$ZVEC_WAS_RUNNING" = "true" ]; then
+              docker compose stop -t 30 topiclink-zvec
+            fi
+            if ! python3 "$ZVEC_MANAGER" activate --lock "$ZVEC_LOCK" --workspace "$WORKSPACE_HOST_PATH"; then
+              if [ "$ZVEC_WAS_RUNNING" = "true" ]; then
+                docker compose start topiclink-zvec || true
+              fi
+              exit 1
             fi
             docker compose down
             docker compose up -d
