@@ -238,6 +238,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Initialize Resonnet submodule
+        run: git submodule update --init backend
+
       - name: Setup uv
         uses: astral-sh/setup-uv@v5
 
