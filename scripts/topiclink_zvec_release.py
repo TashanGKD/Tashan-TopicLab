@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Download, stage, and atomically activate a TopicLink Zvec release."""
+"""Download, stage, and atomically activate a TopicLink Zvec artifact."""
 
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -19,17 +21,18 @@ import uuid
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from email.utils import formatdate
 from pathlib import Path, PurePosixPath
 
 
 SAFE_COMPONENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-SAFE_REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+SAFE_BUCKET = re.compile(r"^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 LOCK_KEYS = {
     "schema_version",
     "version",
-    "repository",
-    "release_tag",
+    "storage",
+    "object_key",
     "asset",
     "sha256",
     "collection_dir",
@@ -45,32 +48,35 @@ def log(message: str) -> None:
 @dataclass(frozen=True)
 class ReleaseSpec:
     version: str
-    repository: str
-    release_tag: str
+    storage: str
+    object_key: str
     asset: str
     sha256: str
     collection_dir: str
     min_doc_count: int
     expected_dimensions: int
 
-    @property
-    def download_url(self) -> str:
-        tag = urllib.parse.quote(self.release_tag, safe="")
-        asset = urllib.parse.quote(self.asset, safe="")
-        return f"https://github.com/{self.repository}/releases/download/{tag}/{asset}"
-
     def metadata(self) -> dict[str, object]:
         return {
-            "schema_version": 1,
+            "schema_version": 2,
             "version": self.version,
-            "repository": self.repository,
-            "release_tag": self.release_tag,
+            "storage": self.storage,
+            "object_key": self.object_key,
             "asset": self.asset,
             "sha256": self.sha256,
             "collection_dir": self.collection_dir,
             "min_doc_count": self.min_doc_count,
             "expected_dimensions": self.expected_dimensions,
         }
+
+
+@dataclass(frozen=True)
+class OssCredentials:
+    access_key_id: str
+    access_key_secret: str
+    bucket: str
+    endpoint: str
+    security_token: str = ""
 
 
 @dataclass(frozen=True)
@@ -110,40 +116,154 @@ def load_release_spec(lock_path: Path) -> ReleaseSpec:
         raise ValueError(f"unknown release lock keys: {', '.join(sorted(unknown))}")
     if missing:
         raise ValueError(f"missing release lock keys: {', '.join(sorted(missing))}")
-    if payload.get("schema_version") != 1:
-        raise ValueError("schema_version must be 1")
+    if payload.get("schema_version") != 2:
+        raise ValueError("schema_version must be 2")
 
     version = _required_string(payload, "version")
-    repository = _required_string(payload, "repository")
-    release_tag = _required_string(payload, "release_tag")
+    storage = _required_string(payload, "storage")
+    object_key = _required_string(payload, "object_key")
     asset = _required_string(payload, "asset")
     digest = _required_string(payload, "sha256").lower()
     collection_dir = _required_string(payload, "collection_dir")
 
     for key, value in (
         ("version", version),
-        ("release_tag", release_tag),
         ("asset", asset),
         ("collection_dir", collection_dir),
     ):
         if not SAFE_COMPONENT.fullmatch(value):
             raise ValueError(f"{key} contains unsafe characters")
+    if storage != "aliyun-oss":
+        raise ValueError("storage must be aliyun-oss")
+    object_path = PurePosixPath(object_key)
+    if (
+        not object_key
+        or object_key.startswith("/")
+        or "\\" in object_key
+        or any(part in {"", ".", ".."} for part in object_key.split("/"))
+        or object_path.name != asset
+    ):
+        raise ValueError("object_key must be a safe relative OSS path ending in asset")
     if not asset.endswith(".zip"):
         raise ValueError("asset must be a .zip file")
-    if not SAFE_REPOSITORY.fullmatch(repository):
-        raise ValueError("repository must use owner/name format")
     if not SHA256.fullmatch(digest):
         raise ValueError("sha256 must contain exactly 64 lower-case hex characters")
 
     return ReleaseSpec(
         version=version,
-        repository=repository,
-        release_tag=release_tag,
+        storage=storage,
+        object_key=object_key,
         asset=asset,
         sha256=digest,
         collection_dir=collection_dir,
         min_doc_count=_required_positive_int(payload, "min_doc_count"),
         expected_dimensions=_required_positive_int(payload, "expected_dimensions"),
+    )
+
+
+def _read_env_file(path: Path | None) -> dict[str, str]:
+    if path is None:
+        return {}
+    values: dict[str, str] = {}
+    lines = path.expanduser().resolve(strict=True).read_text(encoding="utf-8").splitlines()
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].lstrip()
+        key, separator, value = line.partition("=")
+        key = key.strip()
+        if not separator or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        values[key] = value
+    return values
+
+
+def load_oss_credentials(env_file: Path | None = None) -> OssCredentials:
+    values = _read_env_file(env_file)
+
+    def required(name: str) -> str:
+        value = (os.getenv(name) or values.get(name) or "").strip()
+        if not value:
+            raise ValueError(f"{name} is required for private OSS download")
+        return value
+
+    bucket = required("OSS_BUCKET")
+    if not SAFE_BUCKET.fullmatch(bucket):
+        raise ValueError("OSS_BUCKET is not a valid bucket name")
+    return OssCredentials(
+        access_key_id=required("OSS_ACCESS_KEY_ID"),
+        access_key_secret=required("OSS_ACCESS_KEY_SECRET"),
+        bucket=bucket,
+        endpoint=required("OSS_ENDPOINT"),
+        security_token=(
+            os.getenv("OSS_SECURITY_TOKEN")
+            or values.get("OSS_SECURITY_TOKEN")
+            or ""
+        ).strip(),
+    )
+
+
+def _oss_object_url(credentials: OssCredentials, object_key: str) -> str:
+    endpoint = credentials.endpoint.strip()
+    if "://" not in endpoint:
+        endpoint = f"https://{endpoint}"
+    parsed = urllib.parse.urlsplit(endpoint)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError(
+            "OSS_ENDPOINT must be an HTTP(S) endpoint without a path or credentials"
+        )
+    hostname = parsed.hostname
+    if hostname != credentials.bucket and not hostname.startswith(f"{credentials.bucket}."):
+        hostname = f"{credentials.bucket}.{hostname}"
+    if parsed.port:
+        hostname = f"{hostname}:{parsed.port}"
+    quoted_key = urllib.parse.quote(object_key, safe="/~-._")
+    return urllib.parse.urlunsplit((parsed.scheme, hostname, f"/{quoted_key}", "", ""))
+
+
+def build_oss_get_request(
+    spec: ReleaseSpec,
+    credentials: OssCredentials,
+    *,
+    request_date: str | None = None,
+) -> urllib.request.Request:
+    date_header = request_date or formatdate(timeval=None, localtime=False, usegmt=True)
+    headers = {
+        "Accept": "application/octet-stream",
+        "Date": date_header,
+        "User-Agent": "TopicLab-Deploy/2.0",
+    }
+    canonical_headers = ""
+    if credentials.security_token:
+        headers["x-oss-security-token"] = credentials.security_token
+        canonical_headers = f"x-oss-security-token:{credentials.security_token}\n"
+    canonical_resource = f"/{credentials.bucket}/{spec.object_key}"
+    string_to_sign = f"GET\n\n\n{date_header}\n{canonical_headers}{canonical_resource}"
+    signature = base64.b64encode(
+        hmac.new(
+            credentials.access_key_secret.encode("utf-8"),
+            string_to_sign.encode("utf-8"),
+            hashlib.sha1,
+        ).digest()
+    ).decode("ascii")
+    headers["Authorization"] = f"OSS {credentials.access_key_id}:{signature}"
+    return urllib.request.Request(
+        _oss_object_url(credentials, spec.object_key),
+        headers=headers,
+        method="GET",
     )
 
 
@@ -183,7 +303,11 @@ def verify_checksum(path: Path, expected: str) -> None:
         raise RuntimeError(f"SHA-256 mismatch for {path.name}: expected {expected}, got {actual}")
 
 
-def download_archive(spec: ReleaseSpec, destination: Path) -> bool:
+def download_archive(
+    spec: ReleaseSpec,
+    destination: Path,
+    credentials: OssCredentials,
+) -> bool:
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.is_file():
         try:
@@ -194,14 +318,11 @@ def download_archive(spec: ReleaseSpec, destination: Path) -> bool:
             destination.unlink()
 
     part = destination.with_name(f".{destination.name}.part-{os.getpid()}-{uuid.uuid4().hex}")
-    request = urllib.request.Request(
-        spec.download_url,
-        headers={"User-Agent": "TopicLab-Deploy/1.0", "Accept": "application/octet-stream"},
-    )
     try:
         for attempt in range(1, 4):
             try:
-                log(f"downloading {spec.download_url} (attempt {attempt}/3)")
+                request = build_oss_get_request(spec, credentials)
+                log(f"downloading private OSS object {spec.object_key} (attempt {attempt}/3)")
                 with (
                     urllib.request.urlopen(request, timeout=120) as response,
                     part.open("wb") as handle,
@@ -214,7 +335,13 @@ def download_archive(spec: ReleaseSpec, destination: Path) -> bool:
             except (OSError, urllib.error.URLError, RuntimeError) as exc:
                 part.unlink(missing_ok=True)
                 if attempt == 3:
-                    raise RuntimeError(f"could not download verified release asset: {exc}") from exc
+                    if isinstance(exc, urllib.error.HTTPError):
+                        detail = f"OSS returned HTTP {exc.code}"
+                    elif isinstance(exc, urllib.error.URLError):
+                        detail = f"OSS request failed ({type(exc.reason).__name__})"
+                    else:
+                        detail = str(exc)
+                    raise RuntimeError(f"could not download verified OSS asset: {detail}") from exc
                 time.sleep(attempt * 5)
     finally:
         part.unlink(missing_ok=True)
@@ -311,10 +438,13 @@ def prepare_release(
     paths: ReleasePaths,
     *,
     archive_override: Path | None = None,
+    oss_credentials: OssCredentials | None = None,
 ) -> Path:
     paths.package_root.mkdir(parents=True, exist_ok=True)
     if archive_override is None:
-        download_archive(spec, paths.archive)
+        if oss_credentials is None:
+            raise ValueError("OSS credentials are required when no local archive is provided")
+        download_archive(spec, paths.archive, oss_credentials)
         archive = paths.archive
     else:
         archive = archive_override.expanduser().resolve(strict=True)
@@ -387,6 +517,11 @@ def build_parser() -> argparse.ArgumentParser:
     prepare = subparsers.add_parser("prepare", help="download and extract the locked release")
     _add_common_arguments(prepare)
     prepare.add_argument("--archive", type=Path, help="use a local archive instead of downloading")
+    prepare.add_argument(
+        "--env-file",
+        type=Path,
+        help="read OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET, OSS_BUCKET, and OSS_ENDPOINT",
+    )
 
     activate = subparsers.add_parser(
         "activate", help="atomically point the runtime path at the release"
@@ -409,7 +544,13 @@ def main(argv: list[str] | None = None) -> int:
         spec = load_release_spec(args.lock.expanduser().resolve(strict=True))
         paths = build_release_paths(args.workspace, spec)
         if args.command == "prepare":
-            prepared = prepare_release(spec, paths, archive_override=args.archive)
+            credentials = None if args.archive else load_oss_credentials(args.env_file)
+            prepared = prepare_release(
+                spec,
+                paths,
+                archive_override=args.archive,
+                oss_credentials=credentials,
+            )
             print(json.dumps({"status": "prepared", "path": str(prepared)}, sort_keys=True))
         elif args.command == "activate":
             print(json.dumps(activate_release(spec, paths), ensure_ascii=False, sort_keys=True))
