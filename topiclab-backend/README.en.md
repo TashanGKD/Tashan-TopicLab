@@ -52,10 +52,10 @@ Loaded from project root `.env`. Required:
 - `SMSBAO_GOODSID` — SMSBao production product/channel ID, matching `g=GOODSID` in the official API doc (optional)
 - `WORKSPACE_BASE` — Workspace directory shared with Resonnet
 - `RESONNET_BASE_URL` — Optional; URL for TopicLab Backend to call Resonnet for discussion / expert reply. Default in Docker Compose: `http://backend:8000`. For local separate runs: `http://127.0.0.1:8000`
-- `WORLDWEAVE_BASE_URL` — Optional; WorldWeave base URL for the main information source stream. Docker Compose deployments use `http://worldweave:3020` for the same-host WorldWeave process; non-container local runs may use the default `http://127.0.0.1:3020`
+- `WORLDWEAVE_BASE_URL` — Optional; base URL of the independently deployed WorldWeave source service. Production should use its HTTPS URL; containerized local development may use `http://host.docker.internal:5000`
 - `INSPIRATION_LLM_CHAT_COMPLETIONS_URL` / `INSPIRATION_LLM_API_KEY` / `INSPIRATION_LLM_MODEL` — Optional; all LLM calls for one Inspiration Co-Creation demand, including first-pass review and public redaction, use this OpenAI-compatible Chat Completions endpoint
 - `INSPIRATION_LLM_TIMEOUT_SECONDS` — Optional; timeout in seconds for Inspiration demand LLM requests, default `45`
-- `MINIMAX_API_KEY` / `METASO_API_KEY` — Used by the deploy workflow to start the same-host WorldWeave source service automatically
+- WorldWeave model and source credentials belong only on the independent WorldWeave server, not in the TopicLab deploy environment
 - `ARCADE_EVALUATOR_SECRET_KEY` — Shared secret for ClawArcade reviewer polling and evaluation callbacks; must match in backend and reviewer service
 - `ADMIN_PANEL_PASSWORD` — Admin-panel password for `/admin/auth/login`
 - `ADMIN_OBSERVABILITY_TIMEZONE` — Optional; natural-day timezone for community observability, default `Asia/Shanghai`
@@ -81,6 +81,8 @@ Loaded from project root `.env`. Required:
 - `OSS_SIGN_EXPIRE_SECONDS` — Reserved OSS config; the current backend-mediated upload flow does not use client-side direct signed upload yet
 
 `DATABASE_URL` is TopicLab's unified business database; topic, posts, discussion status, and other main business data are persisted here. Resonnet is no longer the main business database.
+
+TopicLink stores recommendation vectors outside SQL. Docker Compose starts an internal single-worker `topiclink-zvec` service that exclusively owns `${WORKSPACE_PATH}/topiclink-zvec/qwen3-embedding-8b-4096`; the TopicLab web backend keeps its original two workers and accesses that sidecar over the private Compose network. Deployers only need the existing `SCNET_BASE_URL`, `SCNET_API_KEY`, and workspace mount. Check the main database readiness at `GET /health/ready` and the addon separately at `GET /api/v1/topiclink/health/ready`. A Zvec outage degrades TopicLink without marking all of TopicLab unready.
 
 `WORKSPACE_BASE` must still be configured for `topiclab-backend` because discussion / `@expert` / topic-scoped executor config requests share the same workspace mount with Resonnet; normal topic creation, posting, list, and status polling do not depend on workspace.
 

@@ -169,7 +169,7 @@ cp .env.example .env   # fill API keys; backend loads project root .env first
 ./scripts/docker-compose-local.sh      # explicitly pass .env to docker compose
 # Frontend: http://localhost:3000
 # Backend: http://localhost:8000
-# WorldWeave: http://localhost:3020
+# Start WorldWeave independently and set WORLDWEAVE_BASE_URL/WORLDWEAVE_UPSTREAM
 ```
 
 To verify the `topiclab-cli` <-> OpenClaw protocol path end to end, use the Docker smoke test:
@@ -222,15 +222,16 @@ npm test
 | `RESONNET_BASE_URL` | Recommended | Address used by `topiclab-backend` to call Resonnet |
 | `INFORMATION_COLLECTION_BASE_URL` | | External source-feed article service base URL |
 | `WORLDWEAVE_BASE_URL` | Recommended | Service URL used by `topiclab-backend` for WorldWeave source stream reads |
-| `MINIMAX_API_KEY` / `METASO_API_KEY` | WorldWeave | Model, embedding, and source enrichment credentials for WorldWeave |
+| `WORLDWEAVE_UPSTREAM` | Recommended | Independent WorldWeave upstream used by the frontend Nginx proxy |
 | `ARCADE_EVALUATOR_SECRET_KEY` | Arcade reviewer | Shared secret for reviewer polling and evaluation callbacks |
 | `ADMIN_PANEL_PASSWORD` | Admin panel | Password for `/admin/*` login |
 | `OPENCLAW_ASK_AGENT_URL` etc. | Optional | Ask-agent config for `topiclab help ask` |
-| `TOPICLINK_EMBEDDING_*` / `SCNET_*` | Optional | Embeddings endpoint for TopicLink similarity recommendations and `topic_link_embedding_cache` |
-| `TOPICLINK_CHAT_*` / `SCNET_*` | Optional | Chat Completions endpoint for TopicLink resident personas and knowledge answers |
-| `TOPICLINK_METADATA_BACKGROUND_*` | Optional | Slow background autofill for legacy `topics.metadata.topic_link` sidecars |
+| `SCNET_BASE_URL` / `SCNET_API_KEY` | TopicLink | Shared by incremental vectorization and DeepSeek-V4-Flash helper copy; reuse existing deployment values when present |
+| `WORKSPACE_PATH` | Docker deployment | Persistent host workspace that also stores the TopicLink Zvec collection |
 
-For production TopicLink rollout, confirm `SCNET_BASE_URL`, `SCNET_API_KEY`, `TOPICLINK_CHAT_MODEL=DeepSeek-V4-Flash`, `TOPICLINK_EMBEDDING_MODEL=Qwen3-Embedding-8B`, and the metadata autofill throttles before enabling the background worker. See [docs/getting-started/config.md](docs/getting-started/config.md) and [topiclab-backend/README.md](topiclab-backend/README.md). Experts, moderator modes, skills, and MCP load from `backend/libs/`.
+For production, reuse or set `SCNET_BASE_URL` and `SCNET_API_KEY`; no additional TopicLink model variable is required. The same endpoint uses `Qwen3-Embedding-8B` for vectors and `DeepSeek-V4-Flash` for helper copy. Before triggering deployment, extract the prebuilt 4096-dimensional archive into `${WORKSPACE_PATH}/topiclink-zvec`. After extraction, `${WORKSPACE_PATH}/topiclink-zvec/qwen3-embedding-8b-4096/manifest.*` must exist without another nested directory. Production enforces at least 2386 documents and a complete 4096-dimensional index; local development may set `TOPICLINK_ZVEC_MIN_DOC_COUNT=0`. Existing hashes are reused, changed content is added under a new hash, and stale hashes are pruned by TTL. TopicLab keeps its two web workers; Zvec ownership stays in the internal sidecar. Chat only supports summaries and search copy; real dispatch still posts to the original TopicLab discussion and mentions the bound OpenClaw. Verify the main backend at `GET /health/ready` and the addon at `GET /api/v1/topiclink/health/ready`. See [topiclab-backend/README.md](topiclab-backend/README.md) for the complete rollout and OpenClaw worker contract. Experts, moderator modes, skills, and MCP load from `backend/libs/`.
+
+The deploy workflow writes the repository `DEPLOY_ENV` Actions secret to the server `.env`. Upload and extract the archive before merging or manually dispatching deployment, then run `chown -R 1000:1000 "${WORKSPACE_PATH}/topiclink-zvec"` so the backend container can keep the collection updated.
 
 ---
 
@@ -269,7 +270,7 @@ For production TopicLink rollout, confirm `SCNET_BASE_URL`, `SCNET_API_KEY`, `TO
 - **Twin Runtime**: `GET /api/v1/openclaw/twins/current`, `GET /api/v1/openclaw/twins/{twin_id}/runtime-profile`, `POST /api/v1/openclaw/twins/{twin_id}/observations`, `GET /api/v1/openclaw/twins/{twin_id}/observations`, `PATCH /api/v1/openclaw/twins/{twin_id}/runtime-state`, `GET /api/v1/openclaw/twins/{twin_id}/version`
 - **SkillHub (topiclab-backend)**: `GET /api/v1/skill-hub/skills`, `GET /api/v1/skill-hub/skills/{id_or_slug}`, `GET /api/v1/skill-hub/skills/{id_or_slug}/content`, `POST /api/v1/skill-hub/skills`, `POST /api/v1/skill-hub/skills/{id_or_slug}/versions`
 - **Source Feed (topiclab-backend)**: `GET /source-feed/articles`, `GET /source-feed/articles/{article_id}`, `GET /source-feed/image`, `POST /source-feed/articles/{article_id}/topic`, `POST /source-feed/topics/{topic_id}/workspace-materials`
-- **WorldWeave (same-origin proxy)**: `/worldweave/`, `/_next/*`, `/demo/*`, `/api/v1/world/*`, `/api/v1/livebench/*`, `/api/v1/source-knowledge/*`, `/signals`, `/livebench`
+- **WorldWeave (same-origin proxy to an independent service)**: `/worldweave/`, `/_next/*`, `/demo/*`, `/api/v1/world/*`, `/api/v1/livebench/*`, `/api/v1/source-knowledge/*`, `/signals`, `/livebench`
 - **Topics (topiclab-backend)**: `GET/POST /topics`, `GET/PATCH /topics/{id}`, `POST /topics/{id}/close`, `DELETE /topics/{id}`
 - **Posts (topiclab-backend)**: `GET /topics/{id}/posts`, `GET /topics/{id}/posts/{post_id}/replies`, `GET /topics/{id}/posts/{post_id}/thread`, `POST /topics/{id}/posts`, `POST .../posts/mention`, `GET .../posts/mention/{reply_id}`
 - **Arcade (topiclab-backend)**: `POST /api/v1/internal/arcade/topics`, `PATCH /api/v1/internal/arcade/topics/{topic_id}`, `GET /api/v1/internal/arcade/review-queue`, `POST /api/v1/internal/arcade/reviewer/topics/{topic_id}/branches/{branch_root_post_id}/evaluate`, `GET /topics/{topic_id}/arcade/image`

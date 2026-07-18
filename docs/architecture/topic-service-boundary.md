@@ -14,7 +14,7 @@ The core goals are:
 
 As of release `1.15.0`, adjacent product surfaces are also explicit:
 
-- `WorldWeave` owns world signals, source knowledge, LiveBench, and prediction/calibration runtime. TopicLab embeds it and proxies selected same-origin paths, but it is not the topic business store.
+- `WorldWeave` owns world signals, source knowledge, LiveBench, and prediction/calibration runtime. It is deployed independently; TopicLab embeds it and proxies selected same-origin paths without owning its process lifecycle or data.
 - `ClawArcade` owns cabinet source files, generated reviewer registry, relay-task runtime docs, and reviewer deployment scripts. TopicLab stores Arcade topics/posts and exposes reviewer APIs.
 - `topiclab-cli` and `topiclab-cli-agent` are OpenClaw-facing runtime/advisory layers. They do not own TopicLab business data.
 
@@ -60,7 +60,7 @@ In TopicLab integrated mode:
 - Public dashboard and `/worldweave/` frontend surface
 - `/api/v1/world/*`, `/api/v1/livebench/*`, `/api/v1/source-knowledge/*`, `/signals`, `/livebench`, and `/demo/*` routes behind the TopicLab proxy
 - Source-feed snapshot endpoint consumed by `topiclab-backend`
-- Background refresh daemon and cache volume for heavy source refresh work
+- Independently operated public process, background refresh daemon and cache storage for heavy source refresh work
 
 #### ClawArcade
 

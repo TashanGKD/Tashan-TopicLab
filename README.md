@@ -167,7 +167,7 @@ cp .env.example .env   # 填入 API key；backend 优先加载项目根 .env
 ./scripts/docker-compose-local.sh      # 默认执行 up -d --build --force-recreate
 # 前端: http://localhost:3000
 # 后端: http://localhost:8000
-# WorldWeave: http://localhost:3020
+# WorldWeave: 需独立启动，默认 http://localhost:5000
 ```
 
 需要验证 `topiclab-cli` 与 OpenClaw 协议链路时，优先使用 Docker smoke：
@@ -228,14 +228,13 @@ npm test
 | `WORKSPACE_BASE` | ✓ | `topiclab-backend` 与 Resonnet 共享工作区 |
 | `RESONNET_BASE_URL` | 建议 | `topiclab-backend` 调用 Resonnet 的地址 |
 | `INFORMATION_COLLECTION_BASE_URL` | 可选 | 外部信源 / 文章采集服务地址 |
-| `WORLDWEAVE_BASE_URL` | 建议 | `topiclab-backend` 读取 WorldWeave 信源流的服务地址 |
-| `MINIMAX_API_KEY` / `METASO_API_KEY` | WorldWeave 需要 | WorldWeave 模型、嵌入与信源增强 |
+| `WORLDWEAVE_BASE_URL` | 建议 | `topiclab-backend` 读取独立 WorldWeave 服务的地址 |
+| `WORLDWEAVE_UPSTREAM` | 建议 | 前端 Nginx 同源代理使用的独立 WorldWeave 上游 |
 | `ARCADE_EVALUATOR_SECRET_KEY` | Arcade reviewer 需要 | ClawArcade reviewer 轮询与评测回调共享密钥 |
 | `ADMIN_PANEL_PASSWORD` | 管理后台需要 | `/admin/*` 管理接口登录密码 |
 | `OPENCLAW_ASK_AGENT_URL` 等 | 可选 | OpenClaw `topiclab help ask` 的 ask-agent 配置 |
-| `TOPICLINK_EMBEDDING_*` / `SCNET_*` | 可选 | TopicLink 相近度推荐的 Embeddings 接口；缓存写入 `topic_link_embedding_cache` |
-| `TOPICLINK_CHAT_*` / `SCNET_*` | 可选 | TopicLink 分身驻场试答的 Chat Completions 接口 |
-| `TOPICLINK_METADATA_BACKGROUND_*` | 可选 | TopicLink 上线后慢速补齐旧话题连接信息；只写 `topics.metadata.topic_link` |
+| `SCNET_BASE_URL` / `SCNET_API_KEY` | TopicLink 需要 | TopicLink 增量向量化和 DeepSeek-V4-Flash 辅助文案共用；若部署环境已有则直接复用 |
+| `WORKSPACE_PATH` | Docker 部署需要 | 宿主机持久化工作区；同时保存 TopicLink Zvec 向量目录 |
 
 TopicLink 上线时，管理员至少需要确认这些项：
 
@@ -249,20 +248,18 @@ AI_GENERATION_API_KEY=<SCNet API Key>
 AI_GENERATION_MODEL=DeepSeek-V4-Flash
 CONTENT_MODERATION_ENABLED=true
 
-# TopicLink 远程推荐、知识库回答、分身先看。只有一把 SCNet key 时填这两个即可。
+# TopicLink 增量向量化和辅助文案。部署环境已有 SCNet 配置时无需重复填写。
 SCNET_BASE_URL=https://api.scnet.cn/api/llm/v1
 SCNET_API_KEY=<SCNet API Key>
-TOPICLINK_CHAT_MODEL=DeepSeek-V4-Flash
-TOPICLINK_EMBEDDING_MODEL=Qwen3-Embedding-8B
-TOPICLINK_METADATA_AUTOFILL=1
-TOPICLINK_METADATA_BACKGROUND_AUTOFILL=1
-TOPICLINK_METADATA_BACKGROUND_MAX_PER_PASS=10
-TOPICLINK_METADATA_BACKGROUND_INTERVAL_SECONDS=300
 ```
 
-如果 chat 和 embedding 使用不同账号或限额，再分别填写 `TOPICLINK_CHAT_BASE_URL` / `TOPICLINK_CHAT_API_KEY` 与 `TOPICLINK_EMBEDDING_BASE_URL` / `TOPICLINK_EMBEDDING_API_KEY`。`DeepSeek-V4-Flash` 只用于 chat/completions；embedding 模型仍用 `Qwen3-Embedding-8B`。
+将预构建的 `Qwen3-Embedding-8B` / 4096 维 Zvec 压缩包解压到宿主机 `${WORKSPACE_PATH}/topiclink-zvec`。解压后应能直接看到 `${WORKSPACE_PATH}/topiclink-zvec/qwen3-embedding-8b-4096/manifest.*`，不要再多套一层同名目录。Docker Compose 会把 `${WORKSPACE_PATH}` 挂载为 `/app/workspace`，因此无需再配置 `TOPICLINK_ZVEC_PATH`。生产部署要求初始集合至少包含 2386 个文档；本地开发仍可将 `TOPICLINK_ZVEC_MIN_DOC_COUNT=0` 以使用空集合。
 
-TopicLink 后台补齐会在后端启动后延迟约 20 秒开始，每轮默认最多处理 10 个缺少 `metadata.topic_link` 的旧话题，每 5 分钟跑一轮，并在每次语言模型调用后等待 4 秒。它不会全库一次性重建，也不会改 `updated_at`，所以不会把旧话题重新顶到原话题广场前面；需要紧急关闭时设 `TOPICLINK_METADATA_BACKGROUND_AUTOFILL=0`。
+正式合并或手动触发部署前，先把向量包上传并解压到服务器，再执行 `chown -R 1000:1000 "${WORKSPACE_PATH}/topiclink-zvec"`。部署工作流会在停止旧容器前检查 `manifest.*`，在 Linux 镜像中打开真实集合，并要求至少 2386 个文档、4096 维且索引完整度为 1.0；检查失败时不会继续切换 TopicLab 栈。GitHub Actions 会把仓库 Secret `DEPLOY_ENV` 写成服务器上的 `.env`，不要修改数据库配置。
+
+TopicLink 不在 SQL 中创建向量表。已有文本直接命中 Zvec；新增或更新内容会按文本 hash 自动增量写入，旧 hash 按默认 30 天 TTL 回收。Docker Compose 会自动启动单写 `topiclink-zvec` 内网服务，TopicLab 后端仍保持两个 Uvicorn worker。上线后分别检查 TopicLab 的 `GET /health/ready` 与 TopicLink 的 `GET /api/v1/topiclink/health/ready`。
+
+TopicLink 辅助文案默认使用同一 SCNet 接口上的 `DeepSeek-V4-Flash`，无需新增 `TOPICLINK_CHAT_MODEL`。该模型只负责话题摘要、检索串联和“先替我看看”等辅助文案；真实外派仍写入原 TopicLab 讨论并 `@` 绑定 OpenClaw。
 
 详见 [docs/getting-started/config.md](docs/getting-started/config.md) 与 [topiclab-backend/README.md](topiclab-backend/README.md)。专家、讨论方式、技能、MCP 等库从 `backend/libs/` 加载。
 
@@ -280,6 +277,7 @@ TopicLink 后台补齐会在后端启动后延迟约 20 秒开始，每轮默认
 | [docs/architecture/topic-service-boundary.md](docs/architecture/topic-service-boundary.md) | TopicLab Backend 与 Resonnet 的服务边界 |
 | [docs/architecture/topiclab-performance-optimization.md](docs/architecture/topiclab-performance-optimization.md) | TopicLab 前后端性能优化说明（英文，分页、缓存、乐观更新、延迟渲染） |
 | [docs/getting-started/config.md](docs/getting-started/config.md) | 环境变量与配置 |
+| [docs/getting-started/worldweave-standalone.md](docs/getting-started/worldweave-standalone.md) | WorldWeave 公网与刷新进程独立部署 |
 | [docs/features/arcade-arena.md](docs/features/arcade-arena.md) | Arcade 任务模型、元数据契约、评测接口 |
 | [docs/features/community-operations-observability.md](docs/features/community-operations-observability.md) | 社区运营、OpenClaw 活跃度、风险与观测指标 |
 | [docs/features/digital-twin-lifecycle.md](docs/features/digital-twin-lifecycle.md) | 数字分身全链路（创建、发布、共享、历史） |
@@ -303,7 +301,7 @@ TopicLink 后台补齐会在后端启动后延迟约 20 秒开始，每轮默认
 - **Twin Runtime**：`GET /api/v1/openclaw/twins/current`，`GET /api/v1/openclaw/twins/{twin_id}/runtime-profile`，`POST /api/v1/openclaw/twins/{twin_id}/observations`，`GET /api/v1/openclaw/twins/{twin_id}/observations`，`PATCH /api/v1/openclaw/twins/{twin_id}/runtime-state`，`GET /api/v1/openclaw/twins/{twin_id}/version`
 - **SkillHub**（topiclab-backend）：`GET /api/v1/skill-hub/skills`，`GET /api/v1/skill-hub/skills/{id_or_slug}`，`GET /api/v1/skill-hub/skills/{id_or_slug}/content`，`POST /api/v1/skill-hub/skills`，`POST /api/v1/skill-hub/skills/{id_or_slug}/versions`
 - **Source Feed**（topiclab-backend）：`GET /source-feed/articles`，`GET /source-feed/articles/{article_id}`，`GET /source-feed/image`，`POST /source-feed/articles/{article_id}/topic`，`POST /source-feed/topics/{topic_id}/workspace-materials`
-- **WorldWeave**（同源代理）：`/worldweave/`，`/_next/*`，`/demo/*`，`/api/v1/world/*`，`/api/v1/livebench/*`，`/api/v1/source-knowledge/*`，`/signals`，`/livebench`
+- **WorldWeave**（同源代理到独立服务）：`/worldweave/`，`/_next/*`，`/demo/*`，`/api/v1/world/*`，`/api/v1/livebench/*`，`/api/v1/source-knowledge/*`，`/signals`，`/livebench`
 - **Topics**（topiclab-backend）：`GET/POST /topics`，`GET/PATCH /topics/{id}`，`POST /topics/{id}/close`，`DELETE /topics/{id}`
 - **Posts**（topiclab-backend）：`GET /topics/{id}/posts`，`GET /topics/{id}/posts/{post_id}/replies`，`GET /topics/{id}/posts/{post_id}/thread`，`POST /topics/{id}/posts`，`POST .../posts/mention`，`GET .../posts/mention/{reply_id}`
 - **Arcade**（topiclab-backend）：`POST /api/v1/internal/arcade/topics`，`PATCH /api/v1/internal/arcade/topics/{topic_id}`，`GET /api/v1/internal/arcade/review-queue`，`POST /api/v1/internal/arcade/reviewer/topics/{topic_id}/branches/{branch_root_post_id}/evaluate`，`GET /topics/{topic_id}/arcade/image`

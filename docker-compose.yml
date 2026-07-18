@@ -1,69 +1,4 @@
 services:
-  worldweave:
-    image: topiclab-worldweave:local
-    restart: unless-stopped
-    mem_limit: ${WORLDWEAVE_MEM_LIMIT:-4g}
-    build:
-      context: ./worldweave
-      dockerfile: ../docker/worldweave.Dockerfile
-      args:
-        NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-docker.m.daocloud.io/library/node:20-slim}
-    env_file:
-      - ${ENV_FILE:-.env}
-    environment:
-      - PORT=3020
-      - HOST=0.0.0.0
-      - WORLD_HOST=0.0.0.0
-      - WORLD_WEB_ENABLE_HEAVY_REFRESH=0
-      - NODE_OPTIONS=${WORLDWEAVE_NODE_OPTIONS:---max-old-space-size=3072}
-    ports:
-      - "${WORLDWEAVE_HOST_PORT:-3020}:3020"
-    volumes:
-      - worldweave-cache:/app/.cache
-    networks:
-      - app-network
-    healthcheck:
-      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3020/api/v1/openclaw/skill.md').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
-      interval: 10s
-      timeout: 20s
-      retries: 15
-      start_period: 60s
-
-  worldweave-refresh:
-    image: topiclab-worldweave:local
-    restart: unless-stopped
-    mem_limit: ${WORLDWEAVE_REFRESH_MEM_LIMIT:-6g}
-    env_file:
-      - ${ENV_FILE:-.env}
-    environment:
-      - NODE_OPTIONS=${WORLDWEAVE_REFRESH_NODE_OPTIONS:---max-old-space-size=3072}
-      - WORLD_SOURCE_REFRESH_INTERVAL_MINUTES=${WORLD_SOURCE_REFRESH_INTERVAL_MINUTES:-60}
-      - WORLD_SOURCE_REFRESH_TIMEOUT_MINUTES=${WORLD_SOURCE_REFRESH_TIMEOUT_MINUTES:-20}
-      - WORLD_SOURCE_REFRESH_MANAGE_WORKER=1
-      - WORLD_SOURCE_REFRESH_WORKER_PORT=5020
-      - WORLD_SOURCE_REFRESH_WORKER_HOST=127.0.0.1
-      - WORLD_CATALOG_SOURCE_FETCH_CONCURRENCY=${WORLD_CATALOG_SOURCE_FETCH_CONCURRENCY:-6}
-      - WORLD_CATALOG_SOURCE_REFRESH_BATCH_SIZE=${WORLD_CATALOG_SOURCE_REFRESH_BATCH_SIZE:-120}
-      - WORLD_TRANSLATION_BATCH_SIZE=${WORLD_TRANSLATION_BATCH_SIZE:-2}
-      - WORLD_TRANSLATION_PRIME_LIMIT=${WORLD_TRANSLATION_PRIME_LIMIT:-8}
-      - WORLD_VISIBLE_TRANSLATION_BATCH_SIZE=${WORLD_VISIBLE_TRANSLATION_BATCH_SIZE:-12}
-      - WORLD_ALIGNMENT_BATCH_SIZE=${WORLD_ALIGNMENT_BATCH_SIZE:-2}
-      - WORLD_ALIGNMENT_PRIME_LIMIT=${WORLD_ALIGNMENT_PRIME_LIMIT:-4}
-      - WORLD_SOURCE_KNOWLEDGE_SYNC_INTERVAL_MINUTES=${WORLD_SOURCE_KNOWLEDGE_SYNC_INTERVAL_MINUTES:-30}
-      - WORLD_SOURCE_KNOWLEDGE_EMBED_BATCH_SIZE=${WORLD_SOURCE_KNOWLEDGE_EMBED_BATCH_SIZE:-3}
-      - WORLD_SOURCE_KNOWLEDGE_EMBED_MAX_PENDING=${WORLD_SOURCE_KNOWLEDGE_EMBED_MAX_PENDING:-60}
-    command:
-      - sh
-      - -lc
-      - node scripts/world-source-refresh-daemon.mjs
-    depends_on:
-      worldweave:
-        condition: service_healthy
-    volumes:
-      - worldweave-cache:/app/.cache
-    networks:
-      - app-network
-
   topiclab-backend:
     build:
       context: ./topiclab-backend
@@ -72,12 +7,15 @@ services:
         # 阿里云超时时可设 PIP_INDEX_URL=https://pypi.org/simple/ PIP_TRUSTED_HOST=pypi.org
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
         PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-mirrors.aliyun.com}
+        PIP_TIMEOUT: ${PIP_TIMEOUT:-120}
+        PIP_RETRIES: ${PIP_RETRIES:-3}
     env_file:
       - ${ENV_FILE:-.env}
     environment:
       - WORKSPACE_BASE=/app/workspace
+      - TOPICLINK_ZVEC_SERVICE_URL=http://topiclink-zvec:8000
       - TOPICLAB_SYNC_URL=${TOPICLAB_SYNC_URL:-http://topiclab-backend:8000}
-      - WORLDWEAVE_BASE_URL=http://worldweave:3020
+      - WORLDWEAVE_BASE_URL=${WORLDWEAVE_BASE_URL:-http://host.docker.internal:5000}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -94,11 +32,42 @@ services:
       retries: 15
       start_period: 45s
 
+  topiclink-zvec:
+    build:
+      context: ./topiclab-backend
+      args:
+        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-mirrors.aliyun.com}
+        PIP_TIMEOUT: ${PIP_TIMEOUT:-120}
+        PIP_RETRIES: ${PIP_RETRIES:-3}
+    command: ["uvicorn", "app.topiclink_zvec_service:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    env_file:
+      - ${ENV_FILE:-.env}
+    environment:
+      - WORKSPACE_BASE=/app/workspace
+      - TOPICLINK_ZVEC_SERVICE_URL=
+      - TOPICLINK_ZVEC_MIN_DOC_COUNT=${TOPICLINK_ZVEC_MIN_DOC_COUNT:-0}
+    volumes:
+      - ${WORKSPACE_PATH:-./workspace}:/app/workspace
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=15)\""]
+      interval: 10s
+      timeout: 20s
+      retries: 15
+      start_period: 30s
+
   backend:
     build:
       context: ./backend
       args:
         PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-mirrors.aliyun.com}
+        PIP_TIMEOUT: ${PIP_TIMEOUT:-120}
+        PIP_RETRIES: ${PIP_RETRIES:-3}
     env_file:
       - ${ENV_FILE:-.env}
     ports:
@@ -126,11 +95,11 @@ services:
         VITE_BASE_PATH: ${VITE_BASE_PATH:-/}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    environment:
+      - WORLDWEAVE_UPSTREAM=${WORLDWEAVE_UPSTREAM:-http://host.docker.internal:5000}
     ports:
       - "${FRONTEND_PORT:-3000}:80"
     depends_on:
-      worldweave:
-        condition: service_healthy
       backend:
         condition: service_healthy
       topiclab-backend:
@@ -199,5 +168,4 @@ networks:
     driver: bridge
 
 volumes:
-  worldweave-cache:
   clawarcade-reviewer-logs:

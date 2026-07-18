@@ -194,6 +194,40 @@ export interface TopicLinkPresenceResponse {
   updated_at?: string | null
 }
 
+export type TopicLinkAgentTaskStatus = 'pending' | 'claimed' | 'replied' | 'failed'
+
+export interface TopicLinkAgentTask {
+  id: string
+  task_type: 'diligence' | string
+  status: TopicLinkAgentTaskStatus
+  source: {
+    type: string
+    id: string
+    title: string
+    path: string
+  }
+  target_agent: {
+    agent_uid: string
+    handle: string
+  }
+  input: Record<string, unknown>
+  output: {
+    summary?: string
+    risk_notes?: string[]
+    next_step?: string
+    [key: string]: unknown
+  }
+  error_message?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+  claimed_at?: string | null
+  completed_at?: string | null
+}
+
+export interface TopicLinkAgentTaskResponse {
+  task: TopicLinkAgentTask
+}
+
 export interface PostMetadata {
   scene?: string
   arcade?: {
@@ -875,6 +909,10 @@ export const topicsApi = {
   },
   setTopicLinkPresence: (id: string, data?: { persona_name?: string }) =>
     api.post<TopicLinkPresenceResponse>(`/topiclink/${id}/presence`, data),
+  dispatchOpcDiligence: (slug: string) =>
+    api.post<TopicLinkAgentTaskResponse>(`/topiclink/opc/${encodeURIComponent(slug)}/diligence`),
+  getTopicLinkDispatch: (taskId: string) =>
+    api.get<TopicLinkAgentTaskResponse>(`/topiclink/dispatches/${encodeURIComponent(taskId)}`),
   create: (data: CreateTopicRequest) => api.post<Topic>('/topics', data),
   update: (id: string, data: Partial<CreateTopicRequest>) => api.patch<Topic>(`/topics/${id}`, data),
   close: (id: string) => api.post<Topic>(`/topics/${id}/close`),

@@ -19,6 +19,7 @@ jobs:
     outputs:
       run_frontend: ${{ steps.diff.outputs.run_frontend }}
       run_api: ${{ steps.diff.outputs.run_api }}
+      run_topiclab_backend: ${{ steps.diff.outputs.run_topiclab_backend }}
       run_agent_sdk: ${{ steps.diff.outputs.run_agent_sdk }}
       run_docker: ${{ steps.diff.outputs.run_docker }}
       run_worldweave: ${{ steps.diff.outputs.run_worldweave }}
@@ -33,6 +34,7 @@ jobs:
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "run_frontend=true" >> "$GITHUB_OUTPUT"
             echo "run_api=true" >> "$GITHUB_OUTPUT"
+            echo "run_topiclab_backend=true" >> "$GITHUB_OUTPUT"
             echo "run_agent_sdk=true" >> "$GITHUB_OUTPUT"
             echo "run_docker=true" >> "$GITHUB_OUTPUT"
             echo "run_worldweave=true" >> "$GITHUB_OUTPUT"
@@ -46,12 +48,21 @@ jobs:
           if ! git rev-parse "$BASE" &>/dev/null; then
             echo "run_frontend=true" >> "$GITHUB_OUTPUT"
             echo "run_api=true" >> "$GITHUB_OUTPUT"
+            echo "run_topiclab_backend=true" >> "$GITHUB_OUTPUT"
             echo "run_agent_sdk=true" >> "$GITHUB_OUTPUT"
             echo "run_docker=true" >> "$GITHUB_OUTPUT"
             echo "run_worldweave=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+
           CHANGED=$(git diff --name-only "$BASE" HEAD 2>/dev/null || echo "")
+
+          # TopicLab backend: auth, topics, TopicLink, Zvec sidecar, and their tests
+          if echo "$CHANGED" | grep -qE '^topiclab-backend/|^docker-compose\.(yml|yaml)|^\.github/workflows/(ci|deploy)\.yml'; then
+            echo "run_topiclab_backend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_topiclab_backend=false" >> "$GITHUB_OUTPUT"
+          fi
 
           # Frontend: frontend/**, root config that affects frontend
           if echo "$CHANGED" | grep -qE '^frontend/|^vite\.config\.|^tsconfig\.json'; then
@@ -82,7 +93,7 @@ jobs:
           fi
 
           # WorldWeave: submodule pointer, deployment image, or same-origin proxy contract
-          if echo "$CHANGED" | grep -qE '^worldweave$|^docker/worldweave\.Dockerfile|^\.github/workflows/ci\.yml|^frontend/(nginx(\.root)?\.conf|nginx\.conf\.template|vite\.config\.ts|src/pages/(SourceFeedPage\.tsx|__tests__/(WorldWeaveProxyConfig|ViteWorldWeaveProxyConfig|SourceFeedPage)\.test\.(ts|tsx)))$'; then
+          if echo "$CHANGED" | grep -qE '^worldweave$|^\.github/workflows/ci\.yml|^frontend/(Dockerfile|nginx(\.root)?\.conf|nginx\.conf\.template|vite\.config\.ts|src/pages/(SourceFeedPage\.tsx|__tests__/(WorldWeaveProxyConfig|ViteWorldWeaveProxyConfig|SourceFeedPage)\.test\.(ts|tsx)))$'; then
             echo "run_worldweave=true" >> "$GITHUB_OUTPUT"
           else
             echo "run_worldweave=false" >> "$GITHUB_OUTPUT"
@@ -217,6 +228,39 @@ jobs:
             --with pytest --with pytest-asyncio --with httpx \
             pytest tests/test_api.py -v --tb=short
 
+  topiclab-backend-tests:
+    name: TopicLab backend
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.run_topiclab_backend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize Resonnet submodule
+        run: git submodule update --init backend
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run TopicLink and topics contract tests
+        working-directory: topiclab-backend
+        env:
+          TOPICLAB_TESTING: "1"
+        run: |
+          uv run --frozen --group dev python -m pytest \
+            tests/test_topiclink_api.py \
+            tests/test_topiclink_zvec_migration.py \
+            tests/test_runtime_safety.py \
+            tests/test_topics_api.py \
+            -q
+
   # ─────────────────────────────────────────────────────────────────────────
   # Layer 1: Backend unit tests (Agent SDK, mocked)
   # ─────────────────────────────────────────────────────────────────────────
@@ -309,7 +353,7 @@ jobs:
     needs: [detect-changes]
     if: needs.detect-changes.outputs.run_docker == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
@@ -318,4 +362,9 @@ jobs:
 
       - name: Build images
         run: |
+          cp .env.example .env
+          export PIP_INDEX_URL=https://pypi.org/simple
+          export PIP_TRUSTED_HOST=pypi.org
+          export PIP_TIMEOUT=60
+          export PIP_RETRIES=2
           docker compose build --no-cache
