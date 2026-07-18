@@ -117,7 +117,7 @@ def _get_information_collection_base_url() -> str:
 
 
 def _get_worldweave_base_url() -> str:
-    return os.getenv("WORLDWEAVE_BASE_URL", "http://127.0.0.1:5000").rstrip("/")
+    return os.getenv("WORLDWEAVE_BASE_URL", "http://127.0.0.1:3020").rstrip("/")
 
 
 def _get_source_feed_list_cache_ttl_seconds() -> float:

@@ -181,7 +181,7 @@ describe('SourceFeedPage', () => {
 
     expect(await screen.findByText('世界脉络服务未连接')).toBeInTheDocument()
     expect(
-      screen.getByText('请确认 WorldWeave 已在本机 5000 端口启动，并重新刷新页面。'),
+      screen.getByText('请确认 WorldWeave 已在本机 3020 端口启动，并重新刷新页面。'),
     ).toBeInTheDocument()
     expect(screen.queryByTitle('世界脉络')).not.toBeInTheDocument()
   })
