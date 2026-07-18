@@ -97,7 +97,10 @@ jobs:
               WORKSPACE_HOST_PATH="$REPO_DIR/${WORKSPACE_PATH_VALUE%/}"
             fi
 
-            python3 "$ZVEC_MANAGER" prepare --lock "$ZVEC_LOCK" --workspace "$WORKSPACE_HOST_PATH"
+            python3 "$ZVEC_MANAGER" prepare \
+              --lock "$ZVEC_LOCK" \
+              --workspace "$WORKSPACE_HOST_PATH" \
+              --env-file "$REPO_DIR/.env"
             ZVEC_RELEASE_HOST_PATH="$(python3 "$ZVEC_MANAGER" path --lock "$ZVEC_LOCK" --workspace "$WORKSPACE_HOST_PATH" --kind release-host)"
             ZVEC_RELEASE_CONTAINER_PATH="$(python3 "$ZVEC_MANAGER" path --lock "$ZVEC_LOCK" --workspace "$WORKSPACE_HOST_PATH" --kind release-container)"
             if [ "$(id -u)" -eq 0 ]; then

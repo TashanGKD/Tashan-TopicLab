@@ -1,8 +1,8 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "version": "20260717",
-  "repository": "TashanGKD/Tashan-TopicLab",
-  "release_tag": "topiclink-zvec-20260717",
+  "storage": "aliyun-oss",
+  "object_key": "topiclink-zvec/releases/20260717/topiclink-zvec-qwen3-embedding-8b-4096-20260717.zip",
   "asset": "topiclink-zvec-qwen3-embedding-8b-4096-20260717.zip",
   "sha256": "134129236f6819b8b12e06266cb4d2d4ac60c50552920957ecb3213de7184de2",
   "collection_dir": "qwen3-embedding-8b-4096",
