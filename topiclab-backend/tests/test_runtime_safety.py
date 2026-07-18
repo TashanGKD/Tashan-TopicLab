@@ -172,6 +172,7 @@ def test_high_risk_async_routes_use_threadpool_for_sync_work():
     openclaw_source = (source_root / "openclaw.py").read_text(encoding="utf-8")
     topics_source = (source_root / "topics.py").read_text(encoding="utf-8")
     auth_source = (source_root / "auth.py").read_text(encoding="utf-8")
+    topiclink_source = (source_root / "topiclink.py").read_text(encoding="utf-8")
 
     assert "from starlette.concurrency import run_in_threadpool" in openclaw_source
     assert "run_in_threadpool(\n        _load_openclaw_home_payload" in openclaw_source
@@ -184,6 +185,8 @@ def test_high_risk_async_routes_use_threadpool_for_sync_work():
     assert "await run_in_threadpool(verify_access_token, credentials.credentials)" in auth_source
     assert "await run_in_threadpool(verify_openclaw_api_key, token)" in auth_source
     assert "await run_in_threadpool(_load_me_payload" in auth_source
+    assert "await asyncio.to_thread(_read_embedding_cache, model, inputs)" in topiclink_source
+    assert "await asyncio.to_thread(\n        _write_embedding_cache" in topiclink_source
 
 
 def test_topiclab_backend_compose_healthcheck_uses_readiness_probe():
@@ -192,6 +195,27 @@ def test_topiclab_backend_compose_healthcheck_uses_readiness_probe():
 
     assert "http://127.0.0.1:8000/health/ready" in service_block
     assert "http://127.0.0.1:8000/health', timeout=15" not in service_block
+
+
+def test_resonnet_docker_build_accepts_package_index_overrides():
+    compose_source = (PROJECT_ROOT.parent / "docker-compose.yml").read_text(encoding="utf-8")
+    dockerfile_source = (PROJECT_ROOT.parent / "backend" / "Dockerfile").read_text(encoding="utf-8")
+    service_block = compose_source.split("  backend:", 1)[1].split("\n  frontend:", 1)[0]
+
+    assert "PIP_INDEX_URL:" in service_block
+    assert "PIP_TRUSTED_HOST:" in service_block
+    assert "PIP_TIMEOUT:" in service_block
+    assert "PIP_RETRIES:" in service_block
+    assert "ARG PIP_INDEX_URL=" in dockerfile_source
+    assert "ARG PIP_TRUSTED_HOST=" in dockerfile_source
+    assert "ARG PIP_TIMEOUT=" in dockerfile_source
+    assert "ARG PIP_RETRIES=" in dockerfile_source
+    assert 'echo "index-url = ${PIP_INDEX_URL}"' in dockerfile_source
+    assert 'echo "trusted-host = ${PIP_TRUSTED_HOST}"' in dockerfile_source
+    assert 'echo "timeout = ${PIP_TIMEOUT}"' in dockerfile_source
+    assert 'echo "retries = ${PIP_RETRIES}"' in dockerfile_source
+    assert "pip install --no-cache-dir -e . && exit 0" in dockerfile_source
+    assert dockerfile_source.rstrip().split("EXPOSE", 1)[0].rstrip().endswith("exit 1")
 
 
 def test_topiclab_backend_keeps_two_workers_and_zvec_sidecar_is_single_writer():
@@ -221,9 +245,12 @@ def test_topiclink_zvec_sidecar_exposes_single_writer_cache_contract(monkeypatch
     monkeypatch.setattr(service.topiclink, "_read_zvec_cache", lambda model, inputs: [[1.0, 0.0] for _ in inputs])
     monkeypatch.setattr(service.topiclink, "_write_zvec_cache", lambda model, inputs, vectors: True)
     monkeypatch.setattr(service.topiclink, "_prune_zvec_cache", lambda force=False: 2)
+    monkeypatch.setattr(service.topiclink, "_topiclink_zvec_doc_count", lambda collection: 7)
 
     with TestClient(service.app) as client:
-        assert client.get("/health/ready").json()["status"] == "ready"
+        health = client.get("/health/ready")
+        assert health.json()["status"] == "ready"
+        assert health.json()["doc_count"] == 7
         assert client.post("/cache/fetch", json={"model": "m", "inputs": ["a"]}).json() == {
             "vectors": [[1.0, 0.0]]
         }
@@ -232,8 +259,12 @@ def test_topiclink_zvec_sidecar_exposes_single_writer_cache_contract(monkeypatch
             json={"model": "m", "inputs": ["a"], "vectors": [[1.0, 0.0]]},
         ).json() == {"written": 1}
         assert client.post("/cache/prune", json={"force": True}).json() == {"deleted": 2}
+        monkeypatch.setenv("TOPICLINK_ZVEC_MIN_DOC_COUNT", "8")
+        underfilled = client.get("/health/ready")
+        assert underfilled.status_code == 503
+        assert underfilled.json()["zvec"] == "underfilled"
 
-    assert calls == ["open", "start", "stop"]
+    assert calls == ["open", "start", "open", "open", "stop"]
 
 
 def test_async_api_handlers_do_not_call_sync_auth_verifiers_directly():

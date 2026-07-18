@@ -1805,6 +1805,14 @@ def test_worldweave_source_feed_detail_uses_cached_list_snapshot(client, monkeyp
     source_feed_module._worldweave_source_article_cache.clear()
 
 
+def test_worldweave_source_feed_defaults_to_standalone_port(monkeypatch):
+    import app.api.source_feed as source_feed_module
+
+    monkeypatch.delenv("WORLDWEAVE_BASE_URL", raising=False)
+
+    assert source_feed_module._get_worldweave_base_url() == "http://127.0.0.1:5000"
+
+
 def test_discussion_and_mention_complete_via_executor(client, monkeypatch):
     monkeypatch.setattr(
         "app.api.topics.moderate_post_content",

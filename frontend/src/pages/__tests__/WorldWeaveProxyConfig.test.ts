@@ -8,7 +8,8 @@ const CONFIG_PATHS = [
   'nginx.conf',
 ] as const
 
-const WORLDWEAVE_DOCKERFILE_PATH = join(process.cwd(), '..', 'docker', 'worldweave.Dockerfile')
+const FRONTEND_DOCKERFILE_PATH = join(process.cwd(), 'Dockerfile')
+const COMPOSE_PATH = join(process.cwd(), '..', 'docker-compose.yml')
 const DEPLOY_WORKFLOW_PATH = join(process.cwd(), '..', '.github', 'workflows', 'deploy.yml')
 
 function readConfig(path: (typeof CONFIG_PATHS)[number]) {
@@ -33,26 +34,29 @@ describe('WorldWeave nginx proxy config', () => {
     expect(config).toContain('location /daily/')
     expect(config).toContain('location = /livebench')
     expect(config).toContain('location /livebench/')
-    expect(config).toContain('worldweave:3020')
+    expect(config).toContain('${WORLDWEAVE_UPSTREAM}')
+    expect(config).toContain('proxy_ssl_server_name on;')
+    expect(config).toContain('proxy_set_header Host $proxy_host;')
     expect(config).toContain('proxy_set_header Host $http_host;')
-    expect(config).not.toContain('host.docker.internal:5000')
-    expect(config).not.toContain('host.docker.internal:3020')
+    expect(config).not.toContain('worldweave:3020')
   })
 
-  it('seeds reviewed WorldWeave ASEAN model artifacts into the cache volume', () => {
-    const dockerfile = readFileSync(WORLDWEAVE_DOCKERFILE_PATH, 'utf-8')
+  it('injects the standalone WorldWeave upstream when the frontend container starts', () => {
+    const dockerfile = readFileSync(FRONTEND_DOCKERFILE_PATH, 'utf-8')
 
-    expect(dockerfile).toContain('COPY --from=builder /app/.cache/asean-training ./.seed-cache/asean-training')
-    expect(dockerfile).toContain('cp -an /app/.seed-cache/. /app/.cache/')
-    expect(dockerfile).toContain('node scripts/world-start.mjs')
+    expect(dockerfile).toContain('ENV NGINX_ENVSUBST_FILTER=^WORLDWEAVE_UPSTREAM$')
+    expect(dockerfile).toContain('/etc/nginx/templates/nginx.conf.template')
   })
 
-  it('runs WorldWeave scene freshness checks during deploy', () => {
+  it('keeps WorldWeave runtime deployment outside the TopicLab stack', () => {
+    const compose = readFileSync(COMPOSE_PATH, 'utf-8')
     const workflow = readFileSync(DEPLOY_WORKFLOW_PATH, 'utf-8')
 
-    expect(workflow).toContain('WORLD_HEALTH_BASE_URL=http://127.0.0.1:3020')
-    expect(workflow).toContain('WORLD_HEALTH_CHECK_SCENES=tech-ai,geo-politics-daily')
-    expect(workflow).toContain('node scripts/health-world.mjs')
-    expect(workflow).toContain('worldweave-refresh logs')
+    expect(compose).not.toMatch(/^  worldweave:/m)
+    expect(compose).not.toMatch(/^  worldweave-refresh:/m)
+    expect(compose).toContain('WORLDWEAVE_UPSTREAM=${WORLDWEAVE_UPSTREAM:-http://host.docker.internal:5000}')
+    expect(workflow).not.toContain('docker compose exec -T worldweave')
+    expect(workflow).not.toContain('worldweave-refresh logs')
+    expect(workflow).not.toContain('set_submodule_url worldweave')
   })
 })

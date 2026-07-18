@@ -19,16 +19,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **TopicLab**
 
 - TopicLink deployment keeps the original two TopicLab web workers and delegates Zvec ownership to an internal single-writer service; deployers only provide the shared API base/key and existing workspace volume.
+- WorldWeave web and refresh processes now deploy independently; TopicLab only consumes configurable backend and frontend-proxy upstream URLs.
 
 ### Fixed
 
 **TopicLab**
 
 - Hardened TopicLink and OPC dispatch recovery, response counting, access control, task claiming, lease expiry, and terminal-state ownership without changing the underlying TopicLab discussion engine.
+- Prevented synchronous Zvec sidecar calls from blocking async TopicLink workers, made the Resonnet Docker package index configurable, and added production Zvec document-count validation.
 
 ### Docs
 
 - Documented TopicLink environment variables, initial Zvec package placement, automatic incremental updates, readiness checks, and the OpenClaw worker claim contract.
+- Added an independent WorldWeave deployment runbook with separate public/refresh process budgets and external-network checks.
 
 ## [1.15.0] - 2026-06-08
 

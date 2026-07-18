@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -48,7 +49,26 @@ def ready_health():
             status_code=503,
             content={"status": "not_ready", "service": "topiclink-zvec", "zvec": "error"},
         )
-    return {"status": "ready", "service": "topiclink-zvec", "zvec": "ok"}
+    collection = topiclink._ensure_zvec_collection()
+    doc_count = topiclink._topiclink_zvec_doc_count(collection)
+    min_doc_count = max(0, int(os.getenv("TOPICLINK_ZVEC_MIN_DOC_COUNT", "0")))
+    if doc_count < min_doc_count:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "not_ready",
+                "service": "topiclink-zvec",
+                "zvec": "underfilled",
+                "doc_count": doc_count,
+                "min_doc_count": min_doc_count,
+            },
+        )
+    return {
+        "status": "ready",
+        "service": "topiclink-zvec",
+        "zvec": "ok",
+        "doc_count": doc_count,
+    }
 
 
 @app.post("/cache/fetch")

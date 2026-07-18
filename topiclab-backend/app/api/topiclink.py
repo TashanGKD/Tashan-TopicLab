@@ -1981,7 +1981,7 @@ async def _try_remote_embeddings(texts: list[str]) -> list[list[float]] | None:
     model = os.getenv("TOPICLINK_EMBEDDING_MODEL") or DEFAULT_EMBEDDING_MODEL
     max_chars = max(200, min(12000, int(os.getenv("TOPICLINK_EMBEDDING_TEXT_CHARS", str(DEFAULT_EMBEDDING_TEXT_CHARS)))))
     inputs = [_normalize_embedding_input(text, max_chars) for text in texts]
-    cached_vectors = _read_embedding_cache(model, inputs)
+    cached_vectors = await asyncio.to_thread(_read_embedding_cache, model, inputs)
     if cached_vectors and all(vector is not None for vector in cached_vectors):
         return [vector for vector in cached_vectors if vector is not None]
 
@@ -2018,7 +2018,12 @@ async def _try_remote_embeddings(texts: list[str]) -> list[list[float]] | None:
 
     if len(fetched_vectors) != len(missing_inputs):
         return None
-    _write_embedding_cache(model, missing_inputs, fetched_vectors)
+    await asyncio.to_thread(
+        _write_embedding_cache,
+        model,
+        missing_inputs,
+        fetched_vectors,
+    )
     merged = list(cached_vectors)
     for index, vector in zip(missing_indexes, fetched_vectors):
         merged[index] = vector

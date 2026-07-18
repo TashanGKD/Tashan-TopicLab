@@ -18,12 +18,16 @@ FROM ${NGINX_BASE_IMAGE}
 COPY --from=builder /app/dist /usr/share/nginx/html
 # Use root nginx config when VITE_BASE_PATH is /, else the legacy /topic-lab/ config.
 ARG VITE_BASE_PATH=/
-COPY nginx.root.conf /tmp/nginx.root.conf
-COPY nginx.conf /tmp/nginx.conf
-RUN if [ "$VITE_BASE_PATH" = "/" ] || [ -z "$VITE_BASE_PATH" ]; then \
-      cp /tmp/nginx.root.conf /etc/nginx/nginx.conf; \
+ENV WORLDWEAVE_UPSTREAM=http://host.docker.internal:5000
+ENV NGINX_ENVSUBST_FILTER=^WORLDWEAVE_UPSTREAM$
+ENV NGINX_ENVSUBST_OUTPUT_DIR=/etc/nginx
+COPY nginx.root.conf /tmp/nginx.root.conf.template
+COPY nginx.conf /tmp/nginx.conf.template
+RUN mkdir -p /etc/nginx/templates && \
+    if [ "$VITE_BASE_PATH" = "/" ] || [ -z "$VITE_BASE_PATH" ]; then \
+      cp /tmp/nginx.root.conf.template /etc/nginx/templates/nginx.conf.template; \
     else \
-      cp /tmp/nginx.conf /etc/nginx/nginx.conf; \
+      cp /tmp/nginx.conf.template /etc/nginx/templates/nginx.conf.template; \
     fi
 
 EXPOSE 80

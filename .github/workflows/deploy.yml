@@ -57,19 +57,45 @@ jobs:
             set_submodule_url backend TashanGKD/Resonnet
             set_submodule_url topiclab-cli TashanGKD/TopicLab-CLI
             set_submodule_url ClawArcade TashanGKD/ClawArcade
-            set_submodule_url worldweave TashanGKD/worldweave
             git submodule update --init backend
             git config -f .git/modules/backend/config submodule.libs/assignable_skills/_submodules/ai-research.url "https://x-access-token:${SUBMODULE_AUTH}@github.com/Orchestra-Research/AI-Research-SKILLs.git"
             git config -f .git/modules/backend/config submodule.libs/assignable_skills/_submodules/anthropics.url "https://x-access-token:${SUBMODULE_AUTH}@github.com/anthropics/skills.git"
             git config -f .git/modules/backend/config submodule.libs/assignable_skills/_submodules/claude-scientific.url "https://x-access-token:${SUBMODULE_AUTH}@github.com/K-Dense-AI/claude-scientific-skills.git"
             git config -f .git/modules/backend/config --get submodule.libs/assignable_skills/_submodules/claude-scientific.url | sed -E 's#x-access-token:[^@]+@#x-access-token:***@#'
-            git submodule update --init --recursive
+            git submodule update --init --recursive backend topiclab-cli ClawArcade
 
             if [ -z "${DEPLOY_ENV:-}" ]; then
               echo "::error::DEPLOY_ENV secret is not set. Add it in repo Settings → Secrets."
               exit 1
             fi
             echo "$DEPLOY_ENV" > .env
+            printf '\nTOPICLINK_ZVEC_MIN_DOC_COUNT=2386\n' >> .env
+
+            WORKSPACE_PATH_VALUE="$(python3 - <<'PY'
+            from pathlib import Path
+
+            value = ""
+            for raw_line in Path(".env").read_text(encoding="utf-8").splitlines():
+                line = raw_line.strip()
+                if line.startswith("WORKSPACE_PATH="):
+                    value = line.split("=", 1)[1].strip().strip("\"'")
+            print(value)
+            PY
+            )"
+            if [ -z "$WORKSPACE_PATH_VALUE" ]; then
+              echo "::error::WORKSPACE_PATH is required for the TopicLink Zvec package."
+              exit 1
+            fi
+            if [[ "$WORKSPACE_PATH_VALUE" = /* ]]; then
+              TOPICLINK_ZVEC_DIR="${WORKSPACE_PATH_VALUE%/}/topiclink-zvec/qwen3-embedding-8b-4096"
+            else
+              TOPICLINK_ZVEC_DIR="$REPO_DIR/${WORKSPACE_PATH_VALUE%/}/topiclink-zvec/qwen3-embedding-8b-4096"
+            fi
+            if ! find "$TOPICLINK_ZVEC_DIR" -maxdepth 1 -type f -name 'manifest.*' -print -quit | grep -q .; then
+              echo "::error::TopicLink Zvec package is missing: $TOPICLINK_ZVEC_DIR/manifest.*"
+              echo "Upload and extract the validated package before running this deployment."
+              exit 1
+            fi
 
             run_with_heartbeat() {
               local label="$1"
@@ -84,6 +110,16 @@ jobs:
             }
 
             run_with_heartbeat "docker compose build" docker compose build
+            CURRENT_ZVEC_ID="$(docker compose ps -q topiclink-zvec 2>/dev/null || true)"
+            if [ -n "$CURRENT_ZVEC_ID" ] && [ "$(docker inspect -f '{{.State.Running}}' "$CURRENT_ZVEC_ID")" = "true" ]; then
+              docker compose exec -T topiclink-zvec python -c "import json, urllib.request; payload=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=15)); count=int(payload.get('doc_count') or 0); assert count >= 2386, payload; print(payload)"
+            else
+              docker compose run --rm --no-deps topiclink-zvec \
+                python scripts/validate_topiclink_zvec_collection.py \
+                /app/workspace/topiclink-zvec/qwen3-embedding-8b-4096 \
+                --min-doc-count 2386 \
+                --expected-dimensions 4096
+            fi
             docker compose down
             docker compose up -d
             for i in $(seq 1 30); do
@@ -97,21 +133,6 @@ jobs:
               fi
               sleep 2
             done
-            for i in $(seq 1 30); do
-              if docker compose exec -T worldweave node -e "fetch('http://127.0.0.1:3020/api/v1/openclaw/skill.md').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
-                break
-              fi
-              if [ "$i" = "30" ]; then
-                echo "::error::WorldWeave container did not become healthy on port 3020."
-                docker compose logs --tail=120 worldweave
-                exit 1
-              fi
-              sleep 2
-            done
-            if ! docker compose exec -T worldweave sh -lc "WORLD_HEALTH_BASE_URL=http://127.0.0.1:3020 WORLD_HEALTH_CHECK_SCENES=tech-ai,geo-politics-daily WORLD_HEALTH_FAIL_ON_REFRESH_DEGRADED=1 node scripts/health-world.mjs"; then
-              echo "::warning::WorldWeave scene freshness health check failed. Check the worldweave-refresh logs and source refresh status."
-              docker compose logs --tail=120 worldweave-refresh || true
-            fi
             docker image prune -f
 
             # Read frontend port from .env (default 3000); trim whitespace/CRLF to avoid nginx config issues

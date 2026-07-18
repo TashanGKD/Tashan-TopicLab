@@ -95,45 +95,22 @@ SOURCE_FEED_LIST_CACHE_TTL_SECONDS=30
 
 ### 9. WorldWeave Source Stream and Dashboard
 
-WorldWeave is the bundled world-signal runtime used by TopicLab's information page and OpenClaw research/calibration surface.
-
-Current `1.15.0` parent-repo baseline: `worldweave` submodule commit `3360d5d7686c94d8a0eb97a28ec92a01d6d2fbf5` (WorldWeave PR #12, ASEAN decision demo).
+WorldWeave is an independently deployed world-signal runtime. TopicLab does not build or restart its public and refresh processes.
 
 ```bash
-# topiclab-backend reads WorldWeave source snapshots through this internal URL
-WORLDWEAVE_BASE_URL=http://worldweave:3020
+# Backend-to-WorldWeave requests.
+WORLDWEAVE_BASE_URL=https://worldweave.example.com
 
-# Frontend embeds the dashboard through the same-origin proxy path
+# Frontend Nginx same-origin proxy upstream.
+WORLDWEAVE_UPSTREAM=https://worldweave.example.com
+
+# Browser-facing path remains on the TopicLab origin.
 VITE_WORLDWEAVE_FRONTEND_URL=/worldweave/
-
-# Host port for local Compose access
-WORLDWEAVE_HOST_PORT=3020
-
-# WorldWeave model and source-enrichment credentials
-MINIMAX_API_KEY=
-METASO_API_KEY=
-MINIMAX_BASE_URL=https://api.scnet.cn/api/llm/v1
-
-# Optional Postgres monitor sink for refresh runs, source health, and signals.
-# Keep this separate from TopicLab backend DATABASE_URL.
-WORLDWEAVE_DATABASE_URL=
 ```
 
-Docker Compose starts two WorldWeave services:
+For local development, start WorldWeave separately and use `http://host.docker.internal:5000` from TopicLab containers or `http://127.0.0.1:5000` from Vite. Model, search, refresh, database and memory settings belong to the WorldWeave server's `.env.local`, not TopicLab `DEPLOY_ENV`.
 
-- `worldweave`: public cache-first web/API service.
-- `worldweave-refresh`: background source-refresh daemon that keeps source knowledge, LiveBench, dashboard snapshots, and optional Postgres monitor rows current.
-
-Do not point `WORLD_BATCH_REFRESH_BASE_URL` at the public `worldweave` service in production. Compose sets `WORLD_SOURCE_REFRESH_MANAGE_WORKER=1` for `worldweave-refresh`, so the daemon starts its own heavy-refresh worker inside the refresh container. Use those defaults unless you are changing the WorldWeave runtime itself.
-
-Memory and Node heap defaults:
-
-```bash
-WORLDWEAVE_MEM_LIMIT=4g
-WORLDWEAVE_NODE_OPTIONS=--max-old-space-size=3072
-WORLDWEAVE_REFRESH_MEM_LIMIT=6g
-WORLDWEAVE_REFRESH_NODE_OPTIONS=--max-old-space-size=3072
-```
+See [worldweave-standalone.md](worldweave-standalone.md) for server requirements, Docker process separation and deployment order.
 
 ### 10. Literature API vs Source Feed “Academic” Tab
 

@@ -5,6 +5,7 @@ import pytest
 import zvec
 
 from scripts.migrate_topiclink_embedding_cache_to_zvec import migrate_cache, zvec_document_id
+from scripts.validate_topiclink_zvec_collection import validate_collection
 
 
 def _write_cache(path, *, dimensions: int = 4) -> list[dict]:
@@ -100,3 +101,27 @@ def test_rejects_mixed_embedding_dimensions(tmp_path):
 
     with pytest.raises(ValueError, match="dimension"):
         migrate_cache(source, tmp_path / "topiclink.zvec", optimize=False)
+
+
+def test_validates_deployable_zvec_collection(tmp_path):
+    source = tmp_path / "cache.jsonl.gz"
+    _write_cache(source)
+    target = tmp_path / "topiclink.zvec"
+    migrate_cache(source, target, optimize=True)
+
+    result = validate_collection(
+        target,
+        min_doc_count=2,
+        expected_dimensions=4,
+    )
+
+    assert result["doc_count"] == 2
+    assert result["dimensions"] == 4
+    assert result["index_completeness"] == 1.0
+
+    with pytest.raises(RuntimeError, match="below required minimum"):
+        validate_collection(
+            target,
+            min_doc_count=3,
+            expected_dimensions=4,
+        )
