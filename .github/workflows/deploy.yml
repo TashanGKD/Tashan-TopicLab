@@ -41,6 +41,11 @@ jobs:
               for i in 1 2 3; do git clone "$REPO_URL" "$REPO_DIR" && break || sleep 5; done
             fi
             cd "$REPO_DIR"
+            # Production deploys only the tracked TopicLab stack. In particular,
+            # do not auto-load stale server-local docker-compose.override files
+            # that can reintroduce the independently deployed WorldWeave services.
+            export COMPOSE_FILE="$REPO_DIR/docker-compose.yml"
+            echo "[deploy] Compose file: $COMPOSE_FILE (local overrides disabled)"
             git remote set-url origin "$REPO_URL"
             SUBMODULE_AUTH="${SUBMODULE_TOKEN:-$GITHUB_TOKEN}"
             set_submodule_url() {
@@ -164,8 +169,8 @@ jobs:
               fi
               exit 1
             fi
-            docker compose down
-            docker compose up -d
+            docker compose down --remove-orphans
+            docker compose up -d --remove-orphans
             for i in $(seq 1 30); do
               if docker compose exec -T topiclab-backend python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/topiclink/health/ready', timeout=5)"; then
                 break
