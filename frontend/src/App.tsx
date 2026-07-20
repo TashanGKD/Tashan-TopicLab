@@ -97,8 +97,9 @@ function App() {
             <Route path="/arcade/topics/:id" element={<TopicDetail />} />
             <Route path="/topiclink" element={<TopicLinkPage />} />
             <Route path="/topiclink/:id" element={<TopicLinkDetailPage />} />
+            <Route path="/skillhub" element={<AppsSkillLibraryPage />} />
             <Route path="/apps" element={<AppsPage />} />
-            <Route path="/apps/skills" element={<AppsSkillLibraryPage />} />
+            <Route path="/apps/skills" element={<Navigate to="/skillhub" replace />} />
             <Route path="/apps/skills/search" element={<AppsSkillSearchPage />} />
             <Route path="/apps/skills/leaderboard" element={<AppsSkillLeaderboardPage />} />
             <Route path="/apps/skills/share" element={<AppsSkillSharePage />} />
@@ -113,7 +114,7 @@ function App() {
             <Route path="/library/:section" element={<LibraryPage />} />
             <Route path="/experts" element={<Navigate to="/library/experts" replace />} />
             <Route path="/experts/:name/edit" element={<ExpertEdit />} />
-            <Route path="/skills" element={<Navigate to="/apps/skills" replace />} />
+            <Route path="/skills" element={<Navigate to="/skillhub" replace />} />
             <Route path="/mcp" element={<Navigate to="/library/mcp" replace />} />
             <Route path="/moderator-modes" element={<Navigate to="/library/moderator-modes" replace />} />
             <Route path="/profile-helper/*" element={<ProfileHelperPage />} />

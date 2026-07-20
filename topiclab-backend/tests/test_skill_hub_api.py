@@ -137,6 +137,492 @@ def test_skill_hub_public_seeded_routes(client):
     assert "GET /api/v1/skill-hub/skills/{id_or_slug}/content" in guide.text
 
 
+def test_science_catalog_is_built_in_filterable_and_traceable(client):
+    meta = client.get("/api/v1/skill-hub/science-catalog/meta")
+    assert meta.status_code == 200, meta.text
+    payload = meta.json()
+    assert payload["total"] == 1391
+    assert payload["dimensions"]["stages"] == ["发现获取", "构思设计", "执行采集", "分析验证", "表达发表"]
+    assert len(payload["dimensions"]["functions"]) == 17
+    assert payload["source"]["repository"] == "TashanGKD/tashan-research-skills"
+    assert len(payload["source"]["sha256"]) == 64
+
+    response = client.get(
+        "/api/v1/skill-hub/science-catalog",
+        params={"domain": "生命科学", "stage": "执行采集", "function": "模拟建模", "limit": 5},
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["total"] > 0
+    assert len(result["list"]) <= 5
+    assert all(item["domain"] == "生命科学" for item in result["list"])
+    assert all(item["stage"] == "执行采集" for item in result["list"])
+    assert all(item["function"] == "模拟建模" for item in result["list"])
+    assert all(item["source_repository"] and item["source_path"] for item in result["list"])
+
+    detail = client.get(f"/api/v1/skill-hub/science-catalog/{result['list'][0]['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["id"] == result["list"][0]["id"]
+
+
+def test_science_catalog_sort_is_stable_and_source_review_aware(monkeypatch):
+    from app.services import science_skill_catalog
+
+    skills = [
+        {
+            "id": "trusted-metadata",
+            "name": "Beta",
+            "readiness": "trusted",
+            "review_status": "metadata_reviewed",
+            "quality_score": 99,
+        },
+        {
+            "id": "provisional-manual",
+            "name": "Alpha",
+            "readiness": "provisional",
+            "review_status": "manual_confirmed",
+            "quality_score": 100,
+        },
+        {
+            "id": "trusted-manual",
+            "name": "Gamma",
+            "readiness": "trusted",
+            "review_status": "manual_confirmed",
+            "quality_score": 80,
+        },
+    ]
+    monkeypatch.setattr(science_skill_catalog, "_load_catalog", lambda: ({"skills": skills}, "digest"))
+
+    result = science_skill_catalog.list_catalog_skills(limit=10)
+
+    assert [item["id"] for item in result["list"]] == [
+        "trusted-manual",
+        "trusted-metadata",
+        "provisional-manual",
+    ]
+
+
+def test_science_catalog_search_matches_bilingual_field_tokens(monkeypatch):
+    from app.services import science_skill_catalog
+
+    skills = [
+        {
+            "id": "protein-analysis",
+            "name": "Protein analysis",
+            "summary": "Analyze protein structure and sequence data.",
+            "task": "蛋白质结构分析",
+            "readiness": "trusted",
+            "review_status": "manual_confirmed",
+            "quality_score": 90,
+        },
+        {
+            "id": "paper-writing",
+            "name": "Paper writing",
+            "summary": "Draft a research manuscript.",
+            "task": "科研写作",
+            "readiness": "trusted",
+            "review_status": "manual_confirmed",
+            "quality_score": 90,
+        },
+    ]
+    monkeypatch.setattr(science_skill_catalog, "_load_catalog", lambda: ({"skills": skills}, "digest"))
+
+    english = science_skill_catalog.list_catalog_skills(q="protein structure", limit=10)
+    chinese = science_skill_catalog.list_catalog_skills(q="蛋白质结构", limit=10)
+
+    assert [item["id"] for item in english["list"]] == ["protein-analysis"]
+    assert [item["id"] for item in chinese["list"]] == ["protein-analysis"]
+
+
+def test_science_finder_uses_agentscope_only_for_valid_taxonomy_routing(client, monkeypatch):
+    from app.services import science_skill_finder
+
+    monkeypatch.setenv("SCIENCE_SKILL_FINDER_API_KEY", "test-key")
+    monkeypatch.setenv("SCIENCE_SKILL_FINDER_BASE_URL", "https://example.invalid/v1")
+    monkeypatch.setenv("SCIENCE_SKILL_FINDER_MODEL", "glm5.2")
+
+    async def fake_route_with_agentscope(query, dimensions, config):
+        assert query == "我想预测蛋白质三维结构，并比较不同候选模型"
+        assert "生命科学" in dimensions["domains"]
+        return {
+            "domain": "生命科学",
+            "stage": "执行采集",
+            "function": "模拟建模",
+            "search_terms": ["蛋白质", "结构预测"],
+            "rationale": "主要产物是蛋白质三维结构模型。",
+            "skill_ids": ["not-allowed-model-answer"],
+            "__skill_mounted": True,
+        }
+
+    async def fake_recommend_with_agentscope(query, route, candidates, config, limit):
+        assert query == "我想预测蛋白质三维结构，并比较不同候选模型"
+        assert route["domain"] == "生命科学"
+        assert route["stage"] == "执行采集"
+        assert any(item["id"] == "alphafold2" for item in candidates)
+        assert limit == 6
+        return [
+            {
+                "id": "alphafold2",
+                "reason": "研究对象和预期产物都与蛋白质结构预测直接匹配。",
+            }
+        ]
+
+    monkeypatch.setattr(science_skill_finder, "_route_with_agentscope", fake_route_with_agentscope)
+    monkeypatch.setattr(
+        science_skill_finder,
+        "_recommend_with_agentscope",
+        fake_recommend_with_agentscope,
+    )
+    response = client.post(
+        "/api/v1/skill-hub/science-catalog/find",
+        json={"query": "我想预测蛋白质三维结构，并比较不同候选模型", "limit": 6},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["driver"] == {
+        "orchestrator": "AgentScope",
+        "provider": "SCNet",
+        "model": "glm5.2",
+        "mode": "model",
+        "configured": True,
+        "skill_mounted": True,
+        "message": "AgentScope 已完成三维路由与候选推荐",
+    }
+    assert payload["route"]["domain"] == "生命科学"
+    assert payload["route"]["stage"] == "执行采集"
+    assert payload["route"]["function"] == "模拟建模"
+    assert [item["id"] for item in payload["results"]] == ["alphafold2"]
+    assert payload["results"][0]["recommendation_reason"] == "研究对象和预期产物都与蛋白质结构预测直接匹配。"
+    assert all(item["domain"] == "生命科学" for item in payload["results"])
+    assert all(item["stage"] == "执行采集" for item in payload["results"])
+    assert payload["results"][0]["function"] == "模拟建模"
+    assert all(item["id"] != "not-allowed-model-answer" for item in payload["results"])
+    assert payload["ranking"]["criteria"] == [
+        {"key": "semantic_match", "label": "需求语义匹配"},
+        {"key": "task_match", "label": "任务匹配"},
+        {"key": "function_match", "label": "功能偏好"},
+        {"key": "quality_score", "label": "质量分"},
+    ]
+    assert [item["rank"] for item in payload["results"]] == list(range(1, len(payload["results"]) + 1))
+    assert all(item["ranking_signals"]["task_match"] >= 0 for item in payload["results"])
+    assert all(item["ranking_signals"]["semantic_match"] > 0 for item in payload["results"])
+    assert all(item["ranking_signals"]["readiness"] == item["readiness"] for item in payload["results"])
+    assert all(item["ranking_signals"]["source_review"] == item["review_status"] for item in payload["results"])
+    assert all(item["ranking_signals"]["quality_score"] == item["quality_score"] for item in payload["results"])
+
+
+def test_science_finder_prefers_skillhub_scnet_api_key(monkeypatch):
+    from app.services import science_skill_finder
+
+    monkeypatch.setenv("skillhub_scnet_api_key", "skillhub-scnet-test-key")
+    monkeypatch.setenv("SCNET_API_KEY", "topiclink-scnet-test-key")
+    monkeypatch.delenv("SCIENCE_SKILL_FINDER_API_KEY", raising=False)
+
+    config = science_skill_finder.get_finder_config()
+
+    assert config.api_key == "skillhub-scnet-test-key"
+
+
+def test_science_finder_streams_route_and_recommendations(client, monkeypatch):
+    from app.api import skill_hub
+
+    result = {
+        "query": "单细胞类型注释",
+        "route": {
+            "domain": "生命科学",
+            "stage": "分析验证",
+            "function": "数据处理",
+            "search_terms": ["单细胞", "细胞类型"],
+            "rationale": "主要产物是细胞类型标签。",
+        },
+        "results": [{"id": "single-cell-annotation", "name": "Single Cell Annotation"}],
+        "total": 1,
+        "ranking": {"criteria": [{"key": "semantic_match", "label": "需求语义匹配"}]},
+        "driver": {"mode": "model", "skill_mounted": True},
+    }
+
+    async def fake_find(query, *, limit, on_event=None):
+        assert query == "单细胞类型注释"
+        assert limit == 5
+        assert on_event is not None
+        await on_event("route", result["route"])
+        await on_event("status", {"message": "正在复核候选技能"})
+        await on_event("result", result["results"][0])
+        return result
+
+    monkeypatch.setattr(skill_hub, "find_science_skills", fake_find)
+    response = client.post(
+        "/api/v1/skill-hub/science-catalog/find/stream",
+        json={"query": "单细胞类型注释", "limit": 5},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("text/event-stream")
+    text = response.text
+    assert text.index("event: status") < text.index("event: route")
+    assert text.index("event: route") < text.index("event: result")
+    assert text.index("event: result") < text.index("event: done")
+    assert '"id":"single-cell-annotation"' in text
+    assert '"skill_mounted":true' in text
+
+
+def test_science_finder_config_can_read_local_secret_docx(tmp_path, monkeypatch):
+    import zipfile
+
+    from app.services import science_skill_finder
+
+    fake_api_key = "sk-" + "test_secret_value_1234567890"
+    secret_doc = tmp_path / "provider.docx"
+    with zipfile.ZipFile(secret_doc, "w") as archive:
+        archive.writestr(
+            "word/document.xml",
+            '<w:document xmlns:w="test"><w:t>https://api.example.test/api/llm/v1</w:t>'
+            f"<w:t>{fake_api_key}</w:t></w:document>",
+        )
+    monkeypatch.setenv("SCIENCE_SKILL_FINDER_SECRET_DOCX", str(secret_doc))
+    monkeypatch.delenv("skillhub_scnet_api_key", raising=False)
+    monkeypatch.delenv("SCIENCE_SKILL_FINDER_API_KEY", raising=False)
+    monkeypatch.delenv("SCIENCE_SKILL_FINDER_BASE_URL", raising=False)
+    monkeypatch.delenv("SCNET_API_KEY", raising=False)
+    monkeypatch.delenv("SCNET_BASE_URL", raising=False)
+
+    config = science_skill_finder.get_finder_config()
+
+    assert config.base_url == "https://api.example.test/api/llm/v1"
+    assert config.api_key == fake_api_key
+    assert config.protocol == "openai"
+
+
+def test_science_finder_parses_json_after_model_reasoning_text():
+    from app.services.science_skill_finder import _parse_json_object
+
+    parsed = _parse_json_object(
+        '<think>先比较对象与产物，不能采用 {未验证候选}。</think>\n'
+        '```json\n{"recommendations":[{"id":"alphafold2","reason":"对象和产物直接匹配"}]}\n```'
+    )
+
+    assert parsed["recommendations"][0]["id"] == "alphafold2"
+
+
+def test_science_finder_falls_back_to_local_catalog_without_model_credentials(client, monkeypatch):
+    monkeypatch.setenv("SCIENCE_SKILL_FINDER_USE_DESKTOP_SCNET", "0")
+    monkeypatch.delenv("skillhub_scnet_api_key", raising=False)
+    monkeypatch.delenv("SCIENCE_SKILL_FINDER_API_KEY", raising=False)
+    monkeypatch.delenv("SCNET_API_KEY", raising=False)
+
+    capabilities = client.get("/api/v1/skill-hub/science-catalog/finder/capabilities")
+    assert capabilities.status_code == 200, capabilities.text
+    assert capabilities.json()["configured"] is False
+    assert capabilities.json()["orchestrator"] == "AgentScope"
+
+    response = client.post(
+        "/api/v1/skill-hub/science-catalog/find",
+        json={"query": "蛋白质结构预测", "limit": 5},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["driver"]["mode"] == "local_fallback"
+    assert payload["driver"]["configured"] is False
+    assert not any(term in payload["route"]["rationale"] for term in ("模型不可用", "本地路由", "降级", "SCNet"))
+    assert payload["results"]
+    assert all(item["source_repository"] and item["source_path"] for item in payload["results"])
+
+    english = client.post(
+        "/api/v1/skill-hub/science-catalog/find",
+        json={"query": "reproduce paper results", "limit": 5},
+    )
+    assert english.status_code == 200, english.text
+    english_payload = english.json()
+    assert english_payload["route"]["stage"] == "分析验证"
+    assert english_payload["route"]["function"] == "验证评测"
+    assert any(item["id"] == "paper-reproduce" for item in english_payload["results"])
+
+    unrelated = client.post(
+        "/api/v1/skill-hub/science-catalog/find",
+        json={"query": "zzqvorn blxkpt 9876543210", "limit": 5},
+    )
+    assert unrelated.status_code == 200, unrelated.text
+    unrelated_payload = unrelated.json()
+    assert unrelated_payload["route"]["domain"] is None
+    assert unrelated_payload["route"]["stage"] is None
+    assert unrelated_payload["route"]["function"] is None
+    assert unrelated_payload["results"] == []
+    assert unrelated_payload["total"] == 0
+
+    for vague_query in ("做研究", "我需要一个工具", "帮我处理数据", "I need a research tool"):
+        vague = client.post(
+            "/api/v1/skill-hub/science-catalog/find",
+            json={"query": vague_query, "limit": 5},
+        )
+        assert vague.status_code == 200, vague.text
+        vague_payload = vague.json()
+        assert vague_payload["route"]["domain"] is None
+        assert vague_payload["route"]["stage"] is None
+        assert vague_payload["route"]["function"] is None
+        assert vague_payload["results"] == []
+        assert vague_payload["total"] == 0
+
+    for specific_query in ("AlphaFold2", "蛋白质结构预测", "因果推断"):
+        specific = client.post(
+            "/api/v1/skill-hub/science-catalog/find",
+            json={"query": specific_query, "limit": 5},
+        )
+        assert specific.status_code == 200, specific.text
+        specific_payload = specific.json()
+        assert any(
+            specific_payload["route"].get(key)
+            for key in ("domain", "stage", "function")
+        )
+        assert specific_payload["results"]
+
+
+def test_critic_evaluation_contract_fails_closed_without_worker(client, monkeypatch):
+    monkeypatch.delenv("SKILL_HUB_CRITIC_WORKER_URL", raising=False)
+    capabilities = client.get("/api/v1/skill-hub/evaluations/capabilities")
+    assert capabilities.status_code == 200, capabilities.text
+    assert capabilities.json()["worker_available"] is False
+    assert capabilities.json()["supported_kinds"] == ["skill", "mcp"]
+    assert capabilities.json()["supported_depths"] == ["standard"]
+    assert capabilities.json()["evaluation_profile"] == "standard"
+
+    owner = register_and_login(client, phone="13800019992", username="critic-viewer")
+    response = client.post(
+        "/api/v1/skill-hub/evaluations",
+        json={"kind": "skill", "target": "https://github.com/example/research-skill", "depth": "quick"},
+        headers={"Authorization": f"Bearer {owner['token']}"},
+    )
+    assert response.status_code == 503
+    assert "评测 Worker" in response.json()["detail"]
+
+
+def test_critic_evaluation_allows_isolated_anonymous_jobs(client, monkeypatch):
+    calls = []
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self.payload
+
+    class FakeAsyncClient:
+        def __init__(self, *, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, *, json, headers):
+            calls.append(("post", url, json, headers))
+            return FakeResponse({"job_id": "critic-job-1", "status": "queued", **json})
+
+        async def get(self, url, *, headers, params=None):
+            calls.append(("get", url, params, headers))
+            if url.endswith("/health"):
+                return FakeResponse(
+                    {
+                        "ready": True,
+                        "supported_kinds": ["skill", "mcp"],
+                        "evaluation_profile": "standard",
+                        "runtime": {
+                            "orchestrator": "agentscope",
+                            "provider": "aistar",
+                            "model": "glm5.2",
+                        },
+                    }
+                )
+            return FakeResponse(
+                {
+                    "job_id": "critic-job-1",
+                    "status": "completed",
+                    "verdict": "建议安装",
+                    "score": 91,
+                    "evidence": {"behavior_cases": 3, "behavior_pairs": 6, "trigger_queries": 8},
+                }
+            )
+
+    monkeypatch.setenv("SKILL_HUB_CRITIC_WORKER_URL", "http://critic-worker:8090")
+    monkeypatch.setenv("SKILL_HUB_CRITIC_WORKER_TOKEN", "test-worker-token")
+    monkeypatch.setattr("app.services.critic_evaluation.httpx.AsyncClient", FakeAsyncClient)
+    capabilities = client.get("/api/v1/skill-hub/evaluations/capabilities")
+    assert capabilities.status_code == 200, capabilities.text
+    assert capabilities.json()["worker_available"] is True
+    assert capabilities.json()["runtime"] == {
+        "orchestrator": "agentscope",
+        "provider": "aistar",
+        "model": "glm5.2",
+    }
+
+    submitted = client.post(
+        "/api/v1/skill-hub/evaluations",
+        json={"kind": "skill", "target": "https://github.com/example/research-skill", "depth": "quick"},
+    )
+    assert submitted.status_code == 200, submitted.text
+    assert submitted.json()["job_id"] == "critic-job-1"
+    cookie_header = submitted.headers.get("set-cookie", "")
+    assert "skillhub_critic_guest=" in cookie_header
+    assert "HttpOnly" in cookie_header
+    assert "SameSite=lax" in cookie_header
+    requester_id = calls[1][2]["requester_id"]
+    assert requester_id >= 2**62
+    assert calls[0] == (
+        "get",
+        "http://critic-worker:8090/health",
+        None,
+        {"Authorization": "Bearer test-worker-token"},
+    )
+    assert calls[1] == (
+        "post",
+        "http://critic-worker:8090/api/v1/evaluations",
+        {
+            "kind": "skill",
+            "target": "https://github.com/example/research-skill",
+            "depth": "standard",
+            "evaluation_profile": "standard",
+            "runtime": {
+                "orchestrator": "agentscope",
+                "provider": "aistar",
+                "model": "glm5.2",
+            },
+            "requester_id": requester_id,
+            "source": "topiclab-skill-hub",
+        },
+        {"Authorization": "Bearer test-worker-token"},
+    )
+
+    completed = client.get("/api/v1/skill-hub/evaluations/critic-job-1")
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["evidence"]["behavior_pairs"] == 6
+    assert calls[2] == (
+        "get",
+        "http://critic-worker:8090/api/v1/evaluations/critic-job-1",
+        {"requester_id": requester_id},
+        {"Authorization": "Bearer test-worker-token"},
+    )
+
+    streamed = client.get("/api/v1/skill-hub/evaluations/critic-job-1/stream")
+    assert streamed.status_code == 200, streamed.text
+    assert "event: job" in streamed.text
+    assert '"status":"completed"' in streamed.text
+    assert calls[3] == (
+        "get",
+        "http://critic-worker:8090/api/v1/evaluations/critic-job-1",
+        {"requester_id": requester_id},
+        {"Authorization": "Bearer test-worker-token"},
+    )
+
+    client.cookies.clear()
+    missing_session = client.get("/api/v1/skill-hub/evaluations/critic-job-1")
+    assert missing_session.status_code == 404
+    assert len(calls) == 4
+
+
 def test_skill_hub_publish_review_and_profile_flow(client):
     owner = register_and_login(client, phone="13800010001", username="owner")
     reviewer = register_and_login(client, phone="13800010002", username="reviewer")

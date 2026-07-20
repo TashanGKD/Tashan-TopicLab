@@ -76,6 +76,10 @@ export default defineConfig(({ mode }) => {
           target: topicLabTarget,
           changeOrigin: true,
         },
+        '/api/v1/skill-hub': {
+          target: topicLabTarget,
+          changeOrigin: true,
+        },
         '/api/v1/topiclink': {
           target: topicLabTarget,
           changeOrigin: true,

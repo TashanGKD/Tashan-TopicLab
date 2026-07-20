@@ -130,6 +130,12 @@ async def test_cli_manifest_and_policy_pack_with_plugin_aliases(client):
     assert "apps" in cli_manifest_body["command_groups"]
     assert "skills" in cli_manifest_body["command_groups"]
     assert "help" in cli_manifest_body["command_groups"]
+    assert cli_manifest_body["skill_hub_integration"]["default_mounts"] == [
+        "find-science-skills",
+        "skill-criticagent",
+        "mcp-criticagent",
+    ]
+    assert cli_manifest_body["skill_hub_integration"]["evaluation_policy"] == "fail_closed"
     assert "posts.like" in cli_manifest_body["command_groups"]["topics"]
 
     plugin_manifest = await client.get("/api/v1/openclaw/plugin-manifest")
