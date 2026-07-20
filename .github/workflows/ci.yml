@@ -23,7 +23,6 @@ jobs:
       run_agent_sdk: ${{ steps.diff.outputs.run_agent_sdk }}
       run_docker: ${{ steps.diff.outputs.run_docker }}
       run_worldweave: ${{ steps.diff.outputs.run_worldweave }}
-      run_topiclab_backend: ${{ steps.diff.outputs.run_topiclab_backend }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,7 +38,6 @@ jobs:
             echo "run_agent_sdk=true" >> "$GITHUB_OUTPUT"
             echo "run_docker=true" >> "$GITHUB_OUTPUT"
             echo "run_worldweave=true" >> "$GITHUB_OUTPUT"
-            echo "run_topiclab_backend=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
@@ -54,14 +52,13 @@ jobs:
             echo "run_agent_sdk=true" >> "$GITHUB_OUTPUT"
             echo "run_docker=true" >> "$GITHUB_OUTPUT"
             echo "run_worldweave=true" >> "$GITHUB_OUTPUT"
-            echo "run_topiclab_backend=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           CHANGED=$(git diff --name-only "$BASE" HEAD 2>/dev/null || echo "")
 
           # TopicLab backend: auth, topics, TopicLink, Zvec sidecar, and their tests
-          if echo "$CHANGED" | grep -qE '^topiclab-backend/|^docker-compose\.(yml|yaml)|^\.github/workflows/(ci|deploy)\.yml|^deploy/topiclink-zvec\.lock\.json$|^scripts/topiclink_zvec_release\.py$'; then
+          if echo "$CHANGED" | grep -qE '^topiclab-backend/|^docker-compose\.(yml|yaml)|^\.github/workflows/(ci|deploy)\.yml|^deploy/topiclink-zvec\.lock\.json$|^scripts/(topiclink_zvec_release|sync_science_skill_catalog)\.py$|^backend$'; then
             echo "run_topiclab_backend=true" >> "$GITHUB_OUTPUT"
           else
             echo "run_topiclab_backend=false" >> "$GITHUB_OUTPUT"
@@ -102,12 +99,6 @@ jobs:
             echo "run_worldweave=false" >> "$GITHUB_OUTPUT"
           fi
 
-          # TopicLab backend: SkillHub, Critic Worker, catalog sync, or its seed submodule.
-          if echo "$CHANGED" | grep -qE '^topiclab-backend/|^scripts/sync_science_skill_catalog\.py$|^backend$|^\.github/workflows/ci\.yml$'; then
-            echo "run_topiclab_backend=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run_topiclab_backend=false" >> "$GITHUB_OUTPUT"
-          fi
   # ─────────────────────────────────────────────────────────────────────────
   # Layer 1: Frontend build (compile + typecheck)
   # ─────────────────────────────────────────────────────────────────────────
