@@ -1,6 +1,7 @@
 import base64
 import io
 import json
+import os
 import pathlib
 import subprocess
 import tarfile
@@ -284,8 +285,10 @@ def test_github_codeload_archive_rejects_path_escape(monkeypatch, tmp_path):
 def test_github_codeload_archive_uses_short_ephemeral_root_for_long_job_path(monkeypatch, tmp_path):
     from app import critic_runner
 
-    job = tmp_path / ("long-job-path-" * 5)
-    job.mkdir()
+    job = tmp_path
+    while len(str((job / "source-archive").resolve())) <= 160:
+        job /= "long-job-path"
+    job.mkdir(parents=True)
     short_temp = tmp_path / "short"
     archive_buffer = io.BytesIO()
     with tarfile.open(fileobj=archive_buffer, mode="w:gz") as archive:
@@ -1101,7 +1104,7 @@ def test_mcp_report_adapter_rejects_silent_basic_fallback(tmp_path):
     assert result["blocker"] == "mcp_smart_test_evidence_missing"
 
 
-def test_bounded_process_terminates_windows_process_tree_on_timeout(monkeypatch, tmp_path):
+def test_bounded_process_terminates_process_on_timeout(monkeypatch, tmp_path):
     from app import critic_runner
 
     command = ["slow-tool", "--child"]
@@ -1110,6 +1113,7 @@ def test_bounded_process_terminates_windows_process_tree_on_timeout(monkeypatch,
         pid = 4242
         returncode = None
         calls = 0
+        killed = False
 
         def communicate(self, timeout=None):
             self.calls += 1
@@ -1117,6 +1121,9 @@ def test_bounded_process_terminates_windows_process_tree_on_timeout(monkeypatch,
                 raise subprocess.TimeoutExpired(command, timeout, output="partial", stderr="waiting")
             self.returncode = 1
             return "partial", "terminated"
+
+        def kill(self):
+            self.killed = True
 
     process = FakeProcess()
     cleanup_commands = []
@@ -1131,7 +1138,12 @@ def test_bounded_process_terminates_windows_process_tree_on_timeout(monkeypatch,
     with pytest.raises(subprocess.TimeoutExpired):
         critic_runner._run_bounded_process(command, cwd=tmp_path, timeout=1)
 
-    assert cleanup_commands == [["taskkill", "/PID", "4242", "/T", "/F"]]
+    if os.name == "nt":
+        assert cleanup_commands == [["taskkill", "/PID", "4242", "/T", "/F"]]
+        assert process.killed is False
+    else:
+        assert cleanup_commands == []
+        assert process.killed is True
     assert process.calls == 2
 
 
