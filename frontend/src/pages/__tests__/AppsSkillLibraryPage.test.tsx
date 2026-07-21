@@ -320,7 +320,8 @@ describe('SkillHub pages', () => {
 
     renderSkillHubHome()
     await screen.findByText('评测服务可用')
-    expect(screen.getByText(/无需登录/)).toBeInTheDocument()
+    expect(screen.getByText(/登录后可提交公开仓库评测/)).toBeInTheDocument()
+    expect(screen.getAllByText(/发送给 SCNet 模型/).length).toBeGreaterThan(0)
 
     expect(screen.getByLabelText('Skill 仓库地址')).toHaveValue(
       'https://github.com/anthropics/skills/tree/main/skills/doc-coauthoring',

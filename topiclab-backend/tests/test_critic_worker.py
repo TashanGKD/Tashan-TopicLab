@@ -1,6 +1,8 @@
 import asyncio
 import json
+from datetime import datetime, timedelta, timezone
 
+import httpx
 from fastapi.testclient import TestClient
 
 
@@ -127,13 +129,155 @@ def test_worker_fails_closed_on_auth_contract_and_ownership(tmp_path):
     assert forbidden.status_code == 404
 
 
+def test_worker_fails_closed_when_internal_auth_is_unconfigured(monkeypatch, tmp_path):
+    from app.critic_worker import create_critic_worker_app
+
+    monkeypatch.delenv("skillhub_scnet_api_key", raising=False)
+
+    async def fake_runner(request, job_dir):
+        return {"status": "completed"}
+
+    client = TestClient(create_critic_worker_app(runner=fake_runner, state_dir=tmp_path))
+    response = client.post(
+        "/api/v1/evaluations",
+        json={
+            "kind": "skill",
+            "target": "https://github.com/example/research-skill",
+            "depth": "standard",
+            "evaluation_profile": "standard",
+            "runtime": RUNTIME,
+            "requester_id": 17,
+            "source": "topiclab-skill-hub",
+        },
+    )
+
+    assert response.status_code == 503
+    assert "authentication" in response.json()["detail"]
+
+
+def test_worker_rejects_noncanonical_github_and_option_like_npm_targets(tmp_path):
+    from app.critic_worker import create_critic_worker_app
+
+    async def fake_runner(request, job_dir):
+        return {"status": "completed"}
+
+    client = TestClient(
+        create_critic_worker_app(
+            runner=fake_runner,
+            worker_token="worker-secret",
+            state_dir=tmp_path,
+        )
+    )
+    headers = {"Authorization": "Bearer worker-secret"}
+    base = {
+        "depth": "standard",
+        "evaluation_profile": "standard",
+        "runtime": RUNTIME,
+        "requester_id": 17,
+        "source": "topiclab-skill-hub",
+    }
+    invalid_targets = (
+        ("skill", "https://github.com:8443/example/research-skill"),
+        ("skill", "https://github.com/example/research-skill?ref=main"),
+        ("mcp", "--help"),
+        ("mcp", "../local-package"),
+    )
+
+    for kind, target in invalid_targets:
+        response = client.post(
+            "/api/v1/evaluations",
+            json={**base, "kind": kind, "target": target},
+            headers=headers,
+        )
+        assert response.status_code == 422, (target, response.text)
+
+
+def test_worker_rejects_new_jobs_when_capacity_is_full(tmp_path):
+    from app.critic_worker import create_critic_worker_app
+
+    async def exercise():
+        started = asyncio.Event()
+        release = asyncio.Event()
+
+        async def slow_runner(request, job_dir):
+            started.set()
+            await release.wait()
+            return {"status": "completed"}
+
+        app = create_critic_worker_app(
+            runner=slow_runner,
+            worker_token="worker-secret",
+            state_dir=tmp_path,
+            max_concurrent_jobs=1,
+            max_pending_jobs=0,
+        )
+        headers = {"Authorization": "Bearer worker-secret"}
+        payload = {
+            "kind": "skill",
+            "target": "https://github.com/example/first-skill",
+            "depth": "standard",
+            "evaluation_profile": "standard",
+            "runtime": RUNTIME,
+            "requester_id": 17,
+            "source": "topiclab-skill-hub",
+        }
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://worker.test",
+        ) as client:
+            first = asyncio.create_task(
+                client.post("/api/v1/evaluations", json=payload, headers=headers)
+            )
+            await asyncio.wait_for(started.wait(), timeout=2)
+            second = await client.post(
+                "/api/v1/evaluations",
+                json={**payload, "target": "https://github.com/example/second-skill"},
+                headers=headers,
+            )
+            assert second.status_code == 429
+            assert second.headers["retry-after"] == "60"
+            release.set()
+            assert (await first).status_code == 202
+
+    asyncio.run(exercise())
+
+
+def test_job_store_removes_expired_terminal_state(tmp_path):
+    from app.critic_worker import JobStore
+
+    job_dir = tmp_path / "expired-job"
+    job_dir.mkdir()
+    old = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    (job_dir / "job.json").write_text(
+        json.dumps(
+            {
+                "job_id": "expired-job",
+                "status": "completed",
+                "requester_id": 17,
+                "created_at": old,
+                "updated_at": old,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    store = JobStore(tmp_path, retention_seconds=60, max_stored_jobs=10)
+
+    assert store.get("expired-job") is None
+    assert not job_dir.exists()
+
+
 def test_worker_health_reports_runner_and_fixed_runtime(tmp_path):
     from app.critic_worker import create_critic_worker_app
 
     async def fake_runner(request, job_dir):
         return {"status": "blocked"}
 
-    app = create_critic_worker_app(runner=fake_runner, state_dir=tmp_path)
+    app = create_critic_worker_app(
+        runner=fake_runner,
+        worker_token="worker-secret",
+        state_dir=tmp_path,
+    )
     response = TestClient(app).get("/health")
 
     assert response.status_code == 200
@@ -182,8 +326,13 @@ def test_worker_does_not_claim_unrun_behavior_steps_for_blocked_result(tmp_path)
             },
         }
 
-    app = create_critic_worker_app(runner=blocked_runner, state_dir=tmp_path)
+    app = create_critic_worker_app(
+        runner=blocked_runner,
+        worker_token="worker-secret",
+        state_dir=tmp_path,
+    )
     client = TestClient(app)
+    headers = {"Authorization": "Bearer worker-secret"}
     response = client.post(
         "/api/v1/evaluations",
         json={
@@ -195,10 +344,13 @@ def test_worker_does_not_claim_unrun_behavior_steps_for_blocked_result(tmp_path)
             "requester_id": 17,
             "source": "topiclab-skill-hub",
         },
+        headers=headers,
     )
     job_id = response.json()["job_id"]
     result = client.get(
-        f"/api/v1/evaluations/{job_id}", params={"requester_id": 17}
+        f"/api/v1/evaluations/{job_id}",
+        params={"requester_id": 17},
+        headers=headers,
     ).json()
 
     assert result["status"] == "blocked"
@@ -210,7 +362,7 @@ def test_worker_does_not_claim_unrun_behavior_steps_for_blocked_result(tmp_path)
     }
 
 
-def test_worker_exposes_runner_progress_for_a_running_job(tmp_path):
+def test_worker_preserves_progress_when_restart_interrupts_a_running_job(tmp_path):
     from app.critic_worker import create_critic_worker_app
 
     job_id = "running-job"
@@ -274,12 +426,22 @@ def test_worker_exposes_runner_progress_for_a_running_job(tmp_path):
     async def fake_runner(request, current_job_dir):
         return {"status": "blocked"}
 
-    client = TestClient(create_critic_worker_app(runner=fake_runner, state_dir=tmp_path))
+    client = TestClient(
+        create_critic_worker_app(
+            runner=fake_runner,
+            worker_token="worker-secret",
+            state_dir=tmp_path,
+        )
+    )
     response = client.get(
-        f"/api/v1/evaluations/{job_id}", params={"requester_id": 17}
+        f"/api/v1/evaluations/{job_id}",
+        params={"requester_id": 17},
+        headers={"Authorization": "Bearer worker-secret"},
     )
 
     assert response.status_code == 200
+    assert response.json()["status"] == "failed"
+    assert response.json()["error_type"] == "WorkerRestarted"
     assert response.json()["progress"] == {
         "current_step": "behavior",
         "completed_steps": ["validation"],

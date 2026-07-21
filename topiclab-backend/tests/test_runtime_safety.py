@@ -197,6 +197,38 @@ def test_topiclab_backend_compose_healthcheck_uses_readiness_probe():
     assert "http://127.0.0.1:8000/health', timeout=15" not in service_block
 
 
+def test_critic_worker_compose_isolates_secrets_and_network():
+    compose_source = (PROJECT_ROOT.parent / "docker-compose.yml").read_text(encoding="utf-8")
+    backend_block = compose_source.split("  topiclab-backend:", 1)[1].split(
+        "\n  skillhub-critic-worker:", 1
+    )[0]
+    worker_block = compose_source.split("  skillhub-critic-worker:", 1)[1].split(
+        "\n  topiclink-zvec:", 1
+    )[0]
+
+    assert "env_file:" not in worker_block
+    assert "skillhub_scnet_api_key:" in worker_block
+    assert "- critic-network" in worker_block
+    assert "- app-network" not in worker_block
+    assert "- critic-network" in backend_block
+    assert "ports:" not in worker_block
+
+
+def test_critic_deploy_uses_a_full_locked_revision():
+    repository = PROJECT_ROOT.parent
+    revision = (repository / ".critic-research-revision").read_text(encoding="utf-8").strip()
+    deploy_source = (repository / ".github" / "workflows" / "deploy.yml").read_text(encoding="utf-8")
+    critic_checkout = deploy_source.split('CRITIC_RESEARCH_DIR=', 1)[1].split(
+        'if [ -z "${DEPLOY_ENV:-}" ]', 1
+    )[0]
+
+    assert len(revision) == 40
+    assert all(character in "0123456789abcdef" for character in revision)
+    assert 'fetch --depth 1 origin "$CRITIC_RESEARCH_REVISION"' in critic_checkout
+    assert "verify_critic_runtime.py" in critic_checkout
+    assert "reset --hard origin/main" not in critic_checkout
+
+
 def test_resonnet_docker_build_accepts_package_index_overrides():
     compose_source = (PROJECT_ROOT.parent / "docker-compose.yml").read_text(encoding="utf-8")
     dockerfile_source = (PROJECT_ROOT.parent / "backend" / "Dockerfile").read_text(encoding="utf-8")

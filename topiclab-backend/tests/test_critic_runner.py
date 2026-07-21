@@ -96,6 +96,10 @@ def test_runner_rejects_non_github_and_credentialed_targets():
         parse_github_target("https://example.com/org/repo")
     with pytest.raises(ValueError, match="credentials"):
         parse_github_target("https://user:token@github.com/org/repo")
+    with pytest.raises(ValueError, match="port"):
+        parse_github_target("https://github.com:8443/org/repo")
+    with pytest.raises(ValueError, match="query or fragment"):
+        parse_github_target("https://github.com/org/repo?token=untrusted")
 
     parsed = parse_github_target(
         "https://github.com/org/repo/tree/main/skills/research-skill"
@@ -337,11 +341,16 @@ def test_provider_environment_uses_skillhub_scnet_api_key(monkeypatch):
     monkeypatch.delenv("skillhub_scnet_api_key", raising=False)
     monkeypatch.setenv("skillhub_scnet_api_key", "skillhub-scnet-test-key")
     monkeypatch.setenv("SCNET_API_KEY", "topiclink-scnet-test-key")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://secret.invalid/topiclab")
+    monkeypatch.setenv("JWT_SECRET", "must-not-reach-runner")
     monkeypatch.delenv("SCNET_BASE_URL", raising=False)
 
     environment, base_url, model = _provider_environment()
 
     assert environment["CRITIC_WORKER_PROVIDER_KEY"] == "skillhub-scnet-test-key"
+    assert "SCNET_API_KEY" not in environment
+    assert "DATABASE_URL" not in environment
+    assert "JWT_SECRET" not in environment
     assert base_url == "https://api.scnet.cn/api/llm/v1"
     assert model == "GLM-5.2"
 
@@ -432,7 +441,7 @@ def test_basic_criticagent_uses_one_mounted_source_review_call(monkeypatch, tmp_
     monkeypatch.setattr(
         critic_runner,
         "_provider_environment",
-        lambda: ({"CRITIC_WORKER_PROVIDER_KEY": "memory-only"}, "https://provider.invalid/v1", "GLM-5.2"),
+        lambda _home=None: ({"CRITIC_WORKER_PROVIDER_KEY": "memory-only"}, "https://provider.invalid/v1", "GLM-5.2"),
     )
 
     def fake_provider(*args, **kwargs):
@@ -533,7 +542,7 @@ def test_standard_criticagent_uses_exactly_four_mounted_calls(monkeypatch, tmp_p
     monkeypatch.setattr(
         critic_runner,
         "_provider_environment",
-        lambda: ({"CRITIC_WORKER_PROVIDER_KEY": "memory-only"}, "https://provider.invalid/v1", "GLM-5.2"),
+        lambda _home=None: ({"CRITIC_WORKER_PROVIDER_KEY": "memory-only"}, "https://provider.invalid/v1", "GLM-5.2"),
     )
 
     def fake_provider(*args, **kwargs):
@@ -1089,7 +1098,9 @@ def test_bounded_process_terminates_process_on_timeout(monkeypatch, tmp_path):
 
     process = FakeProcess()
     cleanup_commands = []
+    killed_groups = []
     monkeypatch.setattr(critic_runner.subprocess, "Popen", lambda *args, **kwargs: process)
+    monkeypatch.setattr(critic_runner.os, "killpg", lambda pid, sig: killed_groups.append((pid, sig)))
     monkeypatch.setattr(
         critic_runner.subprocess,
         "run",
@@ -1105,7 +1116,8 @@ def test_bounded_process_terminates_process_on_timeout(monkeypatch, tmp_path):
         assert process.killed is False
     else:
         assert cleanup_commands == []
-        assert process.killed is True
+        assert killed_groups == [(4242, critic_runner.signal.SIGKILL)]
+        assert process.killed is False
     assert process.calls == 2
 
 

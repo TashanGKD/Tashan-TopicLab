@@ -26,6 +26,7 @@ services:
       - ./.runtime/tashan-research-skills:/opt/critic/tashan-research-skills:ro
     networks:
       - app-network
+      - critic-network
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=15)\""]
       interval: 10s
@@ -43,13 +44,13 @@ services:
         PIP_TIMEOUT: ${PIP_TIMEOUT:-120}
         PIP_RETRIES: ${PIP_RETRIES:-3}
     command: ["uvicorn", "app.critic_worker:app", "--host", "0.0.0.0", "--port", "8090", "--workers", "1"]
-    env_file:
-      - ${ENV_FILE:-.env}
+    environment:
+      skillhub_scnet_api_key: ${skillhub_scnet_api_key:-}
     volumes:
       - ./.runtime/tashan-research-skills:/opt/critic/tashan-research-skills:ro
       - skillhub-critic-state:/app/critic-state
     networks:
-      - app-network
+      - critic-network
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import json,urllib.request; payload=json.load(urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=15)); assert payload.get('ready') is True, payload\""]
       interval: 10s
@@ -190,6 +191,8 @@ services:
 
 networks:
   app-network:
+    driver: bridge
+  critic-network:
     driver: bridge
 
 volumes:

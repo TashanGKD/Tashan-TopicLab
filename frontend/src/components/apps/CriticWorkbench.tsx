@@ -177,7 +177,7 @@ export default function CriticWorkbench() {
       setJob(response.data)
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : '提交评测失败'
-      setError(message.includes('401') ? '评测提交失败，请稍后重试' : message)
+      setError(message.includes('401') ? '请先登录后再提交评测' : message)
     } finally {
       setLoadingKind(null)
     }
@@ -196,7 +196,7 @@ export default function CriticWorkbench() {
               评测 Skill 与 MCP
             </h3>
             <p className="mt-1 text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
-              无需登录。提交地址后，系统会检查规范、安全、内容质量与适用边界。
+              登录后可提交公开仓库评测；仓库内容与任务摘要会发送给 SCNet 模型，并实施调用配额保护。
             </p>
             </div>
             <span
@@ -264,6 +264,7 @@ export default function CriticWorkbench() {
                   <input
                     aria-label={entry.label}
                     value={targets[entry.kind]}
+                    maxLength={2048}
                     onChange={(event) => setTargets((current) => ({ ...current, [entry.kind]: event.target.value }))}
                     placeholder={entry.placeholder}
                     className="h-11 w-full rounded-md border px-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500/30"

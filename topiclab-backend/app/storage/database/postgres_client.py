@@ -1485,6 +1485,34 @@ def _apply_skill_hub_ddl(session) -> None:
         )
     )
     session.execute(text("CREATE INDEX IF NOT EXISTS idx_skill_hub_task_events_agent_created ON skill_hub_task_events(openclaw_agent_id, created_at DESC)"))
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS skill_hub_model_usage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                operation VARCHAR(64) NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            if is_sqlite
+            else
+            """
+            CREATE TABLE IF NOT EXISTS skill_hub_model_usage (
+                id BIGSERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                operation VARCHAR(64) NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+    )
+    session.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS idx_skill_hub_model_usage_lookup "
+            "ON skill_hub_model_usage(user_id, operation, created_at DESC)"
+        )
+    )
 
 
 def ensure_site_feedback_schema() -> None:

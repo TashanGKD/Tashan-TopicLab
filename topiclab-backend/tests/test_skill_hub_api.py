@@ -4,6 +4,7 @@ from pathlib import Path
 
 import httpx
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
@@ -291,9 +292,11 @@ def test_science_finder_uses_agentscope_only_for_valid_taxonomy_routing(client, 
         "_recommend_with_agentscope",
         fake_recommend_with_agentscope,
     )
+    owner = register_and_login(client, phone="13800019993", username="finder-viewer")
     response = client.post(
         "/api/v1/skill-hub/science-catalog/find",
         json={"query": "我想预测蛋白质三维结构，并比较不同候选模型", "limit": 6},
+        headers={"Authorization": f"Bearer {owner['token']}"},
     )
     assert response.status_code == 200, response.text
     payload = response.json()
@@ -362,10 +365,11 @@ def test_science_finder_streams_route_and_recommendations(client, monkeypatch):
         "driver": {"mode": "model", "skill_mounted": True},
     }
 
-    async def fake_find(query, *, limit, on_event=None):
+    async def fake_find(query, *, limit, on_event=None, allow_model=True):
         assert query == "单细胞类型注释"
         assert limit == 5
         assert on_event is not None
+        assert allow_model is False
         await on_event("route", result["route"])
         await on_event("status", {"message": "正在复核候选技能"})
         await on_event("result", result["results"][0])
@@ -480,6 +484,108 @@ def test_science_finder_falls_back_to_local_catalog_without_model_credentials(cl
         assert specific_payload["results"]
 
 
+def test_anonymous_science_finder_never_calls_the_model(client, monkeypatch):
+    from app.services import science_skill_finder
+
+    monkeypatch.setenv("skillhub_scnet_api_key", "configured-but-private")
+
+    async def unexpected_model_call(*args, **kwargs):
+        raise AssertionError("anonymous requests must not call the model")
+
+    monkeypatch.setattr(science_skill_finder, "_route_with_agentscope", unexpected_model_call)
+    response = client.post(
+        "/api/v1/skill-hub/science-catalog/find",
+        json={"query": "蛋白质结构预测", "limit": 5},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["driver"]["mode"] == "local_fallback"
+
+
+def test_model_usage_quota_is_persisted_per_user(client):
+    from app.api.auth import verify_access_token
+    from app.services import model_usage_quota
+
+    owner = register_and_login(client, phone="13800019995", username="quota-viewer")
+    identity = verify_access_token(owner["token"])
+    assert identity is not None
+    user_id = int(identity["sub"])
+
+    model_usage_quota.consume_model_usage(user_id, "critic_evaluation")
+    model_usage_quota.consume_model_usage(user_id, "critic_evaluation")
+    with pytest.raises(HTTPException) as captured:
+        model_usage_quota.consume_model_usage(user_id, "critic_evaluation")
+
+    assert getattr(captured.value, "status_code", None) == 429
+    assert getattr(captured.value, "headers", {}).get("Retry-After") == "600"
+
+
+def test_critic_rejects_unsafe_target_before_consuming_quota(client, monkeypatch):
+    from app.api import skill_hub
+
+    quota_calls = []
+    monkeypatch.setattr(
+        skill_hub,
+        "consume_model_usage",
+        lambda user_id, operation: quota_calls.append((user_id, operation)),
+    )
+    owner = register_and_login(client, phone="13800019991", username="critic-input-reviewer")
+    headers = {"Authorization": f"Bearer {owner['token']}"}
+
+    for kind, target in (
+        ("skill", "https://github.com:8443/example/repository"),
+        ("skill", "https://github.com/example/repository?token=untrusted"),
+        ("mcp", "--help"),
+    ):
+        response = client.post(
+            "/api/v1/skill-hub/evaluations",
+            json={"kind": kind, "target": target},
+            headers=headers,
+        )
+        assert response.status_code == 422, (target, response.text)
+
+    assert quota_calls == []
+
+
+def test_critic_proxy_preserves_worker_capacity_response(client, monkeypatch):
+    class CapacityResponse:
+        status_code = 429
+        headers = {"Retry-After": "60"}
+
+        @staticmethod
+        def json():
+            return {"detail": "Critic Worker 队列已满，请稍后再试"}
+
+    class CapacityAsyncClient:
+        def __init__(self, *, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, *args, **kwargs):
+            return CapacityResponse()
+
+    monkeypatch.setenv("skillhub_scnet_api_key", "critic-capacity-test-key")
+    monkeypatch.setattr(
+        "app.services.critic_evaluation.httpx.AsyncClient",
+        CapacityAsyncClient,
+    )
+    owner = register_and_login(client, phone="13800019990", username="critic-capacity-reviewer")
+    response = client.post(
+        "/api/v1/skill-hub/evaluations",
+        json={"kind": "skill", "target": "https://github.com/example/repository"},
+        headers={"Authorization": f"Bearer {owner['token']}"},
+    )
+
+    assert response.status_code == 429, response.text
+    assert response.headers["retry-after"] == "60"
+    assert "队列已满" in response.json()["detail"]
+
+
 def test_critic_evaluation_contract_fails_closed_when_builtin_worker_is_unavailable(client, monkeypatch):
     class UnavailableAsyncClient:
         def __init__(self, *, timeout):
@@ -515,12 +621,14 @@ def test_critic_evaluation_contract_fails_closed_when_builtin_worker_is_unavaila
     assert "评测 Worker" in response.json()["detail"]
 
 
-def test_critic_evaluation_allows_isolated_anonymous_jobs(client, monkeypatch):
+def test_critic_evaluation_requires_login_and_uses_authenticated_worker(client, monkeypatch):
     calls = []
 
     class FakeResponse:
-        def __init__(self, payload):
+        def __init__(self, payload, status_code=200, headers=None):
             self.payload = payload
+            self.status_code = status_code
+            self.headers = headers or {}
 
         def raise_for_status(self):
             return None
@@ -567,7 +675,11 @@ def test_critic_evaluation_allows_isolated_anonymous_jobs(client, monkeypatch):
                 }
             )
 
+    monkeypatch.setenv("skillhub_scnet_api_key", "critic-test-key")
     monkeypatch.setattr("app.services.critic_evaluation.httpx.AsyncClient", FakeAsyncClient)
+    from app.critic_security import derive_worker_token
+
+    worker_headers = {"Authorization": f"Bearer {derive_worker_token()}"}
     capabilities = client.get("/api/v1/skill-hub/evaluations/capabilities")
     assert capabilities.status_code == 200, capabilities.text
     assert capabilities.json()["worker_available"] is True
@@ -577,23 +689,28 @@ def test_critic_evaluation_allows_isolated_anonymous_jobs(client, monkeypatch):
         "model": "glm5.2",
     }
 
-    submitted = client.post(
+    anonymous = client.post(
         "/api/v1/skill-hub/evaluations",
         json={"kind": "skill", "target": "https://github.com/example/research-skill", "depth": "quick"},
     )
+    assert anonymous.status_code == 401
+
+    owner = register_and_login(client, phone="13800019994", username="critic-owner")
+    auth_headers = {"Authorization": f"Bearer {owner['token']}"}
+    submitted = client.post(
+        "/api/v1/skill-hub/evaluations",
+        json={"kind": "skill", "target": "https://github.com/example/research-skill", "depth": "quick"},
+        headers=auth_headers,
+    )
     assert submitted.status_code == 200, submitted.text
     assert submitted.json()["job_id"] == "critic-job-1"
-    cookie_header = submitted.headers.get("set-cookie", "")
-    assert "skillhub_critic_guest=" in cookie_header
-    assert "HttpOnly" in cookie_header
-    assert "SameSite=lax" in cookie_header
     requester_id = calls[1][2]["requester_id"]
-    assert requester_id >= 2**62
+    assert 0 < requester_id < 2**62
     assert calls[0] == (
         "get",
         "http://skillhub-critic-worker:8090/health",
         None,
-        {},
+        worker_headers,
     )
     assert calls[1] == (
         "post",
@@ -611,20 +728,23 @@ def test_critic_evaluation_allows_isolated_anonymous_jobs(client, monkeypatch):
             "requester_id": requester_id,
             "source": "topiclab-skill-hub",
         },
-        {},
+        worker_headers,
     )
 
-    completed = client.get("/api/v1/skill-hub/evaluations/critic-job-1")
+    completed = client.get("/api/v1/skill-hub/evaluations/critic-job-1", headers=auth_headers)
     assert completed.status_code == 200, completed.text
     assert completed.json()["evidence"]["behavior_pairs"] == 6
     assert calls[2] == (
         "get",
         "http://skillhub-critic-worker:8090/api/v1/evaluations/critic-job-1",
         {"requester_id": requester_id},
-        {},
+        worker_headers,
     )
 
-    streamed = client.get("/api/v1/skill-hub/evaluations/critic-job-1/stream")
+    streamed = client.get(
+        "/api/v1/skill-hub/evaluations/critic-job-1/stream",
+        headers=auth_headers,
+    )
     assert streamed.status_code == 200, streamed.text
     assert "event: job" in streamed.text
     assert '"status":"completed"' in streamed.text
@@ -632,12 +752,11 @@ def test_critic_evaluation_allows_isolated_anonymous_jobs(client, monkeypatch):
         "get",
         "http://skillhub-critic-worker:8090/api/v1/evaluations/critic-job-1",
         {"requester_id": requester_id},
-        {},
+        worker_headers,
     )
 
-    client.cookies.clear()
     missing_session = client.get("/api/v1/skill-hub/evaluations/critic-job-1")
-    assert missing_session.status_code == 404
+    assert missing_session.status_code == 401
     assert len(calls) == 4
 
 

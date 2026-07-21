@@ -452,6 +452,7 @@ export default function AppsSkillLibraryPage() {
             <AppsInput
               aria-label="描述科研需求"
               value={finderQuery}
+              maxLength={2000}
               onChange={(event) => setFinderQuery(event.target.value)}
               placeholder="例如：单细胞类型注释 / predict protein structure"
               className="h-11 w-full rounded-md py-0 leading-10 outline-none"
@@ -465,6 +466,9 @@ export default function AppsSkillLibraryPage() {
             {finderStreaming ? '正在推荐…' : '搜索科研技能'}
           </button>
         </form>
+        <p className="text-xs leading-5" style={{ color: 'var(--text-tertiary)' }}>
+          未登录时仅使用本地目录匹配；登录后会将这段科研需求发送给 SCNet 模型进行语义复核。
+        </p>
         {finderError ? (
           <div role="alert" className="flex flex-wrap items-center gap-3 text-sm" style={{ color: 'var(--accent-error)' }}>
             <span>{finderError}</span>

@@ -3,17 +3,15 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import hmac
 import json
-import secrets
-import time
+from typing import Literal
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
+from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
-from app.api.auth import JWT_SECRET, get_current_user, security, verify_access_token
+from app.api.auth import get_current_user, security, verify_access_token
 from app.services.skill_hub import (
     add_skill_version,
     create_download,
@@ -41,6 +39,7 @@ from app.services.critic_evaluation import (
     get_critic_capabilities,
     get_critic_evaluation,
     submit_critic_evaluation,
+    validate_critic_target,
 )
 from app.services.science_skill_catalog import (
     get_catalog_meta,
@@ -51,11 +50,20 @@ from app.services.science_skill_finder import (
     find_science_skills,
     get_finder_capabilities,
 )
+from app.services.model_usage_quota import consume_model_usage
 
 router = APIRouter(prefix="/skill-hub")
-CRITIC_GUEST_COOKIE = "skillhub_critic_guest"
-CRITIC_GUEST_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
 CRITIC_TERMINAL_STATUSES = {"completed", "failed", "blocked", "unverifiable"}
+
+
+class ScienceFinderRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=2000)
+    limit: int = Field(default=8, ge=1, le=12)
+
+
+class CriticEvaluationRequest(BaseModel):
+    kind: Literal["skill", "mcp"]
+    target: str = Field(min_length=1, max_length=2048)
 
 
 async def _get_optional_user(credentials=Depends(security)) -> dict | None:
@@ -64,54 +72,15 @@ async def _get_optional_user(credentials=Depends(security)) -> dict | None:
     return await run_in_threadpool(verify_access_token, credentials.credentials)
 
 
-def _critic_guest_secret() -> bytes:
-    return JWT_SECRET.encode("utf-8")
-
-
-def _issue_critic_guest_token() -> tuple[str, str]:
-    issued_at = str(int(time.time()))
-    nonce = secrets.token_urlsafe(24)
-    message = f"{issued_at}.{nonce}"
-    signature = hmac.new(_critic_guest_secret(), message.encode("utf-8"), hashlib.sha256).hexdigest()
-    return f"{message}.{signature}", nonce
-
-
-def _read_critic_guest_nonce(token: str | None) -> str | None:
-    if not token:
-        return None
+def _authenticated_user_id(user: dict) -> int:
+    raw = user.get("sub") or user.get("user_id") or user.get("id")
     try:
-        issued_raw, nonce, signature = token.split(".", 2)
-        issued_at = int(issued_raw)
-    except (TypeError, ValueError):
-        return None
-    now = int(time.time())
-    if issued_at > now + 300 or now - issued_at > CRITIC_GUEST_MAX_AGE_SECONDS:
-        return None
-    message = f"{issued_raw}.{nonce}"
-    expected = hmac.new(_critic_guest_secret(), message.encode("utf-8"), hashlib.sha256).hexdigest()
-    return nonce if hmac.compare_digest(signature, expected) else None
-
-
-def _critic_guest_requester_id(nonce: str) -> int:
-    digest = hashlib.sha256(f"skillhub-critic:{nonce}".encode("utf-8")).digest()
-    return (int.from_bytes(digest[:8], "big") & ((1 << 62) - 1)) | (1 << 62)
-
-
-def _critic_requester(
-    request: Request,
-    user: dict | None,
-    *,
-    create_guest: bool,
-) -> tuple[int, str | None]:
-    if user and user.get("sub") is not None:
-        return int(user["sub"]), None
-    nonce = _read_critic_guest_nonce(request.cookies.get(CRITIC_GUEST_COOKIE))
-    if nonce:
-        return _critic_guest_requester_id(nonce), None
-    if not create_guest:
-        raise HTTPException(status_code=404, detail="评测任务不存在")
-    token, nonce = _issue_critic_guest_token()
-    return _critic_guest_requester_id(nonce), token
+        user_id = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=401, detail="登录身份无效") from exc
+    if user_id <= 0:
+        raise HTTPException(status_code=401, detail="登录身份无效")
+    return user_id
 
 
 @router.get("/science-catalog/meta")
@@ -148,15 +117,17 @@ async def get_science_finder_capabilities_endpoint():
 
 
 @router.post("/science-catalog/find")
-async def find_science_skills_endpoint(payload: dict):
-    query = str(payload.get("query") or "").strip()
+async def find_science_skills_endpoint(
+    payload: ScienceFinderRequest,
+    user: dict | None = Depends(_get_optional_user),
+):
+    query = payload.query.strip()
     if not query:
         raise HTTPException(status_code=422, detail="科研需求不能为空")
-    try:
-        limit = int(payload.get("limit") or 8)
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=422, detail="limit 必须是整数") from exc
-    return await find_science_skills(query, limit=limit)
+    allow_model = user is not None
+    if allow_model:
+        await run_in_threadpool(consume_model_usage, _authenticated_user_id(user), "science_finder")
+    return await find_science_skills(query, limit=payload.limit, allow_model=allow_model)
 
 
 def _finder_stream_event(event: str, payload: dict) -> str:
@@ -165,14 +136,16 @@ def _finder_stream_event(event: str, payload: dict) -> str:
 
 
 @router.post("/science-catalog/find/stream")
-async def stream_science_skills_endpoint(payload: dict):
-    query = str(payload.get("query") or "").strip()
+async def stream_science_skills_endpoint(
+    payload: ScienceFinderRequest,
+    user: dict | None = Depends(_get_optional_user),
+):
+    query = payload.query.strip()
     if not query:
         raise HTTPException(status_code=422, detail="科研需求不能为空")
-    try:
-        limit = int(payload.get("limit") or 8)
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=422, detail="limit 必须是整数") from exc
+    allow_model = user is not None
+    if allow_model:
+        await run_in_threadpool(consume_model_usage, _authenticated_user_id(user), "science_finder")
 
     async def stream():
         queue: asyncio.Queue[tuple[str, dict] | None] = asyncio.Queue()
@@ -184,7 +157,12 @@ async def stream_science_skills_endpoint(payload: dict):
 
         async def produce():
             try:
-                result = await find_science_skills(query, limit=limit, on_event=emit)
+                result = await find_science_skills(
+                    query,
+                    limit=payload.limit,
+                    on_event=emit,
+                    allow_model=allow_model,
+                )
                 await queue.put(("done", {key: value for key, value in result.items() if key != "results"}))
             except Exception:
                 await queue.put(("error", {"message": "搜索暂时不可用，请稍后重试。"}))
@@ -222,25 +200,16 @@ async def get_critic_capabilities_endpoint():
 
 @router.post("/evaluations")
 async def submit_critic_evaluation_endpoint(
-    payload: dict,
-    request: Request,
-    response: Response,
-    user: dict | None = Depends(_get_optional_user),
+    payload: CriticEvaluationRequest,
+    user: dict = Depends(get_current_user),
 ):
-    requester_id, guest_token = _critic_requester(request, user, create_guest=True)
-    result = await submit_critic_evaluation(payload, requester_id=requester_id)
-    if guest_token:
-        forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme).split(",", 1)[0].strip()
-        response.set_cookie(
-            CRITIC_GUEST_COOKIE,
-            guest_token,
-            max_age=CRITIC_GUEST_MAX_AGE_SECONDS,
-            httponly=True,
-            secure=forwarded_proto == "https",
-            samesite="lax",
-            path="/",
-        )
-    return result
+    requester_id = _authenticated_user_id(user)
+    target = validate_critic_target(payload.kind, payload.target)
+    await run_in_threadpool(consume_model_usage, requester_id, "critic_evaluation")
+    return await submit_critic_evaluation(
+        {"kind": payload.kind, "target": target},
+        requester_id=requester_id,
+    )
 
 
 def _critic_stream_event(event: str, payload: dict) -> str:
@@ -251,10 +220,9 @@ def _critic_stream_event(event: str, payload: dict) -> str:
 @router.get("/evaluations/{job_id}/stream")
 async def stream_critic_evaluation_endpoint(
     job_id: str,
-    request: Request,
-    user: dict | None = Depends(_get_optional_user),
+    user: dict = Depends(get_current_user),
 ):
-    requester_id, _ = _critic_requester(request, user, create_guest=False)
+    requester_id = _authenticated_user_id(user)
 
     async def stream():
         previous = ""
@@ -283,10 +251,9 @@ async def stream_critic_evaluation_endpoint(
 @router.get("/evaluations/{job_id}")
 async def get_critic_evaluation_endpoint(
     job_id: str,
-    request: Request,
-    user: dict | None = Depends(_get_optional_user),
+    user: dict = Depends(get_current_user),
 ):
-    requester_id, _ = _critic_requester(request, user, create_guest=False)
+    requester_id = _authenticated_user_id(user)
     return await get_critic_evaluation(job_id, requester_id=requester_id)
 
 

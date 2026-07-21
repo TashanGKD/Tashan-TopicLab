@@ -9,16 +9,23 @@ import os
 import pathlib
 import secrets
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
 import threading
 import uuid
 from collections.abc import Awaitable, Callable
+from datetime import datetime, timedelta, timezone
 from typing import Any
-from urllib.parse import urlparse
 
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Query
+
+from app.critic_security import (
+    derive_worker_token,
+    is_supported_github_target,
+    is_supported_npm_package,
+)
 
 
 SUPPORTED_KINDS = ("skill", "mcp")
@@ -29,6 +36,11 @@ RUNTIME = {
     "model": "glm5.2",
 }
 TERMINAL_STATUSES = {"completed", "failed", "blocked", "unverifiable"}
+ACTIVE_STATUSES = {"queued", "running"}
+MAX_CONCURRENT_JOBS = 1
+MAX_PENDING_JOBS = 8
+JOB_RETENTION_SECONDS = 24 * 60 * 60
+MAX_STORED_JOBS = 100
 Runner = Callable[[dict[str, Any], pathlib.Path], dict[str, Any] | Awaitable[dict[str, Any]]]
 DEFAULT_RUNNER_COMMAND = f'"{sys.executable}" -m app.critic_runner'
 DEFAULT_RUNNER_PROFILE = "standard_v1"
@@ -48,23 +60,33 @@ def _atomic_json(path: pathlib.Path, value: dict[str, Any]) -> None:
     os.replace(temporary, path)
 
 
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _parsed_timestamp(raw: object, fallback: datetime) -> datetime:
+    try:
+        value = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return fallback
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def _is_valid_target(kind: str, target: str) -> bool:
-    parsed = urlparse(target)
-    is_https = parsed.scheme == "https" and bool(parsed.netloc)
+    is_https = is_supported_github_target(target)
     if kind == "skill":
         return is_https
     if is_https:
         return True
-    if not target or any(character.isspace() for character in target):
-        return False
-    package = target[1:].split("/", 1) if target.startswith("@") else [target]
-    return len(package) in {1, 2} and all(package)
+    return is_supported_npm_package(target)
 
 
 def _validate_request(payload: dict[str, Any]) -> dict[str, Any]:
     kind = str(payload.get("kind") or "").strip().lower()
     target = str(payload.get("target") or "").strip()
-    if kind not in SUPPORTED_KINDS or not _is_valid_target(kind, target):
+    if len(target) > 2048 or kind not in SUPPORTED_KINDS or not _is_valid_target(kind, target):
         raise HTTPException(status_code=422, detail="不支持的评测目标")
     contract = (payload.get("depth"), payload.get("evaluation_profile"))
     if contract not in {("basic", "basic"), ("standard", "standard"), ("full", "complete")}:
@@ -91,31 +113,89 @@ def _validate_request(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 class JobStore:
-    def __init__(self, root: pathlib.Path):
+    def __init__(
+        self,
+        root: pathlib.Path,
+        *,
+        retention_seconds: int = JOB_RETENTION_SECONDS,
+        max_stored_jobs: int = MAX_STORED_JOBS,
+    ):
         self.root = root.resolve()
         self.root.mkdir(parents=True, exist_ok=True)
+        self.retention_seconds = max(60, retention_seconds)
+        self.max_stored_jobs = max(1, max_stored_jobs)
         self._lock = threading.RLock()
         self._jobs: dict[str, dict[str, Any]] = {}
         for path in sorted(self.root.glob("*/job.json")):
             try:
                 job = json.loads(path.read_text(encoding="utf-8"))
                 if isinstance(job, dict) and isinstance(job.get("job_id"), str):
+                    interrupted = job.get("status") in ACTIVE_STATUSES
+                    if interrupted:
+                        progress = _running_progress(path.parent)
+                        job.update(
+                            {
+                                "status": "failed",
+                                "message": "Worker 重启导致评测中断，请重新提交",
+                                "error_type": "WorkerRestarted",
+                                "progress": progress or job.get("progress"),
+                                "trace": _trace_events(path.parent),
+                            }
+                        )
                     self._jobs[job["job_id"]] = job
+                    if interrupted:
+                        self.write(job)
             except (OSError, json.JSONDecodeError):
                 continue
+        self.cleanup()
 
     def job_dir(self, job_id: str) -> pathlib.Path:
         return self.root / job_id
 
     def write(self, job: dict[str, Any]) -> None:
         with self._lock:
-            self._jobs[job["job_id"]] = dict(job)
+            stored = dict(job)
+            stored.setdefault("created_at", _now_iso())
+            stored["updated_at"] = _now_iso()
+            self._jobs[job["job_id"]] = stored
             _atomic_json(self.job_dir(job["job_id"]) / "job.json", self._jobs[job["job_id"]])
 
     def get(self, job_id: str) -> dict[str, Any] | None:
         with self._lock:
             job = self._jobs.get(job_id)
             return dict(job) if job else None
+
+    def find_active(self, request: dict[str, Any]) -> dict[str, Any] | None:
+        with self._lock:
+            for job in self._jobs.values():
+                if job.get("status") not in ACTIVE_STATUSES:
+                    continue
+                if all(job.get(key) == request.get(key) for key in ("requester_id", "kind", "target")):
+                    return dict(job)
+        return None
+
+    def cleanup(self) -> None:
+        with self._lock:
+            now = datetime.now(timezone.utc)
+            terminal: list[tuple[datetime, str]] = []
+            for job_id, job in self._jobs.items():
+                if job.get("status") not in TERMINAL_STATUSES:
+                    continue
+                job_path = self.job_dir(job_id) / "job.json"
+                fallback = datetime.fromtimestamp(job_path.stat().st_mtime, timezone.utc) if job_path.exists() else now
+                timestamp = _parsed_timestamp(job.get("updated_at") or job.get("created_at"), fallback)
+                terminal.append((timestamp, job_id))
+            expired = {
+                job_id
+                for timestamp, job_id in terminal
+                if now - timestamp > timedelta(seconds=self.retention_seconds)
+            }
+            retained = sorted((item for item in terminal if item[1] not in expired), key=lambda item: item[0])
+            overflow = max(0, len(retained) - self.max_stored_jobs)
+            expired.update(job_id for _, job_id in retained[:overflow])
+            for job_id in expired:
+                self._jobs.pop(job_id, None)
+                shutil.rmtree(self.job_dir(job_id), ignore_errors=True)
 
 
 class SubprocessRunner:
@@ -278,12 +358,25 @@ def create_critic_worker_app(
     runner: Runner | None = None,
     worker_token: str | None = None,
     state_dir: pathlib.Path | None = None,
+    max_concurrent_jobs: int = MAX_CONCURRENT_JOBS,
+    max_pending_jobs: int = MAX_PENDING_JOBS,
+    retention_seconds: int = JOB_RETENTION_SECONDS,
+    max_stored_jobs: int = MAX_STORED_JOBS,
 ) -> FastAPI:
     uses_builtin_runner = runner is None
     selected_runner = runner or _configured_runner()
-    token = worker_token or ""
+    token = worker_token if worker_token is not None else derive_worker_token()
     root = state_dir or _default_state_dir()
-    store = JobStore(pathlib.Path(root))
+    store = JobStore(
+        pathlib.Path(root),
+        retention_seconds=retention_seconds,
+        max_stored_jobs=max_stored_jobs,
+    )
+    concurrent_limit = max(1, max_concurrent_jobs)
+    outstanding_limit = concurrent_limit + max(0, max_pending_jobs)
+    semaphore = asyncio.Semaphore(concurrent_limit)
+    capacity_lock = asyncio.Lock()
+    outstanding_jobs = 0
     worker = FastAPI(title="TopicLab Critic Worker", docs_url=None, redoc_url=None)
     runner_ready = selected_runner is not None and (
         not isinstance(selected_runner, SubprocessRunner) or selected_runner.ready
@@ -291,34 +384,61 @@ def create_critic_worker_app(
 
     def authorize(authorization: str | None) -> None:
         if not token:
-            return
+            raise HTTPException(status_code=503, detail="Worker authentication is not configured")
         expected = f"Bearer {token}"
         if not authorization or not secrets.compare_digest(authorization, expected):
             raise HTTPException(status_code=401, detail="Worker authentication failed")
 
+    async def reserve_request(request: dict[str, Any]) -> tuple[dict[str, Any] | None, bool]:
+        nonlocal outstanding_jobs
+        async with capacity_lock:
+            existing = store.find_active(request)
+            if existing is not None:
+                return existing, False
+            if outstanding_jobs >= outstanding_limit:
+                return None, False
+            outstanding_jobs += 1
+            return None, True
+
+    async def release_capacity() -> None:
+        nonlocal outstanding_jobs
+        async with capacity_lock:
+            outstanding_jobs = max(0, outstanding_jobs - 1)
+
     async def run_job(job_id: str, request: dict[str, Any]) -> None:
-        job = store.get(job_id)
-        if not job:
-            return
-        job["status"] = "running"
-        job["progress"] = {"current_step": "validation", "completed_steps": [], "total_steps": 4}
-        store.write(job)
         try:
-            result = selected_runner(request, store.job_dir(job_id)) if selected_runner else None
-            if inspect.isawaitable(result):
-                result = await result
-            if not isinstance(result, dict):
-                raise RuntimeError("critic runner is unavailable")
-            status = str(result.get("status") or "failed")
-            if status not in TERMINAL_STATUSES:
-                raise ValueError("runner returned a non-terminal status")
-            job.update(result)
-            job["status"] = status
-        except Exception as exc:
-            job.update({"status": "failed", "message": "评测执行器发生错误", "error_type": type(exc).__name__})
-        job["progress"] = _result_progress(job)
-        job["trace"] = _trace_events(store.job_dir(job_id))
-        store.write(job)
+            async with semaphore:
+                job = store.get(job_id)
+                if not job:
+                    return
+                job["status"] = "running"
+                job["progress"] = {"current_step": "validation", "completed_steps": [], "total_steps": 4}
+                store.write(job)
+                try:
+                    result = selected_runner(request, store.job_dir(job_id)) if selected_runner else None
+                    if inspect.isawaitable(result):
+                        result = await result
+                    if not isinstance(result, dict):
+                        raise RuntimeError("critic runner is unavailable")
+                    status = str(result.get("status") or "failed")
+                    if status not in TERMINAL_STATUSES:
+                        raise ValueError("runner returned a non-terminal status")
+                    job.update(result)
+                    job["status"] = status
+                except Exception as exc:
+                    job.update(
+                        {
+                            "status": "failed",
+                            "message": "评测执行器发生错误",
+                            "error_type": type(exc).__name__,
+                        }
+                    )
+                job["progress"] = _result_progress(job)
+                job["trace"] = _trace_events(store.job_dir(job_id))
+                store.write(job)
+                store.cleanup()
+        finally:
+            await release_capacity()
 
     @worker.get("/health")
     async def health():
@@ -339,20 +459,33 @@ def create_critic_worker_app(
         if not runner_ready:
             raise HTTPException(status_code=503, detail="Critic runner is not configured")
         request = _validate_request(payload)
+        existing, reserved = await reserve_request(request)
+        if existing is not None:
+            return existing
+        if not reserved:
+            raise HTTPException(
+                status_code=429,
+                detail="Critic Worker 队列已满，请稍后再试",
+                headers={"Retry-After": "60"},
+            )
         job_id = uuid.uuid4().hex
-        job_dir = store.job_dir(job_id)
-        job_dir.mkdir(parents=True, exist_ok=False)
-        _atomic_json(job_dir / "request.json", request)
-        job = {
-            "job_id": job_id,
-            "status": "queued",
-            **request,
-            "progress": {"current_step": "validation", "completed_steps": [], "total_steps": 4},
-            "trace": [],
-        }
-        store.write(job)
-        background_tasks.add_task(run_job, job_id, request)
-        return job
+        try:
+            job_dir = store.job_dir(job_id)
+            job_dir.mkdir(parents=True, exist_ok=False)
+            _atomic_json(job_dir / "request.json", request)
+            job = {
+                "job_id": job_id,
+                "status": "queued",
+                **request,
+                "progress": {"current_step": "validation", "completed_steps": [], "total_steps": 4},
+                "trace": [],
+            }
+            store.write(job)
+            background_tasks.add_task(run_job, job_id, request)
+            return job
+        except Exception:
+            await release_capacity()
+            raise
 
     @worker.get("/api/v1/evaluations/{job_id}")
     async def get_job(

@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any
-from urllib.parse import urlparse
 
 import httpx
 from fastapi import HTTPException
+
+from app.critic_security import (
+    derive_worker_token,
+    is_supported_github_target,
+    is_supported_npm_package,
+)
 
 
 SUPPORTED_KINDS = ("skill", "mcp")
@@ -19,7 +23,6 @@ CRITIC_RUNTIME = {
     "model": "glm5.2",
 }
 CRITIC_WORKER_URL = "http://skillhub-critic-worker:8090"
-NPM_PACKAGE_RE = re.compile(r"^(?:@[a-z0-9._-]+/)?[a-z0-9._-]+$", re.IGNORECASE)
 
 
 def _worker_url() -> str:
@@ -53,21 +56,52 @@ async def get_critic_capabilities() -> dict[str, Any]:
     }
 
 
-def _validate_target(kind: str, target: str) -> str:
+def validate_critic_target(kind: str, target: str) -> str:
     clean = target.strip()
     if not clean or len(clean) > 2048:
         raise HTTPException(status_code=422, detail="评测目标不能为空或过长")
-    parsed = urlparse(clean)
-    is_https_url = parsed.scheme == "https" and bool(parsed.netloc)
+    is_https_url = is_supported_github_target(clean)
     if kind == "skill" and not is_https_url:
-        raise HTTPException(status_code=422, detail="Skill 评测当前仅接受 HTTPS 仓库地址")
-    if kind == "mcp" and not (is_https_url or NPM_PACKAGE_RE.fullmatch(clean)):
-        raise HTTPException(status_code=422, detail="MCP 评测需要 HTTPS 仓库地址或 npm 包名")
+        raise HTTPException(status_code=422, detail="Skill 评测当前仅接受 GitHub HTTPS 仓库地址")
+    if kind == "mcp" and not (is_https_url or is_supported_npm_package(clean)):
+        raise HTTPException(status_code=422, detail="MCP 评测需要 GitHub HTTPS 仓库地址或 npm 包名")
     return clean
 
 
 def _worker_headers() -> dict[str, str]:
-    return {}
+    token = derive_worker_token()
+    return {"Authorization": f"Bearer {token}"} if token else {}
+
+
+def _raise_worker_status(response: httpx.Response) -> None:
+    if response.status_code < 400:
+        return
+    if response.status_code in {404, 422, 429, 503}:
+        try:
+            payload = response.json()
+            detail = payload.get("detail") if isinstance(payload, dict) else None
+        except ValueError:
+            detail = None
+        headers = {}
+        retry_after = response.headers.get("Retry-After")
+        if retry_after:
+            headers["Retry-After"] = retry_after
+        raise HTTPException(
+            status_code=response.status_code,
+            detail=detail if isinstance(detail, str) else "评测 Worker 拒绝了请求",
+            headers=headers or None,
+        )
+    raise HTTPException(status_code=502, detail="评测 Worker 请求失败")
+
+
+def _worker_payload(response: httpx.Response) -> dict[str, Any]:
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail="评测 Worker 返回了无效响应") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=502, detail="评测 Worker 返回了无效响应")
+    return payload
 
 
 async def submit_critic_evaluation(payload: dict[str, Any], *, requester_id: int) -> dict[str, Any]:
@@ -79,7 +113,7 @@ async def submit_critic_evaluation(payload: dict[str, Any], *, requester_id: int
         raise HTTPException(status_code=422, detail="不支持的评测类型")
     body = {
         "kind": kind,
-        "target": _validate_target(kind, str(payload.get("target") or "")),
+        "target": validate_critic_target(kind, str(payload.get("target") or "")),
         "depth": "standard",
         "evaluation_profile": EVALUATION_PROFILE,
         "runtime": dict(CRITIC_RUNTIME),
@@ -89,9 +123,9 @@ async def submit_critic_evaluation(payload: dict[str, Any], *, requester_id: int
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(f"{worker}/api/v1/evaluations", json=body, headers=_worker_headers())
-            response.raise_for_status()
-            return response.json()
-    except httpx.HTTPError as exc:
+            _raise_worker_status(response)
+            return _worker_payload(response)
+    except httpx.RequestError as exc:
         raise HTTPException(status_code=502, detail="评测 Worker 请求失败") from exc
 
 
@@ -106,7 +140,7 @@ async def get_critic_evaluation(job_id: str, *, requester_id: int) -> dict[str, 
                 params={"requester_id": requester_id},
                 headers=_worker_headers(),
             )
-            response.raise_for_status()
-            return response.json()
-    except httpx.HTTPError as exc:
+            _raise_worker_status(response)
+            return _worker_payload(response)
+    except httpx.RequestError as exc:
         raise HTTPException(status_code=502, detail="评测 Worker 请求失败") from exc

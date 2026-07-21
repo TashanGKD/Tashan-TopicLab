@@ -1684,6 +1684,7 @@ export interface ScienceSkillFinderCapabilities {
   skill_sha256?: string | null
   desktop_config: boolean
   fallback_available: boolean
+  model_requires_auth?: boolean
 }
 
 export interface ScienceSkillRoute {
@@ -1742,9 +1743,13 @@ async function streamScienceSkills(
   signal?: AbortSignal,
 ) {
   const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`
+  const token = tokenManager.get()
   const response = await fetch(`${base}api/v1/skill-hub/science-catalog/find/stream`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify(payload),
     signal,
   })
