@@ -27,7 +27,7 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           envs: GITHUB_TOKEN,REPO,DEPLOY_ENV,SUBMODULE_TOKEN
-          timeout: 120m
+          timeout: 30s
           command_timeout: 120m
           script: |
             set -euo pipefail
@@ -104,10 +104,26 @@ jobs:
             # always operate on the versioned stack.
             export COMPOSE_FILE="$REPO_DIR/docker-compose.yml"
             BUILD_ENV_FILE="$REPO_DIR/.env.build"
-            cleanup_build_env() {
+            DEPLOY_CHILD_PID=""
+            cleanup_deploy() {
+              local child_pid="${DEPLOY_CHILD_PID:-}"
+              if [ -n "$child_pid" ] && kill -0 "$child_pid" 2>/dev/null; then
+                echo "[deploy] stopping unfinished child process $child_pid"
+                kill -TERM "$child_pid" 2>/dev/null || true
+                for _ in $(seq 1 30); do
+                  kill -0 "$child_pid" 2>/dev/null || break
+                  sleep 1
+                done
+                kill -KILL "$child_pid" 2>/dev/null || true
+                wait "$child_pid" 2>/dev/null || true
+              fi
               rm -f "$BUILD_ENV_FILE"
             }
-            trap cleanup_build_env EXIT
+            exit_on_signal() {
+              exit 143
+            }
+            trap cleanup_deploy EXIT
+            trap exit_on_signal HUP INT TERM
             DOCKER_HOST_GATEWAY="$(docker network inspect bridge --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}')"
             if [ -z "$DOCKER_HOST_GATEWAY" ]; then
               echo "::error::Docker bridge gateway is unavailable for the deployment proxy."
@@ -189,15 +205,19 @@ jobs:
               local label="$1"
               shift
               "$@" &
-              local pid="$!"
-              while kill -0 "$pid" 2>/dev/null; do
+              DEPLOY_CHILD_PID="$!"
+              while kill -0 "$DEPLOY_CHILD_PID" 2>/dev/null; do
                 echo "[deploy] ${label} still running at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
                 sleep 30
               done
-              wait "$pid"
+              local status=0
+              wait "$DEPLOY_CHILD_PID" || status="$?"
+              DEPLOY_CHILD_PID=""
+              return "$status"
             }
 
             run_with_heartbeat "docker compose build" \
+              timeout --signal=TERM --kill-after=30s 60m \
               docker compose --env-file "$BUILD_ENV_FILE" build
             ZVEC_ACTIVE_RESOLVED="$(python3 "$ZVEC_MANAGER" path --lock "$ZVEC_LOCK" --workspace "$WORKSPACE_HOST_PATH" --kind active-resolved)"
             CURRENT_ZVEC_ID="$(docker compose ps -q topiclink-zvec 2>/dev/null || true)"
