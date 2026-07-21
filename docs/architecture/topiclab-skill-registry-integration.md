@@ -31,24 +31,11 @@ python scripts/sync_science_skill_catalog.py \
 
 Use `--check` with the same arguments in CI to reject an outdated snapshot. The script validates schema, count, dimensions, duplicate canonical IDs, and hash-backed source-verification records before rebuilding the deterministic snapshot.
 
-The workbench reads `GET /api/v1/skill-hub/evaluations/capabilities` and submits authenticated jobs through `/evaluations`. Configure `SKILL_HUB_CRITIC_WORKER_URL` and, when required, `SKILL_HUB_CRITIC_WORKER_TOKEN`. If the worker is absent, the API fails closed with `503`; it does not fall back to local package execution.
-
-Run the isolated worker as a separate process:
-
-```bash
-python -m uvicorn app.critic_worker:app --host 0.0.0.0 --port 8090
-```
-
-The worker requires `CRITIC_WORKER_RUNNER`, a reviewed executable that accepts
-`--request <json> --output <json>`. The bundled command is
-`python -m app.critic_runner`. Requests and job state are atomically archived
-under `CRITIC_WORKER_STATE_DIR`. `/health` reports `ready: false` until the
-runner is explicitly marked `CRITIC_WORKER_RUNNER_PROFILE=standard_v1`.
+The workbench reads `GET /api/v1/skill-hub/evaluations/capabilities` and submits jobs through `/evaluations`. The normal deployment starts the isolated worker, uses the bundled reviewed runner, and archives requests and job state without exposing additional environment settings. If the worker is absent, the API fails closed with `503`; it does not fall back to local package execution.
 
 `app.critic_runner` acquires GitHub sources through the official read-only
 codeload archive (or npm metadata for package targets), seals provenance and
-content hashes, and runs the vendored static/security checks configured by
-`CRITIC_KERNEL_ROOT`. The standard contract then makes exactly four mounted
+content hashes, and runs the bundled vendored static/security checks. The standard contract then makes exactly four mounted
 model calls: task/mode planning, one representative execution, one eight-query
 trigger batch, and one final CriticAgent adjudication. It keeps source hashes,
 provider reports, progress events, and evidence artifacts, and fails closed

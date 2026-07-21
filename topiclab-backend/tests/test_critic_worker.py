@@ -145,28 +145,23 @@ def test_worker_health_reports_runner_and_fixed_runtime(tmp_path):
     }
 
 
-def test_worker_does_not_advertise_partial_subprocess_runner(monkeypatch, tmp_path):
-    from app.critic_worker import create_critic_worker_app
+def test_worker_uses_bundled_standard_runner_by_default(monkeypatch, tmp_path):
+    from app import critic_worker
 
-    monkeypatch.setenv("CRITIC_WORKER_RUNNER", "python partial_runner.py")
-    monkeypatch.delenv("CRITIC_WORKER_RUNNER_PROFILE", raising=False)
-    app = create_critic_worker_app(state_dir=tmp_path)
+    monkeypatch.setattr(critic_worker, "_builtin_runtime_ready", lambda: True)
+    app = critic_worker.create_critic_worker_app(state_dir=tmp_path)
     client = TestClient(app)
 
-    assert client.get("/health").json()["ready"] is False
-    response = client.post(
-        "/api/v1/evaluations",
-        json={
-            "kind": "skill",
-            "target": "https://github.com/example/research-skill",
-            "depth": "basic",
-            "evaluation_profile": "basic",
-            "runtime": RUNTIME,
-            "requester_id": 17,
-            "source": "topiclab-skill-hub",
-        },
-    )
-    assert response.status_code == 503
+    assert client.get("/health").json()["ready"] is True
+
+
+def test_builtin_worker_stays_unready_without_the_single_skillhub_key(monkeypatch, tmp_path):
+    from app import critic_worker
+
+    monkeypatch.delenv("skillhub_scnet_api_key", raising=False)
+    app = critic_worker.create_critic_worker_app(state_dir=tmp_path)
+
+    assert TestClient(app).get("/health").json()["ready"] is False
 
 
 def test_worker_does_not_claim_unrun_behavior_steps_for_blocked_result(tmp_path):

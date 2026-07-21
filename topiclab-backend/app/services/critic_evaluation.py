@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import re
 from typing import Any
 from urllib.parse import urlparse
@@ -19,11 +18,12 @@ CRITIC_RUNTIME = {
     "provider": "aistar",
     "model": "glm5.2",
 }
+CRITIC_WORKER_URL = "http://skillhub-critic-worker:8090"
 NPM_PACKAGE_RE = re.compile(r"^(?:@[a-z0-9._-]+/)?[a-z0-9._-]+$", re.IGNORECASE)
 
 
 def _worker_url() -> str:
-    return os.environ.get("SKILL_HUB_CRITIC_WORKER_URL", "").strip().rstrip("/")
+    return CRITIC_WORKER_URL
 
 
 async def get_critic_capabilities() -> dict[str, Any]:
@@ -67,8 +67,7 @@ def _validate_target(kind: str, target: str) -> str:
 
 
 def _worker_headers() -> dict[str, str]:
-    token = os.environ.get("SKILL_HUB_CRITIC_WORKER_TOKEN", "").strip()
-    return {"Authorization": f"Bearer {token}"} if token else {}
+    return {}
 
 
 async def submit_critic_evaluation(payload: dict[str, Any], *, requester_id: int) -> dict[str, Any]:

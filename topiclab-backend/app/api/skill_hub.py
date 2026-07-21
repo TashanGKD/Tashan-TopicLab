@@ -6,7 +6,6 @@ import asyncio
 import hashlib
 import hmac
 import json
-import os
 import secrets
 import time
 
@@ -66,8 +65,7 @@ async def _get_optional_user(credentials=Depends(security)) -> dict | None:
 
 
 def _critic_guest_secret() -> bytes:
-    value = os.environ.get("SKILL_HUB_GUEST_SESSION_SECRET") or JWT_SECRET
-    return value.encode("utf-8")
+    return JWT_SECRET.encode("utf-8")
 
 
 def _issue_critic_guest_token() -> tuple[str, str]:

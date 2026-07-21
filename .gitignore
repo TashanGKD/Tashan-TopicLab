@@ -70,3 +70,4 @@ workspace/
 /topiclab-backend/artifacts/
 /topiclab-backend/*.log
 /frontend/.vite-*.log
+/.runtime/

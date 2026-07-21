@@ -1,6 +1,8 @@
 import importlib
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
@@ -55,6 +57,24 @@ def register_and_login(client, *, phone: str, username: str, password: str = "pa
     )
     assert register.status_code == 200, register.text
     return register.json()
+
+
+def test_skillhub_public_config_exposes_only_the_single_scnet_key():
+    repository = Path(__file__).resolve().parents[2]
+    forbidden = (
+        "SCIENCE_SKILL_FINDER_",
+        "SKILL_HUB_CRITIC_",
+        "CRITIC_WORKER_",
+        "CRITIC_KERNEL_ROOT",
+        "CRITIC_RESEARCH_ROOT",
+        "MCP_CRITIC_ROOT",
+        "CRITIC_PROVIDER_",
+    )
+
+    for name in (".env.example", ".env.deploy.example"):
+        content = (repository / name).read_text(encoding="utf-8")
+        assert content.count("skillhub_scnet_api_key") == 1
+        assert not any(variable in content for variable in forbidden)
 
 
 def test_skill_hub_public_seeded_routes(client):
@@ -237,9 +257,7 @@ def test_science_catalog_search_matches_bilingual_field_tokens(monkeypatch):
 def test_science_finder_uses_agentscope_only_for_valid_taxonomy_routing(client, monkeypatch):
     from app.services import science_skill_finder
 
-    monkeypatch.setenv("SCIENCE_SKILL_FINDER_API_KEY", "test-key")
-    monkeypatch.setenv("SCIENCE_SKILL_FINDER_BASE_URL", "https://example.invalid/v1")
-    monkeypatch.setenv("SCIENCE_SKILL_FINDER_MODEL", "glm5.2")
+    monkeypatch.setenv("skillhub_scnet_api_key", "test-key")
 
     async def fake_route_with_agentscope(query, dimensions, config):
         assert query == "我想预测蛋白质三维结构，并比较不同候选模型"
@@ -282,7 +300,7 @@ def test_science_finder_uses_agentscope_only_for_valid_taxonomy_routing(client, 
     assert payload["driver"] == {
         "orchestrator": "AgentScope",
         "provider": "SCNet",
-        "model": "glm5.2",
+        "model": "GLM-5.2",
         "mode": "model",
         "configured": True,
         "skill_mounted": True,
@@ -311,16 +329,19 @@ def test_science_finder_uses_agentscope_only_for_valid_taxonomy_routing(client, 
     assert all(item["ranking_signals"]["quality_score"] == item["quality_score"] for item in payload["results"])
 
 
-def test_science_finder_prefers_skillhub_scnet_api_key(monkeypatch):
+def test_science_finder_uses_only_skillhub_scnet_api_key(monkeypatch):
     from app.services import science_skill_finder
 
     monkeypatch.setenv("skillhub_scnet_api_key", "skillhub-scnet-test-key")
     monkeypatch.setenv("SCNET_API_KEY", "topiclink-scnet-test-key")
-    monkeypatch.delenv("SCIENCE_SKILL_FINDER_API_KEY", raising=False)
+    monkeypatch.setenv("SCIENCE_SKILL_FINDER_API_KEY", "legacy-test-key")
 
     config = science_skill_finder.get_finder_config()
 
     assert config.api_key == "skillhub-scnet-test-key"
+    assert config.base_url == "https://api.scnet.cn/api/llm/v1"
+    assert config.model == "GLM-5.2"
+    assert config.protocol == "openai"
 
 
 def test_science_finder_streams_route_and_recommendations(client, monkeypatch):
@@ -366,31 +387,17 @@ def test_science_finder_streams_route_and_recommendations(client, monkeypatch):
     assert '"skill_mounted":true' in text
 
 
-def test_science_finder_config_can_read_local_secret_docx(tmp_path, monkeypatch):
-    import zipfile
-
+def test_science_finder_does_not_reuse_other_product_credentials(monkeypatch):
     from app.services import science_skill_finder
 
-    fake_api_key = "sk-" + "test_secret_value_1234567890"
-    secret_doc = tmp_path / "provider.docx"
-    with zipfile.ZipFile(secret_doc, "w") as archive:
-        archive.writestr(
-            "word/document.xml",
-            '<w:document xmlns:w="test"><w:t>https://api.example.test/api/llm/v1</w:t>'
-            f"<w:t>{fake_api_key}</w:t></w:document>",
-        )
-    monkeypatch.setenv("SCIENCE_SKILL_FINDER_SECRET_DOCX", str(secret_doc))
     monkeypatch.delenv("skillhub_scnet_api_key", raising=False)
-    monkeypatch.delenv("SCIENCE_SKILL_FINDER_API_KEY", raising=False)
-    monkeypatch.delenv("SCIENCE_SKILL_FINDER_BASE_URL", raising=False)
-    monkeypatch.delenv("SCNET_API_KEY", raising=False)
-    monkeypatch.delenv("SCNET_BASE_URL", raising=False)
+    monkeypatch.setenv("SCIENCE_SKILL_FINDER_API_KEY", "legacy-test-key")
+    monkeypatch.setenv("SCNET_API_KEY", "topiclink-test-key")
 
     config = science_skill_finder.get_finder_config()
 
-    assert config.base_url == "https://api.example.test/api/llm/v1"
-    assert config.api_key == fake_api_key
-    assert config.protocol == "openai"
+    assert config.api_key == ""
+    assert config.configured is False
 
 
 def test_science_finder_parses_json_after_model_reasoning_text():
@@ -405,10 +412,7 @@ def test_science_finder_parses_json_after_model_reasoning_text():
 
 
 def test_science_finder_falls_back_to_local_catalog_without_model_credentials(client, monkeypatch):
-    monkeypatch.setenv("SCIENCE_SKILL_FINDER_USE_DESKTOP_SCNET", "0")
     monkeypatch.delenv("skillhub_scnet_api_key", raising=False)
-    monkeypatch.delenv("SCIENCE_SKILL_FINDER_API_KEY", raising=False)
-    monkeypatch.delenv("SCNET_API_KEY", raising=False)
 
     capabilities = client.get("/api/v1/skill-hub/science-catalog/finder/capabilities")
     assert capabilities.status_code == 200, capabilities.text
@@ -476,8 +480,24 @@ def test_science_finder_falls_back_to_local_catalog_without_model_credentials(cl
         assert specific_payload["results"]
 
 
-def test_critic_evaluation_contract_fails_closed_without_worker(client, monkeypatch):
-    monkeypatch.delenv("SKILL_HUB_CRITIC_WORKER_URL", raising=False)
+def test_critic_evaluation_contract_fails_closed_when_builtin_worker_is_unavailable(client, monkeypatch):
+    class UnavailableAsyncClient:
+        def __init__(self, *, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, *args, **kwargs):
+            raise httpx.ConnectError("worker unavailable")
+
+        async def post(self, *args, **kwargs):
+            raise httpx.ConnectError("worker unavailable")
+
+    monkeypatch.setattr("app.services.critic_evaluation.httpx.AsyncClient", UnavailableAsyncClient)
     capabilities = client.get("/api/v1/skill-hub/evaluations/capabilities")
     assert capabilities.status_code == 200, capabilities.text
     assert capabilities.json()["worker_available"] is False
@@ -491,7 +511,7 @@ def test_critic_evaluation_contract_fails_closed_without_worker(client, monkeypa
         json={"kind": "skill", "target": "https://github.com/example/research-skill", "depth": "quick"},
         headers={"Authorization": f"Bearer {owner['token']}"},
     )
-    assert response.status_code == 503
+    assert response.status_code == 502
     assert "评测 Worker" in response.json()["detail"]
 
 
@@ -547,8 +567,6 @@ def test_critic_evaluation_allows_isolated_anonymous_jobs(client, monkeypatch):
                 }
             )
 
-    monkeypatch.setenv("SKILL_HUB_CRITIC_WORKER_URL", "http://critic-worker:8090")
-    monkeypatch.setenv("SKILL_HUB_CRITIC_WORKER_TOKEN", "test-worker-token")
     monkeypatch.setattr("app.services.critic_evaluation.httpx.AsyncClient", FakeAsyncClient)
     capabilities = client.get("/api/v1/skill-hub/evaluations/capabilities")
     assert capabilities.status_code == 200, capabilities.text
@@ -573,13 +591,13 @@ def test_critic_evaluation_allows_isolated_anonymous_jobs(client, monkeypatch):
     assert requester_id >= 2**62
     assert calls[0] == (
         "get",
-        "http://critic-worker:8090/health",
+        "http://skillhub-critic-worker:8090/health",
         None,
-        {"Authorization": "Bearer test-worker-token"},
+        {},
     )
     assert calls[1] == (
         "post",
-        "http://critic-worker:8090/api/v1/evaluations",
+        "http://skillhub-critic-worker:8090/api/v1/evaluations",
         {
             "kind": "skill",
             "target": "https://github.com/example/research-skill",
@@ -593,7 +611,7 @@ def test_critic_evaluation_allows_isolated_anonymous_jobs(client, monkeypatch):
             "requester_id": requester_id,
             "source": "topiclab-skill-hub",
         },
-        {"Authorization": "Bearer test-worker-token"},
+        {},
     )
 
     completed = client.get("/api/v1/skill-hub/evaluations/critic-job-1")
@@ -601,9 +619,9 @@ def test_critic_evaluation_allows_isolated_anonymous_jobs(client, monkeypatch):
     assert completed.json()["evidence"]["behavior_pairs"] == 6
     assert calls[2] == (
         "get",
-        "http://critic-worker:8090/api/v1/evaluations/critic-job-1",
+        "http://skillhub-critic-worker:8090/api/v1/evaluations/critic-job-1",
         {"requester_id": requester_id},
-        {"Authorization": "Bearer test-worker-token"},
+        {},
     )
 
     streamed = client.get("/api/v1/skill-hub/evaluations/critic-job-1/stream")
@@ -612,9 +630,9 @@ def test_critic_evaluation_allows_isolated_anonymous_jobs(client, monkeypatch):
     assert '"status":"completed"' in streamed.text
     assert calls[3] == (
         "get",
-        "http://critic-worker:8090/api/v1/evaluations/critic-job-1",
+        "http://skillhub-critic-worker:8090/api/v1/evaluations/critic-job-1",
         {"requester_id": requester_id},
-        {"Authorization": "Bearer test-worker-token"},
+        {},
     )
 
     client.cookies.clear()

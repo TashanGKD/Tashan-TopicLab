@@ -10,7 +10,7 @@ import pathlib
 import secrets
 import shlex
 import subprocess
-import tempfile
+import sys
 import threading
 import uuid
 from collections.abc import Awaitable, Callable
@@ -29,6 +29,9 @@ RUNTIME = {
 }
 TERMINAL_STATUSES = {"completed", "failed", "blocked", "unverifiable"}
 Runner = Callable[[dict[str, Any], pathlib.Path], dict[str, Any] | Awaitable[dict[str, Any]]]
+DEFAULT_RUNNER_COMMAND = f'"{sys.executable}" -m app.critic_runner'
+DEFAULT_RUNNER_PROFILE = "standard_v1"
+DEFAULT_STATE_DIR = pathlib.Path("/app/critic-state")
 
 
 def _atomic_json(path: pathlib.Path, value: dict[str, Any]) -> None:
@@ -150,9 +153,20 @@ class SubprocessRunner:
 
 
 def _configured_runner() -> Runner | None:
-    command = os.environ.get("CRITIC_WORKER_RUNNER", "").strip()
-    profile = os.environ.get("CRITIC_WORKER_RUNNER_PROFILE", "").strip()
-    return SubprocessRunner(command, profile) if command else None
+    return SubprocessRunner(DEFAULT_RUNNER_COMMAND, DEFAULT_RUNNER_PROFILE)
+
+
+def _builtin_runtime_ready() -> bool:
+    if not os.environ.get("skillhub_scnet_api_key", "").strip():
+        return False
+    from app.critic_runner import DEFAULT_CRITIC_RESEARCH_ROOTS
+
+    return any(
+        (root / "skills" / "find-science-skills" / "scripts" / "run_agentscope_critic_provider.py").is_file()
+        and (root / "skills" / "skill-criticagent" / "vendor" / "mcp_criticagent" / "src" / "core" / "skill_validator.py").is_file()
+        and (root / "skills" / "mcp-criticagent" / "SKILL.md").is_file()
+        for root in DEFAULT_CRITIC_RESEARCH_ROOTS
+    )
 
 
 def _result_progress(result: dict[str, Any]) -> dict[str, Any]:
@@ -258,17 +272,15 @@ def create_critic_worker_app(
     worker_token: str | None = None,
     state_dir: pathlib.Path | None = None,
 ) -> FastAPI:
+    uses_builtin_runner = runner is None
     selected_runner = runner or _configured_runner()
-    token = worker_token if worker_token is not None else os.environ.get("SKILL_HUB_CRITIC_WORKER_TOKEN", "")
-    root = state_dir or pathlib.Path(
-        os.environ.get("CRITIC_WORKER_STATE_DIR")
-        or pathlib.Path(tempfile.gettempdir()) / "topiclab-critic-worker"
-    )
+    token = worker_token or ""
+    root = state_dir or DEFAULT_STATE_DIR
     store = JobStore(pathlib.Path(root))
     worker = FastAPI(title="TopicLab Critic Worker", docs_url=None, redoc_url=None)
     runner_ready = selected_runner is not None and (
         not isinstance(selected_runner, SubprocessRunner) or selected_runner.ready
-    )
+    ) and (not uses_builtin_runner or _builtin_runtime_ready())
 
     def authorize(authorization: str | None) -> None:
         if not token:

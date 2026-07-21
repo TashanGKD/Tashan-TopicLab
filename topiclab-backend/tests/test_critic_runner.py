@@ -5,7 +5,6 @@ import os
 import pathlib
 import subprocess
 import tarfile
-import zipfile
 
 import pytest
 
@@ -61,10 +60,10 @@ def _write_skill(root: pathlib.Path, *, insecure: bool = False) -> pathlib.Path:
     return skill
 
 
-def test_research_scripts_can_be_configured_separately_from_vendored_kernel(
+def test_research_scripts_resolve_from_builtin_runtime_roots(
     monkeypatch, tmp_path
 ):
-    from app.critic_runner import _critic_research_root
+    from app import critic_runner
 
     kernel = tmp_path / "mcp-kernel"
     (kernel / "src" / "core").mkdir(parents=True)
@@ -74,9 +73,9 @@ def test_research_scripts_can_be_configured_separately_from_vendored_kernel(
     (research / "skills" / "skill-criticagent" / "SKILL.md").write_text(
         "# CriticAgent\n", encoding="utf-8"
     )
-    monkeypatch.setenv("CRITIC_RESEARCH_ROOT", str(research))
+    monkeypatch.setattr(critic_runner, "DEFAULT_CRITIC_RESEARCH_ROOTS", (research,))
 
-    assert _critic_research_root(kernel) == research.resolve()
+    assert critic_runner._critic_research_root(kernel) == research.resolve()
 
 
 def test_vendored_kernel_can_be_resolved_from_research_root(tmp_path):
@@ -332,41 +331,10 @@ def test_github_codeload_archive_uses_short_ephemeral_root_for_long_job_path(mon
     assert (source / "deep" / "path" / "README.md").is_file()
 
 
-def test_provider_secret_docx_preserves_base64_padding(monkeypatch, tmp_path):
-    from app.critic_runner import _provider_environment
-
-    secret = "sk-" + ("A" * 32) + "="
-    document = tmp_path / "provider.docx"
-    with zipfile.ZipFile(document, "w") as archive:
-        archive.writestr(
-            "word/document.xml",
-            f"<document><p>API Key {secret}</p><p>https://provider.example/api/llm/v1。</p></document>",
-        )
-    for name in (
-        "skillhub_scnet_api_key",
-        "CRITIC_PROVIDER_API_KEY",
-        "CRITIC_PROVIDER_BASE_URL",
-    ):
-        monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv("CRITIC_PROVIDER_SECRET_DOCX", str(document))
-
-    environment, base_url, model = _provider_environment()
-
-    assert environment["CRITIC_WORKER_PROVIDER_KEY"] == secret
-    assert base_url == "https://provider.example/api/llm/v1"
-    assert model == "GLM-5.2"
-
-
 def test_provider_environment_uses_skillhub_scnet_api_key(monkeypatch):
     from app.critic_runner import _provider_environment
 
-    for name in (
-        "skillhub_scnet_api_key",
-        "CRITIC_PROVIDER_API_KEY",
-        "CRITIC_PROVIDER_BASE_URL",
-        "CRITIC_PROVIDER_SECRET_DOCX",
-    ):
-        monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv("skillhub_scnet_api_key", raising=False)
     monkeypatch.setenv("skillhub_scnet_api_key", "skillhub-scnet-test-key")
     monkeypatch.setenv("SCNET_API_KEY", "topiclink-scnet-test-key")
     monkeypatch.delenv("SCNET_BASE_URL", raising=False)
@@ -381,18 +349,12 @@ def test_provider_environment_uses_skillhub_scnet_api_key(monkeypatch):
 def test_mcp_provider_environment_adapts_worker_secret_to_original_engine(monkeypatch):
     from app.critic_runner import _mcp_provider_environment
 
-    monkeypatch.delenv("skillhub_scnet_api_key", raising=False)
-    monkeypatch.delenv("CRITIC_PROVIDER_API_KEY", raising=False)
-    monkeypatch.delenv("CRITIC_PROVIDER_BASE_URL", raising=False)
-    monkeypatch.delenv("CRITIC_PROVIDER_SECRET_DOCX", raising=False)
-    monkeypatch.setenv("OPENAI_API_KEY", "memory-only-test-key")
-    monkeypatch.setenv("OPENAI_BASE_URL", "https://provider.invalid/v1")
-    monkeypatch.setenv("OPENAI_MODEL", "GLM-5.2")
+    monkeypatch.setenv("skillhub_scnet_api_key", "memory-only-test-key")
 
     environment = _mcp_provider_environment()
 
     assert environment["OPENAI_API_KEY"] == "memory-only-test-key"
-    assert environment["OPENAI_BASE_URL"] == "https://provider.invalid/v1"
+    assert environment["OPENAI_BASE_URL"] == "https://api.scnet.cn/api/llm/v1"
     assert environment["OPENAI_MODEL"] == "GLM-5.2"
 
 
@@ -1171,9 +1133,7 @@ def test_original_mcp_criticagent_runs_inside_job_and_preserves_engine(monkeypat
     source = job / "source"
     source.mkdir()
     (source / "README.md").write_text("# target\n", encoding="utf-8")
-    monkeypatch.setenv("OPENAI_API_KEY", "memory-only-test-key")
-    monkeypatch.setenv("OPENAI_BASE_URL", "https://provider.invalid/v1")
-    monkeypatch.setenv("OPENAI_MODEL", "GLM-5.2")
+    monkeypatch.setenv("skillhub_scnet_api_key", "memory-only-test-key")
 
     def execute(command, **kwargs):
         assert kwargs["cwd"] == job
@@ -1233,9 +1193,7 @@ def test_original_mcp_criticagent_retries_only_failed_repository_health(monkeypa
     source = job / "source"
     source.mkdir()
     (source / "README.md").write_text("# target\n", encoding="utf-8")
-    monkeypatch.setenv("OPENAI_API_KEY", "memory-only-test-key")
-    monkeypatch.setenv("OPENAI_BASE_URL", "https://provider.invalid/v1")
-    monkeypatch.setenv("OPENAI_MODEL", "GLM-5.2")
+    monkeypatch.setenv("skillhub_scnet_api_key", "memory-only-test-key")
     commands = []
 
     def execute(command, **kwargs):
@@ -1283,74 +1241,12 @@ def test_original_mcp_criticagent_retries_only_failed_repository_health(monkeypa
     assert json.loads((job / "mcp-repository-health-retry.json").read_text(encoding="utf-8"))["status"] == "success"
 
 
-def test_run_request_uses_configured_original_mcp_engine(monkeypatch, tmp_path):
-    from app import critic_runner
-
-    source = tmp_path / "source"
-    source.mkdir()
-    (source / "README.md").write_text("# target", encoding="utf-8")
-    engine = tmp_path / "engine"
-    engine.mkdir()
-    monkeypatch.setenv("MCP_CRITIC_ROOT", str(engine))
-    monkeypatch.setattr(
-        critic_runner,
-        "_acquire_github",
-        lambda target, job_dir: (
-            source,
-            {"requested_target": target, "requested_subpath": None, "commit_sha": "abc123"},
-        ),
-    )
-    calls = []
-
-    def evaluate(request, source_root, job_dir, *, engine_root):
-        calls.append((request, source_root, job_dir, engine_root))
-        return {
-            "status": "completed",
-            "score": 90,
-            "verdict": "建议采用",
-            "layers": {
-                "deploy_protocol": {
-                    "status": "passed",
-                    "deployment_success": True,
-                    "communication_success": True,
-                    "available_tools_count": 2,
-                    "first_tool_call_attempted": True,
-                },
-                "behavior": {
-                    "status": "passed",
-                    "generated_cases": 2,
-                    "executed_cases": 2,
-                    "passed_cases": 2,
-                    "smart_test_provider_calls": 3,
-                },
-                "repository_health": {"status": "passed", "final_score": 80},
-            },
-        }
-
-    monkeypatch.setattr(critic_runner, "run_mcp_criticagent", evaluate)
-    request = _request("mcp")
-    request["target"] = "https://github.com/example/mcp"
-
-    result = critic_runner.run_request(
-        request,
-        tmp_path / "job",
-        kernel_root=tmp_path / "kernel",
-    )
-
-    assert result["status"] == "completed"
-    assert len(calls) == 1
-    assert calls[0][3] == engine
-
-
 def test_run_request_acquires_npm_source_before_mcp_evaluation(monkeypatch, tmp_path):
     from app import critic_runner
 
     source = tmp_path / "npm-source"
     source.mkdir()
     (source / "package.json").write_text('{"name":"@scope/mcp"}', encoding="utf-8")
-    engine = tmp_path / "engine"
-    engine.mkdir()
-    monkeypatch.setenv("MCP_CRITIC_ROOT", str(engine))
     acquisitions = []
 
     def acquire(package, job_dir):
@@ -1365,31 +1261,20 @@ def test_run_request_acquires_npm_source_before_mcp_evaluation(monkeypatch, tmp_
     monkeypatch.setattr(critic_runner, "_acquire_npm", acquire)
     monkeypatch.setattr(
         critic_runner,
-        "run_mcp_criticagent",
-        lambda request, source_root, job_dir, *, engine_root: {
+        "run_standard_criticagent",
+        lambda request, source_root, job_dir, *, kernel_root: {
             "status": "completed",
             "score": 90,
             "verdict": "建议采用",
-            "layers": {
-                "deploy_protocol": {
-                    "status": "passed",
-                    "deployment_success": True,
-                    "communication_success": True,
-                    "available_tools_count": 1,
-                    "first_tool_call_attempted": True,
-                },
-                "behavior": {
-                    "status": "passed",
-                    "generated_cases": 2,
-                    "executed_cases": 2,
-                    "passed_cases": 2,
-                    "smart_test_provider_calls": 2,
-                },
-                "repository_health": {"status": "passed", "final_score": 80},
+            "evidence": {
+                "provider_calls": 4,
+                "behavior_cases": 1,
+                "trigger_queries": 8,
+                "final_adjudications": 1,
             },
         },
     )
-    request = _request("mcp")
+    request = _standard_request("mcp")
     request["target"] = "@scope/mcp"
 
     result = critic_runner.run_request(request, tmp_path / "job", kernel_root=tmp_path / "kernel")

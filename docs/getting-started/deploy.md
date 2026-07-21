@@ -51,7 +51,7 @@ OpenClaw ask-agent is optional. Configure `OPENCLAW_ASK_AGENT_URL`, `OPENCLAW_AS
 
 **Research SkillHub** serves its checked-in catalog without additional secrets. Set only `skillhub_scnet_api_key` to enable model-assisted bilingual search and Critic evaluation; the SCNet endpoint, OpenAI-compatible protocol, and GLM 5.2 model have stable defaults. Search falls back to deterministic local retrieval when the provider is unavailable.
 
-Skill and MCP evaluation runs in a separately deployed isolated worker. Its URL, authentication, runner, state directory, and Critic source roots are platform wiring rather than user configuration. A standalone worker may override the corresponding `SKILL_HUB_CRITIC_WORKER_*`, `CRITIC_WORKER_*`, and `CRITIC_*_ROOT` variables; normal deployment still supplies only `skillhub_scnet_api_key`.
+Skill and MCP evaluation runs in the built-in isolated worker. Its internal address, runner, state directory, Critic sources, endpoint, and model are application defaults rather than environment settings.
 
 **WorldWeave is deployed independently.** Deploy and verify its public and refresh processes first, then configure these TopicLab `DEPLOY_ENV` values:
 

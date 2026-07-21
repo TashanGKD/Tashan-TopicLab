@@ -64,6 +64,31 @@ jobs:
             git config -f .git/modules/backend/config --get submodule.libs/assignable_skills/_submodules/claude-scientific.url | sed -E 's#x-access-token:[^@]+@#x-access-token:***@#'
             git submodule update --init --recursive backend topiclab-cli ClawArcade
 
+            CRITIC_RESEARCH_DIR="$REPO_DIR/.runtime/tashan-research-skills"
+            CRITIC_RESEARCH_URL="https://github.com/TashanGKD/tashan-research-skills.git"
+            mkdir -p "$REPO_DIR/.runtime"
+            if [ ! -d "$CRITIC_RESEARCH_DIR/.git" ]; then
+              for i in 1 2 3; do
+                git clone --depth 1 --branch main "$CRITIC_RESEARCH_URL" "$CRITIC_RESEARCH_DIR" && break || {
+                  rm -rf "$CRITIC_RESEARCH_DIR"
+                  [ "$i" = "3" ] && echo "Critic runtime clone failed after 3 retries" && exit 1
+                  sleep 5
+                }
+              done
+            else
+              git -C "$CRITIC_RESEARCH_DIR" remote set-url origin "$CRITIC_RESEARCH_URL"
+              for i in 1 2 3; do
+                git -C "$CRITIC_RESEARCH_DIR" fetch --depth 1 origin main && break || {
+                  [ "$i" = "3" ] && echo "Critic runtime fetch failed after 3 retries" && exit 1
+                  sleep 5
+                }
+              done
+              git -C "$CRITIC_RESEARCH_DIR" reset --hard origin/main
+            fi
+            test -f "$CRITIC_RESEARCH_DIR/skills/find-science-skills/scripts/run_agentscope_critic_provider.py"
+            test -f "$CRITIC_RESEARCH_DIR/skills/skill-criticagent/vendor/mcp_criticagent/src/core/skill_validator.py"
+            test -f "$CRITIC_RESEARCH_DIR/skills/mcp-criticagent/SKILL.md"
+
             if [ -z "${DEPLOY_ENV:-}" ]; then
               echo "::error::DEPLOY_ENV secret is not set. Add it in repo Settings → Secrets."
               exit 1
@@ -166,6 +191,19 @@ jobs:
             fi
             docker compose down
             docker compose up -d
+            if grep -Eq '^skillhub_scnet_api_key=.+$' .env; then
+              for i in $(seq 1 30); do
+                if docker compose exec -T skillhub-critic-worker python -c "import json,urllib.request; payload=json.load(urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=5)); assert payload.get('ready') is True, payload"; then
+                  break
+                fi
+                if [ "$i" = "30" ]; then
+                  echo "::error::SkillHub Critic Worker did not become ready."
+                  docker compose logs --tail=120 skillhub-critic-worker
+                  exit 1
+                fi
+                sleep 2
+              done
+            fi
             for i in $(seq 1 30); do
               if docker compose exec -T topiclab-backend python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/topiclink/health/ready', timeout=5)"; then
                 break

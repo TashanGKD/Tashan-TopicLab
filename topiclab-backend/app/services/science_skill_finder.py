@@ -7,7 +7,6 @@ import json
 import logging
 import os
 import re
-import zipfile
 from dataclasses import dataclass
 from functools import lru_cache
 from importlib.metadata import PackageNotFoundError, version
@@ -20,13 +19,14 @@ from app.services.science_skill_catalog import get_catalog_items, get_catalog_me
 logger = logging.getLogger(__name__)
 DEFAULT_MODEL = "GLM-5.2"
 DEFAULT_SCNET_BASE_URL = "https://api.scnet.cn/api/llm/v1"
-DEFAULT_FIND_SKILL_DIR = (
+DEFAULT_FIND_SKILL_DIRS = (
+    Path("/opt/critic/tashan-research-skills/skills/find-science-skills"),
     Path.home()
     / "work"
     / "tashan-skills-maintain"
     / "tashan-research-skills"
     / "skills"
-    / "find-science-skills"
+    / "find-science-skills",
 )
 GENERIC_QUERY_TOKENS = frozenset(
     {
@@ -106,87 +106,25 @@ class FinderConfig:
         return bool(self.base_url and self.api_key)
 
 
-def _load_desktop_scnet() -> dict[str, str]:
-    if os.getenv("SCIENCE_SKILL_FINDER_USE_DESKTOP_SCNET", "0").strip().lower() in {"0", "false", "no"}:
-        return {}
-    settings_path = Path.home() / ".claude" / "settings.json"
-    try:
-        payload = json.loads(settings_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-    env = payload.get("env") if isinstance(payload, dict) else None
-    if not isinstance(env, dict):
-        return {}
-    return {
-        "base_url": str(env.get("ANTHROPIC_BASE_URL") or "").strip(),
-        "api_key": str(env.get("ANTHROPIC_AUTH_TOKEN") or "").strip(),
-        "protocol": "anthropic",
-    }
-
-
-def _load_secret_docx() -> dict[str, str]:
-    secret_path = os.getenv("SCIENCE_SKILL_FINDER_SECRET_DOCX", "").strip()
-    if not secret_path:
-        return {}
-    try:
-        with zipfile.ZipFile(Path(secret_path)) as archive:
-            document = archive.read("word/document.xml").decode("utf-8", errors="replace")
-    except (OSError, KeyError, zipfile.BadZipFile):
-        return {}
-    plain = re.sub(r"<[^>]+>", " ", document)
-    key_match = re.search(r"sk-[A-Za-z0-9_=-]{20,}", plain)
-    urls = re.findall(r'https?://[^\s<>"\']+', plain)
-    base_url = next(
-        (url.rstrip("。.,，）)") for url in urls if "/api/llm/v1" in url),
-        "",
-    )
-    return {
-        "base_url": base_url,
-        "api_key": key_match.group(0) if key_match else "",
-        "protocol": "openai",
-    }
-
-
 def get_finder_config() -> FinderConfig:
-    desktop = _load_desktop_scnet()
-    secret_doc = _load_secret_docx()
-    explicit_base = os.getenv("SCIENCE_SKILL_FINDER_BASE_URL") or os.getenv("SCNET_BASE_URL")
-    explicit_key = (
-        os.getenv("skillhub_scnet_api_key")
-        or os.getenv("SCIENCE_SKILL_FINDER_API_KEY")
-        or os.getenv("SCNET_API_KEY")
-    )
-    base_url = str(
-        explicit_base
-        or secret_doc.get("base_url")
-        or desktop.get("base_url")
-        or DEFAULT_SCNET_BASE_URL
-    ).rstrip("/")
-    api_key = str(explicit_key or secret_doc.get("api_key") or desktop.get("api_key") or "").strip()
-    protocol = str(
-        os.getenv("SCIENCE_SKILL_FINDER_PROTOCOL")
-        or secret_doc.get("protocol")
-        or ("anthropic" if desktop and not explicit_base else "openai")
-    ).strip().lower()
     return FinderConfig(
-        base_url=base_url,
-        api_key=api_key,
-        model=str(os.getenv("SCIENCE_SKILL_FINDER_MODEL") or DEFAULT_MODEL).strip(),
-        protocol=protocol if protocol in {"openai", "anthropic"} else "openai",
-        desktop_config=bool(desktop and not explicit_key),
+        base_url=DEFAULT_SCNET_BASE_URL,
+        api_key=os.getenv("skillhub_scnet_api_key", "").strip(),
+        model=DEFAULT_MODEL,
+        protocol="openai",
+        desktop_config=False,
     )
 
 
 def _resolve_find_skill_source() -> tuple[Path, str]:
-    configured = os.getenv("SCIENCE_SKILL_FINDER_SKILL_DIR", "").strip()
-    source = Path(configured).expanduser() if configured else DEFAULT_FIND_SKILL_DIR
-    skill_file = source.resolve() / "SKILL.md"
-    if not skill_file.is_file():
-        raise FileNotFoundError("find-science-skills source is unavailable")
-    content = skill_file.read_bytes()
-    if b"name: find-science-skills" not in content:
-        raise ValueError("configured skill source is not find-science-skills")
-    return skill_file.parent, hashlib.sha256(content).hexdigest()
+    for source in DEFAULT_FIND_SKILL_DIRS:
+        skill_file = source.resolve() / "SKILL.md"
+        if not skill_file.is_file():
+            continue
+        content = skill_file.read_bytes()
+        if b"name: find-science-skills" in content:
+            return skill_file.parent, hashlib.sha256(content).hexdigest()
+    raise FileNotFoundError("find-science-skills source is unavailable")
 
 
 def get_finder_capabilities() -> dict[str, Any]:

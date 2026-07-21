@@ -17,7 +17,6 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
-import zipfile
 from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlparse
@@ -47,6 +46,11 @@ GITHUB_ARCHIVE_MAX_BYTES = 100 * 1024 * 1024
 GITHUB_ARCHIVE_MAX_FILES = 5000
 GITHUB_ARCHIVE_MAX_UNPACKED_BYTES = 300 * 1024 * 1024
 DEFAULT_SCNET_BASE_URL = "https://api.scnet.cn/api/llm/v1"
+DEFAULT_SCNET_MODEL = "GLM-5.2"
+DEFAULT_CRITIC_RESEARCH_ROOTS = (
+    pathlib.Path("/opt/critic/tashan-research-skills"),
+    pathlib.Path.home() / "work" / "tashan-skills-maintain" / "tashan-research-skills",
+)
 
 CHINESE_OUTPUT_CONTRACT = (
     "所有面向用户的叙述必须使用简体中文。JSON 键名、schema、枚举值、URL、源码标识和"
@@ -734,15 +738,12 @@ def run_mcp_criticagent(
 
 
 def _critic_research_root(kernel_root: pathlib.Path) -> pathlib.Path:
-    configured = os.environ.get("CRITIC_RESEARCH_ROOT", "").strip()
-    if configured:
-        candidate = pathlib.Path(configured).resolve()
-        if (candidate / "skills" / "find-science-skills" / "scripts").is_dir() and (
-            candidate / "skills" / "skill-criticagent" / "SKILL.md"
-        ).is_file():
-            return candidate
-        raise ValueError("configured CriticAgent research root is unavailable")
-    for candidate in (kernel_root.resolve(), *kernel_root.resolve().parents):
+    for candidate in (
+        *DEFAULT_CRITIC_RESEARCH_ROOTS,
+        kernel_root.resolve(),
+        *kernel_root.resolve().parents,
+    ):
+        candidate = candidate.resolve()
         if (candidate / "skills" / "find-science-skills" / "scripts").is_dir() and (
             candidate / "skills" / "skill-criticagent" / "SKILL.md"
         ).is_file():
@@ -752,60 +753,16 @@ def _critic_research_root(kernel_root: pathlib.Path) -> pathlib.Path:
 
 def _provider_environment() -> tuple[dict[str, str], str, str]:
     environment = os.environ.copy()
-    base_url = environment.get("CRITIC_PROVIDER_BASE_URL", "").strip() or environment.get(
-        "SCNET_BASE_URL", ""
-    ).strip()
-    model = environment.get("CRITIC_PROVIDER_MODEL", "GLM-5.2").strip() or "GLM-5.2"
-    api_key = (
-        os.environ.get("skillhub_scnet_api_key", "").strip()
-        or environment.get("CRITIC_PROVIDER_API_KEY", "").strip()
-        or environment.get("SCNET_API_KEY", "").strip()
-    )
-    secret_doc = environment.get("CRITIC_PROVIDER_SECRET_DOCX", "").strip()
-    if secret_doc and (not api_key or not base_url):
-        with zipfile.ZipFile(pathlib.Path(secret_doc)) as archive:
-            document = archive.read("word/document.xml").decode("utf-8", errors="replace")
-        plain = re.sub(r"<[^>]+>", " ", document)
-        if not api_key:
-            match = re.search(r"sk-[A-Za-z0-9_=-]{20,}", plain)
-            api_key = match.group(0) if match else ""
-        if not base_url:
-            urls = re.findall(r"https?://[^\s<>\"]+", plain)
-            base_url = next(
-                (url.rstrip("。.,，）)") for url in urls if "/api/llm/v1" in url),
-                "",
-            )
-    base_url = base_url or DEFAULT_SCNET_BASE_URL
-    if not api_key or not base_url:
+    api_key = os.environ.get("skillhub_scnet_api_key", "").strip()
+    if not api_key:
         raise RuntimeError("CriticAgent provider credentials are unavailable")
     environment["CRITIC_WORKER_PROVIDER_KEY"] = api_key
-    return environment, base_url.rstrip("/"), model
+    return environment, DEFAULT_SCNET_BASE_URL, DEFAULT_SCNET_MODEL
 
 
 def _mcp_provider_environment() -> dict[str, str]:
-    configured = any(
-        os.environ.get(name, "").strip()
-        for name in (
-            "skillhub_scnet_api_key",
-            "CRITIC_PROVIDER_API_KEY",
-            "CRITIC_PROVIDER_BASE_URL",
-            "CRITIC_PROVIDER_SECRET_DOCX",
-            "SCNET_API_KEY",
-            "SCNET_BASE_URL",
-        )
-    )
-    if configured:
-        environment, base_url, model = _provider_environment()
-        api_key = environment["CRITIC_WORKER_PROVIDER_KEY"]
-    else:
-        environment = os.environ.copy()
-        api_key = environment.get("OPENAI_API_KEY", "").strip()
-        base_url = environment.get("OPENAI_BASE_URL", "").strip()
-        model = environment.get("OPENAI_MODEL", "").strip()
-        if not api_key or not base_url:
-            raise RuntimeError("CriticAgent provider credentials are unavailable")
-        model = model or "GLM-5.2"
-
+    environment, base_url, model = _provider_environment()
+    api_key = environment["CRITIC_WORKER_PROVIDER_KEY"]
     environment["CRITIC_WORKER_PROVIDER_KEY"] = api_key
     environment["OPENAI_API_KEY"] = api_key
     environment["OPENAI_BASE_URL"] = base_url.rstrip("/")
@@ -2757,7 +2714,6 @@ def run_request(request: dict[str, Any], job_dir: pathlib.Path, *, kernel_root: 
         source_root, provenance = _acquire_github(target, job_dir)
     _write_progress(job_dir, "validation", [], "来源已封存，正在执行规范与安全检查")
     mcp_evaluator: MCPEvaluator | None = None
-    mcp_root = os.environ.get("MCP_CRITIC_ROOT", "").strip()
     if request["kind"] == "mcp" and request.get("evaluation_profile") in {"basic", "standard"}:
 
         def configured_mcp_evaluator(
@@ -2771,22 +2727,6 @@ def run_request(request: dict[str, Any], job_dir: pathlib.Path, *, kernel_root: 
                 else run_standard_criticagent
             )
             return evaluator(current_request, current_source, current_job, kernel_root=kernel_root)
-
-        mcp_evaluator = configured_mcp_evaluator
-    elif request["kind"] == "mcp" and mcp_root:
-        engine_root = pathlib.Path(mcp_root)
-
-        def configured_mcp_evaluator(
-            current_request: dict[str, Any],
-            current_source: pathlib.Path,
-            current_job: pathlib.Path,
-        ) -> dict[str, Any]:
-            return run_mcp_criticagent(
-                current_request,
-                current_source,
-                current_job,
-                engine_root=engine_root,
-            )
 
         mcp_evaluator = configured_mcp_evaluator
     skill_evaluator: SkillEvaluator | None = None
@@ -2841,8 +2781,15 @@ def main() -> int:
     args = parser.parse_args()
     request = json.loads(args.request.read_text(encoding="utf-8"))
     job_dir = args.output.resolve().parent
-    kernel_value = os.environ.get("CRITIC_KERNEL_ROOT", "").strip()
-    if not kernel_value:
+    kernel_root = next(
+        (
+            root / "skills" / "skill-criticagent" / "vendor" / "mcp_criticagent"
+            for root in DEFAULT_CRITIC_RESEARCH_ROOTS
+            if (root / "skills" / "skill-criticagent" / "vendor" / "mcp_criticagent").is_dir()
+        ),
+        None,
+    )
+    if kernel_root is None:
         result = {
             "schema": RESULT_SCHEMA,
             "status": "blocked",
@@ -2852,7 +2799,7 @@ def main() -> int:
         }
     else:
         try:
-            result = run_request(request, job_dir, kernel_root=pathlib.Path(kernel_value))
+            result = run_request(request, job_dir, kernel_root=kernel_root)
         except Exception as exc:
             result = {
                 "schema": RESULT_SCHEMA,
