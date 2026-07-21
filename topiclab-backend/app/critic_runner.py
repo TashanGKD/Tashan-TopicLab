@@ -60,6 +60,12 @@ SUBPROCESS_ENV_ALLOWLIST = (
     "SSL_CERT_FILE",
     "SSL_CERT_DIR",
     "REQUESTS_CA_BUNDLE",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "NO_PROXY",
+    "no_proxy",
 )
 
 CHINESE_OUTPUT_CONTRACT = (
