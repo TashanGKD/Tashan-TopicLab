@@ -11,6 +11,7 @@ import secrets
 import shlex
 import subprocess
 import sys
+import tempfile
 import threading
 import uuid
 from collections.abc import Awaitable, Callable
@@ -31,7 +32,13 @@ TERMINAL_STATUSES = {"completed", "failed", "blocked", "unverifiable"}
 Runner = Callable[[dict[str, Any], pathlib.Path], dict[str, Any] | Awaitable[dict[str, Any]]]
 DEFAULT_RUNNER_COMMAND = f'"{sys.executable}" -m app.critic_runner'
 DEFAULT_RUNNER_PROFILE = "standard_v1"
-DEFAULT_STATE_DIR = pathlib.Path("/app/critic-state")
+
+
+def _default_state_dir() -> pathlib.Path:
+    container_root = pathlib.Path("/app")
+    if container_root.is_dir():
+        return container_root / "critic-state"
+    return pathlib.Path(tempfile.gettempdir()) / "topiclab-critic-worker"
 
 
 def _atomic_json(path: pathlib.Path, value: dict[str, Any]) -> None:
@@ -275,7 +282,7 @@ def create_critic_worker_app(
     uses_builtin_runner = runner is None
     selected_runner = runner or _configured_runner()
     token = worker_token or ""
-    root = state_dir or DEFAULT_STATE_DIR
+    root = state_dir or _default_state_dir()
     store = JobStore(pathlib.Path(root))
     worker = FastAPI(title="TopicLab Critic Worker", docs_url=None, redoc_url=None)
     runner_ready = selected_runner is not None and (
