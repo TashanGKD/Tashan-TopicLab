@@ -244,7 +244,7 @@ def test_deploy_translates_host_proxy_for_docker_builds():
     assert 'DOCKER_HOST_GATEWAY="$(docker network inspect bridge' in deploy_source
     assert "prepare_docker_build_env.py" in deploy_source
     assert 'docker compose --env-file "$BUILD_ENV_FILE" build' in deploy_source
-    assert "trap cleanup_build_env EXIT" in deploy_source
+    assert "trap cleanup_deploy EXIT" in deploy_source
     assert 'export COMPOSE_FILE="$REPO_DIR/docker-compose.yml"' in deploy_source
     assert 'config --services)' in deploy_source
     assert "Versioned Compose stack is missing" in deploy_source

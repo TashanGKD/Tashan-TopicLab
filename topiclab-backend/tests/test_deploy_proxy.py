@@ -192,3 +192,33 @@ def test_topiclab_image_reuses_node_runtime_instead_of_debian_npm_packages():
     assert "nodejs" not in apt_layer
     assert " npm" not in apt_layer
     assert compose.count("NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-") >= 4
+
+
+def test_resonnet_image_reuses_node_runtime_instead_of_nodesource():
+    dockerfile = (REPOSITORY_ROOT / "backend" / "Dockerfile").read_text(
+        encoding="utf-8"
+    )
+    compose = (REPOSITORY_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    backend_service = compose.split("  backend:", 1)[1].split("\n  frontend:", 1)[0]
+
+    assert "FROM ${NODE_BASE_IMAGE} AS node-runtime" in dockerfile
+    assert "COPY --from=node-runtime /usr/local/bin/node" in dockerfile
+    assert "COPY --from=node-runtime /usr/local/lib/node_modules" in dockerfile
+    assert "deb.nodesource.com" not in dockerfile
+    assert "apt-get install -y --no-install-recommends nodejs" not in dockerfile
+    assert "Acquire::Retries" in dockerfile
+    assert 'Acquire::http::Pipeline-Depth "0"' in dockerfile
+    assert "NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-" in backend_service
+
+
+def test_deploy_limits_ssh_connection_and_cleans_up_timed_out_builds():
+    deploy = (REPOSITORY_ROOT / ".github" / "workflows" / "deploy.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "timeout: 30s" in deploy
+    assert "command_timeout: 120m" in deploy
+    assert "trap cleanup_deploy EXIT" in deploy
+    assert "trap exit_on_signal HUP INT TERM" in deploy
+    assert 'kill -TERM "$child_pid"' in deploy
+    assert "timeout --signal=TERM --kill-after=30s 60m" in deploy
