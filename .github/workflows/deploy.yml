@@ -100,6 +100,9 @@ jobs:
             fi
             echo "$DEPLOY_ENV" > .env
 
+            # Ignore inherited COMPOSE_FILE values and stale Compose overrides;
+            # always operate on the versioned stack.
+            export COMPOSE_FILE="$REPO_DIR/docker-compose.yml"
             BUILD_ENV_FILE="$REPO_DIR/.env.build"
             cleanup_build_env() {
               rm -f "$BUILD_ENV_FILE"
@@ -115,6 +118,18 @@ jobs:
               --destination "$BUILD_ENV_FILE" \
               --gateway "$DOCKER_HOST_GATEWAY"
             docker compose --env-file "$BUILD_ENV_FILE" config --quiet
+            COMPOSE_SERVICES="$(docker compose --env-file "$BUILD_ENV_FILE" config --services)"
+            printf '%s\n' "$COMPOSE_SERVICES" | sed 's/^/[deploy] compose service: /'
+            for required_service in topiclab-backend skillhub-critic-worker topiclink-zvec backend frontend; do
+              if ! printf '%s\n' "$COMPOSE_SERVICES" | grep -qx "$required_service"; then
+                echo "::error::Versioned Compose stack is missing $required_service."
+                exit 1
+              fi
+            done
+            if printf '%s\n' "$COMPOSE_SERVICES" | grep -Eq '^worldweave(-refresh)?$'; then
+              echo "::error::Obsolete bundled WorldWeave service is still active in the Compose stack."
+              exit 1
+            fi
 
             # The same-host WorldWeave deployment exposes container port 5000
             # on host port 3020. Migrate only the old default; explicit remote
