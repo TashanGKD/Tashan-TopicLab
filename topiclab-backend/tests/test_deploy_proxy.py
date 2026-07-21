@@ -222,3 +222,6 @@ def test_deploy_limits_ssh_connection_and_cleans_up_timed_out_builds():
     assert "trap exit_on_signal HUP INT TERM" in deploy
     assert 'kill -TERM "$child_pid"' in deploy
     assert "timeout --signal=TERM --kill-after=30s 60m" in deploy
+    assert 'exec 9>"$DEPLOY_LOCK_FILE"' in deploy
+    assert "flock -n 9" in deploy
+    assert 'docker compose --parallel 1 --env-file "$BUILD_ENV_FILE" build' in deploy

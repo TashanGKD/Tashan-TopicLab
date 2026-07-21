@@ -42,6 +42,12 @@ jobs:
               for i in 1 2 3; do git clone "$REPO_URL" "$REPO_DIR" && break || sleep 5; done
             fi
             cd "$REPO_DIR"
+            DEPLOY_LOCK_FILE="$REPO_DIR/.deploy.lock"
+            exec 9>"$DEPLOY_LOCK_FILE"
+            if ! flock -n 9; then
+              echo "::error::Another deployment or orphaned build still holds $DEPLOY_LOCK_FILE."
+              exit 1
+            fi
             git remote set-url origin "$REPO_URL"
             SUBMODULE_AUTH="${SUBMODULE_TOKEN:-$GITHUB_TOKEN}"
             set_submodule_url() {
@@ -218,7 +224,7 @@ jobs:
 
             run_with_heartbeat "docker compose build" \
               timeout --signal=TERM --kill-after=30s 60m \
-              docker compose --env-file "$BUILD_ENV_FILE" build
+              docker compose --parallel 1 --env-file "$BUILD_ENV_FILE" build
             ZVEC_ACTIVE_RESOLVED="$(python3 "$ZVEC_MANAGER" path --lock "$ZVEC_LOCK" --workspace "$WORKSPACE_HOST_PATH" --kind active-resolved)"
             CURRENT_ZVEC_ID="$(docker compose ps -q topiclink-zvec 2>/dev/null || true)"
             ZVEC_WAS_RUNNING=false
