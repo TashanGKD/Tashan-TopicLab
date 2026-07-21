@@ -343,6 +343,8 @@ def test_provider_environment_uses_skillhub_scnet_api_key(monkeypatch):
     monkeypatch.setenv("SCNET_API_KEY", "topiclink-scnet-test-key")
     monkeypatch.setenv("DATABASE_URL", "postgresql://secret.invalid/topiclab")
     monkeypatch.setenv("JWT_SECRET", "must-not-reach-runner")
+    monkeypatch.setenv("HTTPS_PROXY", "http://host.docker.internal:1081")
+    monkeypatch.setenv("NO_PROXY", "localhost,127.0.0.1")
     monkeypatch.delenv("SCNET_BASE_URL", raising=False)
 
     environment, base_url, model = _provider_environment()
@@ -351,6 +353,8 @@ def test_provider_environment_uses_skillhub_scnet_api_key(monkeypatch):
     assert "SCNET_API_KEY" not in environment
     assert "DATABASE_URL" not in environment
     assert "JWT_SECRET" not in environment
+    assert environment["HTTPS_PROXY"] == "http://host.docker.internal:1081"
+    assert environment["NO_PROXY"] == "localhost,127.0.0.1"
     assert base_url == "https://api.scnet.cn/api/llm/v1"
     assert model == "GLM-5.2"
 

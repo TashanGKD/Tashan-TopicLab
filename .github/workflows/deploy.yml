@@ -31,6 +31,7 @@ jobs:
           command_timeout: 120m
           script: |
             set -euo pipefail
+            umask 077
             BASE_DIR="${{ secrets.DEPLOY_PATH || '/var/www/github-actions/repos' }}"
             REPO_NAME=$(basename "$REPO")
             REPO_DIR="$BASE_DIR/$REPO_NAME"
@@ -99,6 +100,22 @@ jobs:
             fi
             echo "$DEPLOY_ENV" > .env
 
+            BUILD_ENV_FILE="$REPO_DIR/.env.build"
+            cleanup_build_env() {
+              rm -f "$BUILD_ENV_FILE"
+            }
+            trap cleanup_build_env EXIT
+            DOCKER_HOST_GATEWAY="$(docker network inspect bridge --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}')"
+            if [ -z "$DOCKER_HOST_GATEWAY" ]; then
+              echo "::error::Docker bridge gateway is unavailable for the deployment proxy."
+              exit 1
+            fi
+            python3 "$REPO_DIR/scripts/prepare_docker_build_env.py" \
+              --source "$REPO_DIR/.env" \
+              --destination "$BUILD_ENV_FILE" \
+              --gateway "$DOCKER_HOST_GATEWAY"
+            docker compose --env-file "$BUILD_ENV_FILE" config --quiet
+
             # The same-host WorldWeave deployment exposes container port 5000
             # on host port 3020. Migrate only the old default; explicit remote
             # HTTPS origins and other custom upstreams remain untouched.
@@ -165,7 +182,8 @@ jobs:
               wait "$pid"
             }
 
-            run_with_heartbeat "docker compose build" docker compose build
+            run_with_heartbeat "docker compose build" \
+              docker compose --env-file "$BUILD_ENV_FILE" build
             ZVEC_ACTIVE_RESOLVED="$(python3 "$ZVEC_MANAGER" path --lock "$ZVEC_LOCK" --workspace "$WORKSPACE_HOST_PATH" --kind active-resolved)"
             CURRENT_ZVEC_ID="$(docker compose ps -q topiclink-zvec 2>/dev/null || true)"
             ZVEC_WAS_RUNNING=false

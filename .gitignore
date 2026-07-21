@@ -42,6 +42,7 @@ build/
 # Project
 .env
 .env.deploy
+.env.build
 
 backend/workspace/
 frontend/.vite/

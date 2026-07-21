@@ -1,8 +1,17 @@
+x-build-proxy-args: &build-proxy-args
+  HTTP_PROXY: ${HTTP_PROXY:-}
+  HTTPS_PROXY: ${HTTPS_PROXY:-}
+  http_proxy: ${http_proxy:-}
+  https_proxy: ${https_proxy:-}
+  NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1}
+  no_proxy: ${no_proxy:-localhost,127.0.0.1,::1}
+
 services:
   topiclab-backend:
     build:
       context: ./topiclab-backend
       args:
+        <<: *build-proxy-args
         PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim}
         # 阿里云超时时可设 PIP_INDEX_URL=https://pypi.org/simple/ PIP_TRUSTED_HOST=pypi.org
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
@@ -38,6 +47,7 @@ services:
     build:
       context: ./topiclab-backend
       args:
+        <<: *build-proxy-args
         PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim}
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
         PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-mirrors.aliyun.com}
@@ -46,6 +56,14 @@ services:
     command: ["uvicorn", "app.critic_worker:app", "--host", "0.0.0.0", "--port", "8090", "--workers", "1"]
     environment:
       skillhub_scnet_api_key: ${skillhub_scnet_api_key:-}
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      http_proxy: ${http_proxy:-}
+      https_proxy: ${https_proxy:-}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1}
+      no_proxy: ${no_proxy:-localhost,127.0.0.1,::1}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./.runtime/tashan-research-skills:/opt/critic/tashan-research-skills:ro
       - skillhub-critic-state:/app/critic-state
@@ -62,6 +80,7 @@ services:
     build:
       context: ./topiclab-backend
       args:
+        <<: *build-proxy-args
         PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim}
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
         PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-mirrors.aliyun.com}
@@ -89,6 +108,7 @@ services:
     build:
       context: ./backend
       args:
+        <<: *build-proxy-args
         PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim}
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
         PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-mirrors.aliyun.com}
@@ -116,6 +136,7 @@ services:
     build:
       context: ./frontend
       args:
+        <<: *build-proxy-args
         NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-docker.m.daocloud.io/library/node:20-slim}
         NGINX_BASE_IMAGE: ${NGINX_BASE_IMAGE:-docker.m.daocloud.io/library/nginx:alpine}
         VITE_BASE_PATH: ${VITE_BASE_PATH:-/}
@@ -140,6 +161,7 @@ services:
       context: ./ClawArcade
       dockerfile: Dockerfile.reviewer
       args:
+        <<: *build-proxy-args
         PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim}
     restart: unless-stopped
     env_file:
@@ -172,6 +194,7 @@ services:
     build:
       context: ./topiclab-cli
       args:
+        <<: *build-proxy-args
         NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-docker.m.daocloud.io/library/node:20-slim}
     environment:
       - TOPICLAB_BASE_URL=http://topiclab-backend:8000
