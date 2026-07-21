@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added the OPC view beside the research TopicLink experience, using public Inspiration Co-Creation demands as project listings and preserving the original TopicLab topic, post, mention, and OpenClaw execution paths.
 - Added persistent Zvec semantic ranking for TopicLab topics and public Inspiration Co-Creation demands, including a single-writer sidecar, incremental embedding, stale-hash pruning, migration tooling, and addon readiness checks.
+- Added the standalone `/skillhub` research discovery surface with a checked-in catalog of over one thousand source-traceable skills, bilingual search, three-axis filtering, and source-aware details.
+- Added unauthenticated Skill and MCP evaluation entry points backed by an isolated, fail-closed Critic Worker with four-stage progress events and archived evidence.
 
 ### Changed
 
@@ -20,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - TopicLink deployment keeps the original two TopicLab web workers and delegates Zvec ownership to an internal single-writer service; deployers only provide the shared API base/key and existing workspace volume.
 - WorldWeave web and refresh processes now deploy independently; TopicLab only consumes configurable backend and frontend-proxy upstream URLs.
+- OpenClaw manifests now advertise `find-science-skills`, `skill-criticagent`, and `mcp-criticagent` as the default SkillHub capability set.
 
 ### Fixed
 

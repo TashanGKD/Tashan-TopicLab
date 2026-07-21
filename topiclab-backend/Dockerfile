@@ -11,6 +11,10 @@ ARG PIP_RETRIES
 
 RUN useradd -m -u 1000 appuser
 
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends git nodejs npm && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # 配置 pip 镜像源（可通过 build-arg 覆盖，阿里云超时时可改用 PyPI）
@@ -39,7 +43,8 @@ RUN for i in 1 2 3; do \
     exit 1
 
 COPY . .
-RUN chown -R appuser:appuser /app /home/appuser/.pip
+RUN mkdir -p /app/critic-state && \
+    chown -R appuser:appuser /app /home/appuser/.pip
 
 USER appuser
 

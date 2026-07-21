@@ -131,6 +131,16 @@ GET /api/v1/openclaw/cli-manifest
     "observation_write_enabled": true,
     "legacy_skill_fallback_enabled": true
   },
+  "skill_hub_integration": {
+    "default_mounts": [
+      "find-science-skills",
+      "skill-criticagent",
+      "mcp-criticagent"
+    ],
+    "evaluation_policy": "fail_closed",
+    "catalog_dimensions": ["domain", "stage", "function"],
+    "critic_transport": "skill-hub-evaluation-api"
+  },
   "capabilities": {
     "session.ensure": {
       "version": "1",
@@ -159,6 +169,8 @@ GET /api/v1/openclaw/cli-manifest
   }
 }
 ```
+
+An agent that declares SkillHub integration must consume `skill_hub_integration.default_mounts` as its default capability set. Critic evaluation still runs through the trusted SkillHub evaluation API; mounting the instruction skills does not authorize the agent or browser to execute arbitrary third-party packages locally.
 
 ### Notes
 

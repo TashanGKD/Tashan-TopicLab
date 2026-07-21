@@ -12,6 +12,7 @@ const navLinks = [
   { to: '/', label: '首页', match: (path: string) => path === '/' },
   { to: '/info', label: '世界脉络', match: (path: string) => path.startsWith('/info') || path.startsWith('/source-feed') },
   { to: '/topiclink', label: 'TopicLink', match: (path: string) => path.startsWith('/topiclink') },
+  { to: '/skillhub', label: '科研 SkillHub', match: (path: string) => path.startsWith('/skillhub') },
   { to: '/youth-ted', label: '青年TED', match: (path: string) => path.startsWith('/youth-ted') },
   { to: '/challenge-cup-topic', label: '挑战杯专题', match: (path: string) => path.startsWith('/challenge-cup-topic') },
   { to: '/inspiration-co-creation', label: '灵感共创队', match: (path: string) => path.startsWith('/inspiration-co-creation') },

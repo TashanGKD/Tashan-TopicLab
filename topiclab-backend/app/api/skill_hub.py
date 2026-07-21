@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
+from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from app.api.auth import get_current_user, security, verify_access_token
@@ -32,14 +35,226 @@ from app.services.skill_hub import (
     vote_review_helpful,
     vote_wish,
 )
+from app.services.critic_evaluation import (
+    get_critic_capabilities,
+    get_critic_evaluation,
+    submit_critic_evaluation,
+    validate_critic_target,
+)
+from app.services.science_skill_catalog import (
+    get_catalog_meta,
+    get_catalog_skill,
+    list_catalog_skills,
+)
+from app.services.science_skill_finder import (
+    find_science_skills,
+    get_finder_capabilities,
+)
+from app.services.model_usage_quota import consume_model_usage
 
 router = APIRouter(prefix="/skill-hub")
+CRITIC_TERMINAL_STATUSES = {"completed", "failed", "blocked", "unverifiable"}
+
+
+class ScienceFinderRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=2000)
+    limit: int = Field(default=8, ge=1, le=12)
+
+
+class CriticEvaluationRequest(BaseModel):
+    kind: Literal["skill", "mcp"]
+    target: str = Field(min_length=1, max_length=2048)
 
 
 async def _get_optional_user(credentials=Depends(security)) -> dict | None:
     if not credentials:
         return None
     return await run_in_threadpool(verify_access_token, credentials.credentials)
+
+
+def _authenticated_user_id(user: dict) -> int:
+    raw = user.get("sub") or user.get("user_id") or user.get("id")
+    try:
+        user_id = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=401, detail="登录身份无效") from exc
+    if user_id <= 0:
+        raise HTTPException(status_code=401, detail="登录身份无效")
+    return user_id
+
+
+@router.get("/science-catalog/meta")
+async def get_science_catalog_meta_endpoint():
+    return get_catalog_meta()
+
+
+@router.get("/science-catalog")
+async def list_science_catalog_endpoint(
+    q: str | None = Query(default=None),
+    domain: str | None = Query(default=None),
+    subdomain: str | None = Query(default=None),
+    stage: str | None = Query(default=None),
+    function: str | None = Query(default=None),
+    readiness: str | None = Query(default=None),
+    limit: int = Query(default=24, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
+    return list_catalog_skills(
+        q=q,
+        domain=domain,
+        subdomain=subdomain,
+        stage=stage,
+        function=function,
+        readiness=readiness,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/science-catalog/finder/capabilities")
+async def get_science_finder_capabilities_endpoint():
+    return get_finder_capabilities()
+
+
+@router.post("/science-catalog/find")
+async def find_science_skills_endpoint(
+    payload: ScienceFinderRequest,
+    user: dict | None = Depends(_get_optional_user),
+):
+    query = payload.query.strip()
+    if not query:
+        raise HTTPException(status_code=422, detail="科研需求不能为空")
+    allow_model = user is not None
+    if allow_model:
+        await run_in_threadpool(consume_model_usage, _authenticated_user_id(user), "science_finder")
+    return await find_science_skills(query, limit=payload.limit, allow_model=allow_model)
+
+
+def _finder_stream_event(event: str, payload: dict) -> str:
+    data = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    return f"event: {event}\ndata: {data}\n\n"
+
+
+@router.post("/science-catalog/find/stream")
+async def stream_science_skills_endpoint(
+    payload: ScienceFinderRequest,
+    user: dict | None = Depends(_get_optional_user),
+):
+    query = payload.query.strip()
+    if not query:
+        raise HTTPException(status_code=422, detail="科研需求不能为空")
+    allow_model = user is not None
+    if allow_model:
+        await run_in_threadpool(consume_model_usage, _authenticated_user_id(user), "science_finder")
+
+    async def stream():
+        queue: asyncio.Queue[tuple[str, dict] | None] = asyncio.Queue()
+
+        async def emit(event: str, event_payload: dict):
+            await queue.put((event, event_payload))
+            if event == "result":
+                await asyncio.sleep(0.3)
+
+        async def produce():
+            try:
+                result = await find_science_skills(
+                    query,
+                    limit=payload.limit,
+                    on_event=emit,
+                    allow_model=allow_model,
+                )
+                await queue.put(("done", {key: value for key, value in result.items() if key != "results"}))
+            except Exception:
+                await queue.put(("error", {"message": "搜索暂时不可用，请稍后重试。"}))
+            finally:
+                await queue.put(None)
+
+        task = asyncio.create_task(produce())
+        yield _finder_stream_event("status", {"message": "正在理解科研需求"})
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                yield _finder_stream_event(item[0], item[1])
+        finally:
+            if not task.done():
+                task.cancel()
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.get("/science-catalog/{canonical_id}")
+async def get_science_catalog_skill_endpoint(canonical_id: str):
+    return get_catalog_skill(canonical_id)
+
+
+@router.get("/evaluations/capabilities")
+async def get_critic_capabilities_endpoint():
+    return await get_critic_capabilities()
+
+
+@router.post("/evaluations")
+async def submit_critic_evaluation_endpoint(
+    payload: CriticEvaluationRequest,
+    user: dict = Depends(get_current_user),
+):
+    requester_id = _authenticated_user_id(user)
+    target = validate_critic_target(payload.kind, payload.target)
+    await run_in_threadpool(consume_model_usage, requester_id, "critic_evaluation")
+    return await submit_critic_evaluation(
+        {"kind": payload.kind, "target": target},
+        requester_id=requester_id,
+    )
+
+
+def _critic_stream_event(event: str, payload: dict) -> str:
+    data = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    return f"event: {event}\ndata: {data}\n\n"
+
+
+@router.get("/evaluations/{job_id}/stream")
+async def stream_critic_evaluation_endpoint(
+    job_id: str,
+    user: dict = Depends(get_current_user),
+):
+    requester_id = _authenticated_user_id(user)
+
+    async def stream():
+        previous = ""
+        while True:
+            try:
+                job = await get_critic_evaluation(job_id, requester_id=requester_id)
+            except HTTPException as exc:
+                message = exc.detail if isinstance(exc.detail, str) else "评测进度暂时不可用"
+                yield _critic_stream_event("error", {"message": message})
+                break
+            current = json.dumps(job, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            if current != previous:
+                yield _critic_stream_event("job", job)
+                previous = current
+            if str(job.get("status") or "") in CRITIC_TERMINAL_STATUSES:
+                break
+            await asyncio.sleep(0.8)
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.get("/evaluations/{job_id}")
+async def get_critic_evaluation_endpoint(
+    job_id: str,
+    user: dict = Depends(get_current_user),
+):
+    requester_id = _authenticated_user_id(user)
+    return await get_critic_evaluation(job_id, requester_id=requester_id)
 
 
 def _parse_csv_list(value: str | None) -> list[str]:

@@ -1625,6 +1625,266 @@ export interface SkillHubCategoriesResponse {
   clusters: SkillHubCluster[]
 }
 
+export interface ScienceSkillCatalogItem {
+  id: string
+  name: string
+  summary: string
+  domain: string
+  subdomain: string
+  stage: string
+  function: string
+  task: string
+  classification_rationale?: string
+  quality_score: number
+  readiness: 'trusted' | 'provisional' | 'restricted' | string
+  review_status: string
+  source_repository: string
+  source_path: string
+  source_verification?: {
+    status: string
+    checked_at: string | null
+    observed_path: string | null
+    evidence_report_sha256: string | null
+    review_required: boolean
+  }
+}
+
+export interface ScienceSkillCatalogMeta {
+  schema: string
+  total: number
+  source_skill_count: number
+  excluded_non_scientific_count: number
+  dimensions: {
+    domains: string[]
+    subdomains: string[]
+    stages: string[]
+    functions: string[]
+  }
+  source: {
+    repository: string
+    path: string
+    sha256: string
+  }
+}
+
+export interface ScienceSkillCatalogResponse {
+  list: ScienceSkillCatalogItem[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface ScienceSkillFinderCapabilities {
+  orchestrator: string
+  orchestrator_version: string
+  provider: string
+  model: string
+  configured: boolean
+  skill_available?: boolean
+  skill_sha256?: string | null
+  desktop_config: boolean
+  fallback_available: boolean
+  model_requires_auth?: boolean
+}
+
+export interface ScienceSkillRoute {
+  domain: string | null
+  stage: string | null
+  function: string | null
+  search_terms: string[]
+  rationale: string
+}
+
+export interface ScienceSkillFinderResult extends ScienceSkillCatalogItem {
+  rank?: number
+  recommendation_reason?: string
+  ranking_signals?: {
+    semantic_match?: number
+    task_match: number
+    function_match?: number
+    readiness: ScienceSkillCatalogItem['readiness']
+    source_review: string
+    quality_score: number
+  }
+}
+
+export interface ScienceSkillFinderResponse {
+  query: string
+  route: ScienceSkillRoute
+  results: ScienceSkillFinderResult[]
+  total: number
+  ranking?: {
+    criteria: Array<{
+      key: 'task_match' | 'readiness' | 'source_review' | 'quality_score' | string
+      label: string
+    }>
+  }
+  driver: {
+    orchestrator: string
+    provider: string
+    model: string
+    mode: 'model' | 'local_fallback' | string
+    configured: boolean
+    skill_mounted?: boolean
+    message: string
+  }
+}
+
+export interface ScienceSkillFinderStreamHandlers {
+  onStatus?: (payload: { message: string }) => void
+  onRoute?: (route: ScienceSkillRoute) => void
+  onResult?: (result: ScienceSkillFinderResult) => void
+  onDone?: (payload: Omit<ScienceSkillFinderResponse, 'results'>) => void
+}
+
+async function streamScienceSkills(
+  payload: { query: string; limit?: number },
+  handlers: ScienceSkillFinderStreamHandlers,
+  signal?: AbortSignal,
+) {
+  const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`
+  const token = tokenManager.get()
+  const response = await fetch(`${base}api/v1/skill-hub/science-catalog/find/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+    signal,
+  })
+  if (!response.ok || !response.body) {
+    throw new Error(`Science skill stream failed with ${response.status}`)
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  const dispatch = (block: string) => {
+    const lines = block.split(/\r?\n/)
+    const event = lines.find((line) => line.startsWith('event:'))?.slice(6).trim()
+    const data = lines.filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n')
+    if (!event || !data) return
+    const parsed = JSON.parse(data)
+    if (event === 'status') handlers.onStatus?.(parsed)
+    else if (event === 'route') handlers.onRoute?.(parsed)
+    else if (event === 'result') handlers.onResult?.(parsed)
+    else if (event === 'done') handlers.onDone?.(parsed)
+    else if (event === 'error') throw new Error(parsed.message || 'Science skill stream failed')
+  }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    buffer += decoder.decode(value, { stream: !done })
+    const blocks = buffer.split(/\r?\n\r?\n/)
+    buffer = blocks.pop() ?? ''
+    blocks.forEach(dispatch)
+    if (done) break
+  }
+  if (buffer.trim()) dispatch(buffer)
+}
+
+export interface CriticCapabilities {
+  worker_available: boolean
+  supported_kinds: Array<'skill' | 'mcp' | string>
+  supported_depths: Array<'basic' | 'standard' | 'full' | string>
+  evaluation_profile?: 'basic' | 'standard' | 'complete' | string
+  runtime?: {
+    orchestrator: string
+    provider: string
+    model: string
+  }
+  execution?: string
+  message: string
+}
+
+export interface CriticEvaluationJob {
+  id?: string
+  job_id?: string
+  status?: 'queued' | 'running' | 'completed' | 'failed' | string
+  kind?: 'skill' | 'mcp' | string
+  target?: string
+  depth?: 'basic' | 'standard' | 'quick' | 'full' | string
+  verdict?: string
+  score?: number
+  message?: string
+  report_url?: string
+  progress?: {
+    current_step?: 'validation' | 'behavior' | 'triggers' | 'verdict' | string
+    completed_steps?: string[]
+    total_steps?: number
+    message?: string
+  }
+  trace?: Array<{
+    sequence: number
+    step: 'validation' | 'behavior' | 'triggers' | 'verdict' | string
+    kind: 'status' | 'reasoning' | 'execution' | 'evidence' | 'result' | 'error' | string
+    title: string
+    summary: string
+    details: string[]
+  }>
+  dimensions?: Array<{
+    key: string
+    label: string
+    status: 'passed' | 'failed' | 'blocked' | 'not_applicable' | string
+    summary: string
+  }>
+  evidence?: {
+    behavior_cases?: number
+    behavior_pairs?: number
+    trigger_queries?: number
+    artifacts?: number
+  }
+  limitations?: string[]
+  [key: string]: unknown
+}
+
+export interface CriticEvaluationStreamHandlers {
+  onJob?: (job: CriticEvaluationJob) => void
+}
+
+async function streamCriticEvaluation(
+  jobId: string,
+  handlers: CriticEvaluationStreamHandlers,
+  signal?: AbortSignal,
+) {
+  const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`
+  const token = tokenManager.get()
+  const response = await fetch(`${base}api/v1/skill-hub/evaluations/${encodeURIComponent(jobId)}/stream`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    credentials: 'same-origin',
+    signal,
+  })
+  if (!response.ok || !response.body) {
+    throw new Error(`Critic evaluation stream failed with ${response.status}`)
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  const dispatch = (block: string) => {
+    const lines = block.split(/\r?\n/)
+    const event = lines.find((line) => line.startsWith('event:'))?.slice(6).trim()
+    const data = lines.filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n')
+    if (!event || !data) return
+    const parsed = JSON.parse(data)
+    if (event === 'job') handlers.onJob?.(parsed)
+    else if (event === 'error') throw new Error(parsed.message || 'Critic evaluation stream failed')
+  }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    buffer += decoder.decode(value, { stream: !done })
+    const blocks = buffer.split(/\r?\n\r?\n/)
+    buffer = blocks.pop() ?? ''
+    blocks.forEach(dispatch)
+    if (done) break
+  }
+  if (buffer.trim()) dispatch(buffer)
+}
+
 function buildSkillHubPublishForm(payload: {
   name: string
   summary: string
@@ -1678,6 +1938,44 @@ function buildSkillHubPublishForm(payload: {
 }
 
 export const skillHubApi = {
+  getScienceCatalogMeta: () =>
+    api.get<ScienceSkillCatalogMeta>('/v1/skill-hub/science-catalog/meta'),
+  listScienceCatalog: (params?: {
+    q?: string
+    domain?: string
+    subdomain?: string
+    stage?: string
+    function?: string
+    readiness?: string
+    limit?: number
+    offset?: number
+  }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.q) searchParams.set('q', params.q)
+    if (params?.domain) searchParams.set('domain', params.domain)
+    if (params?.subdomain) searchParams.set('subdomain', params.subdomain)
+    if (params?.stage) searchParams.set('stage', params.stage)
+    if (params?.function) searchParams.set('function', params.function)
+    if (params?.readiness) searchParams.set('readiness', params.readiness)
+    if (params?.limit != null) searchParams.set('limit', String(params.limit))
+    if (params?.offset != null) searchParams.set('offset', String(params.offset))
+    const qs = searchParams.toString()
+    return api.get<ScienceSkillCatalogResponse>(`/v1/skill-hub/science-catalog${qs ? `?${qs}` : ''}`)
+  },
+  getScienceCatalogSkill: (canonicalId: string) =>
+    api.get<ScienceSkillCatalogItem>(`/v1/skill-hub/science-catalog/${encodeURIComponent(canonicalId)}`),
+  getScienceFinderCapabilities: () =>
+    api.get<ScienceSkillFinderCapabilities>('/v1/skill-hub/science-catalog/finder/capabilities'),
+  findScienceSkills: (payload: { query: string; limit?: number }) =>
+    api.post<ScienceSkillFinderResponse>('/v1/skill-hub/science-catalog/find', payload),
+  streamScienceSkills,
+  getCriticCapabilities: () =>
+    api.get<CriticCapabilities>('/v1/skill-hub/evaluations/capabilities'),
+  submitCriticEvaluation: (payload: { kind: 'skill' | 'mcp'; target: string }) =>
+    api.post<CriticEvaluationJob>('/v1/skill-hub/evaluations', payload),
+  getCriticEvaluation: (jobId: string) =>
+    api.get<CriticEvaluationJob>(`/v1/skill-hub/evaluations/${encodeURIComponent(jobId)}`),
+  streamCriticEvaluation,
   listSkills: (params?: {
     q?: string
     category?: string

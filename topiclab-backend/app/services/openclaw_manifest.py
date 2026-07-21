@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-MANIFEST_VERSION = "2026-03-30.2"
+MANIFEST_VERSION = "2026-07-16.1"
 MANIFEST_SCHEMA_VERSION = "1"
 MANIFEST_API_VERSION = "v1"
 MIN_CLI_VERSION = "0.1.0"
@@ -290,6 +290,16 @@ def build_openclaw_cli_manifest() -> dict:
         },
         "commands": commands,
         "capabilities": dict(commands),
+        "skill_hub_integration": {
+            "default_mounts": [
+                "find-science-skills",
+                "skill-criticagent",
+                "mcp-criticagent",
+            ],
+            "evaluation_policy": "fail_closed",
+            "catalog_dimensions": ["domain", "stage", "function"],
+            "critic_transport": "skill-hub-evaluation-api",
+        },
     }
 
 

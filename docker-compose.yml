@@ -23,14 +23,40 @@ services:
     volumes:
       - ${WORKSPACE_PATH:-./workspace}:/app/workspace
       - ${LIBS_PATH:-./backend/libs}:/app/libs:ro
+      - ./.runtime/tashan-research-skills:/opt/critic/tashan-research-skills:ro
     networks:
       - app-network
+      - critic-network
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=15)\""]
       interval: 10s
       timeout: 20s
       retries: 15
       start_period: 45s
+
+  skillhub-critic-worker:
+    build:
+      context: ./topiclab-backend
+      args:
+        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-mirrors.aliyun.com}
+        PIP_TIMEOUT: ${PIP_TIMEOUT:-120}
+        PIP_RETRIES: ${PIP_RETRIES:-3}
+    command: ["uvicorn", "app.critic_worker:app", "--host", "0.0.0.0", "--port", "8090", "--workers", "1"]
+    environment:
+      skillhub_scnet_api_key: ${skillhub_scnet_api_key:-}
+    volumes:
+      - ./.runtime/tashan-research-skills:/opt/critic/tashan-research-skills:ro
+      - skillhub-critic-state:/app/critic-state
+    networks:
+      - critic-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import json,urllib.request; payload=json.load(urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=15)); assert payload.get('ready') is True, payload\""]
+      interval: 10s
+      timeout: 20s
+      retries: 15
+      start_period: 30s
 
   topiclink-zvec:
     build:
@@ -166,6 +192,9 @@ services:
 networks:
   app-network:
     driver: bridge
+  critic-network:
+    driver: bridge
 
 volumes:
   clawarcade-reviewer-logs:
+  skillhub-critic-state:

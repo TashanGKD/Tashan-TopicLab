@@ -30,7 +30,7 @@ vi.mock('../pages/MyFavoritesPage', () => ({ default: () => <div /> }))
 vi.mock('../pages/MyPage', () => ({ default: () => <div /> }))
 vi.mock('../pages/InboxPage', () => ({ default: () => <div /> }))
 vi.mock('../pages/AppsPage', () => ({ default: () => <div /> }))
-vi.mock('../pages/AppsSkillLibraryPage', () => ({ default: () => <div /> }))
+vi.mock('../pages/AppsSkillLibraryPage', () => ({ default: () => <div>Research SkillHub Route</div> }))
 vi.mock('../pages/AppsSkillDetailPage', () => ({ default: () => <div /> }))
 vi.mock('../pages/AppsSkillLeaderboardPage', () => ({ default: () => <div /> }))
 vi.mock('../pages/AppsSkillProfilePage', () => ({ default: () => <div /> }))
@@ -88,6 +88,17 @@ describe('App arcade topic route', () => {
 
     expect(screen.getByText('TopicLink Detail Route')).toBeInTheDocument()
     expect(screen.queryByText('Topic Detail Route')).not.toBeInTheDocument()
+  })
+
+  it('exposes the research SkillHub as a separate top-level route', () => {
+    render(
+      <MemoryRouter initialEntries={['/skillhub']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Research SkillHub Route')).toBeInTheDocument()
+    expect(screen.getByTestId('top-nav')).toBeInTheDocument()
   })
 
   it('routes the youth TED page', () => {

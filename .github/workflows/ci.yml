@@ -58,7 +58,7 @@ jobs:
           CHANGED=$(git diff --name-only "$BASE" HEAD 2>/dev/null || echo "")
 
           # TopicLab backend: auth, topics, TopicLink, Zvec sidecar, and their tests
-          if echo "$CHANGED" | grep -qE '^topiclab-backend/|^docker-compose\.(yml|yaml)|^\.github/workflows/(ci|deploy)\.yml|^deploy/topiclink-zvec\.lock\.json$|^scripts/topiclink_zvec_release\.py$'; then
+          if echo "$CHANGED" | grep -qE '^topiclab-backend/|^docker-compose\.(yml|yaml)|^\.github/workflows/(ci|deploy)\.yml|^\.critic-research-revision$|^deploy/topiclink-zvec\.lock\.json$|^scripts/(topiclink_zvec_release|sync_science_skill_catalog|verify_critic_runtime)\.py$|^backend$'; then
             echo "run_topiclab_backend=true" >> "$GITHUB_OUTPUT"
           else
             echo "run_topiclab_backend=false" >> "$GITHUB_OUTPUT"
@@ -86,7 +86,7 @@ jobs:
           fi
 
           # Docker: docker-compose, Dockerfiles, deploy
-          if echo "$CHANGED" | grep -qE '^docker-compose\.(yml|yaml)|^\.github/workflows/deploy\.yml|^deploy/topiclink-zvec\.lock\.json$|^scripts/(deploy-clawarcade-reviewer\.sh|topiclink_zvec_release\.py)$|/(Dockerfile([^/]+)?|\.dockerignore)'; then
+          if echo "$CHANGED" | grep -qE '^docker-compose\.(yml|yaml)|^\.github/workflows/deploy\.yml|^\.critic-research-revision$|^deploy/topiclink-zvec\.lock\.json$|^scripts/(deploy-clawarcade-reviewer\.sh|topiclink_zvec_release\.py|verify_critic_runtime\.py)$|/(Dockerfile([^/]+)?|\.dockerignore)'; then
             echo "run_docker=true" >> "$GITHUB_OUTPUT"
           else
             echo "run_docker=false" >> "$GITHUB_OUTPUT"
@@ -98,6 +98,7 @@ jobs:
           else
             echo "run_worldweave=false" >> "$GITHUB_OUTPUT"
           fi
+
   # ─────────────────────────────────────────────────────────────────────────
   # Layer 1: Frontend build (compile + typecheck)
   # ─────────────────────────────────────────────────────────────────────────
@@ -152,6 +153,54 @@ jobs:
             src/pages/__tests__/WorldWeaveProxyConfig.test.ts \
             src/pages/__tests__/ViteWorldWeaveProxyConfig.test.ts \
             src/pages/__tests__/SourceFeedPage.test.tsx
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Layer 1: TopicLab SkillHub and Critic Worker tests
+  # ─────────────────────────────────────────────────────────────────────────
+  skillhub-critic-tests:
+    name: TopicLab SkillHub and Critic
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.run_topiclab_backend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize SkillHub seed submodules over HTTPS
+        run: |
+          git submodule update --init backend
+          git -C backend \
+            -c url.https://github.com/.insteadOf=git@github.com: \
+            submodule update --init --recursive
+
+      - name: Checkout locked Critic runtime
+        run: |
+          CRITIC_RESEARCH_REVISION="$(tr -d '[:space:]' < .critic-research-revision)"
+          git init .runtime/tashan-research-skills
+          git -C .runtime/tashan-research-skills remote add origin https://github.com/TashanGKD/tashan-research-skills.git
+          git -C .runtime/tashan-research-skills fetch --depth 1 origin "$CRITIC_RESEARCH_REVISION"
+          git -C .runtime/tashan-research-skills checkout --detach FETCH_HEAD
+          python scripts/verify_critic_runtime.py --runtime .runtime/tashan-research-skills
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run SkillHub and Critic tests
+        working-directory: topiclab-backend
+        run: |
+          uv sync --locked --group dev
+          uv run python -m pytest \
+            tests/test_critic_runner.py \
+            tests/test_critic_worker.py \
+            tests/test_science_skill_catalog_sync.py \
+            tests/test_skill_hub_api.py \
+            -q --tb=short
 
   # ─────────────────────────────────────────────────────────────────────────
   # Layer 1: WorldWeave unit tests and build

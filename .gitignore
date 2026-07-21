@@ -64,3 +64,10 @@ Tashan-TopicLab-main_0/
 !.codex/skills/page-style-adaptation/**
 .DS_Store
 workspace/
+
+# Local UI verification and Critic evaluation runtime output
+/artifacts/
+/topiclab-backend/artifacts/
+/topiclab-backend/*.log
+/frontend/.vite-*.log
+/.runtime/
