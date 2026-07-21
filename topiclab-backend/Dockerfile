@@ -1,8 +1,10 @@
 ARG PYTHON_BASE_IMAGE=docker.m.daocloud.io/library/python:3.11-slim
+ARG NODE_BASE_IMAGE=docker.m.daocloud.io/library/node:20-slim
 ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 ARG PIP_TRUSTED_HOST=mirrors.aliyun.com
 ARG PIP_TIMEOUT=120
 ARG PIP_RETRIES=3
+FROM ${NODE_BASE_IMAGE} AS node-runtime
 FROM ${PYTHON_BASE_IMAGE}
 ARG PIP_INDEX_URL
 ARG PIP_TRUSTED_HOST
@@ -11,9 +13,24 @@ ARG PIP_RETRIES
 
 RUN useradd -m -u 1000 appuser
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends git nodejs npm && \
-    rm -rf /var/lib/apt/lists/*
+# Debian's npm package expands to hundreds of small downloads, which is both
+# slow and fragile through the deployment host proxy. Reuse the configured
+# Node image and keep APT limited to the Git runtime required by Critic.
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-runtime /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
+    ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx && \
+    node --version && npm --version
+
+RUN printf '%s\n' \
+      'Acquire::Retries "5";' \
+      'Acquire::http::Pipeline-Depth "0";' \
+      'Acquire::http::Timeout "30";' \
+      'Acquire::https::Timeout "30";' \
+      > /etc/apt/apt.conf.d/80-topiclab-proxy && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends git ca-certificates && \
+    rm -rf /var/lib/apt/lists/* /etc/apt/apt.conf.d/80-topiclab-proxy
 
 WORKDIR /app
 

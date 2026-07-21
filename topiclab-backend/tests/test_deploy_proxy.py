@@ -173,3 +173,22 @@ def test_build_env_does_not_expose_proxy_values_in_stdout(tmp_path):
 
     assert "secret" not in completed.stdout
     assert "secret" not in completed.stderr
+
+
+def test_topiclab_image_reuses_node_runtime_instead_of_debian_npm_packages():
+    dockerfile = (REPOSITORY_ROOT / "topiclab-backend" / "Dockerfile").read_text(
+        encoding="utf-8"
+    )
+    compose = (REPOSITORY_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    apt_layer = dockerfile.split("> /etc/apt/apt.conf.d/80-topiclab-proxy", 1)[1].split(
+        "WORKDIR /app", 1
+    )[0]
+
+    assert "FROM ${NODE_BASE_IMAGE} AS node-runtime" in dockerfile
+    assert "COPY --from=node-runtime /usr/local/bin/node" in dockerfile
+    assert "COPY --from=node-runtime /usr/local/lib/node_modules" in dockerfile
+    assert "Acquire::Retries" in dockerfile
+    assert 'Acquire::http::Pipeline-Depth "0"' in dockerfile
+    assert "nodejs" not in apt_layer
+    assert " npm" not in apt_layer
+    assert compose.count("NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-") >= 4
