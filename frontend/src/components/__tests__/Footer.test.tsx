@@ -25,4 +25,17 @@ describe('Footer', () => {
     expect(screen.queryByText('二维码每周更新')).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '微信公众号' })).not.toBeInTheDocument()
   })
+
+  it('publishes the ICP registration at the bottom of the site', () => {
+    render(
+      <MemoryRouter>
+        <Footer />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('link', { name: '京ICP备2025117761号-3' })).toHaveAttribute(
+      'href',
+      'https://beian.miit.gov.cn/',
+    )
+  })
 })
