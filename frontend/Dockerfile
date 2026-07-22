@@ -1,15 +1,17 @@
 ARG NODE_BASE_IMAGE=docker.m.daocloud.io/library/node:20-slim
 ARG NGINX_BASE_IMAGE=docker.m.daocloud.io/library/nginx:alpine
+ARG NPM_REGISTRY=https://registry.npmmirror.com
 
 FROM ${NODE_BASE_IMAGE} AS builder
 
 WORKDIR /app
 
 ARG VITE_BASE_PATH=/
+ARG NPM_REGISTRY
 ENV VITE_BASE_PATH=$VITE_BASE_PATH
 
 COPY package*.json ./
-RUN npm install
+RUN npm config set registry "$NPM_REGISTRY" && npm install
 
 COPY . .
 RUN npm run build

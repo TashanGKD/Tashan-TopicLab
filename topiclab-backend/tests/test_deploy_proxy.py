@@ -1,192 +1,76 @@
-import json
-import subprocess
-import sys
 from pathlib import Path
-
-import pytest
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = REPOSITORY_ROOT / "scripts" / "prepare_docker_build_env.py"
 
 
-def _proxy_env(path: Path) -> None:
-    path.write_text(
-        "\n".join(
-            [
-                "APP_SETTING=preserved",
-                "HTTP_PROXY=http://host.docker.internal:1081",
-                'HTTPS_PROXY="http://host.docker.internal:1081"',
-                "http_proxy=http://host.docker.internal:1081",
-                "https_proxy=http://host.docker.internal:1081",
-                "NO_PROXY=localhost,127.0.0.1",
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+def _compose_build_sections(compose: str) -> list[str]:
+    sections = []
+    for service in (
+        "topiclab-backend",
+        "skillhub-critic-worker",
+        "topiclink-zvec",
+        "backend",
+        "frontend",
+        "clawarcade-reviewer",
+        "topiclab-cli-runner",
+    ):
+        block = compose.split(f"  {service}:", 1)[1]
+        sections.append(block.split("\n  ", 1)[0].split("    env_file:", 1)[0])
+    return sections
 
 
-def test_prepare_build_env_rewrites_only_host_proxy_alias(tmp_path):
-    source = tmp_path / ".env"
-    destination = tmp_path / ".env.build"
-    _proxy_env(source)
+def test_compose_builds_use_domestic_mirrors_without_proxy_arguments():
+    compose = (REPOSITORY_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
 
-    completed = subprocess.run(
-        [
-            sys.executable,
-            str(SCRIPT),
-            "--source",
-            str(source),
-            "--destination",
-            str(destination),
-            "--gateway",
-            "172.17.0.1",
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    assert "x-build-proxy-args" not in compose
+    assert "*build-proxy-args" not in compose
+    for build_section in _compose_build_sections(compose):
+        assert "HTTP_PROXY:" not in build_section
+        assert "HTTPS_PROXY:" not in build_section
+        assert "http_proxy:" not in build_section
+        assert "https_proxy:" not in build_section
 
-    assert json.loads(completed.stdout) == {
-        "configured_proxy_variables": 4,
-        "rewritten_host_aliases": 4,
-    }
-    value = destination.read_text(encoding="utf-8")
-    assert "host.docker.internal" not in value
-    assert "HTTP_PROXY=http://172.17.0.1:1081" in value
-    assert 'HTTPS_PROXY="http://172.17.0.1:1081"' in value
-    assert "APP_SETTING=preserved" in value
-    assert "NO_PROXY=localhost,127.0.0.1" in value
-    assert destination.stat().st_mode & 0o777 == 0o600
+    assert compose.count("APT_MIRROR: ${APT_MIRROR:-http://mirrors.aliyun.com/debian}") == 4
+    assert compose.count("PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}") == 5
+    assert compose.count("NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}") == 3
 
 
-def test_prepare_build_env_rejects_missing_proxy_variants(tmp_path):
-    source = tmp_path / ".env"
-    destination = tmp_path / ".env.build"
-    source.write_text("HTTP_PROXY=http://host.docker.internal:1081\n", encoding="utf-8")
-
-    completed = subprocess.run(
-        [
-            sys.executable,
-            str(SCRIPT),
-            "--source",
-            str(source),
-            "--destination",
-            str(destination),
-            "--gateway",
-            "172.17.0.1",
-        ],
-        capture_output=True,
-        text=True,
-    )
-
-    assert completed.returncode != 0
-    assert "required deployment proxy variables are missing" in completed.stderr
-    assert not destination.exists()
-
-
-def test_deploy_example_contains_complete_build_proxy_contract(tmp_path):
-    destination = tmp_path / ".env.build"
-
-    completed = subprocess.run(
-        [
-            sys.executable,
-            str(SCRIPT),
-            "--source",
-            str(REPOSITORY_ROOT / ".env.deploy.example"),
-            "--destination",
-            str(destination),
-            "--gateway",
-            "172.17.0.1",
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-
-    assert json.loads(completed.stdout)["configured_proxy_variables"] == 4
+def test_deploy_example_uses_domestic_build_mirrors():
+    example = (REPOSITORY_ROOT / ".env.deploy.example").read_text(encoding="utf-8")
     assignments = {
         line.split("=", 1)[0]: line.split("=", 1)[1]
-        for line in destination.read_text(encoding="utf-8").splitlines()
-        if line.split("=", 1)[0] in {"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"}
+        for line in example.splitlines()
+        if line and not line.startswith("#") and "=" in line
     }
-    assert len(assignments) == 4
-    assert all("host.docker.internal" not in value for value in assignments.values())
+
+    assert assignments["PYTHON_BASE_IMAGE"].startswith("docker.m.daocloud.io/")
+    assert assignments["NODE_BASE_IMAGE"].startswith("docker.m.daocloud.io/")
+    assert assignments["NGINX_BASE_IMAGE"].startswith("docker.m.daocloud.io/")
+    assert assignments["APT_MIRROR"] == "http://mirrors.aliyun.com/debian"
+    assert assignments["APT_SECURITY_MIRROR"] == "http://mirrors.aliyun.com/debian-security"
+    assert assignments["PIP_INDEX_URL"] == "https://mirrors.aliyun.com/pypi/simple/"
+    assert assignments["NPM_REGISTRY"] == "https://registry.npmmirror.com"
+    for proxy_name in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
+        assert proxy_name not in assignments
+        assert proxy_name not in example
 
 
-@pytest.mark.parametrize("gateway", ["not-an-ip", "host.docker.internal"])
-def test_prepare_build_env_rejects_non_ip_gateway(tmp_path, gateway):
-    source = tmp_path / ".env"
-    _proxy_env(source)
-
-    completed = subprocess.run(
-        [
-            sys.executable,
-            str(SCRIPT),
-            "--source",
-            str(source),
-            "--destination",
-            str(tmp_path / ".env.build"),
-            "--gateway",
-            gateway,
-        ],
-        capture_output=True,
-        text=True,
-    )
-
-    assert completed.returncode != 0
-
-
-def test_build_env_does_not_expose_proxy_values_in_stdout(tmp_path):
-    source = tmp_path / ".env"
-    destination = tmp_path / ".env.build"
-    source.write_text(
-        "\n".join(
-            f"{name}=http://user:secret@host.docker.internal:1081"
-            for name in (
-                "HTTP_PROXY",
-                "HTTPS_PROXY",
-                "http_proxy",
-                "https_proxy",
-            )
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-
-    completed = subprocess.run(
-        [
-            sys.executable,
-            str(SCRIPT),
-            "--source",
-            str(source),
-            "--destination",
-            str(destination),
-            "--gateway",
-            "172.17.0.1",
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-
-    assert "secret" not in completed.stdout
-    assert "secret" not in completed.stderr
-
-
-def test_topiclab_image_reuses_node_runtime_instead_of_debian_npm_packages():
+def test_topiclab_image_reuses_node_and_uses_aliyun_apt_and_pip():
     dockerfile = (REPOSITORY_ROOT / "topiclab-backend" / "Dockerfile").read_text(
         encoding="utf-8"
     )
     compose = (REPOSITORY_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
-    apt_layer = dockerfile.split("> /etc/apt/apt.conf.d/80-topiclab-proxy", 1)[1].split(
+    apt_layer = dockerfile.split("> /etc/apt/apt.conf.d/80-topiclab-mirror", 1)[1].split(
         "WORKDIR /app", 1
     )[0]
 
     assert "FROM ${NODE_BASE_IMAGE} AS node-runtime" in dockerfile
     assert "COPY --from=node-runtime /usr/local/bin/node" in dockerfile
     assert "COPY --from=node-runtime /usr/local/lib/node_modules" in dockerfile
+    assert "APT_MIRROR=http://mirrors.aliyun.com/debian" in dockerfile
+    assert "APT_SECURITY_MIRROR=http://mirrors.aliyun.com/debian-security" in dockerfile
+    assert "PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/" in dockerfile
     assert "Acquire::Retries" in dockerfile
     assert 'Acquire::http::Pipeline-Depth "0"' in dockerfile
     assert "nodejs" not in apt_layer
@@ -194,24 +78,43 @@ def test_topiclab_image_reuses_node_runtime_instead_of_debian_npm_packages():
     assert compose.count("NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-") >= 4
 
 
-def test_resonnet_image_reuses_node_runtime_instead_of_nodesource():
+def test_resonnet_image_uses_domestic_base_apt_pip_and_npm_sources():
     dockerfile = (REPOSITORY_ROOT / "backend" / "Dockerfile").read_text(
         encoding="utf-8"
     )
     compose = (REPOSITORY_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     backend_service = compose.split("  backend:", 1)[1].split("\n  frontend:", 1)[0]
 
+    assert "PYTHON_BASE_IMAGE=docker.m.daocloud.io/" in dockerfile
+    assert "NODE_BASE_IMAGE=docker.m.daocloud.io/" in dockerfile
     assert "FROM ${NODE_BASE_IMAGE} AS node-runtime" in dockerfile
     assert "COPY --from=node-runtime /usr/local/bin/node" in dockerfile
-    assert "COPY --from=node-runtime /usr/local/lib/node_modules" in dockerfile
     assert "deb.nodesource.com" not in dockerfile
-    assert "apt-get install -y --no-install-recommends nodejs" not in dockerfile
-    assert "Acquire::Retries" in dockerfile
-    assert 'Acquire::http::Pipeline-Depth "0"' in dockerfile
-    assert "NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-" in backend_service
+    assert "APT_MIRROR=http://mirrors.aliyun.com/debian" in dockerfile
+    assert "PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/" in dockerfile
+    assert "NPM_REGISTRY=https://registry.npmmirror.com" in dockerfile
+    assert 'npm config set registry "${NPM_REGISTRY}"' in dockerfile
+    assert "APT_MIRROR: ${APT_MIRROR:-" in backend_service
+    assert "NPM_REGISTRY: ${NPM_REGISTRY:-" in backend_service
 
 
-def test_deploy_limits_ssh_connection_and_cleans_up_timed_out_builds():
+def test_frontend_and_reviewer_use_domestic_package_sources():
+    frontend = (REPOSITORY_ROOT / "frontend" / "Dockerfile").read_text(encoding="utf-8")
+    cli = (REPOSITORY_ROOT / "topiclab-cli" / "Dockerfile").read_text(encoding="utf-8")
+    reviewer = (REPOSITORY_ROOT / "ClawArcade" / "Dockerfile.reviewer").read_text(
+        encoding="utf-8"
+    )
+
+    assert "NPM_REGISTRY=https://registry.npmmirror.com" in frontend
+    assert 'npm config set registry "$NPM_REGISTRY"' in frontend
+    assert "NPM_REGISTRY=https://registry.npmmirror.com" in cli
+    assert 'npm config set registry "$NPM_REGISTRY"' in cli
+    assert "PYTHON_BASE_IMAGE=docker.m.daocloud.io/" in reviewer
+    assert "PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/" in reviewer
+    assert "PIP_DEFAULT_TIMEOUT=${PIP_TIMEOUT}" in reviewer
+
+
+def test_deploy_limits_ssh_and_serializes_builds_using_the_runtime_env_file():
     deploy = (REPOSITORY_ROOT / ".github" / "workflows" / "deploy.yml").read_text(
         encoding="utf-8"
     )
@@ -222,3 +125,10 @@ def test_deploy_limits_ssh_connection_and_cleans_up_timed_out_builds():
     assert "trap exit_on_signal HUP INT TERM" in deploy
     assert 'kill -TERM "$child_pid"' in deploy
     assert "timeout --signal=TERM --kill-after=30s 60m" in deploy
+    assert 'exec 9>"$DEPLOY_LOCK_FILE"' in deploy
+    assert "flock -n 9" in deploy
+    assert 'COMPOSE_ENV_FILE="$REPO_DIR/.env"' in deploy
+    assert 'docker compose --parallel 1 --env-file "$COMPOSE_ENV_FILE" build' in deploy
+    assert "prepare_docker_build_env.py" not in deploy
+    assert "DOCKER_HOST_GATEWAY" not in deploy
+    assert ".env.build" not in deploy
