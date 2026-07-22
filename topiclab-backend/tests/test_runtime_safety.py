@@ -208,9 +208,9 @@ def test_critic_worker_compose_isolates_secrets_and_network():
 
     assert "env_file:" not in worker_block
     assert "skillhub_scnet_api_key:" in worker_block
-    assert "HTTP_PROXY:" in worker_block
-    assert "HTTPS_PROXY:" in worker_block
-    assert '"host.docker.internal:host-gateway"' in worker_block
+    assert "HTTP_PROXY:" not in worker_block
+    assert "HTTPS_PROXY:" not in worker_block
+    assert '"host.docker.internal:host-gateway"' not in worker_block
     assert "- critic-network" in worker_block
     assert "- app-network" not in worker_block
     assert "- critic-network" in backend_block
@@ -232,18 +232,21 @@ def test_critic_deploy_uses_a_full_locked_revision():
     assert "reset --hard origin/main" not in critic_checkout
 
 
-def test_deploy_translates_host_proxy_for_docker_builds():
+def test_deploy_uses_domestic_mirrors_without_build_proxy():
     repository = PROJECT_ROOT.parent
     compose_source = (repository / "docker-compose.yml").read_text(encoding="utf-8")
     deploy_source = (repository / ".github" / "workflows" / "deploy.yml").read_text(
         encoding="utf-8"
     )
 
-    assert "x-build-proxy-args: &build-proxy-args" in compose_source
-    assert "<<: *build-proxy-args" in compose_source
-    assert 'DOCKER_HOST_GATEWAY="$(docker network inspect bridge' in deploy_source
-    assert "prepare_docker_build_env.py" in deploy_source
-    assert 'docker compose --parallel 1 --env-file "$BUILD_ENV_FILE" build' in deploy_source
+    assert "x-build-proxy-args" not in compose_source
+    assert "<<: *build-proxy-args" not in compose_source
+    assert "APT_MIRROR: ${APT_MIRROR:-http://mirrors.aliyun.com/debian}" in compose_source
+    assert "PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}" in compose_source
+    assert "NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}" in compose_source
+    assert "DOCKER_HOST_GATEWAY" not in deploy_source
+    assert "prepare_docker_build_env.py" not in deploy_source
+    assert 'docker compose --parallel 1 --env-file "$COMPOSE_ENV_FILE" build' in deploy_source
     assert "trap cleanup_deploy EXIT" in deploy_source
     assert 'export COMPOSE_FILE="$REPO_DIR/docker-compose.yml"' in deploy_source
     assert 'config --services)' in deploy_source

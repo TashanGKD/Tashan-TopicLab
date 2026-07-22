@@ -109,7 +109,7 @@ jobs:
             # Ignore inherited COMPOSE_FILE values and stale Compose overrides;
             # always operate on the versioned stack.
             export COMPOSE_FILE="$REPO_DIR/docker-compose.yml"
-            BUILD_ENV_FILE="$REPO_DIR/.env.build"
+            COMPOSE_ENV_FILE="$REPO_DIR/.env"
             DEPLOY_CHILD_PID=""
             cleanup_deploy() {
               local child_pid="${DEPLOY_CHILD_PID:-}"
@@ -123,24 +123,14 @@ jobs:
                 kill -KILL "$child_pid" 2>/dev/null || true
                 wait "$child_pid" 2>/dev/null || true
               fi
-              rm -f "$BUILD_ENV_FILE"
             }
             exit_on_signal() {
               exit 143
             }
             trap cleanup_deploy EXIT
             trap exit_on_signal HUP INT TERM
-            DOCKER_HOST_GATEWAY="$(docker network inspect bridge --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}')"
-            if [ -z "$DOCKER_HOST_GATEWAY" ]; then
-              echo "::error::Docker bridge gateway is unavailable for the deployment proxy."
-              exit 1
-            fi
-            python3 "$REPO_DIR/scripts/prepare_docker_build_env.py" \
-              --source "$REPO_DIR/.env" \
-              --destination "$BUILD_ENV_FILE" \
-              --gateway "$DOCKER_HOST_GATEWAY"
-            docker compose --env-file "$BUILD_ENV_FILE" config --quiet
-            COMPOSE_SERVICES="$(docker compose --env-file "$BUILD_ENV_FILE" config --services)"
+            docker compose --env-file "$COMPOSE_ENV_FILE" config --quiet
+            COMPOSE_SERVICES="$(docker compose --env-file "$COMPOSE_ENV_FILE" config --services)"
             printf '%s\n' "$COMPOSE_SERVICES" | sed 's/^/[deploy] compose service: /'
             for required_service in topiclab-backend skillhub-critic-worker topiclink-zvec backend frontend; do
               if ! printf '%s\n' "$COMPOSE_SERVICES" | grep -qx "$required_service"; then
@@ -224,7 +214,7 @@ jobs:
 
             run_with_heartbeat "docker compose build" \
               timeout --signal=TERM --kill-after=30s 60m \
-              docker compose --parallel 1 --env-file "$BUILD_ENV_FILE" build
+              docker compose --parallel 1 --env-file "$COMPOSE_ENV_FILE" build
             ZVEC_ACTIVE_RESOLVED="$(python3 "$ZVEC_MANAGER" path --lock "$ZVEC_LOCK" --workspace "$WORKSPACE_HOST_PATH" --kind active-resolved)"
             CURRENT_ZVEC_ID="$(docker compose ps -q topiclink-zvec 2>/dev/null || true)"
             ZVEC_WAS_RUNNING=false
