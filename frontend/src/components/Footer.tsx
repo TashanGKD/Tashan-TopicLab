@@ -15,6 +15,11 @@ const footerLinks = {
   ],
 }
 
+const icpRegistration = {
+  number: '京ICP备2025117761号-3',
+  queryUrl: 'https://beian.miit.gov.cn/',
+}
+
 export default function Footer() {
   const currentYear = new Date().getFullYear()
   const wechatGroupQrUrl = `${import.meta.env.BASE_URL}api/v1/site/assets/wechat-group-qr.webp`
@@ -26,7 +31,7 @@ export default function Footer() {
         backgroundColor: 'var(--bg-footer)',
       }}
     >
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
+      <div className="max-w-4xl mx-auto px-4 pt-12 pb-[calc(7.5rem+env(safe-area-inset-bottom))] sm:px-6 md:pb-12">
         <div className="grid grid-cols-1 gap-8 mb-8 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-start">
           {/* Logo & Slogan */}
           <div className="md:col-span-1">
@@ -221,6 +226,17 @@ export default function Footer() {
               他山学科交叉创新协会
             </a>
           </p>
+        </div>
+        <div className="mt-5 text-center">
+          <a
+            href={icpRegistration.queryUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block text-xs transition-all hover:opacity-80"
+            style={{ color: 'rgba(255, 255, 255, 0.5)' }}
+          >
+            {icpRegistration.number}
+          </a>
         </div>
       </div>
     </footer>
