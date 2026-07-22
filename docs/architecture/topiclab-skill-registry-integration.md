@@ -17,6 +17,20 @@ So the current system is best described as:
 
 > one internal SkillHub, multiple consumption surfaces
 
+### Interactive preview
+
+The standalone `/skillhub` surface supports three-dimensional Wiki browsing,
+Skill leaf-node details, and bilingual natural-language retrieval against the
+same checked-in science catalog.
+
+**Wiki path filtering and Skill details**
+
+![SkillHub Wiki path filtering](../assets/skillhub/skillhub-wiki.gif)
+
+**Chinese and English research-skill retrieval**
+
+![SkillHub bilingual search](../assets/skillhub/skillhub-bilingual-search.gif)
+
 ### Built-in science catalog and Critic workbench
 
 `GET /api/v1/skill-hub/science-catalog` exposes the generated catalog without importing it into marketplace tables. The snapshot preserves canonical ID, provenance, quality/readiness state, and the three orthogonal discovery dimensions: domain, research stage, and function. It is metadata for discovery, not proof that a package is installable.
