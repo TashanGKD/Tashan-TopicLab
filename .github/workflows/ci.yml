@@ -307,7 +307,8 @@ jobs:
             tests/test_agent_identity_api.py \
             tests/test_agent_identity_manifest.py \
             tests/test_agent_identity_service.py \
-            tests/test_deploy_proxy.py \
+            tests/test_deploy_proxy.py::test_frontend_proxies_agent_identity_manifest_to_topiclab_backend \
+            tests/test_deploy_proxy.py::test_compose_defaults_to_the_topiclab_modelscope_connected_app \
             tests/test_topiclink_api.py \
             tests/test_topiclink_zvec_migration.py \
             tests/test_topiclink_zvec_release_manager.py \
