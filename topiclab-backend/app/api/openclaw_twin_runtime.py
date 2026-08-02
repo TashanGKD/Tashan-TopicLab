@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 from typing import Optional
 
 from app.api.auth import (
@@ -15,6 +16,8 @@ from app.api.auth import (
     verify_access_token,
 )
 from app.services.openclaw_policy_pack import DEFAULT_SCENE
+from app.services import agent_identity as agent_identity_service
+from app.services.request_audit import set_authenticated_actor_context
 from app.services.twin_runtime import (
     append_observation,
     backfill_twins_from_legacy,
@@ -51,25 +54,51 @@ class TwinBackfillRequest(BaseModel):
     limit: int = Field(default=500, ge=1, le=5000)
 
 
-def _require_openclaw_user(
+async def _require_openclaw_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> dict:
     if not credentials:
-        raise HTTPException(status_code=401, detail="OpenClaw key required")
+        raise HTTPException(
+            status_code=401,
+            detail="OpenClaw key required or AgentID credential required",
+        )
     token = credentials.credentials
-    if not token.startswith("tloc_"):
-        raise HTTPException(
-            status_code=401,
-            detail="OpenClaw runtime key required",
-            headers=build_openclaw_key_invalid_headers(),
+    if token.startswith("tloc_"):
+        user = await run_in_threadpool(verify_access_token, token)
+        if not user or user.get("auth_type") != "openclaw_key":
+            raise HTTPException(
+                status_code=401,
+                detail=build_openclaw_key_invalid_detail(),
+                headers=build_openclaw_key_invalid_headers(),
+            )
+    else:
+        authorization = f"{credentials.scheme} {token}"
+        try:
+            identity = await agent_identity_service.verify_modelscope_authorization(
+                authorization
+            )
+        except agent_identity_service.AgentIdentityConfigurationError as exc:
+            raise HTTPException(
+                status_code=401,
+                detail="OpenClaw key or valid AgentID token required",
+            ) from exc
+        except agent_identity_service.AgentIdentityAuthenticationError as exc:
+            raise HTTPException(
+                status_code=401,
+                detail="OpenClaw key or valid AgentID token required",
+            ) from exc
+        user = await run_in_threadpool(
+            agent_identity_service.resolve_modelscope_agent_actor, identity
         )
-    user = verify_access_token(token)
-    if not user or user.get("auth_type") != "openclaw_key":
-        raise HTTPException(
-            status_code=401,
-            detail=build_openclaw_key_invalid_detail(),
-            headers=build_openclaw_key_invalid_headers(),
-        )
+        if not user:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "AgentID identity is not registered; call "
+                    "/api/v1/agent-identity/bootstrap first"
+                ),
+            )
+    set_authenticated_actor_context(user)
     return user
 
 

@@ -304,6 +304,10 @@ jobs:
           TOPICLAB_TESTING: "1"
         run: |
           uv run --frozen --group dev python -m pytest \
+            tests/test_agent_identity_api.py \
+            tests/test_agent_identity_manifest.py \
+            tests/test_agent_identity_service.py \
+            tests/test_deploy_proxy.py \
             tests/test_topiclink_api.py \
             tests/test_topiclink_zvec_migration.py \
             tests/test_topiclink_zvec_release_manager.py \

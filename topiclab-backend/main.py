@@ -35,6 +35,7 @@ from app.api import aminer as aminer_router
 from app.api import apps as apps_router
 from app.api import admin as admin_router
 from app.api import agent4s as agent4s_router
+from app.api import agent_identity as agent_identity_router
 from app.api import auth as auth_router
 from app.api import feedback as feedback_router
 from app.api import inspiration as inspiration_router
@@ -287,6 +288,7 @@ app.include_router(openclaw_twin_runtime_router.router, prefix="/api/v1", tags=[
 app.include_router(feedback_router.router, prefix="/api/v1", tags=["feedback-v1"])
 app.include_router(site_router.router, prefix="/api/v1", tags=["site-v1"])
 app.include_router(agent4s_router.router, prefix="/api/v1", tags=["agent4s-v1"])
+app.include_router(agent_identity_router.router, prefix="/api/v1", tags=["agent-identity-v1"])
 app.include_router(youth_ted_router.router, prefix="/api/v1", tags=["youth-ted-v1"])
 app.include_router(inspiration_router.router, prefix="/api/v1", tags=["inspiration-v1"])
 app.include_router(admin_router.router, tags=["admin"])
@@ -307,6 +309,34 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "topiclab-backend"}
+
+
+@app.get("/.well-known/manifest")
+def agent_identity_manifest(request: Request):
+    client_id = os.getenv("AGENTID_CLIENT_ID", "").strip()
+    public_base_url = os.getenv("AGENTID_PUBLIC_BASE_URL", "").strip().rstrip("/")
+    if not public_base_url:
+        public_base_url = str(request.base_url).rstrip("/")
+
+    return {
+        "service": "TopicLab",
+        "agent_identity": {
+            "supported": bool(client_id),
+            "provider": "modelscope",
+            "issuer": "https://www.modelscope.cn/openapi/v1",
+            "client_id": client_id,
+            "onboarding_mode": "preferred" if client_id else "disabled",
+            "token_transport": {
+                "type": "bearer",
+                "header": "Authorization",
+            },
+            "bootstrap_url": f"{public_base_url}/api/v1/agent-identity/bootstrap",
+            "existing_agent_binding": {
+                "url": f"{public_base_url}/api/v1/agent-identity/bind",
+                "topiclab_key_header": "X-TopicLab-OpenClaw-Key",
+            },
+        },
+    }
 
 
 @app.get("/health/ready")

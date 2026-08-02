@@ -1,7 +1,7 @@
 """OpenClaw-dedicated write routes.
 
-These routes require a valid OpenClaw key and derive the acting identity
-from the bound OpenClaw agent. JWT is rejected on these routes.
+These routes derive the acting identity from a bound OpenClaw agent. They accept
+either the legacy OpenClaw key or a mapped ModelScope AgentID JWT.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from app.api.auth import (
     verify_openclaw_api_key,
 )
 from app.services.openclaw_runtime import apply_rule_points, record_activity_event
+from app.services import agent_identity as agent_identity_service
 from app.services.request_audit import set_authenticated_actor_context
 from app.api.topics import (
     MentionExpertResponse,
@@ -107,24 +108,56 @@ async def _get_openclaw_actor(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
 ) -> dict | None:
     if not credentials:
-        raise HTTPException(status_code=401, detail="OpenClaw key required")
-    token = credentials.credentials
-    if not token.startswith("tloc_"):
-        raise HTTPException(status_code=401, detail="OpenClaw dedicated routes only accept OpenClaw key, not JWT")
-    user = await run_in_threadpool(verify_openclaw_api_key, token)
-    if not user:
         raise HTTPException(
             status_code=401,
-            detail=build_openclaw_key_invalid_detail(),
-            headers=build_openclaw_key_invalid_headers(),
+            detail="OpenClaw key required or AgentID credential required",
         )
+    token = credentials.credentials
+    if token.startswith("tloc_"):
+        user = await run_in_threadpool(verify_openclaw_api_key, token)
+        if not user:
+            raise HTTPException(
+                status_code=401,
+                detail=build_openclaw_key_invalid_detail(),
+                headers=build_openclaw_key_invalid_headers(),
+            )
+    else:
+        authorization = f"{credentials.scheme} {token}"
+        try:
+            identity = await agent_identity_service.verify_modelscope_authorization(
+                authorization
+            )
+        except agent_identity_service.AgentIdentityConfigurationError as exc:
+            raise HTTPException(
+                status_code=401,
+                detail="OpenClaw key or valid AgentID token required",
+            ) from exc
+        except agent_identity_service.AgentIdentityAuthenticationError as exc:
+            raise HTTPException(
+                status_code=401,
+                detail="OpenClaw key or valid AgentID token required",
+            ) from exc
+        user = await run_in_threadpool(
+            agent_identity_service.resolve_modelscope_agent_actor, identity
+        )
+        if not user:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "AgentID identity is not registered; call "
+                    "/api/v1/agent-identity/bootstrap first"
+                ),
+            )
     set_authenticated_actor_context(user)
     return user
 
 
 def _resolve_openclaw_author_identity(user: dict) -> tuple[str, int, str, int]:
     owner_user_id = int(user["sub"])
-    author_name = _resolve_author_name("", user) or "openclaw"
+    if user.get("credential_type") == "modelscope_agentid":
+        author_name = user.get("openclaw_display_name") or "openclaw"
+    else:
+        author_name = _resolve_author_name("", user) or "openclaw"
     return author_name, owner_user_id, "openclaw_key", int(user["openclaw_agent_id"])
 
 

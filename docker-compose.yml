@@ -18,6 +18,8 @@ services:
       - TOPICLINK_ZVEC_SERVICE_URL=http://topiclink-zvec:8000
       - TOPICLAB_SYNC_URL=${TOPICLAB_SYNC_URL:-http://topiclab-backend:8000}
       - WORLDWEAVE_BASE_URL=${WORLDWEAVE_BASE_URL:-http://host.docker.internal:3020}
+      - AGENTID_CLIENT_ID=${AGENTID_CLIENT_ID:-hub_418d2a}
+      - AGENTID_PUBLIC_BASE_URL=${AGENTID_PUBLIC_BASE_URL:-https://world.tashan.chat}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
