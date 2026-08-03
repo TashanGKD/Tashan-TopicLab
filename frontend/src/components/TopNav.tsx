@@ -97,7 +97,6 @@ export default function TopNav() {
   const navigate = useNavigate()
   const [user, setUser] = useState<User | null>(null)
   const [unreadInboxCount, setUnreadInboxCount] = useState(0)
-  const [adminMode, setAdminMode] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [userMenuPosition, setUserMenuPosition] = useState({ top: 0, left: 0 })
   const [scrolled, setScrolled] = useState(false)
@@ -121,17 +120,14 @@ export default function TopNav() {
       const latestUser = await refreshCurrentUserProfile()
       if (latestUser) {
         setUser(latestUser)
-        setAdminMode(Boolean(latestUser.is_admin))
         return
       }
     }
     const savedUser = tokenManager.getUser()
     if (savedUser && token) {
       setUser(savedUser)
-      setAdminMode(Boolean(savedUser.is_admin))
     } else {
       setUser(null)
-      setAdminMode(false)
     }
   }, [])
 
@@ -265,11 +261,6 @@ export default function TopNav() {
             : 'bg-white border-b border-[var(--color-gray-light)]'
         }`}
       >
-        {adminMode && location.pathname === '/' ? (
-          <div className="w-full bg-red-600 px-4 py-2 text-center text-xs font-medium tracking-[0.18em] text-white">
-            ADMIN MODE
-          </div>
-        ) : null}
         <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3 min-w-0">
           <Link to="/" className="flex items-center gap-2 sm:gap-3 min-w-0 shrink overflow-hidden">
             <img
@@ -419,6 +410,16 @@ export default function TopNav() {
             >
               数字分身
             </Link>
+            {user?.is_admin ? (
+              <Link
+                to="/admin/qr"
+                className="block whitespace-nowrap px-4 py-2 text-sm font-serif transition-all hover:bg-gray-50"
+                style={{ color: 'var(--color-gray-dark)' }}
+                onClick={() => setUserMenuOpen(false)}
+              >
+                控制台
+              </Link>
+            ) : null}
             <button
               type="button"
               onClick={handleLogout}

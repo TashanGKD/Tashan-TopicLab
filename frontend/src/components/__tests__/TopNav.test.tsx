@@ -1,8 +1,9 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import TopNav from '../TopNav'
+import { refreshCurrentUserProfile, tokenManager } from '../../api/auth'
 
 vi.mock('../../api/auth', () => ({
   authApi: {
@@ -25,6 +26,9 @@ vi.mock('../../api/client', () => ({
 
 describe('TopNav', () => {
   beforeEach(() => {
+    vi.mocked(tokenManager.get).mockReturnValue(null)
+    vi.mocked(tokenManager.getUser).mockReturnValue(null)
+    vi.mocked(refreshCurrentUserProfile).mockResolvedValue(null)
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
       writable: true,
@@ -99,5 +103,52 @@ describe('TopNav', () => {
     )
 
     expect(screen.queryByRole('link', { name: '数字分身' })).not.toBeInTheDocument()
+  })
+
+  it('shows the console in the avatar menu for a site administrator without a homepage banner', async () => {
+    vi.mocked(tokenManager.get).mockReturnValue('admin-token')
+    vi.mocked(refreshCurrentUserProfile).mockResolvedValue({
+      id: 1,
+      phone: '13800138000',
+      username: '管理员',
+      is_admin: true,
+      created_at: '2026-08-03T00:00:00Z',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <TopNav />
+      </MemoryRouter>,
+    )
+
+    const avatarButton = await screen.findByRole('button', { name: /管理员/ })
+    expect(screen.queryByText('ADMIN MODE')).not.toBeInTheDocument()
+    fireEvent.click(avatarButton)
+
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: '控制台' })).toHaveAttribute('href', '/admin/qr')
+    })
+  })
+
+  it('does not show the console in a regular user avatar menu', async () => {
+    vi.mocked(tokenManager.get).mockReturnValue('user-token')
+    vi.mocked(refreshCurrentUserProfile).mockResolvedValue({
+      id: 2,
+      phone: '13800138002',
+      username: '普通用户',
+      is_admin: false,
+      created_at: '2026-08-03T00:00:00Z',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <TopNav />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /普通用户/ }))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '退出登录' })).toBeInTheDocument())
+    expect(screen.queryByRole('link', { name: '控制台' })).not.toBeInTheDocument()
   })
 })

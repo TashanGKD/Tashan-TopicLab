@@ -3,33 +3,62 @@
 from __future__ import annotations
 
 import re
-import os
-import secrets
 from io import BytesIO
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from PIL import Image, ImageOps
 
+from app.api.auth import get_current_user
 from app.storage.database.site_assets_store import (
-    LGGC_WECHAT_GROUP_QR_KEY,
     WEBP_MIME_TYPE,
     WECHAT_GROUP_QR_KEY,
+    create_site_qr_group,
     get_site_image_asset,
     get_site_image_asset_metadata,
+    get_site_qr_group,
+    list_site_qr_groups,
     upsert_site_image_asset,
+    update_site_qr_group,
 )
 
 
 router = APIRouter(prefix="/site", tags=["site"])
 _SITE_ASSET_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,127}$")
+_QR_GROUP_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 _MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+_MAX_QR_TITLE_LENGTH = 120
+
+
+def _require_site_admin(user: dict = Depends(get_current_user)) -> dict:
+    if not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    return user
 
 
 def _validate_site_asset_key(key: str) -> str:
     normalized = key.strip()
     if not _SITE_ASSET_KEY_RE.fullmatch(normalized):
         raise HTTPException(status_code=400, detail="Invalid site asset key")
+    return normalized
+
+
+def _validate_qr_group_path(path: str) -> str:
+    normalized = path.strip().strip("/")
+    if normalized.startswith("qr/"):
+        normalized = normalized[3:]
+    if not _QR_GROUP_SLUG_RE.fullmatch(normalized):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid QR path; use 1-64 lowercase letters, numbers, or hyphens",
+        )
+    return normalized
+
+
+def _validate_qr_group_title(title: str) -> str:
+    normalized = title.strip()
+    if not normalized or len(normalized) > _MAX_QR_TITLE_LENGTH:
+        raise HTTPException(status_code=400, detail="QR title must be 1-120 characters")
     return normalized
 
 
@@ -41,20 +70,6 @@ def _legacy_urls_for_key(key: str) -> list[str]:
 
 def _site_asset_url(key: str) -> str:
     return f"/api/v1/site/assets/{key}.webp"
-
-
-def _get_site_asset_upload_key() -> str:
-    configured = (os.getenv("SITE_ASSET_UPLOAD_KEY") or "").strip()
-    if not configured:
-        raise HTTPException(status_code=503, detail="Site asset upload key is not configured")
-    return configured
-
-
-def _require_site_asset_upload_key(upload_key: str | None) -> None:
-    configured = _get_site_asset_upload_key()
-    candidate = (upload_key or "").strip()
-    if not candidate or not secrets.compare_digest(candidate, configured):
-        raise HTTPException(status_code=401, detail="Invalid site asset upload key")
 
 
 def _serve_site_image_asset(key: str, *, include_body: bool) -> Response:
@@ -79,6 +94,21 @@ def _site_asset_metadata_response(key: str) -> dict[str, object]:
         **metadata,
         "url": _site_asset_url(normalized),
         "legacy_urls": _legacy_urls_for_key(normalized),
+    }
+
+
+def _qr_group_response(group: dict[str, str | None]) -> dict[str, object]:
+    slug = str(group["slug"])
+    asset_key = str(group["asset_key"])
+    return {
+        "slug": slug,
+        "path": f"/qr/{slug}",
+        "title": group["title"],
+        "key": asset_key,
+        "url": _site_asset_url(asset_key),
+        "created_at": group["created_at"],
+        "updated_at": group["asset_updated_at"] or group["updated_at"],
+        "config_updated_at": group["updated_at"],
     }
 
 
@@ -132,9 +162,8 @@ async def upload_site_asset_by_key(
     key: str,
     image: UploadFile = File(...),
     expires_at: str | None = Form(default=None),
-    upload_key: str | None = Query(default=None, alias="key"),
+    _: dict = Depends(_require_site_admin),
 ):
-    _require_site_asset_upload_key(upload_key)
     normalized = _validate_site_asset_key(key)
     payload = await image.read()
     image_webp, width, height = _convert_upload_to_webp(payload)
@@ -156,18 +185,92 @@ async def upload_site_asset_by_key(
 
 
 @router.get("/qr-groups")
-def list_site_qr_groups():
+def get_site_qr_groups():
+    return {"items": [_qr_group_response(group) for group in list_site_qr_groups()]}
+
+
+@router.get("/qr-groups/admin")
+def get_site_qr_groups_for_admin(_: dict = Depends(_require_site_admin)):
+    return {"items": [_qr_group_response(group) for group in list_site_qr_groups()]}
+
+
+@router.get("/qr-groups/{slug}")
+def get_site_qr_group_by_slug(slug: str):
+    normalized = _validate_qr_group_path(slug)
+    group = get_site_qr_group(normalized)
+    if group is None:
+        raise HTTPException(status_code=404, detail="QR group not found")
+    return _qr_group_response(group)
+
+
+@router.post("/qr-groups")
+async def create_site_qr_group_entry(
+    path: str = Form(default=""),
+    title: str = Form(default=""),
+    image: UploadFile = File(...),
+    expires_at: str | None = Form(default=None),
+    _: dict = Depends(_require_site_admin),
+):
+    slug = _validate_qr_group_path(path)
+    normalized_title = _validate_qr_group_title(title)
+    image_webp, width, height = _convert_upload_to_webp(await image.read())
+    created = create_site_qr_group(
+        slug=slug,
+        title=normalized_title,
+        image_webp=image_webp,
+        source_filename=image.filename,
+        expires_at=expires_at,
+    )
+    if not created:
+        raise HTTPException(status_code=409, detail="QR path already exists")
+    group = get_site_qr_group(slug)
+    if group is None:
+        raise HTTPException(status_code=500, detail="Created QR group could not be loaded")
     return {
-        "items": [
-            {
-                "slug": "world-wechat-group",
-                "key": WECHAT_GROUP_QR_KEY,
-                "url": _site_asset_url(WECHAT_GROUP_QR_KEY),
-            },
-            {
-                "slug": "lggc-wechat-group",
-                "key": LGGC_WECHAT_GROUP_QR_KEY,
-                "url": _site_asset_url(LGGC_WECHAT_GROUP_QR_KEY),
-            },
-        ],
+        "ok": True,
+        **_qr_group_response(group),
+        "width": width,
+        "height": height,
+        "webp_bytes": len(image_webp),
+    }
+
+
+@router.put("/qr-groups/{slug}")
+async def update_site_qr_group_entry(
+    slug: str,
+    path: str = Form(default=""),
+    title: str = Form(default=""),
+    image: UploadFile | None = File(default=None),
+    expires_at: str | None = Form(default=None),
+    _: dict = Depends(_require_site_admin),
+):
+    current_slug = _validate_qr_group_path(slug)
+    new_slug = _validate_qr_group_path(path)
+    normalized_title = _validate_qr_group_title(title)
+    image_webp: bytes | None = None
+    width: int | None = None
+    height: int | None = None
+    if image is not None:
+        image_webp, width, height = _convert_upload_to_webp(await image.read())
+    result = update_site_qr_group(
+        slug=current_slug,
+        new_slug=new_slug,
+        title=normalized_title,
+        image_webp=image_webp,
+        source_filename=image.filename if image else None,
+        expires_at=expires_at,
+    )
+    if result == "not_found":
+        raise HTTPException(status_code=404, detail="QR group not found")
+    if result == "conflict":
+        raise HTTPException(status_code=409, detail="QR path already exists")
+    group = get_site_qr_group(new_slug)
+    if group is None:
+        raise HTTPException(status_code=500, detail="Updated QR group could not be loaded")
+    return {
+        "ok": True,
+        **_qr_group_response(group),
+        "width": width,
+        "height": height,
+        "webp_bytes": len(image_webp) if image_webp is not None else None,
     }
