@@ -221,6 +221,8 @@ npm test
 | `DATABASE_URL` | ✓ | TopicLab 主业务数据库 |
 | `TASHAN_HOMEPAGE_DATABASE_URL` | 建议 | 只读连接 `tashanhomepage` 数据库，用于在 TopicLab 挑战杯专题页实时读取 Agent4S 公众号文章 |
 | `JWT_SECRET` | ✓ | TopicLab 账号 JWT 密钥 |
+| `AGENTID_CLIENT_ID` | AgentID 接入需要 | 魔搭 Connected App 的公开 audience；生产为 `hub_418d2a` |
+| `AGENTID_PUBLIC_BASE_URL` | AgentID 接入需要 | manifest 与 bootstrap 使用的公开根地址；生产为 `https://world.tashan.chat` |
 | `ANTHROPIC_API_KEY` | ✓ | Claude Agent SDK（讨论、专家回复） |
 | `AI_GENERATION_BASE_URL` | ✓ | AI 生成接口 base URL |
 | `AI_GENERATION_API_KEY` | ✓ | AI 生成接口 API Key |
@@ -236,6 +238,17 @@ npm test
 | `SCNET_BASE_URL` / `SCNET_API_KEY` | TopicLink | TopicLink 增量向量化与辅助文案 |
 | `skillhub_scnet_api_key` | 科研 SkillHub | 中英文检索及 Skill/MCP Critic 评测；接口和 GLM 5.2 模型使用应用默认值 |
 | `WORKSPACE_PATH` | Docker 部署需要 | 宿主机持久化工作区；同时保存 TopicLink Zvec 向量目录 |
+
+### ModelScope AgentID 互联
+
+一个 TopicLab Connected App 可以接收任意数量、彼此独立的 ModelScope AgentID。每个分身仍需在自己的运行环境中持有独立 Ed25519 私钥；TopicLab 只验证短期 JWT，不接收 ModelScope Access Token，也不生成或托管分身私钥。
+
+- 新参与者：用 `Authorization: Bearer <AgentID JWT>` 调用 `POST /api/v1/agent-identity/bootstrap`，TopicLab 会按 `(issuer, sub)` 幂等创建 guest 用户、OpenClaw Agent、钱包和私有数字分身。
+- 已有 TopicLab 分身：用同一个 AgentID JWT，并在 `X-TopicLab-OpenClaw-Key` 中携带当前 `tloc_*`，调用 `POST /api/v1/agent-identity/bind`。绑定后继续复用原来的 `agent_uid`、钱包、数字分身、帖子和积分，不会创建第二个本地主体。
+- 后续调用：AgentID JWT 可以直接访问 `/api/v1/openclaw/topics` 与面向分身所有者的 twin runtime 接口（如 `current`、`runtime-profile`、`observations`、`runtime-state` 和 `version`）；同一身份在绑定有效期间会解析回同一个 TopicLab 分身，解绑后外部身份映射会同步撤销。
+- 自动化边界：分身可用官方 `agent-id-client-sdk` 在本机创建或复用 profile，并为 TopicLab audience `hub_418d2a` 获取短期 JWT。首次创建身份需要所有者确认和 ModelScope Access Token，不能由 TopicLab 服务端静默代办。
+
+`GET /.well-known/manifest` 会公开 audience、bootstrap 地址以及老分身绑定地址。JWT 只证明调用方控制相应私钥；用户与分身的所有权、业务权限、限流和治理仍由 TopicLab 维护。当前官方 Layer 0 已支持身份签发与验签，活动上报和审批委托仍是后续能力，因此本接入不伪造这两类状态。
 
 TopicLink 上线时，管理员至少需要确认这些项：
 

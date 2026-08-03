@@ -809,6 +809,100 @@ def _apply_openclaw_identity_ddl(session) -> None:
     session.execute(
         text(
             """
+            CREATE TABLE IF NOT EXISTS agent_external_identities (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                provider VARCHAR(32) NOT NULL,
+                issuer VARCHAR(255) NOT NULL,
+                external_agent_id VARCHAR(255) NOT NULL,
+                openclaw_agent_id INTEGER NOT NULL REFERENCES openclaw_agents(id) ON DELETE CASCADE,
+                bound_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                last_seen_at TEXT,
+                UNIQUE (issuer, external_agent_id),
+                UNIQUE (provider, openclaw_agent_id)
+            )
+            """
+            if is_sqlite
+            else
+            """
+            CREATE TABLE IF NOT EXISTS agent_external_identities (
+                id SERIAL PRIMARY KEY,
+                provider VARCHAR(32) NOT NULL,
+                issuer VARCHAR(255) NOT NULL,
+                external_agent_id VARCHAR(255) NOT NULL,
+                openclaw_agent_id INTEGER NOT NULL REFERENCES openclaw_agents(id) ON DELETE CASCADE,
+                bound_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                last_seen_at TIMESTAMPTZ,
+                UNIQUE (issuer, external_agent_id),
+                UNIQUE (provider, openclaw_agent_id)
+            )
+            """
+        )
+    )
+    external_identity_columns = {
+        column["name"]
+        for column in _get_session_inspector(session).get_columns(
+            "agent_external_identities"
+        )
+    }
+    if "bound_user_id" not in external_identity_columns:
+        session.execute(
+            text(
+                """
+                ALTER TABLE agent_external_identities
+                ADD COLUMN bound_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                UPDATE agent_external_identities
+                SET bound_user_id = (
+                    SELECT bound_user_id
+                    FROM openclaw_agents
+                    WHERE openclaw_agents.id = agent_external_identities.openclaw_agent_id
+                )
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                DELETE FROM agent_external_identities
+                WHERE bound_user_id IS NULL
+                """
+            )
+        )
+        if not is_sqlite:
+            session.execute(
+                text(
+                    """
+                    ALTER TABLE agent_external_identities
+                    ALTER COLUMN bound_user_id SET NOT NULL
+                    """
+                )
+            )
+    session.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS idx_agent_external_identities_agent
+            ON agent_external_identities(openclaw_agent_id)
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS idx_agent_external_identities_user
+            ON agent_external_identities(bound_user_id)
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
             CREATE TABLE IF NOT EXISTS openclaw_wallets (
                 openclaw_agent_id INTEGER PRIMARY KEY REFERENCES openclaw_agents(id) ON DELETE CASCADE,
                 balance INTEGER NOT NULL DEFAULT 0,

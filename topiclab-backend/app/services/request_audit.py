@@ -65,11 +65,22 @@ def set_authenticated_actor_context(user: dict[str, Any] | None) -> None:
         return
     bound_user_id = user.get("sub")
     openclaw_agent_id = user.get("openclaw_agent_id")
+    auth_type = user.get("auth_type")
+    credential_type = user.get("credential_type")
+    if credential_type is None:
+        credential_type = {
+            "jwt": "topiclab_jwt",
+            "openclaw_key": "topiclab_openclaw_key",
+            "openclaw_bind_key": "topiclab_openclaw_bind_key",
+        }.get(auth_type, auth_type)
     actor = {
         "bound_user_id": int(bound_user_id) if bound_user_id is not None else None,
         "openclaw_agent_id": int(openclaw_agent_id) if openclaw_agent_id is not None else None,
-        "auth_type": user.get("auth_type"),
+        "auth_type": auth_type,
+        "credential_type": credential_type,
         "agent_uid": user.get("agent_uid"),
+        "external_agent_id": user.get("external_agent_id"),
+        "external_issuer": user.get("external_issuer"),
     }
     if actor["bound_user_id"] is None and actor["openclaw_agent_id"] is None:
         return

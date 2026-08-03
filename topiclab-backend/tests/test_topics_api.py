@@ -2576,6 +2576,39 @@ def test_openclaw_guest_claim_on_register_preserves_identity_and_rebinds_account
     assert guest_resp.status_code == 200, guest_resp.text
     guest = guest_resp.json()
 
+    from app.storage.database.postgres_client import get_db_session
+
+    with get_db_session() as session:
+        guest_agent = session.execute(
+            text(
+                """
+                SELECT id, bound_user_id
+                FROM openclaw_agents
+                WHERE agent_uid = :agent_uid
+                """
+            ),
+            {"agent_uid": guest["agent_uid"]},
+        ).fetchone()
+        session.execute(
+            text(
+                """
+                INSERT INTO agent_external_identities (
+                    provider, issuer, external_agent_id,
+                    openclaw_agent_id, bound_user_id
+                ) VALUES (
+                    'modelscope', :issuer, :external_agent_id,
+                    :openclaw_agent_id, :bound_user_id
+                )
+                """
+            ),
+            {
+                "issuer": "https://www.modelscope.cn/openapi/v1",
+                "external_agent_id": "agent_id:modelscope:guest_claim_test",
+                "openclaw_agent_id": int(guest_agent.id),
+                "bound_user_id": int(guest_agent.bound_user_id),
+            },
+        )
+
     topic_resp = client.post(
         "/api/v1/topics",
         headers={"Authorization": f"Bearer {guest['key']}"},
@@ -2585,8 +2618,6 @@ def test_openclaw_guest_claim_on_register_preserves_identity_and_rebinds_account
     topic_payload = topic_resp.json()
     topic_id = topic_payload["id"]
     assert topic_payload["creator_name"].startswith("OpenClaw Guest")
-
-    from app.storage.database.postgres_client import get_db_session
 
     claim_phone = "13800009989"
     with get_db_session() as session:
@@ -2652,10 +2683,21 @@ def test_openclaw_guest_claim_on_register_preserves_identity_and_rebinds_account
             ),
             {"agent_uid": guest["agent_uid"]},
         ).fetchone()
+        external_identity_owner = session.execute(
+            text(
+                """
+                SELECT bound_user_id
+                FROM agent_external_identities
+                WHERE external_agent_id = :external_agent_id
+                """
+            ),
+            {"external_agent_id": "agent_id:modelscope:guest_claim_test"},
+        ).scalar_one()
     assert topic_row.creator_name == "claimed-user's openclaw"
     assert topic_row.creator_user_id == register_payload["user"]["id"]
     assert agent_row.bound_user_id == register_payload["user"]["id"]
     assert agent_row.display_name == "claimed-user's openclaw"
+    assert external_identity_owner == register_payload["user"]["id"]
 
 
 def test_openclaw_renew_rejects_runtime_key(client):

@@ -114,6 +114,31 @@ def test_frontend_and_reviewer_use_domestic_package_sources():
     assert "PIP_DEFAULT_TIMEOUT=${PIP_TIMEOUT}" in reviewer
 
 
+def test_frontend_proxies_agent_identity_manifest_to_topiclab_backend():
+    for config_name in ("nginx.conf", "nginx.root.conf"):
+        config = (REPOSITORY_ROOT / "frontend" / config_name).read_text(
+            encoding="utf-8"
+        )
+        manifest_location = config.split(
+            "location = /.well-known/manifest", 1
+        )[1].split("}", 1)[0]
+
+        assert "proxy_pass http://topiclab-backend:8000/.well-known/manifest;" in manifest_location
+
+
+def test_compose_defaults_to_the_topiclab_modelscope_connected_app():
+    compose = (REPOSITORY_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    topiclab_backend = compose.split("  topiclab-backend:", 1)[1].split(
+        "\n  skillhub-critic-worker:", 1
+    )[0]
+
+    assert "AGENTID_CLIENT_ID=${AGENTID_CLIENT_ID:-hub_418d2a}" in topiclab_backend
+    assert (
+        "AGENTID_PUBLIC_BASE_URL=${AGENTID_PUBLIC_BASE_URL:-https://world.tashan.chat}"
+        in topiclab_backend
+    )
+
+
 def test_deploy_limits_ssh_and_serializes_builds_using_the_runtime_env_file():
     deploy = (REPOSITORY_ROOT / ".github" / "workflows" / "deploy.yml").read_text(
         encoding="utf-8"

@@ -19,6 +19,7 @@ dependencies = [
     "tzdata>=2025.2",
     "zvec==0.5.1",
     "agentscope>=2.0.1,<3",
+    "agent-id-service-sdk==0.6.0",
 ]
 
 [tool.setuptools]
