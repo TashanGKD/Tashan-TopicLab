@@ -13,6 +13,8 @@ from app.storage.database.postgres_client import _is_sqlite_session, get_db_sess
 
 WECHAT_GROUP_QR_KEY = "wechat-group-qr"
 LGGC_WECHAT_GROUP_QR_KEY = "lggc-wechat-group"
+WECHAT_GROUP_QR_SLUG = "world-wechat-group"
+LGGC_WECHAT_GROUP_QR_SLUG = "lggc-wechat-group"
 WEBP_MIME_TYPE = "image/webp"
 
 _SEED_WECHAT_GROUP_QR_PATH = Path(__file__).resolve().parents[2] / "resources" / "wechat_group_qr.webp"
@@ -64,6 +66,30 @@ def _apply_site_assets_ddl(session) -> None:
             """
         )
     )
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS site_qr_groups (
+                slug TEXT PRIMARY KEY,
+                asset_key TEXT NOT NULL UNIQUE,
+                title TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            if is_sqlite
+            else
+            """
+            CREATE TABLE IF NOT EXISTS site_qr_groups (
+                slug VARCHAR(80) PRIMARY KEY,
+                asset_key VARCHAR(128) NOT NULL UNIQUE,
+                title TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
 
 
 def _seed_site_image_asset(session, *, key: str, image_path: Path) -> None:
@@ -94,6 +120,19 @@ def _seed_lggc_wechat_group_qr(session) -> None:
     _seed_site_image_asset(session, key=LGGC_WECHAT_GROUP_QR_KEY, image_path=_SEED_LGGC_WECHAT_GROUP_QR_PATH)
 
 
+def _seed_qr_group(session, *, slug: str, asset_key: str, title: str) -> None:
+    session.execute(
+        text(
+            """
+            INSERT INTO site_qr_groups (slug, asset_key, title, created_at, updated_at)
+            VALUES (:slug, :asset_key, :title, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT DO NOTHING
+            """
+        ),
+        {"slug": slug, "asset_key": asset_key, "title": title},
+    )
+
+
 def ensure_site_assets_schema_and_seed() -> None:
     with get_db_session() as session:
         ensure_site_assets_schema_and_seed_for_session(session)
@@ -103,6 +142,18 @@ def ensure_site_assets_schema_and_seed_for_session(session) -> None:
     _apply_site_assets_ddl(session)
     _seed_wechat_group_qr(session)
     _seed_lggc_wechat_group_qr(session)
+    _seed_qr_group(
+        session,
+        slug=WECHAT_GROUP_QR_SLUG,
+        asset_key=WECHAT_GROUP_QR_KEY,
+        title="他山世界交流群二维码",
+    )
+    _seed_qr_group(
+        session,
+        slug=LGGC_WECHAT_GROUP_QR_SLUG,
+        asset_key=LGGC_WECHAT_GROUP_QR_KEY,
+        title="灵感共创队群聊二维码",
+    )
 
 
 def upsert_site_image_asset_for_session(
@@ -211,6 +262,138 @@ def get_site_image_asset_metadata(key: str) -> dict[str, str | None] | None:
             "created_at": _to_iso(values["created_at"]),
             "updated_at": _to_iso(values["updated_at"]),
         }
+
+
+def _qr_group_from_row(row) -> dict[str, str | None]:
+    values = row._mapping
+    return {
+        "slug": str(values["slug"]),
+        "asset_key": str(values["asset_key"]),
+        "title": str(values["title"]),
+        "created_at": _to_iso(values["created_at"]),
+        "updated_at": _to_iso(values["updated_at"]),
+        "asset_updated_at": _to_iso(values["asset_updated_at"]),
+    }
+
+
+def list_site_qr_groups() -> list[dict[str, str | None]]:
+    with get_db_session() as session:
+        ensure_site_assets_schema_and_seed_for_session(session)
+        rows = session.execute(
+            text(
+                """
+                SELECT q.slug, q.asset_key, q.title, q.created_at, q.updated_at,
+                       a.updated_at AS asset_updated_at
+                FROM site_qr_groups q
+                JOIN site_assets a ON a.key = q.asset_key
+                ORDER BY q.created_at ASC, q.slug ASC
+                """
+            )
+        ).fetchall()
+        return [_qr_group_from_row(row) for row in rows]
+
+
+def get_site_qr_group(slug: str) -> dict[str, str | None] | None:
+    with get_db_session() as session:
+        ensure_site_assets_schema_and_seed_for_session(session)
+        row = session.execute(
+            text(
+                """
+                SELECT q.slug, q.asset_key, q.title, q.created_at, q.updated_at,
+                       a.updated_at AS asset_updated_at
+                FROM site_qr_groups q
+                JOIN site_assets a ON a.key = q.asset_key
+                WHERE q.slug = :slug
+                LIMIT 1
+                """
+            ),
+            {"slug": slug},
+        ).first()
+        return _qr_group_from_row(row) if row else None
+
+
+def create_site_qr_group(
+    *,
+    slug: str,
+    title: str,
+    image_webp: bytes,
+    source_filename: str | None = None,
+    expires_at: str | None = None,
+) -> bool:
+    asset_key = f"qr-{slug}"
+    with get_db_session() as session:
+        ensure_site_assets_schema_and_seed_for_session(session)
+        existing = session.execute(
+            text("SELECT 1 FROM site_qr_groups WHERE slug = :slug LIMIT 1"),
+            {"slug": slug},
+        ).first()
+        if existing:
+            return False
+        upsert_site_image_asset_for_session(
+            session,
+            key=asset_key,
+            image_webp=image_webp,
+            mime_type=WEBP_MIME_TYPE,
+            expires_at=expires_at,
+            source_filename=source_filename,
+        )
+        session.execute(
+            text(
+                """
+                INSERT INTO site_qr_groups (slug, asset_key, title, created_at, updated_at)
+                VALUES (:slug, :asset_key, :title, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """
+            ),
+            {"slug": slug, "asset_key": asset_key, "title": title},
+        )
+    return True
+
+
+def update_site_qr_group(
+    *,
+    slug: str,
+    new_slug: str,
+    title: str,
+    image_webp: bytes | None = None,
+    source_filename: str | None = None,
+    expires_at: str | None = None,
+) -> str:
+    with get_db_session() as session:
+        ensure_site_assets_schema_and_seed_for_session(session)
+        row = session.execute(
+            text("SELECT asset_key FROM site_qr_groups WHERE slug = :slug LIMIT 1"),
+            {"slug": slug},
+        ).first()
+        if not row:
+            return "not_found"
+        if new_slug != slug:
+            conflict = session.execute(
+                text("SELECT 1 FROM site_qr_groups WHERE slug = :slug LIMIT 1"),
+                {"slug": new_slug},
+            ).first()
+            if conflict:
+                return "conflict"
+        asset_key = str(row.asset_key)
+        if image_webp is not None:
+            upsert_site_image_asset_for_session(
+                session,
+                key=asset_key,
+                image_webp=image_webp,
+                mime_type=WEBP_MIME_TYPE,
+                expires_at=expires_at,
+                source_filename=source_filename,
+            )
+        session.execute(
+            text(
+                """
+                UPDATE site_qr_groups
+                SET slug = :new_slug, title = :title, updated_at = CURRENT_TIMESTAMP
+                WHERE slug = :slug
+                """
+            ),
+            {"slug": slug, "new_slug": new_slug, "title": title},
+        )
+    return "updated"
 
 
 def _to_iso(value) -> str | None:

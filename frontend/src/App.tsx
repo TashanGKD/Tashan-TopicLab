@@ -66,6 +66,7 @@ function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/admin/login" element={<AdminLoginPage />} />
+            <Route path="/admin/qr" element={<WechatGroupQrPage adminMode />} />
             <Route path="/admin" element={<AdminDashboardPage />} />
             <Route path="/info" element={<Navigate to="/info/source" replace />} />
             <Route path="/info/:section" element={<SourceFeedPage />} />
@@ -79,14 +80,7 @@ function App() {
             <Route path="/inspiration-co-creation/submit" element={<InspirationSubmitPage />} />
             <Route path="/inspiration-co-creation/needs/:slug" element={<InspirationNeedDetailPage />} />
             <Route path="/wechat-group-qr" element={<Navigate to="/qr/lggc-wechat-group" replace />} />
-            <Route
-              path="/qr/world-wechat-group"
-              element={<WechatGroupQrPage assetKey="wechat-group-qr" title="他山世界交流群二维码" />}
-            />
-            <Route
-              path="/qr/lggc-wechat-group"
-              element={<WechatGroupQrPage assetKey="lggc-wechat-group" title="灵感共创队群聊二维码" />}
-            />
+            <Route path="/qr/:slug" element={<WechatGroupQrPage />} />
             <Route path="/register" element={<Register />} />
             <Route path="/login" element={<Login />} />
             <Route path="/auth/watcha/callback" element={<WatchaAuthCallback />} />
