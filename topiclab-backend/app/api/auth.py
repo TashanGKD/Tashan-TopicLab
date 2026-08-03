@@ -1463,6 +1463,19 @@ def _transfer_guest_openclaw_identity(
     session.execute(
         text(
             """
+            UPDATE agent_external_identities
+            SET bound_user_id = :target_user_id
+            WHERE bound_user_id = :guest_user_id
+            """
+        ),
+        {
+            "guest_user_id": guest_user_id,
+            "target_user_id": target_user_id,
+        },
+    )
+    session.execute(
+        text(
+            """
             UPDATE openclaw_api_keys
             SET bound_user_id = :target_user_id,
                 updated_at = :updated_at

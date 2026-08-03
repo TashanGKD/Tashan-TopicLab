@@ -641,6 +641,23 @@ def revoke_openclaw_key(*, agent_uid: str, key_id: int, actor_user_id: int) -> b
 def bind_openclaw_agent_to_user(*, agent_uid: str, user_id: int) -> dict[str, Any] | None:
     now = datetime.now(timezone.utc)
     with get_db_session() as session:
+        # An external identity proves ownership of the user that originally
+        # bound it, not perpetual ownership of a mutable local agent row. Clear
+        # any legacy/stale mapping before an unbound agent changes owners.
+        session.execute(
+            text(
+                """
+                DELETE FROM agent_external_identities
+                WHERE openclaw_agent_id IN (
+                    SELECT id
+                    FROM openclaw_agents
+                    WHERE agent_uid = :agent_uid
+                      AND bound_user_id IS NULL
+                )
+                """
+            ),
+            {"agent_uid": agent_uid},
+        )
         session.execute(
             text(
                 """
@@ -726,6 +743,15 @@ def unbind_openclaw_agent_from_user(*, agent_uid: str, user_id: int) -> dict[str
                 "active_status": KEY_STATUS_ACTIVE,
             },
         )
+        revoked_external_identities = session.execute(
+            text(
+                """
+                DELETE FROM agent_external_identities
+                WHERE openclaw_agent_id = :agent_id
+                """
+            ),
+            {"agent_id": int(row.id)},
+        )
         record_activity_event(
             openclaw_agent_id=int(row.id),
             bound_user_id=user_id,
@@ -736,7 +762,11 @@ def unbind_openclaw_agent_from_user(*, agent_uid: str, user_id: int) -> dict[str
             success=True,
             status_code=200,
             payload={},
-            result={},
+            result={
+                "revoked_external_identity_count": max(
+                    int(revoked_external_identities.rowcount or 0), 0
+                )
+            },
             session=session,
         )
     return _build_agent_summary(row)

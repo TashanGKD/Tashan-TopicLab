@@ -70,9 +70,11 @@ def test_concurrent_same_binding_recovers_as_idempotent(monkeypatch):
 
         def execute(self, statement, params):
             sql = str(statement)
+            if "SELECT bound_user_id" in sql and "FROM openclaw_agents" in sql:
+                return FakeResult(SimpleNamespace(bound_user_id=7))
             if "SELECT openclaw_agent_id" in sql:
                 row = (
-                    SimpleNamespace(openclaw_agent_id=42)
+                    SimpleNamespace(openclaw_agent_id=42, bound_user_id=7)
                     if self.attempt == 2
                     else None
                 )

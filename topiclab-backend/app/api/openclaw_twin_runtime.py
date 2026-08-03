@@ -102,6 +102,24 @@ async def _require_openclaw_user(
     return user
 
 
+async def _require_twin_reader_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+) -> dict:
+    """Allow regular TopicLab users plus both supported agent credentials."""
+
+    if not credentials:
+        raise HTTPException(status_code=401, detail="未登录")
+    if not credentials.credentials.startswith("tloc_"):
+        user = await run_in_threadpool(
+            verify_access_token,
+            credentials.credentials,
+        )
+        if user:
+            set_authenticated_actor_context(user)
+            return user
+    return await _require_openclaw_user(credentials)
+
+
 def _require_admin_user(user: dict = Depends(get_current_user)) -> dict:
     if not user.get("is_admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
@@ -210,7 +228,7 @@ async def get_twin_observations(
     scene: Optional[str] = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(_require_twin_reader_user),
 ):
     requester_user_id = int(user["sub"]) if user.get("sub") is not None else None
     try:

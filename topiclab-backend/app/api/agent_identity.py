@@ -7,6 +7,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.services import agent_identity as agent_identity_service
 from app.services.openclaw_runtime import verify_openclaw_api_key
+from app.services.request_audit import set_authenticated_actor_context
 
 router = APIRouter(prefix="/agent-identity", tags=["agent-identity"])
 security = HTTPBearer(auto_error=False)
@@ -48,12 +49,18 @@ async def bootstrap_agent_identity(
     payload: AgentIdentityBootstrapRequest,
     identity=Depends(require_modelscope_identity),
 ):
-    return await run_in_threadpool(
+    result = await run_in_threadpool(
         agent_identity_service.bootstrap_modelscope_identity,
         identity,
         display_name=payload.display_name,
         description=payload.description,
     )
+    actor = await run_in_threadpool(
+        agent_identity_service.resolve_modelscope_agent_actor,
+        identity,
+    )
+    set_authenticated_actor_context(actor)
+    return result
 
 
 @router.post("/bind")
@@ -72,6 +79,14 @@ async def bind_agent_identity(
     )
     if not actor:
         raise HTTPException(status_code=401, detail="Invalid TopicLab OpenClaw key")
+    set_authenticated_actor_context(
+        {
+            **actor,
+            "credential_type": "modelscope_agentid",
+            "external_agent_id": identity.agent_id,
+            "external_issuer": identity.issuer,
+        }
+    )
     try:
         return await run_in_threadpool(
             agent_identity_service.bind_modelscope_identity,

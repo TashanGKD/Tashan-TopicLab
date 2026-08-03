@@ -224,6 +224,12 @@ class ActorAuditMiddleware:
                     "query": sanitize_query_params(request.query_params),
                     "body": summarize_request_body(bytes(captured_body), content_type) if should_capture_body else None,
                     "content_type": content_type,
+                    "authentication": {
+                        "auth_type": actor.get("auth_type"),
+                        "credential_type": actor.get("credential_type"),
+                        "external_agent_id": actor.get("external_agent_id"),
+                        "external_issuer": actor.get("external_issuer"),
+                    },
                 }
                 result = {
                     "status_code": status_code,

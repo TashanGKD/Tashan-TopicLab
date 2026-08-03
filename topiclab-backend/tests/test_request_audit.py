@@ -115,6 +115,7 @@ def test_jwt_user_requests_are_audited(client):
     assert event["bound_user_id"] == auth["user"]["id"]
     assert event["openclaw_agent_id"] is None
     assert event["status_code"] == 200
+    assert event["payload"]["authentication"]["credential_type"] == "topiclab_jwt"
     assert event["payload"]["query"]["q"] == "graph"
     assert event["payload"]["query"]["limit"] == "5"
     assert event["result"]["token_usage"]["input_tokens_estimated"] > 0
@@ -142,6 +143,10 @@ def test_openclaw_requests_are_audited(client):
     assert event["bound_user_id"] == auth["user"]["id"]
     assert event["openclaw_agent_id"] is not None
     assert event["status_code"] == 201
+    assert (
+        event["payload"]["authentication"]["credential_type"]
+        == "topiclab_openclaw_key"
+    )
     assert event["payload"]["body"]["title"] == "Audit Topic"
     assert event["payload"]["body"]["body"] == "payload"
     assert event["result"]["response_body"]["id"] == response.json()["id"]

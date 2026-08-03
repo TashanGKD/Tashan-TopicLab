@@ -1,4 +1,5 @@
 import importlib
+import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -13,6 +14,7 @@ def agentid_client(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{database_path}")
     monkeypatch.setenv("TOPICLAB_TESTING", "1")
     monkeypatch.setenv("JWT_SECRET", "test-secret")
+    monkeypatch.setenv("ADMIN_PANEL_PASSWORD", "admin-secret")
     monkeypatch.setenv("AGENTID_CLIENT_ID", "hub_418d2a")
     monkeypatch.setenv("AGENTID_PUBLIC_BASE_URL", "https://world.tashan.chat")
 
@@ -56,7 +58,13 @@ def agentid_client(tmp_path, monkeypatch):
         yield test_client, postgres_client
 
 
-def _register_existing_openclaw_agent(client, postgres_client) -> dict:
+def _register_existing_openclaw_agent(
+    client,
+    postgres_client,
+    *,
+    phone: str = "13800008881",
+    username: str = "现有他山分身",
+) -> dict:
     with postgres_client.get_db_session() as session:
         session.execute(
             text(
@@ -66,17 +74,17 @@ def _register_existing_openclaw_agent(client, postgres_client) -> dict:
                 """
             ),
             {
-                "phone": "13800008881",
+                "phone": phone,
                 "expires_at": datetime.now(timezone.utc) + timedelta(minutes=5),
             },
         )
     registered = client.post(
         "/auth/register",
         json={
-            "phone": "13800008881",
+            "phone": phone,
             "code": "123456",
             "password": "password123",
-            "username": "现有他山分身",
+            "username": username,
         },
     )
     assert registered.status_code == 200, registered.text
@@ -85,7 +93,10 @@ def _register_existing_openclaw_agent(client, postgres_client) -> dict:
         headers={"Authorization": f"Bearer {registered.json()['token']}"},
     )
     assert key.status_code == 200, key.text
-    return key.json()
+    result = key.json()
+    result["access_token"] = registered.json()["token"]
+    result["user"] = registered.json()["user"]
+    return result
 
 
 def test_agentid_bootstrap_is_idempotent_and_does_not_issue_a_long_lived_key(
@@ -138,7 +149,7 @@ def test_agentid_bootstrap_is_idempotent_and_does_not_issue_a_long_lived_key(
 def test_agentid_can_use_existing_openclaw_business_route_after_bootstrap(
     agentid_client,
 ):
-    client, _ = agentid_client
+    client, postgres_client = agentid_client
     headers = {"Authorization": "Bearer valid"}
     bootstrap = client.post(
         "/api/v1/agent-identity/bootstrap",
@@ -159,6 +170,47 @@ def test_agentid_can_use_existing_openclaw_business_route_after_bootstrap(
     twin = client.get("/api/v1/openclaw/twins/current", headers=headers)
     assert twin.status_code == 200, twin.text
     assert twin.json()["twin"]["display_name"] == "他山选题分身"
+    twin_id = twin.json()["twin"]["twin_id"]
+
+    appended = client.post(
+        f"/api/v1/openclaw/twins/{twin_id}/observations",
+        headers=headers,
+        json={
+            "instance_id": bootstrap.json()["agent"]["agent_uid"],
+            "observation_type": "style_shift",
+            "payload": {"signal": "prefers concise summaries"},
+        },
+    )
+    assert appended.status_code == 200, appended.text
+
+    observations = client.get(
+        f"/api/v1/openclaw/twins/{twin_id}/observations",
+        headers=headers,
+    )
+    assert observations.status_code == 200, observations.text
+    assert observations.json()["total"] == 1
+
+    with postgres_client.get_db_session() as session:
+        audit_row = session.execute(
+            text(
+                """
+                SELECT payload_json
+                FROM openclaw_activity_events
+                WHERE event_type = 'http.request'
+                  AND route LIKE '%/openclaw/topics'
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            )
+        ).fetchone()
+    assert audit_row is not None
+    authentication = json.loads(audit_row.payload_json)["authentication"]
+    assert authentication == {
+        "auth_type": "openclaw_key",
+        "credential_type": "modelscope_agentid",
+        "external_agent_id": "agent_id:modelscope:agent_topiclab_test",
+        "external_issuer": "https://www.modelscope.cn/openapi/v1",
+    }
 
 
 def test_agentid_rejects_invalid_tokens_and_requires_bootstrap(agentid_client):
@@ -230,8 +282,27 @@ def test_existing_openclaw_agent_can_bind_agentid_without_losing_its_local_ident
         mapping_count = session.execute(
             text("SELECT COUNT(*) FROM agent_external_identities")
         ).scalar_one()
+        bind_audit = session.execute(
+            text(
+                """
+                SELECT payload_json
+                FROM openclaw_activity_events
+                WHERE event_type = 'http.request'
+                  AND route LIKE '%/agent-identity/bind'
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            )
+        ).fetchone()
     assert local_agent_count == 1
     assert mapping_count == 1
+    assert bind_audit is not None
+    assert json.loads(bind_audit.payload_json)["authentication"] == {
+        "auth_type": "openclaw_key",
+        "credential_type": "modelscope_agentid",
+        "external_agent_id": "agent_id:modelscope:agent_topiclab_test",
+        "external_issuer": "https://www.modelscope.cn/openapi/v1",
+    }
 
 
 def test_agentid_bind_rejects_reassigning_an_identity_to_another_local_agent(
@@ -310,3 +381,97 @@ def test_agentid_bind_rejects_an_invalid_topiclab_agent_key(agentid_client):
 
     assert response.status_code == 401, response.text
     assert response.json() == {"detail": "Invalid TopicLab OpenClaw key"}
+
+
+def test_unbound_agentid_cannot_follow_a_local_agent_to_a_new_user(agentid_client):
+    client, postgres_client = agentid_client
+    original_owner = _register_existing_openclaw_agent(
+        client,
+        postgres_client,
+        phone="13800008882",
+        username="原分身主人",
+    )
+    bound = client.post(
+        "/api/v1/agent-identity/bind",
+        headers={
+            "Authorization": "Bearer valid",
+            "X-TopicLab-OpenClaw-Key": original_owner["key"],
+        },
+    )
+    assert bound.status_code == 200, bound.text
+
+    unbound = client.post(
+        f"/api/v1/openclaw/agents/{original_owner['agent_uid']}/unbind-user",
+        headers={"Authorization": f"Bearer {original_owner['access_token']}"},
+    )
+    assert unbound.status_code == 200, unbound.text
+
+    new_owner = _register_existing_openclaw_agent(
+        client,
+        postgres_client,
+        phone="13800008883",
+        username="新分身主人",
+    )
+    rebound = client.post(
+        f"/api/v1/openclaw/agents/{original_owner['agent_uid']}/bind-user",
+        headers={"Authorization": f"Bearer {new_owner['access_token']}"},
+    )
+    assert rebound.status_code == 200, rebound.text
+
+    stale_identity = client.post(
+        "/api/v1/openclaw/topics",
+        headers={"Authorization": "Bearer valid"},
+        json={"title": "不应创建", "body": "旧 AgentID 不应跟随换绑"},
+    )
+    assert stale_identity.status_code == 403, stale_identity.text
+
+    with postgres_client.get_db_session() as session:
+        mapping_count = session.execute(
+            text("SELECT COUNT(*) FROM agent_external_identities")
+        ).scalar_one()
+        leaked_topic_count = session.execute(
+            text("SELECT COUNT(*) FROM topics WHERE title = '不应创建'")
+        ).scalar_one()
+    assert mapping_count == 0
+    assert leaked_topic_count == 0
+
+
+def test_deleting_a_user_revokes_its_agentid_mapping(agentid_client):
+    client, postgres_client = agentid_client
+    existing = _register_existing_openclaw_agent(
+        client,
+        postgres_client,
+        phone="13800008884",
+        username="待删除分身主人",
+    )
+    bound = client.post(
+        "/api/v1/agent-identity/bind",
+        headers={
+            "Authorization": "Bearer valid",
+            "X-TopicLab-OpenClaw-Key": existing["key"],
+        },
+    )
+    assert bound.status_code == 200, bound.text
+
+    admin_login = client.post(
+        "/admin/auth/login",
+        json={"password": "admin-secret"},
+    )
+    assert admin_login.status_code == 200, admin_login.text
+    deleted = client.delete(
+        f"/admin/users/{existing['user']['id']}",
+        headers={"Authorization": f"Bearer {admin_login.json()['token']}"},
+    )
+    assert deleted.status_code == 200, deleted.text
+
+    revoked = client.post(
+        "/api/v1/openclaw/topics",
+        headers={"Authorization": "Bearer valid"},
+        json={"title": "删除后不应创建", "body": "映射应失效"},
+    )
+    assert revoked.status_code == 403, revoked.text
+    with postgres_client.get_db_session() as session:
+        mapping_count = session.execute(
+            text("SELECT COUNT(*) FROM agent_external_identities")
+        ).scalar_one()
+    assert mapping_count == 0

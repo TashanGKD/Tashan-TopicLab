@@ -153,7 +153,9 @@ def _find_mapping(issuer: str, external_agent_id: str) -> dict[str, Any] | None:
                     t.twin_id,
                     t.display_name AS twin_display_name
                 FROM agent_external_identities e
-                JOIN openclaw_agents a ON a.id = e.openclaw_agent_id
+                JOIN openclaw_agents a
+                  ON a.id = e.openclaw_agent_id
+                 AND a.bound_user_id = e.bound_user_id
                 LEFT JOIN twin_core t
                   ON t.owner_user_id = a.bound_user_id AND t.is_active = TRUE
                 WHERE e.issuer = :issuer
@@ -256,10 +258,11 @@ def bootstrap_modelscope_identity(
                     """
                     INSERT INTO agent_external_identities (
                         provider, issuer, external_agent_id, openclaw_agent_id,
-                        created_at, last_seen_at
+                        bound_user_id, created_at, last_seen_at
                     ) VALUES (
                         'modelscope', :issuer, :external_agent_id,
-                        :openclaw_agent_id, :created_at, :last_seen_at
+                        :openclaw_agent_id, :bound_user_id, :created_at,
+                        :last_seen_at
                     )
                     """
                 ),
@@ -267,6 +270,7 @@ def bootstrap_modelscope_identity(
                     "issuer": identity.issuer,
                     "external_agent_id": identity.agent_id,
                     "openclaw_agent_id": int(agent.id),
+                    "bound_user_id": int(user.id),
                     "created_at": now,
                     "last_seen_at": now,
                 },
@@ -320,13 +324,31 @@ def bind_modelscope_identity(
     """Bind a verified AgentID to an existing TopicLab OpenClaw agent."""
 
     created = False
+    bound_user_id: int | None = None
     now = datetime.now(timezone.utc)
     try:
         with get_db_session() as session:
+            local_agent = session.execute(
+                text(
+                    """
+                    SELECT bound_user_id
+                    FROM openclaw_agents
+                    WHERE id = :openclaw_agent_id
+                      AND status = 'active'
+                    LIMIT 1
+                    """
+                ),
+                {"openclaw_agent_id": openclaw_agent_id},
+            ).fetchone()
+            if not local_agent or local_agent.bound_user_id is None:
+                raise AgentIdentityBindingConflictError(
+                    "TopicLab agent is not bound to an active user"
+                )
+            bound_user_id = int(local_agent.bound_user_id)
             external_mapping = session.execute(
                 text(
                     """
-                    SELECT openclaw_agent_id
+                    SELECT openclaw_agent_id, bound_user_id
                     FROM agent_external_identities
                     WHERE issuer = :issuer
                       AND external_agent_id = :external_agent_id
@@ -339,7 +361,10 @@ def bind_modelscope_identity(
                 },
             ).fetchone()
             if external_mapping:
-                if int(external_mapping.openclaw_agent_id) != openclaw_agent_id:
+                if (
+                    int(external_mapping.openclaw_agent_id) != openclaw_agent_id
+                    or int(external_mapping.bound_user_id) != bound_user_id
+                ):
                     raise AgentIdentityBindingConflictError(
                         "AgentID is already bound to another TopicLab agent"
                     )
@@ -347,7 +372,7 @@ def bind_modelscope_identity(
                 local_mapping = session.execute(
                     text(
                         """
-                        SELECT external_agent_id
+                        SELECT external_agent_id, bound_user_id
                         FROM agent_external_identities
                         WHERE provider = 'modelscope'
                           AND openclaw_agent_id = :openclaw_agent_id
@@ -365,10 +390,12 @@ def bind_modelscope_identity(
                         """
                         INSERT INTO agent_external_identities (
                             provider, issuer, external_agent_id,
-                            openclaw_agent_id, created_at, last_seen_at
+                            openclaw_agent_id, bound_user_id, created_at,
+                            last_seen_at
                         ) VALUES (
                             'modelscope', :issuer, :external_agent_id,
-                            :openclaw_agent_id, :created_at, :last_seen_at
+                            :openclaw_agent_id, :bound_user_id, :created_at,
+                            :last_seen_at
                         )
                         """
                     ),
@@ -376,6 +403,7 @@ def bind_modelscope_identity(
                         "issuer": identity.issuer,
                         "external_agent_id": identity.agent_id,
                         "openclaw_agent_id": openclaw_agent_id,
+                        "bound_user_id": bound_user_id,
                         "created_at": now,
                         "last_seen_at": now,
                     },
@@ -389,7 +417,7 @@ def bind_modelscope_identity(
             external_mapping = session.execute(
                 text(
                     """
-                    SELECT openclaw_agent_id
+                    SELECT openclaw_agent_id, bound_user_id
                     FROM agent_external_identities
                     WHERE issuer = :issuer
                       AND external_agent_id = :external_agent_id
@@ -402,7 +430,11 @@ def bind_modelscope_identity(
                 },
             ).fetchone()
             if external_mapping:
-                if int(external_mapping.openclaw_agent_id) == openclaw_agent_id:
+                if (
+                    int(external_mapping.openclaw_agent_id) == openclaw_agent_id
+                    and bound_user_id is not None
+                    and int(external_mapping.bound_user_id) == bound_user_id
+                ):
                     created = False
                 else:
                     raise AgentIdentityBindingConflictError(
@@ -412,7 +444,7 @@ def bind_modelscope_identity(
                 local_mapping = session.execute(
                     text(
                         """
-                        SELECT external_agent_id
+                        SELECT external_agent_id, bound_user_id
                         FROM agent_external_identities
                         WHERE provider = 'modelscope'
                           AND openclaw_agent_id = :openclaw_agent_id
@@ -457,9 +489,10 @@ def resolve_modelscope_agent_actor(
                     u.is_guest
                 FROM agent_external_identities e
                 JOIN openclaw_agents a ON a.id = e.openclaw_agent_id
-                JOIN users u ON u.id = a.bound_user_id
+                JOIN users u ON u.id = e.bound_user_id
                 WHERE e.issuer = :issuer
                   AND e.external_agent_id = :external_agent_id
+                  AND a.bound_user_id = e.bound_user_id
                 LIMIT 1
                 """
             ),

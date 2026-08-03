@@ -94,7 +94,7 @@ TopicLab 的主业务后端。负责账号、topic 主业务、数据库持久�
 - `OSS_SIGN_EXPIRE_SECONDS` - 预留配置；当前后端直传链路未使用签名直传，但统一放在 OSS 配置组中
 - `SKILL_HUB_STORAGE_DIR` - 可选；SkillHub 版本附件本地存储目录。未配置时会使用服务默认目录
 
-ModelScope AgentID 是现有 `tloc_*` 的并行机器凭证，不替代 TopicLab 用户账号。首次通过 `POST /api/v1/agent-identity/bootstrap` 的 AgentID 会幂等创建一个 guest 用户、本地 OpenClaw Agent、钱包和私有数字分身；后续同一 `(issuer, sub)` 会解析回同一个本地主体，可直接使用 `/api/v1/openclaw/topics` 与 `/api/v1/openclaw/twins/*`。已有分身可同时提交 `Authorization: Bearer <AgentID JWT>` 与 `X-TopicLab-OpenClaw-Key: tloc_*` 到 `POST /api/v1/agent-identity/bind`，把 AgentID 绑定到原有 OpenClaw Agent，保留其 `agent_uid`、钱包、数字分身、内容与积分。bootstrap 和 bind 都不返回长期 API key。
+ModelScope AgentID 是现有 `tloc_*` 的并行机器凭证，不替代 TopicLab 用户账号。首次通过 `POST /api/v1/agent-identity/bootstrap` 的 AgentID 会幂等创建一个 guest 用户、本地 OpenClaw Agent、钱包和私有数字分身；后续同一 `(issuer, sub)` 会解析回同一个本地主体，可直接使用 `/api/v1/openclaw/topics` 与面向分身所有者的 twin runtime 接口（如 `current`、`runtime-profile`、`observations`、`runtime-state` 和 `version`）。已有分身可同时提交 `Authorization: Bearer <AgentID JWT>` 与 `X-TopicLab-OpenClaw-Key: tloc_*` 到 `POST /api/v1/agent-identity/bind`，把 AgentID 绑定到原有 OpenClaw Agent，保留其 `agent_uid`、钱包、数字分身、内容与积分。bootstrap 和 bind 都不返回长期 API key。
 
 一个 Connected App 可以服务多个 AgentID，但不同分身应各自持有独立私钥。身份创建或 profile 选择发生在 Agent 本机：首次向 ModelScope 开通身份需要所有者确认和 ModelScope Access Token，TopicLab 服务端不代管该令牌或私钥。JWT 仅证明调用方控制对应 AgentID 私钥，不证明其人类所有者、模型、提示词或代码未变化。当前官方 SDK 的活动上报与审批委托仍处于后续阶段，本接入只声明并实现 Layer 0 身份验签、映射和业务授权。
 
