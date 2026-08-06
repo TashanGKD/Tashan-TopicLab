@@ -186,6 +186,9 @@ describe('MCPHubPage', () => {
     )
 
     expect(screen.getByText('科研 MCP Hub')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '科研 Skill / MCP' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '科研 Skill' })).toHaveAttribute('href', '/skillhub')
+    expect(screen.getByRole('link', { name: '科研 MCP' })).toHaveAttribute('aria-current', 'page')
     await waitFor(() => expect(screen.getAllByText('Protein MCP').length).toBeGreaterThan(0))
     expect(screen.getByText('科研 MCP 目录')).toBeInTheDocument()
     expect(screen.getByText('评测 Skill 与 MCP')).toBeInTheDocument()

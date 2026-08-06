@@ -8,6 +8,7 @@ import type {
 } from '../api/client'
 import { skillHubApi } from '../api/client'
 import CriticWorkbench from '../components/apps/CriticWorkbench'
+import ResearchHubSwitch from '../components/apps/ResearchHubSwitch'
 import FindScienceWorkbench from '../components/apps/FindScienceWorkbench'
 import {
   AppsInput,
@@ -401,10 +402,11 @@ export default function AppsSkillLibraryPage() {
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--bg-page)' }}>
       <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-7">
-      <section>
-        <h1 className="text-[2rem] font-serif font-semibold leading-tight sm:text-[2.5rem]" style={{ color: 'var(--text-primary)' }}>
+        <ResearchHubSwitch active="skill" />
+        <section>
+        <h2 className="text-2xl font-serif font-semibold leading-tight sm:text-3xl" style={{ color: 'var(--text-primary)' }}>
           科研 SkillHub
-        </h1>
+        </h2>
         <p className="mt-2 max-w-3xl text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
           收录上千项科研技能，按领域、研究阶段与功能分工搜索与浏览。
         </p>

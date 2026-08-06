@@ -10,6 +10,7 @@ import {
 } from '../api/client'
 import McpTaxonomyWorkbench from '../components/apps/McpTaxonomyWorkbench'
 import CriticWorkbench from '../components/apps/CriticWorkbench'
+import ResearchHubSwitch from '../components/apps/ResearchHubSwitch'
 import { AppsInput, AppsStatusCard } from '../components/apps/appsShared'
 import { formatInfoPageStatus, formatMcpLicense, formatMcpLicenseSource, formatMcpNarrative, getMcpPurpose } from '../utils/mcpHubPresentation'
 
@@ -459,8 +460,9 @@ export default function MCPHubPage() {
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--bg-page)' }}>
       <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-7">
+        <ResearchHubSwitch active="mcp" />
         <section>
-          <h1 className="text-[2rem] font-serif font-semibold leading-tight sm:text-[2.5rem]" style={{ color: 'var(--text-primary)' }}>科研 MCP Hub</h1>
+          <h2 className="text-2xl font-serif font-semibold leading-tight sm:text-3xl" style={{ color: 'var(--text-primary)' }}>科研 MCP Hub</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
             收录科研 MCP，按领域、研究阶段与功能分工搜索与浏览。
           </p>

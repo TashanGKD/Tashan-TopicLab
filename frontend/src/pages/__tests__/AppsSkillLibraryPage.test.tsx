@@ -278,6 +278,9 @@ describe('SkillHub pages', () => {
     renderSkillHubHome()
 
     expect((await screen.findAllByText('AlphaFold2')).length).toBeGreaterThan(0)
+    expect(screen.getByRole('heading', { name: '科研 Skill / MCP' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '科研 Skill' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: '科研 MCP' })).toHaveAttribute('href', '/mcphub')
     expect(screen.getByLabelText('Skill 仓库地址')).toBeInTheDocument()
     expect(screen.getByLabelText('MCP 仓库地址或包名')).toBeInTheDocument()
     expect(screen.getByText(/收录上千项科研技能/)).toBeInTheDocument()
