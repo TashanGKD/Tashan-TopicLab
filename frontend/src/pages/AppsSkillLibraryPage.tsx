@@ -412,7 +412,7 @@ export default function AppsSkillLibraryPage() {
         </p>
       </section>
 
-      <CriticWorkbench />
+      <CriticWorkbench kind="skill" />
 
       <FindScienceWorkbench
         meta={catalogMeta}

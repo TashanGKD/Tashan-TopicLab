@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { skillHubApi } from '../../api/client'
+import CriticWorkbench from '../../components/apps/CriticWorkbench'
 import AppsSkillLibraryPage from '../AppsSkillLibraryPage'
 import AppsSkillDetailPage from '../AppsSkillDetailPage'
 import AppsSkillProfilePage from '../AppsSkillProfilePage'
@@ -282,7 +283,7 @@ describe('SkillHub pages', () => {
     expect(screen.getByRole('link', { name: '科研 Skill' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('link', { name: '科研 MCP' })).toHaveAttribute('href', '/mcphub')
     expect(screen.getByLabelText('Skill 仓库地址')).toBeInTheDocument()
-    expect(screen.getByLabelText('MCP 仓库地址或包名')).toBeInTheDocument()
+    expect(screen.queryByLabelText('MCP 仓库地址或包名')).not.toBeInTheDocument()
     expect(screen.getByText(/收录上千项科研技能/)).toBeInTheDocument()
     expect(screen.queryByText(/1391/)).not.toBeInTheDocument()
     expect(screen.getByText(/从领域进入，选择研究阶段和需要完成的工作/)).toBeInTheDocument()
@@ -323,13 +324,13 @@ describe('SkillHub pages', () => {
 
     renderSkillHubHome()
     await screen.findByText('评测服务可用')
-    expect(screen.getByText(/登录后可提交公开仓库，查看适用范围/)).toBeInTheDocument()
+    expect(screen.getByText(/登录后可提交公开 Skill 仓库，查看适用范围/)).toBeInTheDocument()
     expect(screen.queryByText(/SCNet|AgentScope|调用配额/)).not.toBeInTheDocument()
 
     expect(screen.getByLabelText('Skill 仓库地址')).toHaveValue('')
     expect(screen.getByRole('button', { name: '开始 Skill 评测' })).toBeDisabled()
-    expect(screen.getByLabelText('MCP 仓库地址或包名')).toHaveValue('')
-    expect(screen.getByRole('button', { name: '开始 MCP 评测' })).toBeDisabled()
+    expect(screen.queryByLabelText('MCP 仓库地址或包名')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '开始 MCP 评测' })).not.toBeInTheDocument()
     expect(screen.queryByText('试用示例')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /使用 (Skill|MCP) 示例/ })).not.toBeInTheDocument()
     expect(mockedSubmitCriticEvaluation).not.toHaveBeenCalled()
@@ -372,7 +373,7 @@ describe('SkillHub pages', () => {
     renderSkillHubHome()
     await screen.findByText('评测服务可用')
     expect(screen.getByLabelText('Skill 仓库地址')).toBeInTheDocument()
-    expect(screen.getByLabelText('MCP 仓库地址或包名')).toBeInTheDocument()
+    expect(screen.queryByLabelText('MCP 仓库地址或包名')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('评测深度')).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Skill 仓库地址'), { target: { value: 'https://github.com/example/research-skill' } })
     fireEvent.click(screen.getByRole('button', { name: '开始 Skill 评测' }))
@@ -399,7 +400,7 @@ describe('SkillHub pages', () => {
     })
   })
 
-  it('submits MCP evaluation from its always-visible entry without a depth option', async () => {
+  it('submits MCP evaluation from the MCP-only workbench without a depth option', async () => {
     mockedGetCriticCapabilities.mockResolvedValue({
       data: {
         worker_available: true,
@@ -463,8 +464,9 @@ describe('SkillHub pages', () => {
       })
     })
 
-    renderSkillHubHome()
+    render(<CriticWorkbench kind="mcp" />)
     await screen.findByText('评测服务可用')
+    expect(screen.queryByLabelText('Skill 仓库地址')).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('MCP 仓库地址或包名'), { target: { value: '@scope/mcp-server' } })
     fireEvent.click(screen.getByRole('button', { name: '开始 MCP 评测' }))
 

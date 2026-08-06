@@ -471,7 +471,7 @@ export default function MCPHubPage() {
           </p>
         </section>
 
-        <CriticWorkbench />
+        <CriticWorkbench kind="mcp" />
 
         <McpTaxonomyWorkbench
           meta={meta}
