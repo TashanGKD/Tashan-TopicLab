@@ -68,17 +68,23 @@ def toggle_mcp_favorite(*, mcp_id: str, user: dict[str, Any], enabled: bool = Tr
     _mcp(mcp_id)
     uid = _user_id(user)
     with get_db_session() as session:
-        existing = session.execute(
-            text("SELECT id FROM science_mcp_hub_favorites WHERE mcp_id = :mcp_id AND user_id = :user_id LIMIT 1"),
-            {"mcp_id": mcp_id, "user_id": uid},
-        ).fetchone()
-        if enabled and existing is None:
+        if enabled:
             session.execute(
-                text("INSERT INTO science_mcp_hub_favorites (mcp_id, user_id, created_at) VALUES (:mcp_id, :user_id, :created_at)"),
+                text(
+                    "INSERT INTO science_mcp_hub_favorites (mcp_id, user_id, created_at) "
+                    "VALUES (:mcp_id, :user_id, :created_at) "
+                    "ON CONFLICT(mcp_id, user_id) DO NOTHING"
+                ),
                 {"mcp_id": mcp_id, "user_id": uid, "created_at": _now()},
             )
-        elif not enabled and existing is not None:
-            session.execute(text("DELETE FROM science_mcp_hub_favorites WHERE id = :id"), {"id": int(_row_value(existing, "id"))})
+        else:
+            session.execute(
+                text(
+                    "DELETE FROM science_mcp_hub_favorites "
+                    "WHERE mcp_id = :mcp_id AND user_id = :user_id"
+                ),
+                {"mcp_id": mcp_id, "user_id": uid},
+            )
     return {"mcp_id": mcp_id, "enabled": bool(enabled)}
 
 
@@ -286,12 +292,6 @@ def create_mcp_review(
     safe_rating = max(1, min(int(rating), 5))
     now = _now()
     with get_db_session() as session:
-        duplicate = session.execute(
-            text("SELECT id FROM science_mcp_hub_reviews WHERE mcp_id = :mcp_id AND author_user_id = :user_id LIMIT 1"),
-            {"mcp_id": mcp_id, "user_id": uid},
-        ).fetchone()
-        if duplicate is not None:
-            raise HTTPException(status_code=409, detail="你已经评议过这个科研 MCP")
         inserted = session.execute(
             text(
                 """
@@ -301,7 +301,8 @@ def create_mcp_review(
                 ) VALUES (
                     :mcp_id, :user_id, :rating, :title, :content, :model,
                     :pros_json, :cons_json, :dimensions_json, :created_at, :updated_at
-                ) RETURNING id
+                ) ON CONFLICT(mcp_id, author_user_id) DO NOTHING
+                RETURNING id
                 """
             ),
             {
@@ -318,6 +319,8 @@ def create_mcp_review(
                 "updated_at": now,
             },
         ).fetchone()
+        if inserted is None:
+            raise HTTPException(status_code=409, detail="你已经评议过这个科研 MCP")
         row = session.execute(
             text(
                 """
@@ -344,19 +347,35 @@ def vote_mcp_review_helpful(*, review_id: int, user: dict[str, Any], enabled: bo
             raise HTTPException(status_code=404, detail="评议不存在")
         if int(_row_value(review, "author_user_id") or 0) == uid:
             raise HTTPException(status_code=400, detail="不能给自己的评议投 helpful")
-        vote = session.execute(
-            text("SELECT id FROM science_mcp_hub_review_votes WHERE review_id = :review_id AND voter_user_id = :user_id LIMIT 1"),
-            {"review_id": int(review_id), "user_id": uid},
-        ).fetchone()
-        if enabled and vote is None:
-            session.execute(
-                text("INSERT INTO science_mcp_hub_review_votes (review_id, voter_user_id, created_at) VALUES (:review_id, :user_id, :created_at)"),
+        if enabled:
+            changed = session.execute(
+                text(
+                    "INSERT INTO science_mcp_hub_review_votes (review_id, voter_user_id, created_at) "
+                    "VALUES (:review_id, :user_id, :created_at) "
+                    "ON CONFLICT(review_id, voter_user_id) DO NOTHING RETURNING id"
+                ),
                 {"review_id": int(review_id), "user_id": uid, "created_at": _now()},
+            ).fetchone()
+            delta = 1
+        else:
+            changed = session.execute(
+                text(
+                    "DELETE FROM science_mcp_hub_review_votes "
+                    "WHERE review_id = :review_id AND voter_user_id = :user_id "
+                    "RETURNING id"
+                ),
+                {"review_id": int(review_id), "user_id": uid},
+            ).fetchone()
+            delta = -1
+        if changed is not None:
+            session.execute(
+                text(
+                    "UPDATE science_mcp_hub_reviews SET helpful_count = "
+                    "CASE WHEN helpful_count + :delta > 0 THEN helpful_count + :delta ELSE 0 END, "
+                    "updated_at = :now WHERE id = :id"
+                ),
+                {"id": int(review_id), "delta": delta, "now": _now()},
             )
-            session.execute(text("UPDATE science_mcp_hub_reviews SET helpful_count = helpful_count + 1, updated_at = :now WHERE id = :id"), {"id": int(review_id), "now": _now()})
-        elif not enabled and vote is not None:
-            session.execute(text("DELETE FROM science_mcp_hub_review_votes WHERE id = :id"), {"id": int(_row_value(vote, "id"))})
-            session.execute(text("UPDATE science_mcp_hub_reviews SET helpful_count = CASE WHEN helpful_count > 0 THEN helpful_count - 1 ELSE 0 END, updated_at = :now WHERE id = :id"), {"id": int(review_id), "now": _now()})
         count = session.execute(text("SELECT helpful_count FROM science_mcp_hub_reviews WHERE id = :id"), {"id": int(review_id)}).scalar_one()
     return {"review_id": int(review_id), "helpful_count": int(count or 0), "enabled": bool(enabled)}
 
@@ -437,13 +456,35 @@ def vote_mcp_wish(*, wish_id: int, user: dict[str, Any], enabled: bool = True) -
         wish = session.execute(text("SELECT id FROM science_mcp_hub_wishes WHERE id = :id LIMIT 1"), {"id": int(wish_id)}).fetchone()
         if wish is None:
             raise HTTPException(status_code=404, detail="愿望不存在")
-        vote = session.execute(text("SELECT id FROM science_mcp_hub_wish_votes WHERE wish_id = :wish_id AND voter_user_id = :user_id LIMIT 1"), {"wish_id": int(wish_id), "user_id": uid}).fetchone()
-        if enabled and vote is None:
-            session.execute(text("INSERT INTO science_mcp_hub_wish_votes (wish_id, voter_user_id, created_at) VALUES (:wish_id, :user_id, :created_at)"), {"wish_id": int(wish_id), "user_id": uid, "created_at": _now()})
-            session.execute(text("UPDATE science_mcp_hub_wishes SET votes_count = votes_count + 1, updated_at = :now WHERE id = :id"), {"id": int(wish_id), "now": _now()})
-        elif not enabled and vote is not None:
-            session.execute(text("DELETE FROM science_mcp_hub_wish_votes WHERE id = :id"), {"id": int(_row_value(vote, "id"))})
-            session.execute(text("UPDATE science_mcp_hub_wishes SET votes_count = CASE WHEN votes_count > 0 THEN votes_count - 1 ELSE 0 END, updated_at = :now WHERE id = :id"), {"id": int(wish_id), "now": _now()})
+        if enabled:
+            changed = session.execute(
+                text(
+                    "INSERT INTO science_mcp_hub_wish_votes (wish_id, voter_user_id, created_at) "
+                    "VALUES (:wish_id, :user_id, :created_at) "
+                    "ON CONFLICT(wish_id, voter_user_id) DO NOTHING RETURNING id"
+                ),
+                {"wish_id": int(wish_id), "user_id": uid, "created_at": _now()},
+            ).fetchone()
+            delta = 1
+        else:
+            changed = session.execute(
+                text(
+                    "DELETE FROM science_mcp_hub_wish_votes "
+                    "WHERE wish_id = :wish_id AND voter_user_id = :user_id "
+                    "RETURNING id"
+                ),
+                {"wish_id": int(wish_id), "user_id": uid},
+            ).fetchone()
+            delta = -1
+        if changed is not None:
+            session.execute(
+                text(
+                    "UPDATE science_mcp_hub_wishes SET votes_count = "
+                    "CASE WHEN votes_count + :delta > 0 THEN votes_count + :delta ELSE 0 END, "
+                    "updated_at = :now WHERE id = :id"
+                ),
+                {"id": int(wish_id), "delta": delta, "now": _now()},
+            )
         count = session.execute(text("SELECT votes_count FROM science_mcp_hub_wishes WHERE id = :id"), {"id": int(wish_id)}).scalar_one()
     return {"wish_id": int(wish_id), "votes_count": int(count or 0), "enabled": bool(enabled)}
 
@@ -494,21 +535,28 @@ def create_mcp_collection(*, user: dict[str, Any], title: str, description: str,
     uid = _user_id(user)
     title = (title or "").strip()
     description = (description or "").strip()
-    if not title or not description:
-        raise HTTPException(status_code=422, detail="title 和 description 必填")
+    if not title:
+        raise HTTPException(status_code=422, detail="title 必填")
     visibility = visibility if visibility in {"private", "public"} else "private"
     now = _now()
     with get_db_session() as session:
         base = _slug(title)
         slug = base
         suffix = 2
-        while session.execute(text("SELECT id FROM science_mcp_hub_collections WHERE slug = :slug"), {"slug": slug}).fetchone() is not None:
+        while True:
+            inserted = session.execute(
+                text(
+                    "INSERT INTO science_mcp_hub_collections "
+                    "(slug, title, description, owner_user_id, visibility, created_at, updated_at) "
+                    "VALUES (:slug, :title, :description, :user_id, :visibility, :created_at, :updated_at) "
+                    "ON CONFLICT(slug) DO NOTHING RETURNING id"
+                ),
+                {"slug": slug, "title": title, "description": description, "user_id": uid, "visibility": visibility, "created_at": now, "updated_at": now},
+            ).fetchone()
+            if inserted is not None:
+                break
             slug = f"{base}-{suffix}"
             suffix += 1
-        inserted = session.execute(
-            text("INSERT INTO science_mcp_hub_collections (slug, title, description, owner_user_id, visibility, created_at, updated_at) VALUES (:slug, :title, :description, :user_id, :visibility, :created_at, :updated_at) RETURNING id"),
-            {"slug": slug, "title": title, "description": description, "user_id": uid, "visibility": visibility, "created_at": now, "updated_at": now},
-        ).fetchone()
         row = session.execute(text("SELECT * FROM science_mcp_hub_collections WHERE id = :id"), {"id": int(_row_value(inserted, "id"))}).fetchone()
     return _collection_payload(row, [])
 

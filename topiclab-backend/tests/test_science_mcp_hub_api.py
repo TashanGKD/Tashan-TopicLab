@@ -221,29 +221,63 @@ def test_science_mcp_hub_user_interactions_stay_out_of_active_catalog(client):
 
     favorite = client.post(f"/api/v1/mcp-hub/mcps/{mcp_id}/favorite", headers=headers)
     assert favorite.status_code == 200, favorite.text
+    assert client.post(f"/api/v1/mcp-hub/mcps/{mcp_id}/favorite", headers=headers).status_code == 200
     review = client.post(
         f"/api/v1/mcp-hub/mcps/{mcp_id}/reviews",
         headers=headers,
         json={"rating": 5, "title": "可复核", "content": "一手来源和研究动作描述清楚。", "pros": ["证据清楚"]},
     )
     assert review.status_code == 200, review.text
+    duplicate_review = client.post(
+        f"/api/v1/mcp-hub/mcps/{mcp_id}/reviews",
+        headers=headers,
+        json={"rating": 5, "content": "重复提交"},
+    )
+    assert duplicate_review.status_code == 409, duplicate_review.text
     assert client.get(f"/api/v1/mcp-hub/mcps/{mcp_id}/reviews").json()["list"][0]["mcp_id"] == mcp_id
+
+    voter = register_and_login(client, phone="13800029988", username="mcp-community-voter")
+    voter_headers = {"Authorization": f"Bearer {voter['token']}"}
+    for _ in range(2):
+        helpful = client.post(
+            f"/api/v1/mcp-hub/reviews/{review.json()['id']}/helpful",
+            headers=voter_headers,
+            json={"enabled": True},
+        )
+        assert helpful.status_code == 200, helpful.text
+        assert helpful.json()["helpful_count"] == 1
+    for _ in range(2):
+        unhelpful = client.post(
+            f"/api/v1/mcp-hub/reviews/{review.json()['id']}/helpful",
+            headers=voter_headers,
+            json={"enabled": False},
+        )
+        assert unhelpful.status_code == 200, unhelpful.text
+        assert unhelpful.json()["helpful_count"] == 0
 
     wish = client.post("/api/v1/mcp-hub/wishes", headers=headers, json={"title": "补齐结构生物学工具", "content": "希望发现能处理蛋白结构数据的 MCP。", "taxonomy": {"domain": "生命科学", "subdomain": "蛋白与结构生物学"}})
     assert wish.status_code == 200, wish.text
-    assert client.post(f"/api/v1/mcp-hub/wishes/{wish.json()['id']}/vote", headers=headers).status_code == 200
+    for _ in range(2):
+        vote = client.post(f"/api/v1/mcp-hub/wishes/{wish.json()['id']}/vote", headers=headers)
+        assert vote.status_code == 200, vote.text
+        assert vote.json()["votes_count"] == 1
 
     collection = client.post("/api/v1/mcp-hub/collections", headers=headers, json={"title": "结构生物学观察", "description": "用于持续复核的 MCP 集合"})
     assert collection.status_code == 200, collection.text
+    same_title = client.post("/api/v1/mcp-hub/collections", headers=headers, json={"title": "结构生物学观察", "description": "第二个同名集合"})
+    assert same_title.status_code == 200, same_title.text
+    assert same_title.json()["slug"] != collection.json()["slug"]
     collection_id = collection.json()["id"]
     assert client.post(f"/api/v1/mcp-hub/collections/{collection_id}/items/{mcp_id}", headers=headers).status_code == 200
 
     submission = client.post(
         "/api/v1/mcp-hub/submissions",
         headers=headers,
-        json={"name": "候选 MCP", "summary": "处理蛋白结构实验数据", "canonical_url": "https://github.com/example/protein-mcp", "evidence": "README 明确 MCP server 身份及结构分析动作。", "domain": "生命科学", "subdomain": "蛋白与结构生物学", "stage": "分析验证", "function": "分析推断"},
+        json={"name": "候选 MCP", "summary": "处理蛋白结构实验数据", "canonical_url": "https://github.com/example/protein-mcp", "repo_url": "", "evidence": "README 明确 MCP server 身份及结构分析动作。", "difference": "", "domain": "生命科学", "subdomain": "蛋白与结构生物学", "stage": "分析验证", "function": "分析推断"},
     )
     assert submission.status_code == 200, submission.text
+    assert submission.json()["repo_url"] is None
+    assert submission.json()["difference"] is None
     assert submission.json()["active_catalog_effect"] == "none_until_taxonomy_reviewed_sync"
 
     profile = client.get("/api/v1/mcp-hub/profile", headers=headers)
@@ -256,6 +290,76 @@ def test_science_mcp_hub_user_interactions_stay_out_of_active_catalog(client):
     tasks = client.get("/api/v1/mcp-hub/tasks", headers=headers)
     assert tasks.status_code == 200, tasks.text
     assert any(item["task_key"] == "review_a_mcp" and item["completed"] for item in tasks.json()["tasks"])
+
+
+def test_science_mcp_hub_rejects_malformed_or_oversized_writes(client):
+    owner = register_and_login(client, phone="13800029990", username="mcp-input-reviewer")
+    headers = {"Authorization": f"Bearer {owner['token']}"}
+    mcp_id = client.get("/api/v1/mcp-hub/mcps?limit=1").json()["list"][0]["id"]
+
+    invalid_review_payloads = (
+        {"rating": 6, "content": "越界评分"},
+        {"rating": 5, "title": "x" * 256, "content": "标题过长"},
+        {"rating": 5, "content": "包含未知字段", "unexpected": True},
+    )
+    for payload in invalid_review_payloads:
+        response = client.post(
+            f"/api/v1/mcp-hub/mcps/{mcp_id}/reviews",
+            headers=headers,
+            json=payload,
+        )
+        assert response.status_code == 422, response.text
+
+    strict_boolean = client.post(
+        "/api/v1/mcp-hub/reviews/999999/helpful",
+        headers=headers,
+        json={"enabled": "false"},
+    )
+    assert strict_boolean.status_code == 422, strict_boolean.text
+
+    invalid_url = client.post(
+        "/api/v1/mcp-hub/submissions",
+        headers=headers,
+        json={
+            "name": "候选 MCP",
+            "summary": "候选摘要",
+            "canonical_url": "javascript:alert(1)",
+            "evidence": "来源说明",
+        },
+    )
+    assert invalid_url.status_code == 422, invalid_url.text
+    assert client.get(f"/api/v1/mcp-hub/search?q={'x' * 201}").status_code == 422
+
+    collection = client.post(
+        "/api/v1/mcp-hub/collections",
+        headers=headers,
+        json={"title": "允许空描述的集合"},
+    )
+    assert collection.status_code == 200, collection.text
+    assert collection.json()["description"] == ""
+
+
+def test_science_mcp_finder_does_not_charge_quota_without_model_key(client, monkeypatch):
+    from app.api import mcp_hub
+
+    monkeypatch.delenv("SCNET_API_KEY", raising=False)
+    monkeypatch.delenv("skillhub_scnet_api_key", raising=False)
+    quota_calls = []
+    monkeypatch.setattr(
+        mcp_hub,
+        "consume_model_usage",
+        lambda user_id, operation: quota_calls.append((user_id, operation)),
+    )
+    owner = register_and_login(client, phone="13800029989", username="mcp-local-finder")
+    response = client.post(
+        "/api/v1/mcp-hub/science-catalog/find",
+        headers={"Authorization": f"Bearer {owner['token']}"},
+        json={"query": "蛋白质结构预测", "limit": 3},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["driver"]["mode"] == "local_fallback"
+    assert quota_calls == []
 
 
 def test_science_mcp_hub_read_surfaces_degrade_without_database(monkeypatch):

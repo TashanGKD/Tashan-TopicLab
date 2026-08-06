@@ -111,3 +111,55 @@ def test_science_mcp_catalog_sync_is_reproducible_and_publish_safe(tmp_path: Pat
     )
     assert check.returncode == 0
     assert "snapshot is current" in check.stdout
+
+    runtime_script = root / "topiclab-backend" / "scripts" / "build_science_mcp_catalog_db.py"
+    runtime_database = tmp_path / "science_mcp_catalog.sqlite3"
+    build = subprocess.run(
+        [
+            sys.executable,
+            str(runtime_script),
+            "--source",
+            str(destination),
+            "--destination",
+            str(runtime_database),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert build.returncode == 0, build.stderr
+    assert runtime_database.is_file()
+
+    runtime_check = subprocess.run(
+        [
+            sys.executable,
+            str(runtime_script),
+            "--source",
+            str(destination),
+            "--destination",
+            str(runtime_database),
+            "--check",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert runtime_check.returncode == 0, runtime_check.stdout
+
+    snapshot["mcps"][0]["source_verification"]["content_path"] = "/private/cache/README.md"
+    destination.write_text(json.dumps(snapshot, ensure_ascii=False), encoding="utf-8")
+    unsafe_build = subprocess.run(
+        [
+            sys.executable,
+            str(runtime_script),
+            "--source",
+            str(destination),
+            "--destination",
+            str(runtime_database),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert unsafe_build.returncode != 0
+    assert "local cache metadata" in unsafe_build.stderr

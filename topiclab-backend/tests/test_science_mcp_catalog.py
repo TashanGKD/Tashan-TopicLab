@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import pytest
 from fastapi import HTTPException
 
@@ -47,6 +49,38 @@ def test_science_mcp_catalog_search_and_categories():
     categories = get_mcp_catalog_categories()
     assert categories["counts"]["domains"]["生命科学"] > 0
     assert sum(categories["status_counts"].values()) == 5643
+
+
+def test_science_mcp_catalog_uses_indexed_runtime_database(monkeypatch):
+    from app.services import science_mcp_catalog as catalog
+    from app.services.science_mcp_catalog_db import open_catalog_database
+
+    database = catalog._runtime_database_path()
+    assert database is not None
+
+    def unexpected_json_fallback():
+        raise AssertionError("compiled deployments must not load the full JSON catalog")
+
+    monkeypatch.setattr(catalog, "_load_catalog", unexpected_json_fallback)
+    started = time.perf_counter()
+    result = catalog.list_mcp_catalog(q="MCP", limit=10)
+    elapsed = time.perf_counter() - started
+
+    assert result["total"] == 5643
+    assert len(result["list"]) == 10
+    assert elapsed < 2.0
+    assert catalog.get_mcp_catalog_meta()["total"] == 5643
+    assert catalog.get_mcp_catalog_item(result["list"][0]["id"])["id"] == result["list"][0]["id"]
+    assert sum(catalog.get_mcp_catalog_categories()["status_counts"].values()) == 5643
+
+    with open_catalog_database(database) as connection:
+        indexes = connection.execute("PRAGMA index_list(mcps)").fetchall()
+        unique_index_columns = [
+            [column[2] for column in connection.execute(f'PRAGMA index_info("{row[1]}")')]
+            for row in indexes
+            if int(row[2]) == 1
+        ]
+    assert ["position"] in unique_index_columns, "FTS row lookup must remain indexed"
 
 
 def test_science_mcp_catalog_missing_detail_is_404():

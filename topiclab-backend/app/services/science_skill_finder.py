@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 import re
 from dataclasses import dataclass
 from functools import lru_cache
@@ -13,6 +12,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
+from app.services.research_hub_config import get_research_hub_scnet_api_key
 from app.services.science_skill_catalog import get_catalog_items, get_catalog_meta
 
 
@@ -108,7 +108,7 @@ class FinderConfig:
 def get_finder_config() -> FinderConfig:
     return FinderConfig(
         base_url=DEFAULT_SCNET_BASE_URL,
-        api_key=os.getenv("SCNET_API_KEY", "").strip(),
+        api_key=get_research_hub_scnet_api_key(),
         model=DEFAULT_MODEL,
         desktop_config=False,
     )

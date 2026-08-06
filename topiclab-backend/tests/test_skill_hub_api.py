@@ -401,7 +401,7 @@ def test_science_finder_streams_route_and_recommendations(client, monkeypatch):
     assert '"skill_mounted":true' in text
 
 
-def test_science_finder_does_not_reuse_legacy_product_credentials(monkeypatch):
+def test_science_finder_supports_legacy_deploy_env_during_migration(monkeypatch):
     from app.services import science_skill_finder
 
     monkeypatch.delenv("SCNET_API_KEY", raising=False)
@@ -410,8 +410,8 @@ def test_science_finder_does_not_reuse_legacy_product_credentials(monkeypatch):
 
     config = science_skill_finder.get_finder_config()
 
-    assert config.api_key == ""
-    assert config.configured is False
+    assert config.api_key == "legacy-skillhub-test-key"
+    assert config.configured is True
 
 
 def test_science_finder_parses_json_after_model_reasoning_text():
@@ -427,6 +427,7 @@ def test_science_finder_parses_json_after_model_reasoning_text():
 
 def test_science_finder_falls_back_to_local_catalog_without_model_credentials(client, monkeypatch):
     monkeypatch.delenv("SCNET_API_KEY", raising=False)
+    monkeypatch.delenv("skillhub_scnet_api_key", raising=False)
 
     capabilities = client.get("/api/v1/skill-hub/science-catalog/finder/capabilities")
     assert capabilities.status_code == 200, capabilities.text
@@ -492,6 +493,29 @@ def test_science_finder_falls_back_to_local_catalog_without_model_credentials(cl
             for key in ("domain", "stage", "function")
         )
         assert specific_payload["results"]
+
+
+def test_authenticated_science_finder_does_not_charge_quota_without_model_credentials(client, monkeypatch):
+    from app.api import skill_hub
+
+    monkeypatch.delenv("SCNET_API_KEY", raising=False)
+    monkeypatch.delenv("skillhub_scnet_api_key", raising=False)
+    quota_calls = []
+    monkeypatch.setattr(
+        skill_hub,
+        "consume_model_usage",
+        lambda user_id, operation: quota_calls.append((user_id, operation)),
+    )
+    owner = register_and_login(client, phone="13800019994", username="local-finder-viewer")
+    response = client.post(
+        "/api/v1/skill-hub/science-catalog/find",
+        json={"query": "蛋白质结构预测", "limit": 3},
+        headers={"Authorization": f"Bearer {owner['token']}"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["driver"]["mode"] == "local_fallback"
+    assert quota_calls == []
 
 
 def test_anonymous_science_finder_never_calls_the_model(client, monkeypatch):

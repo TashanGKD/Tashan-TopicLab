@@ -244,7 +244,7 @@ jobs:
             fi
             docker compose down
             docker compose up -d
-            if grep -Eq '^skillhub_scnet_api_key=.+$' .env; then
+            if grep -Eq '^(SCNET_API_KEY|skillhub_scnet_api_key)=.+$' .env; then
               for i in $(seq 1 30); do
                 if docker compose exec -T skillhub-critic-worker python -c "import json,urllib.request; payload=json.load(urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=5)); assert payload.get('ready') is True, payload"; then
                   break

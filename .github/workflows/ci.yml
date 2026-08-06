@@ -201,6 +201,8 @@ jobs:
         working-directory: topiclab-backend
         run: |
           uv sync --locked --group dev
+          uv run python scripts/build_science_mcp_catalog_db.py
+          uv run python scripts/build_science_mcp_catalog_db.py --check
           uv run python -m pytest \
             tests/test_critic_runner.py \
             tests/test_critic_worker.py \

@@ -26,6 +26,7 @@ from app.critic_security import (
     is_supported_github_target,
     is_supported_npm_package,
 )
+from app.services.research_hub_config import get_research_hub_scnet_api_key
 
 
 SUPPORTED_KINDS = ("skill", "mcp")
@@ -244,7 +245,7 @@ def _configured_runner() -> Runner | None:
 
 
 def _builtin_runtime_ready() -> bool:
-    if not os.environ.get("SCNET_API_KEY", "").strip():
+    if not get_research_hub_scnet_api_key():
         return False
     from app.critic_runner import DEFAULT_CRITIC_RESEARCH_ROOTS
 

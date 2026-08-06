@@ -36,7 +36,7 @@
 
 - 后端在读取活动快照时同时校验 `id` 唯一、原始 `source_url` 唯一和规范化 canonical URL 唯一；规范化只用于身份判重（协议/主机大小写、默认端口、末尾斜杠和片段），不改写保存的一手证据 URL。
 - 首页选中目录卡片保留 SkillHub 的右侧展开详情，同时提供“打开完整详情”路由，可进入 `/mcphub/:mcpId` 查看完整来源记录、许可证证据和社区评议。
-- MCP 与 Skill 检索统一读取 `SCNET_API_KEY`，固定走 SCNet 的 OpenAI-compatible `/chat/completions` 与 `GLM-5.2`；不保留 Anthropic 或其他模型的隐式替代分支。
+- MCP 与 Skill 检索统一优先读取 `SCNET_API_KEY`，固定走 SCNet 的 OpenAI-compatible `/chat/completions` 与 `GLM-5.2`；迁移期仅在新变量缺失时兼容旧 `skillhub_scnet_api_key`，不保留 Anthropic 或其他模型的隐式替代分支。
 - 检索驱动状态只有三类：`model` 表示 AI 完成路径与候选复核，`model_route_local_rank` 表示 AI 完成路径但目录完成排序，`local_fallback` 表示匿名、未配置或模型调用失败后使用目录匹配。三类状态均返回 API 并在检索结果区显示，不静默降级。
 - 新补全的一手信息页在完整详情中展示保存状态、实际来源、HTTP 响应、保存时间、字节数和 SHA-256；许可证优先显示规范化名称，没有名称时保留一手原文，不推断缺失许可证。
 

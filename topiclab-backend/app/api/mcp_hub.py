@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, StrictBool, StringConstraints, field_validator
 from starlette.concurrency import run_in_threadpool
 
 from app.api.auth import get_current_user, security, verify_access_token
@@ -19,6 +20,7 @@ from app.services.science_mcp_catalog import (
     list_mcp_catalog,
 )
 from app.services.science_mcp_finder import find_science_mcps, get_mcp_finder_capabilities
+from app.services.science_skill_finder import get_finder_config
 from app.services.science_mcp_hub import (
     add_mcp_collection_item,
     create_mcp_collection,
@@ -46,9 +48,73 @@ from app.services.model_usage_quota import consume_model_usage
 router = APIRouter(prefix="/mcp-hub")
 
 
-class ScienceMcpFinderRequest(BaseModel):
+RequiredShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
+OptionalShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
+ReviewPoint = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+TaxonomyValue = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+DimensionKey = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
+DimensionText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+DimensionValue = int | float | bool | DimensionText | None
+
+
+class McpHubRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class ScienceMcpFinderRequest(McpHubRequest):
     query: str = Field(min_length=1, max_length=2000)
     limit: int = Field(default=8, ge=1, le=12)
+
+
+class McpReviewCreateRequest(McpHubRequest):
+    rating: int = Field(default=5, ge=1, le=5)
+    content: str = Field(min_length=1, max_length=10_000)
+    title: OptionalShortText | None = None
+    model: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)] | None = None
+    pros: list[ReviewPoint] = Field(default_factory=list, max_length=20)
+    cons: list[ReviewPoint] = Field(default_factory=list, max_length=20)
+    dimensions: dict[DimensionKey, DimensionValue] = Field(default_factory=dict, max_length=20)
+
+
+class ToggleRequest(McpHubRequest):
+    enabled: StrictBool = True
+
+
+class McpWishTaxonomy(McpHubRequest):
+    domain: TaxonomyValue | None = None
+    subdomain: TaxonomyValue | None = None
+    stage: TaxonomyValue | None = None
+    function: TaxonomyValue | None = None
+
+
+class McpWishCreateRequest(McpHubRequest):
+    title: RequiredShortText
+    content: str = Field(min_length=1, max_length=10_000)
+    taxonomy: McpWishTaxonomy | None = None
+
+
+class McpCollectionCreateRequest(McpHubRequest):
+    title: RequiredShortText
+    description: str = Field(default="", max_length=5_000)
+    visibility: Literal["private", "public"] = "private"
+
+
+class McpSubmissionCreateRequest(McpHubRequest):
+    name: RequiredShortText
+    summary: str = Field(min_length=1, max_length=2_000)
+    canonical_url: AnyHttpUrl
+    repo_url: AnyHttpUrl | None = None
+    domain: TaxonomyValue | None = None
+    subdomain: TaxonomyValue | None = None
+    stage: TaxonomyValue | None = None
+    function: TaxonomyValue | None = None
+    evidence: str = Field(min_length=1, max_length=10_000)
+    difference: str | None = Field(default=None, max_length=5_000)
+
+    @field_validator("repo_url", "domain", "subdomain", "stage", "function", "difference", mode="before")
+    @classmethod
+    def empty_optional_values_are_none(cls, value):
+        return None if isinstance(value, str) and not value.strip() else value
 
 
 async def _get_optional_user(credentials=Depends(security)) -> dict | None:
@@ -69,26 +135,26 @@ def _authenticated_user_id(user: dict) -> int:
 
 
 @router.get("/meta")
-async def get_mcp_hub_meta():
+def get_mcp_hub_meta():
     return get_mcp_catalog_meta()
 
 
 # The primary catalog contract intentionally mirrors SkillHub. The shorter
 # /meta and /mcps routes below remain compatibility aliases for older clients.
 @router.get("/science-catalog/meta")
-async def get_mcp_science_catalog_meta():
+def get_mcp_science_catalog_meta():
     return get_mcp_catalog_meta()
 
 
 @router.get("/science-catalog")
-async def list_mcp_science_catalog(
-    q: str | None = Query(default=None),
-    domain: str | None = Query(default=None),
-    subdomain: str | None = Query(default=None),
-    stage: str | None = Query(default=None),
-    function: str | None = Query(default=None),
-    readiness: str | None = Query(default=None),
-    sort: str | None = Query(default=None),
+def list_mcp_science_catalog(
+    q: str | None = Query(default=None, max_length=200),
+    domain: str | None = Query(default=None, max_length=128),
+    subdomain: str | None = Query(default=None, max_length=128),
+    stage: str | None = Query(default=None, max_length=128),
+    function: str | None = Query(default=None, max_length=128),
+    readiness: str | None = Query(default=None, max_length=32),
+    sort: str | None = Query(default=None, max_length=32),
     limit: int = Query(default=24, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ):
@@ -106,7 +172,7 @@ async def list_mcp_science_catalog(
 
 
 @router.get("/science-catalog/finder/capabilities")
-async def get_mcp_science_finder_capabilities():
+def get_mcp_science_finder_capabilities():
     return get_mcp_finder_capabilities()
 
 
@@ -118,21 +184,21 @@ async def find_mcp_science_catalog(
     query = payload.query.strip()
     if not query:
         raise HTTPException(status_code=422, detail="科研需求不能为空")
-    allow_model = user is not None
+    allow_model = user is not None and get_finder_config().configured
     if allow_model:
         await run_in_threadpool(consume_model_usage, _authenticated_user_id(user), "science_finder")
     return await find_science_mcps(query, limit=payload.limit, allow_model=allow_model)
 
 
 @router.get("/mcps")
-async def get_mcp_hub_mcps(
-    q: str | None = Query(default=None),
-    domain: str | None = Query(default=None),
-    subdomain: str | None = Query(default=None),
-    stage: str | None = Query(default=None),
-    function: str | None = Query(default=None),
-    status: str | None = Query(default=None),
-    sort: str | None = Query(default=None),
+def get_mcp_hub_mcps(
+    q: str | None = Query(default=None, max_length=200),
+    domain: str | None = Query(default=None, max_length=128),
+    subdomain: str | None = Query(default=None, max_length=128),
+    stage: str | None = Query(default=None, max_length=128),
+    function: str | None = Query(default=None, max_length=128),
+    status: str | None = Query(default=None, max_length=32),
+    sort: str | None = Query(default=None, max_length=32),
     limit: int = Query(default=24, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ):
@@ -150,14 +216,14 @@ async def get_mcp_hub_mcps(
 
 
 @router.get("/search")
-async def search_mcp_hub(
-    q: str = Query(..., min_length=1),
-    domain: str | None = Query(default=None),
-    subdomain: str | None = Query(default=None),
-    stage: str | None = Query(default=None),
-    function: str | None = Query(default=None),
-    status: str | None = Query(default=None),
-    sort: str | None = Query(default=None),
+def search_mcp_hub(
+    q: str = Query(..., min_length=1, max_length=200),
+    domain: str | None = Query(default=None, max_length=128),
+    subdomain: str | None = Query(default=None, max_length=128),
+    stage: str | None = Query(default=None, max_length=128),
+    function: str | None = Query(default=None, max_length=128),
+    status: str | None = Query(default=None, max_length=32),
+    sort: str | None = Query(default=None, max_length=32),
     limit: int = Query(default=24, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ):
@@ -189,7 +255,7 @@ async def stream_mcp_catalog_endpoint(
     query = payload.query.strip()
     if not query:
         raise HTTPException(status_code=422, detail="科研需求不能为空")
-    allow_model = user is not None
+    allow_model = user is not None and get_finder_config().configured
     if allow_model:
         await run_in_threadpool(consume_model_usage, _authenticated_user_id(user), "science_finder")
 
@@ -235,7 +301,7 @@ async def stream_mcp_catalog_endpoint(
 
 
 @router.get("/science-catalog/{mcp_id}")
-async def get_mcp_science_catalog_item(mcp_id: str):
+def get_mcp_science_catalog_item(mcp_id: str):
     item = get_mcp_catalog_item(mcp_id, include_related=True)
     try:
         item["reviews"] = list_mcp_reviews(mcp_id=mcp_id, limit=20)["list"]
@@ -248,7 +314,7 @@ async def get_mcp_science_catalog_item(mcp_id: str):
 
 
 @router.get("/mcps/{mcp_id}")
-async def get_mcp_hub_mcp(mcp_id: str):
+def get_mcp_hub_mcp(mcp_id: str):
     item = get_mcp_catalog_item(mcp_id, include_related=True)
     try:
         item["reviews"] = list_mcp_reviews(mcp_id=mcp_id, limit=20)["list"]
@@ -258,23 +324,23 @@ async def get_mcp_hub_mcp(mcp_id: str):
 
 
 @router.get("/categories")
-async def get_mcp_hub_categories():
+def get_mcp_hub_categories():
     return get_mcp_catalog_categories()
 
 
 @router.get("/mcps/{mcp_id}/content")
-async def get_mcp_content_endpoint(mcp_id: str):
+def get_mcp_content_endpoint(mcp_id: str):
     return get_mcp_content(mcp_id=mcp_id)
 
 
 @router.get("/mcps/{mcp_id}/download")
-async def get_mcp_download_endpoint(mcp_id: str):
+def get_mcp_download_endpoint(mcp_id: str):
     """Keep the SkillHub route shape while returning a safe non-execution status."""
     return get_mcp_download_status(mcp_id=mcp_id)
 
 
 @router.get("/assets/{mcp_id}", response_class=PlainTextResponse)
-async def get_mcp_asset_endpoint(mcp_id: str):
+def get_mcp_asset_endpoint(mcp_id: str):
     asset = get_mcp_asset(mcp_id=mcp_id)
     return PlainTextResponse(
         asset["content"],
@@ -287,97 +353,98 @@ async def get_mcp_asset_endpoint(mcp_id: str):
 
 
 @router.post("/mcps/{mcp_id}/favorite")
-async def favorite_mcp(mcp_id: str, enabled: bool = Query(default=True), user: dict = Depends(get_current_user)):
+def favorite_mcp(mcp_id: str, enabled: bool = Query(default=True), user: dict = Depends(get_current_user)):
     return toggle_mcp_favorite(mcp_id=mcp_id, user=user, enabled=enabled)
 
 
 @router.get("/mcps/{mcp_id}/reviews")
-async def get_mcp_reviews(mcp_id: str, sort: str = Query(default="helpful"), limit: int = Query(default=50, ge=1, le=100)):
+def get_mcp_reviews(mcp_id: str, sort: str = Query(default="helpful", max_length=32), limit: int = Query(default=50, ge=1, le=100)):
     return list_mcp_reviews(mcp_id=mcp_id, sort=sort, limit=limit)
 
 
 @router.post("/mcps/{mcp_id}/reviews")
-async def post_mcp_review(mcp_id: str, payload: dict, user: dict = Depends(get_current_user)):
+def post_mcp_review(mcp_id: str, payload: McpReviewCreateRequest, user: dict = Depends(get_current_user)):
     return create_mcp_review(
         mcp_id=mcp_id,
         user=user,
-        rating=int(payload.get("rating") or 5),
-        content=str(payload.get("content") or ""),
-        title=str(payload.get("title") or "") or None,
-        model=str(payload.get("model") or "") or None,
-        pros=payload.get("pros") if isinstance(payload.get("pros"), list) else None,
-        cons=payload.get("cons") if isinstance(payload.get("cons"), list) else None,
-        dimensions=payload.get("dimensions") if isinstance(payload.get("dimensions"), dict) else None,
+        rating=payload.rating,
+        content=payload.content,
+        title=payload.title,
+        model=payload.model,
+        pros=payload.pros,
+        cons=payload.cons,
+        dimensions=payload.dimensions,
     )
 
 
 @router.post("/reviews/{review_id}/helpful")
-async def vote_mcp_review(review_id: int, payload: dict | None = None, user: dict = Depends(get_current_user)):
-    enabled = True if not payload else bool(payload.get("enabled", True))
+def vote_mcp_review(review_id: int, payload: ToggleRequest | None = None, user: dict = Depends(get_current_user)):
+    enabled = payload.enabled if payload else True
     return vote_mcp_review_helpful(review_id=review_id, user=user, enabled=enabled)
 
 
 @router.get("/leaderboard")
-async def get_mcp_leaderboard():
+def get_mcp_leaderboard():
     return list_mcp_leaderboard()
 
 
 @router.get("/wishes")
-async def get_mcp_wish_list(limit: int = Query(default=50, ge=1, le=100)):
+def get_mcp_wish_list(limit: int = Query(default=50, ge=1, le=100)):
     return list_mcp_wishes(limit=limit)
 
 
 @router.post("/wishes")
-async def post_mcp_wish(payload: dict, user: dict = Depends(get_current_user)):
-    return create_mcp_wish(user=user, title=str(payload.get("title") or ""), content=str(payload.get("content") or ""), taxonomy=payload.get("taxonomy") if isinstance(payload.get("taxonomy"), dict) else None)
+def post_mcp_wish(payload: McpWishCreateRequest, user: dict = Depends(get_current_user)):
+    taxonomy = payload.taxonomy.model_dump(exclude_none=True) if payload.taxonomy else None
+    return create_mcp_wish(user=user, title=payload.title, content=payload.content, taxonomy=taxonomy)
 
 
 @router.post("/wishes/{wish_id}/vote")
-async def vote_mcp_wish_endpoint(wish_id: int, payload: dict | None = None, user: dict = Depends(get_current_user)):
-    enabled = True if not payload else bool(payload.get("enabled", True))
+def vote_mcp_wish_endpoint(wish_id: int, payload: ToggleRequest | None = None, user: dict = Depends(get_current_user)):
+    enabled = payload.enabled if payload else True
     return vote_mcp_wish(wish_id=wish_id, user=user, enabled=enabled)
 
 
 @router.get("/collections")
-async def get_mcp_collections(user: dict | None = Depends(_get_optional_user)):
+def get_mcp_collections(user: dict | None = Depends(_get_optional_user)):
     return list_mcp_collections(user=user)
 
 
 @router.post("/collections")
-async def post_mcp_collection(payload: dict, user: dict = Depends(get_current_user)):
+def post_mcp_collection(payload: McpCollectionCreateRequest, user: dict = Depends(get_current_user)):
     return create_mcp_collection(
         user=user,
-        title=str(payload.get("title") or ""),
-        description=str(payload.get("description") or ""),
-        visibility=str(payload.get("visibility") or "private"),
+        title=payload.title,
+        description=payload.description,
+        visibility=payload.visibility,
     )
 
 
 @router.post("/collections/{collection_id}/items/{mcp_id}")
-async def add_mcp_item(collection_id: int, mcp_id: str, user: dict = Depends(get_current_user)):
+def add_mcp_item(collection_id: int, mcp_id: str, user: dict = Depends(get_current_user)):
     return add_mcp_collection_item(collection_id=collection_id, mcp_id=mcp_id, user=user)
 
 
 @router.delete("/collections/{collection_id}/items/{mcp_id}")
-async def delete_mcp_item(collection_id: int, mcp_id: str, user: dict = Depends(get_current_user)):
+def delete_mcp_item(collection_id: int, mcp_id: str, user: dict = Depends(get_current_user)):
     return remove_mcp_collection_item(collection_id=collection_id, mcp_id=mcp_id, user=user)
 
 
 @router.get("/profile")
-async def get_mcp_hub_profile(user: dict = Depends(get_current_user)):
+def get_mcp_hub_profile(user: dict = Depends(get_current_user)):
     return get_mcp_profile(user=user)
 
 
 @router.get("/tasks")
-async def get_mcp_hub_tasks(user: dict = Depends(get_current_user)):
+def get_mcp_hub_tasks(user: dict = Depends(get_current_user)):
     return list_mcp_tasks(user=user)
 
 
 @router.post("/submissions")
-async def post_mcp_submission(payload: dict, user: dict = Depends(get_current_user)):
-    return submit_mcp_candidate(user=user, payload=payload)
+def post_mcp_submission(payload: McpSubmissionCreateRequest, user: dict = Depends(get_current_user)):
+    return submit_mcp_candidate(user=user, payload=payload.model_dump(mode="json", exclude_none=True))
 
 
 @router.get("/guide.md", response_class=PlainTextResponse)
-async def get_mcp_hub_guide_endpoint():
+def get_mcp_hub_guide_endpoint():
     return PlainTextResponse(get_mcp_hub_guide(), media_type="text/markdown; charset=utf-8")

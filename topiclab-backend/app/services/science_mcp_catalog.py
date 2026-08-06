@@ -6,16 +6,32 @@ import hashlib
 import json
 import os
 import re
+import zlib
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import HTTPException
 
+from app.services.science_mcp_catalog_db import (
+    database_matches_source,
+    decode_catalog_payload,
+    hashed_search_terms,
+    normalize_canonical_url,
+    open_catalog_database,
+    search_tokens,
+    validate_catalog_snapshot,
+)
+
 
 CATALOG_PATH = Path(
-    os.getenv("SCIENCE_MCP_CATALOG_PATH", str(Path(__file__).resolve().parents[1] / "data" / "science_mcp_catalog.json"))
+    os.getenv(
+        "SCIENCE_MCP_CATALOG_PATH",
+        str(Path(__file__).resolve().parents[1] / "data" / "science_mcp_catalog.json"),
+    )
+)
+CATALOG_DATABASE_PATH = Path(
+    os.getenv("SCIENCE_MCP_CATALOG_DB_PATH", str(CATALOG_PATH.with_suffix(".sqlite3")))
 )
 SEARCH_FIELDS = (
     "id",
@@ -41,41 +57,17 @@ SEARCH_FIELDS = (
     "source_name",
     "info_page",
 )
-READINESS_ORDER = {"trusted": 0, "provisional": 1, "restricted": 2}
-EVIDENCE_SCOPE_ORDER = {"source_reviewed": 0, "fast_metadata_triage": 1}
 SORT_LABELS = {
     "organized": "按领域路径",
     "evidence": "按资料核对",
     "tools": "按工具数量",
     "name": "按名称",
 }
-SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
-
-
-def normalize_canonical_url(value: str) -> str:
-    """Normalize a source URL for identity checks without rewriting stored evidence."""
-    raw = str(value or "").strip()
-    parsed = urlsplit(raw)
-    if not parsed.scheme or not parsed.netloc:
-        return raw.casefold().rstrip("/")
-    try:
-        port = parsed.port
-    except ValueError:
-        return raw.casefold().rstrip("/")
-    host = (parsed.hostname or "").casefold()
-    if (parsed.scheme.casefold(), port) in {("http", 80), ("https", 443)}:
-        port = None
-    netloc = host + (f":{port}" if port is not None else "")
-    path = parsed.path.rstrip("/") or "/"
-    return urlunsplit((parsed.scheme.casefold(), netloc, path, parsed.query, ""))
+EVIDENCE_SCOPE_ORDER = {"source_reviewed": 0, "fast_metadata_triage": 1}
 
 
 def _tokens(value: str) -> set[str]:
-    normalized = value.casefold()
-    tokens = set(re.findall(r"[a-z0-9][a-z0-9+._-]{1,}", normalized))
-    for run in re.findall(r"[\u4e00-\u9fff]+", normalized):
-        tokens.update(run[index : index + width] for width in (2, 3, 4) for index in range(max(0, len(run) - width + 1)))
-    return tokens
+    return search_tokens(value)
 
 
 def _score(item: dict[str, Any], query: str) -> int:
@@ -92,45 +84,28 @@ def _score(item: dict[str, Any], query: str) -> int:
 
 @lru_cache(maxsize=1)
 def _load_catalog() -> tuple[dict[str, Any], str]:
+    """Fallback loader for source checkouts without a compiled runtime index."""
+
     raw = CATALOG_PATH.read_bytes()
     payload = json.loads(raw.decode("utf-8"))
-    if payload.get("schema") != "science_mcp_catalog_v1" or not isinstance(payload.get("mcps"), list):
-        raise RuntimeError("Invalid science MCP catalog snapshot")
-    dimensions = payload.get("dimensions")
-    if not isinstance(dimensions, dict) or any(not isinstance(dimensions.get(key), list) for key in ("domains", "subdomains", "stages", "functions")):
-        raise RuntimeError("Science MCP catalog dimensions are invalid")
-    items = payload["mcps"]
-    if payload.get("active_catalog_count") != len(items):
-        raise RuntimeError("Science MCP catalog count does not match payload")
-    ids = [str(item.get("id") or "") for item in items]
-    urls = [str(item.get("source_url") or "") for item in items]
-    if any(not value for value in ids + urls) or len(ids) != len(set(ids)) or len(urls) != len(set(urls)):
-        raise RuntimeError("Science MCP catalog contains duplicate or empty identity fields")
-    normalized_urls = [normalize_canonical_url(value) for value in urls]
-    if len(normalized_urls) != len(set(normalized_urls)):
-        raise RuntimeError("Science MCP catalog contains duplicate normalized canonical URLs")
-    allowed = {key: set(dimensions[key]) for key in ("domains", "subdomains", "stages", "functions")}
-    for item in items:
-        if item.get("domain") not in allowed["domains"] or item.get("subdomain") not in allowed["subdomains"]:
-            raise RuntimeError(f"Science MCP catalog has invalid domain taxonomy: {item.get('id')}")
-        if item.get("stage") not in allowed["stages"] or item.get("function") not in allowed["functions"]:
-            raise RuntimeError(f"Science MCP catalog has invalid stage/function taxonomy: {item.get('id')}")
-        if item.get("evidence_scope") not in {"fast_metadata_triage", "source_reviewed"}:
-            raise RuntimeError(f"Science MCP catalog has invalid evidence scope: {item.get('id')}")
-        if item.get("review_status") != "taxonomy_reviewed" or not str(item.get("classification_rationale") or "").strip():
-            raise RuntimeError(f"Science MCP catalog has incomplete taxonomy review: {item.get('id')}")
-        verification = item.get("source_verification")
-        if not isinstance(verification, dict) or not verification.get("observed_path"):
-            raise RuntimeError(f"Science MCP catalog lacks source verification: {item.get('id')}")
-        if verification.get("fetch_status") == "fetched" and not SHA256_RE.fullmatch(str(verification.get("content_sha256") or "")):
-            raise RuntimeError(f"Science MCP catalog has untraceable fetched content: {item.get('id')}")
-        if "source_metadata" in item or "content_path" in verification:
-            raise RuntimeError(f"Science MCP catalog exposes local cache metadata: {item.get('id')}")
+    validate_catalog_snapshot(payload)
     return payload, hashlib.sha256(raw).hexdigest()
 
 
-def get_mcp_catalog_meta() -> dict[str, Any]:
-    payload, digest = _load_catalog()
+@lru_cache(maxsize=1)
+def _runtime_database_path() -> Path | None:
+    if database_matches_source(CATALOG_PATH, CATALOG_DATABASE_PATH):
+        return CATALOG_DATABASE_PATH
+    return None
+
+
+def _database_metadata(database: Path) -> tuple[dict[str, Any], str]:
+    with open_catalog_database(database) as connection:
+        metadata = dict(connection.execute("SELECT key, value FROM catalog_metadata"))
+    return json.loads(metadata["catalog_json"]), metadata["source_sha256"]
+
+
+def _public_meta(payload: dict[str, Any], digest: str) -> dict[str, Any]:
     return {
         "schema": payload["schema"],
         "total": payload["active_catalog_count"],
@@ -143,8 +118,27 @@ def get_mcp_catalog_meta() -> dict[str, Any]:
         "skillhub_parity": payload.get("skillhub_parity") or {},
         "product_surface": {
             "catalog_mode": "taxonomy_reviewed_only",
-            "read_only_surfaces": ["library", "search", "categories", "detail", "content", "asset", "guide", "share", "download_status"],
-            "community_features": ["favorite", "review", "helpful", "wish", "collection", "profile", "leaderboard", "submission"],
+            "read_only_surfaces": [
+                "library",
+                "search",
+                "categories",
+                "detail",
+                "content",
+                "asset",
+                "guide",
+                "share",
+                "download_status",
+            ],
+            "community_features": [
+                "favorite",
+                "review",
+                "helpful",
+                "wish",
+                "collection",
+                "profile",
+                "leaderboard",
+                "submission",
+            ],
             "candidate_status": "needs_review",
             "active_catalog_effect": "none_until_taxonomy_reviewed_sync",
             "download_status": "safe_placeholder_unavailable",
@@ -154,9 +148,109 @@ def get_mcp_catalog_meta() -> dict[str, Any]:
     }
 
 
+def get_mcp_catalog_meta() -> dict[str, Any]:
+    database = _runtime_database_path()
+    if database is not None:
+        payload, digest = _database_metadata(database)
+    else:
+        payload, digest = _load_catalog()
+    return _public_meta(payload, digest)
+
+
+@lru_cache(maxsize=1)
+def _database_finder_items(database_path: str) -> tuple[dict[str, Any], ...]:
+    with open_catalog_database(Path(database_path)) as connection:
+        rows = connection.execute("SELECT finder_json FROM mcps ORDER BY position").fetchall()
+    return tuple(json.loads(zlib.decompress(row["finder_json"]).decode("utf-8")) for row in rows)
+
+
 def get_mcp_catalog_items() -> list[dict[str, Any]]:
+    """Return the lightweight fields needed by the semantic finder."""
+
+    database = _runtime_database_path()
+    if database is not None:
+        return [dict(item) for item in _database_finder_items(str(database))]
     payload, _ = _load_catalog()
     return list(payload["mcps"])
+
+
+def _safe_sort_mode(value: str | None) -> str:
+    mode = str(value or "organized").strip().casefold()
+    return mode if mode in SORT_LABELS else "organized"
+
+
+def _database_order(sort_mode: str, *, searching: bool) -> str:
+    score = "bm25(mcp_search), " if searching else ""
+    organized = "m.domain, m.subdomain, m.stage, m.function_name, m.name_sort, m.id"
+    if sort_mode == "name":
+        return f"{score}m.name_sort, m.id"
+    if sort_mode == "tools":
+        return f"{score}m.tool_count DESC, {organized}"
+    if sort_mode == "evidence":
+        return f"{score}m.evidence_rank, m.quality_score DESC, {organized}"
+    return f"{score}{organized}"
+
+
+def _list_mcp_catalog_database(
+    database: Path,
+    *,
+    query: str,
+    expected: dict[str, str],
+    sort_mode: str,
+    limit: int,
+    offset: int,
+) -> dict[str, Any]:
+    clauses: list[str] = []
+    parameters: list[Any] = []
+    from_sql = "mcps m"
+    if query:
+        terms = hashed_search_terms(query)
+        if not terms:
+            return {
+                "list": [],
+                "total": 0,
+                "limit": limit,
+                "offset": offset,
+                "sort": sort_mode,
+                "sort_label": SORT_LABELS[sort_mode],
+            }
+        from_sql = "mcp_search JOIN mcps m ON m.position = mcp_search.rowid - 1"
+        clauses.append("mcp_search.terms MATCH ?")
+        parameters.append(" OR ".join(terms))
+    column_names = {
+        "domain": "m.domain",
+        "subdomain": "m.subdomain",
+        "stage": "m.stage",
+        "function": "m.function_name",
+        "status": "m.status",
+        "readiness": "m.readiness",
+    }
+    for key, value in expected.items():
+        if value:
+            clauses.append(f"{column_names[key]} = ?")
+            parameters.append(value)
+    where_sql = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+    order_sql = _database_order(sort_mode, searching=bool(query))
+    with open_catalog_database(database) as connection:
+        total = int(
+            connection.execute(
+                f"SELECT COUNT(*) FROM {from_sql}{where_sql}",
+                parameters,
+            ).fetchone()[0]
+        )
+        rows = connection.execute(
+            f"SELECT m.payload FROM {from_sql}{where_sql} "
+            f"ORDER BY {order_sql} LIMIT ? OFFSET ?",
+            [*parameters, limit, offset],
+        ).fetchall()
+    return {
+        "list": [decode_catalog_payload(row["payload"]) for row in rows],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "sort": sort_mode,
+        "sort_label": SORT_LABELS[sort_mode],
+    }
 
 
 def list_mcp_catalog(
@@ -172,7 +266,6 @@ def list_mcp_catalog(
     limit: int = 24,
     offset: int = 0,
 ) -> dict[str, Any]:
-    payload, _ = _load_catalog()
     query = (q or "").strip()
     expected = {
         "domain": (domain or "").strip(),
@@ -182,18 +275,32 @@ def list_mcp_catalog(
         "status": (status or "").strip(),
         "readiness": (readiness or "").strip(),
     }
+    sort_mode = _safe_sort_mode(sort)
+    safe_limit = max(1, min(int(limit), 100))
+    safe_offset = max(0, int(offset))
+    database = _runtime_database_path()
+    if database is not None:
+        return _list_mcp_catalog_database(
+            database,
+            query=query,
+            expected=expected,
+            sort_mode=sort_mode,
+            limit=safe_limit,
+            offset=safe_offset,
+        )
+
+    payload, _ = _load_catalog()
     matches = [
         item
         for item in payload["mcps"]
         if (not query or _score(item, query) > 0)
         and all(not value or str(item.get(key) or "") == value for key, value in expected.items())
     ]
-    sort_mode = str(sort or "organized").strip().casefold()
-    if sort_mode not in SORT_LABELS:
-        sort_mode = "organized"
+
     def tool_count(item: dict[str, Any]) -> int:
         evidence = item.get("capability_evidence") or {}
         return max(len(item.get("capabilities") or []), int(evidence.get("tool_count") or 0))
+
     def organized_key(item: dict[str, Any]) -> tuple[Any, ...]:
         return (
             str(item.get("domain") or "").casefold(),
@@ -202,6 +309,7 @@ def list_mcp_catalog(
             str(item.get("function") or "").casefold(),
             str(item.get("name") or item.get("id") or "").casefold(),
         )
+
     def item_key(item: dict[str, Any]) -> tuple[Any, ...]:
         score_key = -_score(item, query)
         if sort_mode == "name":
@@ -216,70 +324,189 @@ def list_mcp_catalog(
                 organized_key(item),
             )
         return (score_key, organized_key(item))
+
     matches.sort(key=item_key)
-    safe_limit = max(1, min(int(limit), 100))
-    safe_offset = max(0, int(offset))
-    return {"list": matches[safe_offset : safe_offset + safe_limit], "total": len(matches), "limit": safe_limit, "offset": safe_offset, "sort": sort_mode, "sort_label": SORT_LABELS[sort_mode]}
+    return {
+        "list": matches[safe_offset : safe_offset + safe_limit],
+        "total": len(matches),
+        "limit": safe_limit,
+        "offset": safe_offset,
+        "sort": sort_mode,
+        "sort_label": SORT_LABELS[sort_mode],
+    }
 
 
 def _mcp_card_projection(item: dict[str, Any]) -> dict[str, Any]:
     """Keep related MCPs in the same card shape as SkillHub related skills."""
+
     fields = (
-        "id", "slug", "name", "tagline", "summary", "description", "domain",
-        "subdomain", "stage", "function", "task", "category_key", "category_name",
-        "cluster_key", "cluster_name", "tags", "capabilities", "framework",
-        "capability_evidence", "information_status",
-        "compatibility_level", "pricing_status", "price_points", "license",
-        "license_status", "license_source", "license_raw", "license_evidence",
-        "source_url", "source_name", "docs_url", "latest_version", "featured",
-        "hero_note", "total_reviews", "avg_rating", "total_favorites",
-        "total_downloads", "weekly_downloads", "viewer_favorited", "created_at",
-        "updated_at", "published_at", "quality_score", "readiness", "status",
-        "transport", "info_page_fetched",
+        "id",
+        "slug",
+        "name",
+        "tagline",
+        "summary",
+        "description",
+        "domain",
+        "subdomain",
+        "stage",
+        "function",
+        "task",
+        "category_key",
+        "category_name",
+        "cluster_key",
+        "cluster_name",
+        "tags",
+        "capabilities",
+        "framework",
+        "capability_evidence",
+        "information_status",
+        "compatibility_level",
+        "pricing_status",
+        "price_points",
+        "license",
+        "license_status",
+        "license_source",
+        "license_raw",
+        "license_evidence",
+        "source_url",
+        "source_name",
+        "docs_url",
+        "latest_version",
+        "featured",
+        "hero_note",
+        "total_reviews",
+        "avg_rating",
+        "total_favorites",
+        "total_downloads",
+        "weekly_downloads",
+        "viewer_favorited",
+        "created_at",
+        "updated_at",
+        "published_at",
+        "quality_score",
+        "readiness",
+        "status",
+        "transport",
+        "info_page_fetched",
     )
     return {field: item.get(field) for field in fields}
 
 
+def _database_item(database: Path, mcp_id: str) -> dict[str, Any] | None:
+    with open_catalog_database(database) as connection:
+        row = connection.execute("SELECT payload FROM mcps WHERE id = ? LIMIT 1", (mcp_id,)).fetchone()
+    return decode_catalog_payload(row["payload"]) if row is not None else None
+
+
+def hydrate_mcp_catalog_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Hydrate finder projections only after ranking has selected a small result set."""
+
+    if not results:
+        return []
+    database = _runtime_database_path()
+    if database is None:
+        return results
+    ids = [str(result.get("id") or "") for result in results]
+    placeholders = ",".join("?" for _ in ids)
+    with open_catalog_database(database) as connection:
+        rows = connection.execute(
+            f"SELECT id, payload FROM mcps WHERE id IN ({placeholders})",
+            ids,
+        ).fetchall()
+    payloads = {str(row["id"]): decode_catalog_payload(row["payload"]) for row in rows}
+    hydrated: list[dict[str, Any]] = []
+    for result in results:
+        item = payloads.get(str(result.get("id") or ""))
+        if item is None:
+            continue
+        enriched = dict(item)
+        enriched.update(
+            {
+                key: value
+                for key, value in result.items()
+                if key in {"rank", "recommendation_reason", "ranking_signals"}
+            }
+        )
+        hydrated.append(enriched)
+    return hydrated
+
+
 def get_mcp_catalog_item(mcp_id: str, *, include_related: bool = False) -> dict[str, Any]:
-    payload, _ = _load_catalog()
     needle = mcp_id.strip()
-    for item in payload["mcps"]:
-        if item.get("id") == needle:
-            if not include_related:
-                return item
-            related = [
-                candidate
-                for candidate in payload["mcps"]
-                if candidate.get("id") != needle
-                and (
-                    candidate.get("subdomain") == item.get("subdomain")
-                    or candidate.get("domain") == item.get("domain")
-                )
-            ]
-            related.sort(
-                key=lambda candidate: (
-                    candidate.get("subdomain") != item.get("subdomain"),
-                    candidate.get("domain") != item.get("domain"),
-                    -int(candidate.get("quality_score") or 0),
-                    str(candidate.get("name") or candidate.get("id") or "").casefold(),
-                )
+    database = _runtime_database_path()
+    if database is not None:
+        item = _database_item(database, needle)
+        if item is None:
+            raise HTTPException(status_code=404, detail="科研 MCP 不存在")
+        if not include_related:
+            return item
+        with open_catalog_database(database) as connection:
+            rows = connection.execute(
+                """
+                SELECT payload FROM mcps
+                WHERE id != ? AND (subdomain = ? OR domain = ?)
+                ORDER BY
+                    CASE WHEN subdomain = ? THEN 0 ELSE 1 END,
+                    CASE WHEN domain = ? THEN 0 ELSE 1 END,
+                    quality_score DESC,
+                    name_sort,
+                    id
+                LIMIT 4
+                """,
+                (needle, item.get("subdomain"), item.get("domain"), item.get("subdomain"), item.get("domain")),
+            ).fetchall()
+        related = [decode_catalog_payload(row["payload"]) for row in rows]
+    else:
+        payload, _ = _load_catalog()
+        item = next((candidate for candidate in payload["mcps"] if candidate.get("id") == needle), None)
+        if item is None:
+            raise HTTPException(status_code=404, detail="科研 MCP 不存在")
+        if not include_related:
+            return item
+        related = [
+            candidate
+            for candidate in payload["mcps"]
+            if candidate.get("id") != needle
+            and (candidate.get("subdomain") == item.get("subdomain") or candidate.get("domain") == item.get("domain"))
+        ]
+        related.sort(
+            key=lambda candidate: (
+                candidate.get("subdomain") != item.get("subdomain"),
+                candidate.get("domain") != item.get("domain"),
+                -int(candidate.get("quality_score") or 0),
+                str(candidate.get("name") or candidate.get("id") or "").casefold(),
             )
-            detail = dict(item)
-            # MCP Hub is catalog-only, so it has no executable package versions;
-            # retaining the SkillHub detail key keeps consumers schema-aligned.
-            detail["versions"] = []
-            detail["reviews"] = []
-            detail["related_mcps"] = [_mcp_card_projection(candidate) for candidate in related[:4]]
-            return detail
-    raise HTTPException(status_code=404, detail="科研 MCP 不存在")
+        )
+        related = related[:4]
+    detail = dict(item)
+    detail["versions"] = []
+    detail["reviews"] = []
+    detail["related_mcps"] = [_mcp_card_projection(candidate) for candidate in related]
+    return detail
 
 
 def get_mcp_catalog_categories() -> dict[str, Any]:
+    database = _runtime_database_path()
+    if database is not None:
+        with open_catalog_database(database) as connection:
+            row = connection.execute(
+                "SELECT value FROM catalog_metadata WHERE key = 'categories_json'"
+            ).fetchone()
+        return json.loads(row["value"])
+
     payload, _ = _load_catalog()
     dimensions = payload["dimensions"]
-    counts: dict[str, dict[str, int]] = {key: {value: 0 for value in values} for key, values in dimensions.items()}
+    counts: dict[str, dict[str, int]] = {
+        key: {value: 0 for value in values}
+        for key, values in dimensions.items()
+    }
     status_counts: dict[str, int] = {}
-    item_keys = {"domains": "domain", "subdomains": "subdomain", "stages": "stage", "functions": "function"}
+    item_keys = {
+        "domains": "domain",
+        "subdomains": "subdomain",
+        "stages": "stage",
+        "functions": "function",
+    }
     for item in payload["mcps"]:
         for dimension_key, item_key in item_keys.items():
             counts[dimension_key][str(item[item_key])] += 1

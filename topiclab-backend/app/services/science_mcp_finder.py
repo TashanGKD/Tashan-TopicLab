@@ -7,7 +7,13 @@ import re
 from functools import lru_cache
 from typing import Any
 
-from app.services.science_mcp_catalog import get_mcp_catalog_items, get_mcp_catalog_meta
+from starlette.concurrency import run_in_threadpool
+
+from app.services.science_mcp_catalog import (
+    get_mcp_catalog_items,
+    get_mcp_catalog_meta,
+    hydrate_mcp_catalog_results,
+)
 from app.services.science_skill_finder import (
     GENERIC_QUERY_TOKENS,
     FinderEventCallback,
@@ -49,6 +55,12 @@ LOCAL_RANKING_CRITERIA = [
     {"key": "function_match", "label": "功能偏好"},
     {"key": "quality_score", "label": "资料完整度"},
 ]
+
+
+def _load_finder_catalog() -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Load catalog state outside the async event loop."""
+
+    return get_mcp_catalog_meta(), get_mcp_catalog_items()
 
 
 async def _emit_finder_event(
@@ -216,7 +228,7 @@ def _rank_results(
             -pair[0],
             -pair[1],
             READINESS_ORDER.get(str(pair[2].get("readiness")), 9),
-            SOURCE_REVIEW_ORDER.get(str(pair[2].get("review_status")), 9),
+            SOURCE_REVIEW_ORDER.get(str(pair[2].get("evidence_scope")), 9),
             -int(pair[2].get("quality_score") or 0),
             str(pair[2].get("id")),
         )
@@ -230,7 +242,7 @@ def _rank_results(
             "task_match": task_match,
             "function_match": function_match,
             "readiness": str(item.get("readiness") or ""),
-            "source_review": str(item.get("review_status") or ""),
+            "source_review": str(item.get("evidence_scope") or ""),
             "quality_score": int(item.get("quality_score") or 0),
         }
         ranked.append(enriched)
@@ -247,15 +259,19 @@ async def find_science_mcps(
     clean_query = query.strip()
     if not clean_query:
         raise ValueError("科研需求不能为空")
-    meta = get_mcp_catalog_meta()
+    meta, items = await run_in_threadpool(_load_finder_catalog)
     dimensions = meta["dimensions"]
-    items = get_mcp_catalog_items()
     config = get_finder_config()
     mode = "local_fallback"
     message = "本地三维路由已完成"
     route: dict[str, Any] | None = None
     skill_mounted = False
-    has_catalog_evidence = _has_distinctive_catalog_evidence(clean_query, dimensions, items)
+    has_catalog_evidence = await run_in_threadpool(
+        _has_distinctive_catalog_evidence,
+        clean_query,
+        dimensions,
+        items,
+    )
     if allow_model and config.configured:
         try:
             raw_route = await _route_with_agentscope(clean_query, dimensions, config)
@@ -277,14 +293,14 @@ async def find_science_mcps(
         }
         message = "需要补充更具体的科研需求"
     if route is None and has_catalog_evidence:
-        route = _local_route(clean_query, dimensions, items)
+        route = await run_in_threadpool(_local_route, clean_query, dimensions, items)
     assert route is not None
     await _emit_finder_event(on_event, "route", route)
     safe_limit = max(1, min(int(limit), 12))
     has_route_evidence = any(route.get(key) for key in ("domain", "stage", "function")) or bool(route.get("search_terms"))
     candidate_limit = max(16, safe_limit * 3)
     candidates, total = (
-        _rank_results(clean_query, route, items, candidate_limit)
+        await run_in_threadpool(_rank_results, clean_query, route, items, candidate_limit)
         if has_route_evidence
         else ([], 0)
     )
@@ -308,6 +324,7 @@ async def find_science_mcps(
             logger.warning("Science MCP finder model recommendation failed: %s", type(exc).__name__)
             mode = "model_route_local_rank"
             message = "三维路径已识别，候选暂按目录规则排序"
+    results = await run_in_threadpool(hydrate_mcp_catalog_results, results)
     for item in results:
         await _emit_finder_event(on_event, "result", item)
     return {

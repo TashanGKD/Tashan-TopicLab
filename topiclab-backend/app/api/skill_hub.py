@@ -49,6 +49,7 @@ from app.services.science_skill_catalog import (
 from app.services.science_skill_finder import (
     find_science_skills,
     get_finder_capabilities,
+    get_finder_config,
 )
 from app.services.model_usage_quota import consume_model_usage
 
@@ -124,7 +125,7 @@ async def find_science_skills_endpoint(
     query = payload.query.strip()
     if not query:
         raise HTTPException(status_code=422, detail="科研需求不能为空")
-    allow_model = user is not None
+    allow_model = user is not None and get_finder_config().configured
     if allow_model:
         await run_in_threadpool(consume_model_usage, _authenticated_user_id(user), "science_finder")
     return await find_science_skills(query, limit=payload.limit, allow_model=allow_model)
@@ -143,7 +144,7 @@ async def stream_science_skills_endpoint(
     query = payload.query.strip()
     if not query:
         raise HTTPException(status_code=422, detail="科研需求不能为空")
-    allow_model = user is not None
+    allow_model = user is not None and get_finder_config().configured
     if allow_model:
         await run_in_threadpool(consume_model_usage, _authenticated_user_id(user), "science_finder")
 
