@@ -207,6 +207,7 @@ def test_critic_worker_compose_isolates_secrets_and_network():
     )[0]
 
     assert "env_file:" not in worker_block
+    assert "SCNET_API_KEY:" in worker_block
     assert "skillhub_scnet_api_key:" in worker_block
     assert "HTTP_PROXY:" not in worker_block
     assert "HTTPS_PROXY:" not in worker_block
@@ -215,6 +216,23 @@ def test_critic_worker_compose_isolates_secrets_and_network():
     assert "- app-network" not in worker_block
     assert "- critic-network" in backend_block
     assert "ports:" not in worker_block
+
+
+def test_critic_deploy_healthcheck_accepts_shared_or_legacy_scnet_key():
+    deploy_source = (PROJECT_ROOT.parent / ".github" / "workflows" / "deploy.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "grep -Eq '^(SCNET_API_KEY|skillhub_scnet_api_key)=.+$' .env" in deploy_source
+
+
+def test_science_mcp_catalog_is_compiled_during_image_build():
+    dockerfile = (PROJECT_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    dockerignore = (PROJECT_ROOT / ".dockerignore").read_text(encoding="utf-8")
+
+    assert "python scripts/build_science_mcp_catalog_db.py" in dockerfile
+    assert "python scripts/build_science_mcp_catalog_db.py --check" in dockerfile
+    assert "app/data/science_mcp_catalog.sqlite3" in dockerignore
 
 
 def test_critic_deploy_uses_a_full_locked_revision():

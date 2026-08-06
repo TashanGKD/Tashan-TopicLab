@@ -58,6 +58,11 @@ def _get_engine_url() -> Optional[str]:
     return urlunparse(parsed)
 
 
+def database_configured() -> bool:
+    """Return whether a database URL is available for optional read surfaces."""
+    return bool(_get_engine_url())
+
+
 def _env_int(name: str, default: int) -> int:
     raw = os.getenv(name, "").strip()
     if not raw:
@@ -1609,6 +1614,136 @@ def _apply_skill_hub_ddl(session) -> None:
     )
 
 
+def _apply_science_mcp_hub_ddl(session) -> None:
+    """Create the user-facing MCP Hub interaction tables.
+
+    The catalog itself remains a checked-in, taxonomy-reviewed snapshot.  These
+    tables only hold user interactions and review submissions, so they never
+    change the active catalog count.
+    """
+    is_sqlite = _is_sqlite_session(session)
+    id_sql = "id INTEGER PRIMARY KEY AUTOINCREMENT" if is_sqlite else "id SERIAL PRIMARY KEY"
+    timestamp_sql = "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP" if is_sqlite else "TIMESTAMPTZ NOT NULL DEFAULT NOW()"
+    updated_sql = "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP" if is_sqlite else "TIMESTAMPTZ NOT NULL DEFAULT NOW()"
+    tables = (
+        f"""
+        CREATE TABLE IF NOT EXISTS science_mcp_hub_favorites (
+            {id_sql},
+            mcp_id VARCHAR(255) NOT NULL,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            created_at {timestamp_sql},
+            UNIQUE(mcp_id, user_id)
+        )
+        """,
+        f"""
+        CREATE TABLE IF NOT EXISTS science_mcp_hub_reviews (
+            {id_sql},
+            mcp_id VARCHAR(255) NOT NULL,
+            author_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            rating INTEGER NOT NULL,
+            title VARCHAR(255),
+            content TEXT NOT NULL,
+            model VARCHAR(128),
+            pros_json TEXT NOT NULL DEFAULT '[]',
+            cons_json TEXT NOT NULL DEFAULT '[]',
+            dimensions_json TEXT NOT NULL DEFAULT '{{}}',
+            helpful_count INTEGER NOT NULL DEFAULT 0,
+            created_at {timestamp_sql},
+            updated_at {updated_sql},
+            UNIQUE(mcp_id, author_user_id)
+        )
+        """,
+        f"""
+        CREATE TABLE IF NOT EXISTS science_mcp_hub_review_votes (
+            {id_sql},
+            review_id INTEGER NOT NULL REFERENCES science_mcp_hub_reviews(id) ON DELETE CASCADE,
+            voter_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            created_at {timestamp_sql},
+            UNIQUE(review_id, voter_user_id)
+        )
+        """,
+        f"""
+        CREATE TABLE IF NOT EXISTS science_mcp_hub_wishes (
+            {id_sql},
+            title VARCHAR(255) NOT NULL,
+            content TEXT NOT NULL,
+            domain VARCHAR(128),
+            subdomain VARCHAR(128),
+            stage VARCHAR(128),
+            function VARCHAR(128),
+            status VARCHAR(32) NOT NULL DEFAULT 'open',
+            votes_count INTEGER NOT NULL DEFAULT 0,
+            author_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            created_at {timestamp_sql},
+            updated_at {updated_sql}
+        )
+        """,
+        f"""
+        CREATE TABLE IF NOT EXISTS science_mcp_hub_wish_votes (
+            {id_sql},
+            wish_id INTEGER NOT NULL REFERENCES science_mcp_hub_wishes(id) ON DELETE CASCADE,
+            voter_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            created_at {timestamp_sql},
+            UNIQUE(wish_id, voter_user_id)
+        )
+        """,
+        f"""
+        CREATE TABLE IF NOT EXISTS science_mcp_hub_collections (
+            {id_sql},
+            slug VARCHAR(128) NOT NULL UNIQUE,
+            title VARCHAR(255) NOT NULL,
+            description TEXT NOT NULL,
+            owner_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            visibility VARCHAR(32) NOT NULL DEFAULT 'private',
+            created_at {timestamp_sql},
+            updated_at {updated_sql}
+        )
+        """,
+        f"""
+        CREATE TABLE IF NOT EXISTS science_mcp_hub_collection_items (
+            {id_sql},
+            collection_id INTEGER NOT NULL REFERENCES science_mcp_hub_collections(id) ON DELETE CASCADE,
+            mcp_id VARCHAR(255) NOT NULL,
+            position INTEGER NOT NULL DEFAULT 0,
+            created_at {timestamp_sql},
+            UNIQUE(collection_id, mcp_id)
+        )
+        """,
+        f"""
+        CREATE TABLE IF NOT EXISTS science_mcp_hub_submissions (
+            {id_sql},
+            name VARCHAR(255) NOT NULL,
+            summary TEXT NOT NULL,
+            canonical_url TEXT NOT NULL,
+            repo_url TEXT,
+            domain VARCHAR(128),
+            subdomain VARCHAR(128),
+            stage VARCHAR(128),
+            function VARCHAR(128),
+            evidence TEXT NOT NULL,
+            difference TEXT,
+            status VARCHAR(32) NOT NULL DEFAULT 'needs_review',
+            submitter_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            created_at {timestamp_sql},
+            updated_at {updated_sql}
+        )
+        """,
+    )
+    for ddl in tables:
+        session.execute(text(ddl))
+    indexes = (
+        "CREATE INDEX IF NOT EXISTS idx_science_mcp_hub_favorites_user ON science_mcp_hub_favorites(user_id, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_science_mcp_hub_reviews_mcp ON science_mcp_hub_reviews(mcp_id, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_science_mcp_hub_review_votes_review ON science_mcp_hub_review_votes(review_id)",
+        "CREATE INDEX IF NOT EXISTS idx_science_mcp_hub_wishes_status ON science_mcp_hub_wishes(status, votes_count DESC, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_science_mcp_hub_collections_owner ON science_mcp_hub_collections(owner_user_id, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_science_mcp_hub_collection_items_collection ON science_mcp_hub_collection_items(collection_id, position, created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_science_mcp_hub_submissions_status ON science_mcp_hub_submissions(status, created_at DESC)",
+    )
+    for ddl in indexes:
+        session.execute(text(ddl))
+
+
 def ensure_site_feedback_schema() -> None:
     """Ensure feedback table exists (e.g. after deploy before next full init_auth_tables)."""
     with get_db_session() as session:
@@ -1862,6 +1997,7 @@ def _init_auth_tables_once() -> None:
         _apply_twin_runtime_ddl(session)
         _apply_openclaw_identity_ddl(session)
         _apply_skill_hub_ddl(session)
+        _apply_science_mcp_hub_ddl(session)
         _apply_site_feedback_ddl(session)
         from app.services.skill_hub import ensure_skill_hub_seed_data
         ensure_skill_hub_seed_data(session)

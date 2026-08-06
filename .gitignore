@@ -70,5 +70,7 @@ workspace/
 /artifacts/
 /topiclab-backend/artifacts/
 /topiclab-backend/*.log
+/topiclab-backend/app/data/science_mcp_catalog.sqlite3
+/topiclab-backend/app/data/science_mcp_catalog.sqlite3.tmp
 /frontend/.vite-*.log
 /.runtime/

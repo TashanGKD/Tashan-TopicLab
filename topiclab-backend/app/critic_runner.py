@@ -23,6 +23,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from app.critic_security import is_supported_github_target, is_supported_npm_package
+from app.services.research_hub_config import get_research_hub_scnet_api_key
 
 
 REQUEST_PROFILE = "basic"
@@ -806,7 +807,7 @@ def _critic_research_root(kernel_root: pathlib.Path) -> pathlib.Path:
 
 def _provider_environment(home: pathlib.Path | None = None) -> tuple[dict[str, str], str, str]:
     environment = _minimal_process_environment(home)
-    api_key = os.environ.get("skillhub_scnet_api_key", "").strip()
+    api_key = get_research_hub_scnet_api_key()
     if not api_key:
         raise RuntimeError("CriticAgent provider credentials are unavailable")
     environment["CRITIC_WORKER_PROVIDER_KEY"] = api_key

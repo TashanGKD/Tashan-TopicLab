@@ -57,8 +57,8 @@ jobs:
 
           CHANGED=$(git diff --name-only "$BASE" HEAD 2>/dev/null || echo "")
 
-          # TopicLab backend: auth, topics, TopicLink, Zvec sidecar, and their tests
-          if echo "$CHANGED" | grep -qE '^topiclab-backend/|^docker-compose\.(yml|yaml)|^\.github/workflows/(ci|deploy)\.yml|^\.critic-research-revision$|^deploy/topiclink-zvec\.lock\.json$|^scripts/(topiclink_zvec_release|sync_science_skill_catalog|verify_critic_runtime)\.py$|^backend$'; then
+          # TopicLab backend: auth, topics, Hub catalogs, Zvec sidecar, and their tests
+          if echo "$CHANGED" | grep -qE '^topiclab-backend/|^docker-compose\.(yml|yaml)|^\.github/workflows/(ci|deploy)\.yml|^\.critic-research-revision$|^deploy/topiclink-zvec\.lock\.json$|^scripts/(topiclink_zvec_release|sync_science_(skill|mcp)_catalog|verify_critic_runtime)\.py$|^backend$'; then
             echo "run_topiclab_backend=true" >> "$GITHUB_OUTPUT"
           else
             echo "run_topiclab_backend=false" >> "$GITHUB_OUTPUT"
@@ -119,10 +119,16 @@ jobs:
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install and build
+      - name: Install, test Hub routes, and build
         run: |
           cd frontend
           npm ci
+          npm test -- --run \
+            src/__tests__/AppArcadeRoute.test.tsx \
+            src/pages/__tests__/AppsSkillLibraryPage.test.tsx \
+            src/pages/__tests__/MCPHubPage.test.tsx \
+            src/pages/__tests__/MCPHubProfilePage.test.tsx \
+            src/utils/mcpHubPresentation.test.ts
           npm run build
 
   # ─────────────────────────────────────────────────────────────────────────
@@ -155,10 +161,10 @@ jobs:
             src/pages/__tests__/SourceFeedPage.test.tsx
 
   # ─────────────────────────────────────────────────────────────────────────
-  # Layer 1: TopicLab SkillHub and Critic Worker tests
+  # Layer 1: TopicLab Hub catalogs and Critic Worker tests
   # ─────────────────────────────────────────────────────────────────────────
   skillhub-critic-tests:
-    name: TopicLab SkillHub and Critic
+    name: TopicLab Hubs and Critic
     needs: [detect-changes]
     if: needs.detect-changes.outputs.run_topiclab_backend == 'true'
     runs-on: ubuntu-latest
@@ -191,13 +197,19 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Run SkillHub and Critic tests
+      - name: Run Hub catalog and Critic tests
         working-directory: topiclab-backend
         run: |
           uv sync --locked --group dev
+          uv run python scripts/build_science_mcp_catalog_db.py
+          uv run python scripts/build_science_mcp_catalog_db.py --check
           uv run python -m pytest \
             tests/test_critic_runner.py \
             tests/test_critic_worker.py \
+            tests/test_model_usage_quota.py \
+            tests/test_science_mcp_catalog.py \
+            tests/test_science_mcp_catalog_sync.py \
+            tests/test_science_mcp_hub_api.py \
             tests/test_science_skill_catalog_sync.py \
             tests/test_skill_hub_api.py \
             -q --tb=short

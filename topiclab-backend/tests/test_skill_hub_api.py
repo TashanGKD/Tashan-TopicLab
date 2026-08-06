@@ -65,7 +65,8 @@ def test_skillhub_public_config_exposes_only_the_single_scnet_key():
     forbidden = (
         "SCIENCE_SKILL_FINDER_",
         "SKILL_HUB_CRITIC_",
-        "CRITIC_WORKER_",
+        "CRITIC_WORKER_TOKEN",
+        "CRITIC_WORKER_SECRET",
         "CRITIC_KERNEL_ROOT",
         "CRITIC_RESEARCH_ROOT",
         "MCP_CRITIC_ROOT",
@@ -74,8 +75,16 @@ def test_skillhub_public_config_exposes_only_the_single_scnet_key():
 
     for name in (".env.example", ".env.deploy.example"):
         content = (repository / name).read_text(encoding="utf-8")
-        assert content.count("skillhub_scnet_api_key") == 1
+        assert content.count("SCNET_API_KEY") == 1
+        assert "skillhub_scnet_api_key" not in content
         assert not any(variable in content for variable in forbidden)
+
+
+def test_critic_worker_url_supports_local_process_override(monkeypatch):
+    from app.services import critic_evaluation
+
+    monkeypatch.setenv("CRITIC_WORKER_URL", "http://127.0.0.1:8090/")
+    assert critic_evaluation._worker_url() == "http://127.0.0.1:8090"
 
 
 def test_skill_hub_public_seeded_routes(client):
@@ -167,6 +176,8 @@ def test_science_catalog_is_built_in_filterable_and_traceable(client):
     assert len(payload["dimensions"]["functions"]) == 17
     assert payload["source"]["repository"] == "TashanGKD/tashan-research-skills"
     assert len(payload["source"]["sha256"]) == 64
+    assert payload["license_coverage"]["skill_count"] == 1391
+    assert payload["license_coverage"]["known"] == 1197
 
     response = client.get(
         "/api/v1/skill-hub/science-catalog",
@@ -258,7 +269,7 @@ def test_science_catalog_search_matches_bilingual_field_tokens(monkeypatch):
 def test_science_finder_uses_agentscope_only_for_valid_taxonomy_routing(client, monkeypatch):
     from app.services import science_skill_finder
 
-    monkeypatch.setenv("skillhub_scnet_api_key", "test-key")
+    monkeypatch.setenv("SCNET_API_KEY", "test-key")
 
     async def fake_route_with_agentscope(query, dimensions, config):
         assert query == "我想预测蛋白质三维结构，并比较不同候选模型"
@@ -332,19 +343,18 @@ def test_science_finder_uses_agentscope_only_for_valid_taxonomy_routing(client, 
     assert all(item["ranking_signals"]["quality_score"] == item["quality_score"] for item in payload["results"])
 
 
-def test_science_finder_uses_only_skillhub_scnet_api_key(monkeypatch):
+def test_science_finder_uses_shared_scnet_api_key(monkeypatch):
     from app.services import science_skill_finder
 
-    monkeypatch.setenv("skillhub_scnet_api_key", "skillhub-scnet-test-key")
-    monkeypatch.setenv("SCNET_API_KEY", "topiclink-scnet-test-key")
+    monkeypatch.setenv("SCNET_API_KEY", "shared-scnet-test-key")
+    monkeypatch.setenv("skillhub_scnet_api_key", "legacy-skillhub-test-key")
     monkeypatch.setenv("SCIENCE_SKILL_FINDER_API_KEY", "legacy-test-key")
 
     config = science_skill_finder.get_finder_config()
 
-    assert config.api_key == "skillhub-scnet-test-key"
+    assert config.api_key == "shared-scnet-test-key"
     assert config.base_url == "https://api.scnet.cn/api/llm/v1"
     assert config.model == "GLM-5.2"
-    assert config.protocol == "openai"
 
 
 def test_science_finder_streams_route_and_recommendations(client, monkeypatch):
@@ -391,17 +401,17 @@ def test_science_finder_streams_route_and_recommendations(client, monkeypatch):
     assert '"skill_mounted":true' in text
 
 
-def test_science_finder_does_not_reuse_other_product_credentials(monkeypatch):
+def test_science_finder_supports_legacy_deploy_env_during_migration(monkeypatch):
     from app.services import science_skill_finder
 
-    monkeypatch.delenv("skillhub_scnet_api_key", raising=False)
+    monkeypatch.delenv("SCNET_API_KEY", raising=False)
+    monkeypatch.setenv("skillhub_scnet_api_key", "legacy-skillhub-test-key")
     monkeypatch.setenv("SCIENCE_SKILL_FINDER_API_KEY", "legacy-test-key")
-    monkeypatch.setenv("SCNET_API_KEY", "topiclink-test-key")
 
     config = science_skill_finder.get_finder_config()
 
-    assert config.api_key == ""
-    assert config.configured is False
+    assert config.api_key == "legacy-skillhub-test-key"
+    assert config.configured is True
 
 
 def test_science_finder_parses_json_after_model_reasoning_text():
@@ -416,6 +426,7 @@ def test_science_finder_parses_json_after_model_reasoning_text():
 
 
 def test_science_finder_falls_back_to_local_catalog_without_model_credentials(client, monkeypatch):
+    monkeypatch.delenv("SCNET_API_KEY", raising=False)
     monkeypatch.delenv("skillhub_scnet_api_key", raising=False)
 
     capabilities = client.get("/api/v1/skill-hub/science-catalog/finder/capabilities")
@@ -484,10 +495,33 @@ def test_science_finder_falls_back_to_local_catalog_without_model_credentials(cl
         assert specific_payload["results"]
 
 
+def test_authenticated_science_finder_does_not_charge_quota_without_model_credentials(client, monkeypatch):
+    from app.api import skill_hub
+
+    monkeypatch.delenv("SCNET_API_KEY", raising=False)
+    monkeypatch.delenv("skillhub_scnet_api_key", raising=False)
+    quota_calls = []
+    monkeypatch.setattr(
+        skill_hub,
+        "consume_model_usage",
+        lambda user_id, operation: quota_calls.append((user_id, operation)),
+    )
+    owner = register_and_login(client, phone="13800019994", username="local-finder-viewer")
+    response = client.post(
+        "/api/v1/skill-hub/science-catalog/find",
+        json={"query": "蛋白质结构预测", "limit": 3},
+        headers={"Authorization": f"Bearer {owner['token']}"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["driver"]["mode"] == "local_fallback"
+    assert quota_calls == []
+
+
 def test_anonymous_science_finder_never_calls_the_model(client, monkeypatch):
     from app.services import science_skill_finder
 
-    monkeypatch.setenv("skillhub_scnet_api_key", "configured-but-private")
+    monkeypatch.setenv("SCNET_API_KEY", "configured-but-private")
 
     async def unexpected_model_call(*args, **kwargs):
         raise AssertionError("anonymous requests must not call the model")
@@ -569,7 +603,7 @@ def test_critic_proxy_preserves_worker_capacity_response(client, monkeypatch):
         async def post(self, *args, **kwargs):
             return CapacityResponse()
 
-    monkeypatch.setenv("skillhub_scnet_api_key", "critic-capacity-test-key")
+    monkeypatch.setenv("SCNET_API_KEY", "critic-capacity-test-key")
     monkeypatch.setattr(
         "app.services.critic_evaluation.httpx.AsyncClient",
         CapacityAsyncClient,
@@ -675,7 +709,7 @@ def test_critic_evaluation_requires_login_and_uses_authenticated_worker(client, 
                 }
             )
 
-    monkeypatch.setenv("skillhub_scnet_api_key", "critic-test-key")
+    monkeypatch.setenv("SCNET_API_KEY", "critic-test-key")
     monkeypatch.setattr("app.services.critic_evaluation.httpx.AsyncClient", FakeAsyncClient)
     from app.critic_security import derive_worker_token
 

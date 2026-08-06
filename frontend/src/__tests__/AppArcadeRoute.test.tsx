@@ -47,100 +47,100 @@ describe('App arcade topic route', () => {
     cleanup()
   })
 
-  it('allows arcade-only topic detail routes', () => {
+  it('allows arcade-only topic detail routes', async () => {
     render(
       <MemoryRouter initialEntries={['/arcade/topics/arcade-topic-1']}>
         <App />
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('Topic Detail Route')).toBeInTheDocument()
+    expect(await screen.findByText('Topic Detail Route')).toBeInTheDocument()
   })
 
-  it('keeps the general topics route hidden', () => {
+  it('keeps the general topics route hidden', async () => {
     render(
       <MemoryRouter initialEntries={['/topics/arcade-topic-1']}>
         <App />
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('Home Route')).toBeInTheDocument()
+    expect(await screen.findByText('Home Route')).toBeInTheDocument()
     expect(screen.queryByText('Topic Detail Route')).not.toBeInTheDocument()
   })
 
-  it('exposes TopicLink as a separate route', () => {
+  it('exposes TopicLink as a separate route', async () => {
     render(
       <MemoryRouter initialEntries={['/topiclink']}>
         <App />
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('TopicLink Route')).toBeInTheDocument()
+    expect(await screen.findByText('TopicLink Route')).toBeInTheDocument()
     expect(screen.queryByText('Home Route')).not.toBeInTheDocument()
   })
 
-  it('routes TopicLink detail without enabling the hidden topics detail route', () => {
+  it('routes TopicLink detail without enabling the hidden topics detail route', async () => {
     render(
       <MemoryRouter initialEntries={['/topiclink/topic-1']}>
         <App />
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('TopicLink Detail Route')).toBeInTheDocument()
+    expect(await screen.findByText('TopicLink Detail Route')).toBeInTheDocument()
     expect(screen.queryByText('Topic Detail Route')).not.toBeInTheDocument()
   })
 
-  it('exposes the research SkillHub as a separate top-level route', () => {
+  it('exposes the research SkillHub as a separate top-level route', async () => {
     render(
       <MemoryRouter initialEntries={['/skillhub']}>
         <App />
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('Research SkillHub Route')).toBeInTheDocument()
+    expect(await screen.findByText('Research SkillHub Route')).toBeInTheDocument()
     expect(screen.getByTestId('top-nav')).toBeInTheDocument()
   })
 
-  it('routes the youth TED page', () => {
+  it('routes the youth TED page', async () => {
     render(
       <MemoryRouter initialEntries={['/youth-ted']}>
         <App />
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('Youth TED Route')).toBeInTheDocument()
+    expect(await screen.findByText('Youth TED Route')).toBeInTheDocument()
   })
 
-  it('routes the activities page', () => {
+  it('routes the activities page', async () => {
     render(
       <MemoryRouter initialEntries={['/activities']}>
         <App />
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('Activities Route')).toBeInTheDocument()
+    expect(await screen.findByText('Activities Route')).toBeInTheDocument()
   })
 
-  it('routes the Challenge Cup topic page with global chrome', () => {
+  it('routes the Challenge Cup topic page with global chrome', async () => {
     render(
       <MemoryRouter initialEntries={['/challenge-cup-topic']}>
         <App />
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('Challenge Cup Topic Route')).toBeInTheDocument()
+    expect(await screen.findByText('Challenge Cup Topic Route')).toBeInTheDocument()
     expect(screen.getByTestId('top-nav')).toBeInTheDocument()
     expect(screen.getByTestId('footer')).toBeInTheDocument()
     expect(screen.getByTestId('floating-actions')).toBeInTheDocument()
   })
 
-  it('routes the inspiration co-creation page', () => {
+  it('routes the inspiration co-creation page', async () => {
     render(
       <MemoryRouter initialEntries={['/inspiration-co-creation']}>
         <App />
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('Inspiration Co Creation Route')).toBeInTheDocument()
+    expect(await screen.findByText('Inspiration Co Creation Route')).toBeInTheDocument()
   })
 })

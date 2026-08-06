@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import httpx
@@ -22,11 +23,11 @@ CRITIC_RUNTIME = {
     "provider": "aistar",
     "model": "glm5.2",
 }
-CRITIC_WORKER_URL = "http://skillhub-critic-worker:8090"
+DEFAULT_CRITIC_WORKER_URL = "http://skillhub-critic-worker:8090"
 
 
 def _worker_url() -> str:
-    return CRITIC_WORKER_URL
+    return os.getenv("CRITIC_WORKER_URL", DEFAULT_CRITIC_WORKER_URL).strip().rstrip("/")
 
 
 async def get_critic_capabilities() -> dict[str, Any]:

@@ -70,7 +70,9 @@ RUN for i in 1 2 3; do \
     exit 1
 
 COPY . .
-RUN mkdir -p /app/critic-state && \
+RUN python scripts/build_science_mcp_catalog_db.py && \
+    python scripts/build_science_mcp_catalog_db.py --check && \
+    mkdir -p /app/critic-state && \
     chown -R appuser:appuser /app /home/appuser/.pip
 
 USER appuser

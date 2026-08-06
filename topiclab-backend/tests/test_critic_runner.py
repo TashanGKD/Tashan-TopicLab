@@ -335,12 +335,10 @@ def test_github_codeload_archive_uses_short_ephemeral_root_for_long_job_path(mon
     assert (source / "deep" / "path" / "README.md").is_file()
 
 
-def test_provider_environment_uses_skillhub_scnet_api_key(monkeypatch):
+def test_provider_environment_uses_shared_scnet_api_key(monkeypatch):
     from app.critic_runner import _provider_environment
 
-    monkeypatch.delenv("skillhub_scnet_api_key", raising=False)
-    monkeypatch.setenv("skillhub_scnet_api_key", "skillhub-scnet-test-key")
-    monkeypatch.setenv("SCNET_API_KEY", "topiclink-scnet-test-key")
+    monkeypatch.setenv("SCNET_API_KEY", "shared-scnet-test-key")
     monkeypatch.setenv("DATABASE_URL", "postgresql://secret.invalid/topiclab")
     monkeypatch.setenv("JWT_SECRET", "must-not-reach-runner")
     monkeypatch.setenv("HTTPS_PROXY", "http://host.docker.internal:1081")
@@ -349,7 +347,7 @@ def test_provider_environment_uses_skillhub_scnet_api_key(monkeypatch):
 
     environment, base_url, model = _provider_environment()
 
-    assert environment["CRITIC_WORKER_PROVIDER_KEY"] == "skillhub-scnet-test-key"
+    assert environment["CRITIC_WORKER_PROVIDER_KEY"] == "shared-scnet-test-key"
     assert "SCNET_API_KEY" not in environment
     assert "DATABASE_URL" not in environment
     assert "JWT_SECRET" not in environment
@@ -362,7 +360,7 @@ def test_provider_environment_uses_skillhub_scnet_api_key(monkeypatch):
 def test_mcp_provider_environment_adapts_worker_secret_to_original_engine(monkeypatch):
     from app.critic_runner import _mcp_provider_environment
 
-    monkeypatch.setenv("skillhub_scnet_api_key", "memory-only-test-key")
+    monkeypatch.setenv("SCNET_API_KEY", "memory-only-test-key")
 
     environment = _mcp_provider_environment()
 
@@ -1104,7 +1102,12 @@ def test_bounded_process_terminates_process_on_timeout(monkeypatch, tmp_path):
     cleanup_commands = []
     killed_groups = []
     monkeypatch.setattr(critic_runner.subprocess, "Popen", lambda *args, **kwargs: process)
-    monkeypatch.setattr(critic_runner.os, "killpg", lambda pid, sig: killed_groups.append((pid, sig)))
+    monkeypatch.setattr(
+        critic_runner.os,
+        "killpg",
+        lambda pid, sig: killed_groups.append((pid, sig)),
+        raising=False,
+    )
     monkeypatch.setattr(
         critic_runner.subprocess,
         "run",
@@ -1149,7 +1152,7 @@ def test_original_mcp_criticagent_runs_inside_job_and_preserves_engine(monkeypat
     source = job / "source"
     source.mkdir()
     (source / "README.md").write_text("# target\n", encoding="utf-8")
-    monkeypatch.setenv("skillhub_scnet_api_key", "memory-only-test-key")
+    monkeypatch.setenv("SCNET_API_KEY", "memory-only-test-key")
 
     def execute(command, **kwargs):
         assert kwargs["cwd"] == job
@@ -1209,7 +1212,7 @@ def test_original_mcp_criticagent_retries_only_failed_repository_health(monkeypa
     source = job / "source"
     source.mkdir()
     (source / "README.md").write_text("# target\n", encoding="utf-8")
-    monkeypatch.setenv("skillhub_scnet_api_key", "memory-only-test-key")
+    monkeypatch.setenv("SCNET_API_KEY", "memory-only-test-key")
     commands = []
 
     def execute(command, **kwargs):

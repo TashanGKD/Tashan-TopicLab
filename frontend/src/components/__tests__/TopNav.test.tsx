@@ -82,7 +82,7 @@ describe('TopNav', () => {
     expect(screen.getByRole('link', { name: '挑战杯专题' })).toHaveAttribute('href', '/challenge-cup-topic')
   })
 
-  it('places the research SkillHub after TopicLink in the desktop navigation', () => {
+  it('places one combined research entry after TopicLink in the desktop navigation', () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <TopNav />
@@ -91,8 +91,10 @@ describe('TopNav', () => {
 
     const nav = screen.getByRole('navigation')
     const links = Array.from(nav.querySelectorAll('a')).map((link) => link.textContent?.trim())
-    expect(links.indexOf('科研 SkillHub')).toBe(links.indexOf('TopicLink') + 1)
-    expect(screen.getByRole('link', { name: '科研 SkillHub' })).toHaveAttribute('href', '/skillhub')
+    expect(links.indexOf('科研 Skill / MCP')).toBe(links.indexOf('TopicLink') + 1)
+    expect(screen.getByRole('link', { name: '科研 Skill / MCP' })).toHaveAttribute('href', '/mcphub')
+    expect(screen.queryByRole('link', { name: '科研 SkillHub' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '科研 MCP Hub' })).not.toBeInTheDocument()
   })
 
   it('hides the digital twin link from the public navigation bar', () => {

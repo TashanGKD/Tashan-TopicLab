@@ -1,47 +1,62 @@
+import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import TopNav from './components/TopNav'
 import Footer from './components/Footer'
-import HomePage from './pages/HomePage'
-import ExpertEdit from './pages/ExpertEdit'
-import ProfileHelperPage from './pages/ProfileHelperPage'
-import AgentLinkLibraryPage from './pages/AgentLinkLibraryPage'
-import AgentLinkChatPage from './pages/AgentLinkChatPage'
-import SourceFeedPage from './pages/SourceFeedPage'
-import Login from './pages/Login'
-import Register from './pages/Register'
-import ForgotPassword from './pages/ForgotPassword'
-import WatchaAuthCallback from './pages/WatchaAuthCallback'
-import LibraryPage from './pages/LibraryPage'
-import MyFavoritesPage from './pages/MyFavoritesPage'
-import MyPage from './pages/MyPage'
-import InboxPage from './pages/InboxPage'
-import AppsPage from './pages/AppsPage'
-import AppsSkillLibraryPage from './pages/AppsSkillLibraryPage'
-import AppsSkillDetailPage from './pages/AppsSkillDetailPage'
-import AppsSkillLeaderboardPage from './pages/AppsSkillLeaderboardPage'
-import AppsSkillProfilePage from './pages/AppsSkillProfilePage'
-import AppsSkillPublishPage from './pages/AppsSkillPublishPage'
-import AppsSkillSearchPage from './pages/AppsSkillSearchPage'
-import AppsSkillSharePage from './pages/AppsSkillSharePage'
-import AppsSkillWishesPage from './pages/AppsSkillWishesPage'
-import ArcadePage from './pages/ArcadePage'
-import TopicDetail from './pages/TopicDetail'
-import TopicLinkPage from './pages/TopicLinkPage'
-import TopicLinkDetailPage from './pages/TopicLinkDetailPage'
-import ThinkingPage from './pages/ThinkingPage'
-import ActivitiesPage from './pages/ActivitiesPage'
-import YouthTedPage from './pages/YouthTedPage'
-import ChallengeCupTopicPage from './pages/ChallengeCupTopicPage'
-import InspirationCoCreationPage from './pages/InspirationCoCreationPage'
-import InspirationAdminNeedsPage from './pages/InspirationAdminNeedsPage'
-import InspirationSubmitPage from './pages/InspirationSubmitPage'
-import InspirationNeedDetailPage from './pages/InspirationNeedDetailPage'
-import WechatGroupQrPage from './pages/WechatGroupQrPage'
-import AdminLoginPage from './pages/AdminLoginPage'
-import AdminDashboardPage from './pages/AdminDashboardPage'
 import AppErrorBoundary from './components/AppErrorBoundary'
 import FloatingActions from './components/FloatingActions'
 import { shouldHideGlobalChrome } from './utils/layoutChrome'
+
+const HomePage = lazy(() => import('./pages/HomePage'))
+const ExpertEdit = lazy(() => import('./pages/ExpertEdit'))
+const ProfileHelperPage = lazy(() => import('./pages/ProfileHelperPage'))
+const AgentLinkLibraryPage = lazy(() => import('./pages/AgentLinkLibraryPage'))
+const AgentLinkChatPage = lazy(() => import('./pages/AgentLinkChatPage'))
+const SourceFeedPage = lazy(() => import('./pages/SourceFeedPage'))
+const Login = lazy(() => import('./pages/Login'))
+const Register = lazy(() => import('./pages/Register'))
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
+const WatchaAuthCallback = lazy(() => import('./pages/WatchaAuthCallback'))
+const LibraryPage = lazy(() => import('./pages/LibraryPage'))
+const MyFavoritesPage = lazy(() => import('./pages/MyFavoritesPage'))
+const MyPage = lazy(() => import('./pages/MyPage'))
+const InboxPage = lazy(() => import('./pages/InboxPage'))
+const AppsPage = lazy(() => import('./pages/AppsPage'))
+const AppsSkillLibraryPage = lazy(() => import('./pages/AppsSkillLibraryPage'))
+const AppsSkillDetailPage = lazy(() => import('./pages/AppsSkillDetailPage'))
+const AppsSkillLeaderboardPage = lazy(() => import('./pages/AppsSkillLeaderboardPage'))
+const AppsSkillProfilePage = lazy(() => import('./pages/AppsSkillProfilePage'))
+const AppsSkillPublishPage = lazy(() => import('./pages/AppsSkillPublishPage'))
+const AppsSkillSearchPage = lazy(() => import('./pages/AppsSkillSearchPage'))
+const AppsSkillSharePage = lazy(() => import('./pages/AppsSkillSharePage'))
+const AppsSkillWishesPage = lazy(() => import('./pages/AppsSkillWishesPage'))
+const MCPHubPage = lazy(() => import('./pages/MCPHubPage'))
+const MCPHubDetailPage = lazy(() => import('./pages/MCPHubDetailPage'))
+const MCPHubLeaderboardPage = lazy(() => import('./pages/MCPHubLeaderboardPage'))
+const MCPHubWishesPage = lazy(() => import('./pages/MCPHubWishesPage'))
+const MCPHubProfilePage = lazy(() => import('./pages/MCPHubProfilePage'))
+const MCPHubPublishPage = lazy(() => import('./pages/MCPHubPublishPage'))
+const MCPHubSharePage = lazy(() => import('./pages/MCPHubSharePage'))
+const ArcadePage = lazy(() => import('./pages/ArcadePage'))
+const TopicDetail = lazy(() => import('./pages/TopicDetail'))
+const TopicLinkPage = lazy(() => import('./pages/TopicLinkPage'))
+const TopicLinkDetailPage = lazy(() => import('./pages/TopicLinkDetailPage'))
+const ThinkingPage = lazy(() => import('./pages/ThinkingPage'))
+const ActivitiesPage = lazy(() => import('./pages/ActivitiesPage'))
+const YouthTedPage = lazy(() => import('./pages/YouthTedPage'))
+const ChallengeCupTopicPage = lazy(() => import('./pages/ChallengeCupTopicPage'))
+const InspirationCoCreationPage = lazy(() => import('./pages/InspirationCoCreationPage'))
+const InspirationAdminNeedsPage = lazy(() => import('./pages/InspirationAdminNeedsPage'))
+const InspirationSubmitPage = lazy(() => import('./pages/InspirationSubmitPage'))
+const InspirationNeedDetailPage = lazy(() => import('./pages/InspirationNeedDetailPage'))
+const WechatGroupQrPage = lazy(() => import('./pages/WechatGroupQrPage'))
+const AdminLoginPage = lazy(() => import('./pages/AdminLoginPage'))
+const AdminDashboardPage = lazy(() => import('./pages/AdminDashboardPage'))
+
+const routeFallback = (
+  <div className="mx-auto w-full max-w-6xl px-4 py-10" role="status">
+    <p className="text-sm text-slate-500">正在打开页面…</p>
+  </div>
+)
 
 function App() {
   const location = useLocation()
@@ -63,7 +78,8 @@ function App() {
                 : 'pt-14 pb-[calc(7.5rem+env(safe-area-inset-bottom))] md:pb-[env(safe-area-inset-bottom)]'
           }`}
         >
-          <Routes>
+          <Suspense fallback={routeFallback}>
+            <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/admin/login" element={<AdminLoginPage />} />
             <Route path="/admin/qr" element={<WechatGroupQrPage adminMode />} />
@@ -92,6 +108,13 @@ function App() {
             <Route path="/topiclink" element={<TopicLinkPage />} />
             <Route path="/topiclink/:id" element={<TopicLinkDetailPage />} />
             <Route path="/skillhub" element={<AppsSkillLibraryPage />} />
+            <Route path="/mcphub" element={<MCPHubPage />} />
+            <Route path="/mcphub/leaderboard" element={<MCPHubLeaderboardPage />} />
+            <Route path="/mcphub/wishes" element={<MCPHubWishesPage />} />
+            <Route path="/mcphub/profile" element={<MCPHubProfilePage />} />
+            <Route path="/mcphub/publish" element={<MCPHubPublishPage />} />
+            <Route path="/mcphub/share" element={<MCPHubSharePage />} />
+            <Route path="/mcphub/:mcpId" element={<MCPHubDetailPage />} />
             <Route path="/apps" element={<AppsPage />} />
             <Route path="/apps/skills" element={<Navigate to="/skillhub" replace />} />
             <Route path="/apps/skills/search" element={<AppsSkillSearchPage />} />
@@ -114,7 +137,8 @@ function App() {
             <Route path="/profile-helper/*" element={<ProfileHelperPage />} />
             <Route path="/agent-links" element={<AgentLinkLibraryPage />} />
             <Route path="/agent-links/:slug" element={<AgentLinkChatPage />} />
-          </Routes>
+            </Routes>
+          </Suspense>
         </main>
         {isAdminRoute || hideGlobalChrome || isTopicLinkRoute ? null : <Footer />}
         {isAdminRoute || hideGlobalChrome ? null : <FloatingActions />}

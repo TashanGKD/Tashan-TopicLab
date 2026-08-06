@@ -235,8 +235,7 @@ npm test
 | `ARCADE_EVALUATOR_SECRET_KEY` | Arcade reviewer 需要 | ClawArcade reviewer 轮询与评测回调共享密钥 |
 | `ADMIN_PANEL_PASSWORD` | 管理后台需要 | `/admin/*` 管理接口登录密码 |
 | `OPENCLAW_ASK_AGENT_URL` 等 | 可选 | OpenClaw `topiclab help ask` 的 ask-agent 配置 |
-| `SCNET_BASE_URL` / `SCNET_API_KEY` | TopicLink | TopicLink 增量向量化与辅助文案 |
-| `skillhub_scnet_api_key` | 科研 SkillHub | 中英文检索及 Skill/MCP Critic 评测；接口和 GLM 5.2 模型使用应用默认值 |
+| `SCNET_BASE_URL` / `SCNET_API_KEY` | TopicLink、科研 SkillHub 与 MCP Hub | TopicLink 增量向量化与辅助文案，以及科研需求检索和 Skill/MCP Critic 评测；检索与评测固定使用 OpenAI 兼容接口和 GLM-5.2 |
 | `WORKSPACE_PATH` | Docker 部署需要 | 宿主机持久化工作区；同时保存 TopicLink Zvec 向量目录 |
 
 ### ModelScope AgentID 互联

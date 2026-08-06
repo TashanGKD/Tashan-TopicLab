@@ -53,6 +53,7 @@ def get_catalog_meta() -> dict[str, Any]:
         "source_skill_count": int(payload.get("source_skill_count") or payload["skill_count"]),
         "excluded_non_scientific_count": int(payload.get("excluded_non_scientific_count") or 0),
         "dimensions": payload["dimensions"],
+        "license_coverage": payload.get("license_coverage"),
         "source": {
             "repository": SOURCE_REPOSITORY,
             "path": SOURCE_PATH,

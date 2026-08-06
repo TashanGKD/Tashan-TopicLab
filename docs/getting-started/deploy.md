@@ -49,9 +49,9 @@ Admin observability uses optional tuning variables:
 
 OpenClaw ask-agent is optional. Configure `OPENCLAW_ASK_AGENT_URL`, `OPENCLAW_ASK_AGENT_TOKEN`, `OPENCLAW_ASK_PROJECT_ID`, and `OPENCLAW_ASK_SESSION_ID` only when production should return ask-agent settings during bootstrap/renew so `topiclab help ask` can call the advisory service directly.
 
-**Research SkillHub** serves its checked-in catalog without additional secrets. Set only `skillhub_scnet_api_key` to enable model-assisted bilingual search and Critic evaluation; the SCNet endpoint, OpenAI-compatible protocol, and GLM 5.2 model have stable defaults. Search falls back to deterministic local retrieval when the provider is unavailable.
+**Research SkillHub and MCP Hub** serve their checked-in catalogs without additional secrets. Reuse `SCNET_API_KEY` to enable the shared AgentScope-assisted bilingual search and Critic evaluation; the SCNet endpoint, OpenAI-compatible protocol, and GLM-5.2 model have stable defaults. Existing deployments that only define `skillhub_scnet_api_key` remain compatible during the migration: `SCNET_API_KEY` takes precedence when both are present, and no immediate `DEPLOY_ENV` change is required. Only authenticated searches that can attempt the configured model consume model quota. Anonymous requests and deployments without a model key use deterministic local retrieval; provider failures are reported in the returned driver state before local retrieval is used.
 
-Skill and MCP evaluation runs in the built-in isolated worker. Its internal address, runner, state directory, Critic sources, endpoint, and model are application defaults rather than environment settings.
+Skill and MCP evaluation runs in the built-in isolated worker. Docker Compose wires its internal address automatically; split-process deployments can override that address with `CRITIC_WORKER_URL`. The runner, state directory, Critic sources, endpoint, and model retain application defaults.
 
 **WorldWeave is deployed independently.** Deploy and verify its public and refresh processes first, then configure these TopicLab `DEPLOY_ENV` values:
 
@@ -86,6 +86,37 @@ curl -fsS https://world.tashan.chat/api/v1/skill-hub/skills >/dev/null
 docker compose --profile reviewer ps clawarcade-reviewer
 docker compose --profile reviewer logs --tail=100 clawarcade-reviewer
 ```
+
+### Science MCP Hub release gate
+
+The MCP Hub is a read-only research discovery surface. A deployment is ready to
+be called a local or external release only after the following contract checks
+pass against the same base URL:
+
+```bash
+# Browser entry and catalog invariants
+curl -fsS https://<host>/mcphub >/dev/null
+curl -fsS https://<host>/api/v1/mcp-hub/meta | jq '{active_catalog_count, retired_archive_excluded}'
+
+# Agent discovery contract
+curl -fsS https://<host>/api/v1/mcp-hub/science-catalog/finder/capabilities \
+  | jq '.agent_api | {read_only, catalog_scope, search, stream}'
+curl -fsS -X POST https://<host>/api/v1/mcp-hub/science-catalog/find \
+  -H 'content-type: application/json' \
+  -d '{"query":"UniProt 蛋白质数据","limit":5}' \
+  | jq '{query,total,results:(.results|length)}'
+
+# Detail and evidence page
+curl -fsS https://<host>/api/v1/mcp-hub/mcps/<mcp-id> >/dev/null
+curl -fsS https://<host>/api/v1/mcp-hub/mcps/<mcp-id>/content \
+  | jq '{format,content_type}'
+```
+
+The release gate does not install, start, invoke, or audit a third-party MCP;
+it only verifies the Hub's catalog, evidence, and read-only discovery
+contracts. The local acceptance target is `127.0.0.1:3000` / `127.0.0.1:8001`.
+An external URL, host, and deployment credentials must be supplied before a
+public release can be claimed.
 
 The reviewer service is optional. If `ARCADE_EVALUATOR_SECRET_KEY` is intentionally absent, production deploy can still serve TopicLab; Arcade `local_subprocess` tasks simply will not receive automatic evaluator replies.
 

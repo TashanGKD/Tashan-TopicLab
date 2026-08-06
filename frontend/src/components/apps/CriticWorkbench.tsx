@@ -12,8 +12,29 @@ const REVIEW_STEPS = [
 ] as const
 
 const DEFAULT_TARGETS = {
-  skill: 'https://github.com/anthropics/skills/tree/main/skills/doc-coauthoring',
-  mcp: 'https://github.com/upstash/context7',
+  skill: '',
+  mcp: '',
+} as const
+
+type CriticKind = keyof typeof DEFAULT_TARGETS
+
+const TARGET_CONFIGS = {
+  skill: {
+    kind: 'skill' as const,
+    title: 'Skill 评测',
+    heading: '科研 Skill 评测',
+    description: '登录后可提交公开 Skill 仓库，查看适用范围、使用建议与社区评测结果。',
+    label: 'Skill 仓库地址',
+    placeholder: 'https://github.com/owner/repo/tree/main/skills/example',
+  },
+  mcp: {
+    kind: 'mcp' as const,
+    title: 'MCP 评测',
+    heading: '科研 MCP 评测',
+    description: '登录后可提交公开 MCP 仓库或包名，查看适用范围、使用建议与社区评测结果。',
+    label: 'MCP 仓库地址或包名',
+    placeholder: '@scope/mcp-server 或 https://github.com/owner/mcp-server',
+  },
 } as const
 
 const EVALUATION_CALLS = [
@@ -53,9 +74,9 @@ function jobIdOf(job: CriticEvaluationJob | null) {
   return job?.job_id || job?.id || ''
 }
 
-export default function CriticWorkbench() {
+export default function CriticWorkbench({ kind }: { kind: CriticKind }) {
   const [targets, setTargets] = useState({ ...DEFAULT_TARGETS })
-  const [submittedKind, setSubmittedKind] = useState<'skill' | 'mcp'>('skill')
+  const [submittedKind, setSubmittedKind] = useState<CriticKind>(kind)
   const [capabilities, setCapabilities] = useState<CriticCapabilities | null>(null)
   const [job, setJob] = useState<CriticEvaluationJob | null>(null)
   const [loadingKind, setLoadingKind] = useState<'skill' | 'mcp' | null>(null)
@@ -164,16 +185,17 @@ export default function CriticWorkbench() {
   const terminalCallFailure = terminal && job?.status !== 'completed' && failedCall != null
   const displayedStepLabel = terminalCallFailure ? failedCall.title : currentStepLabel
   const displayedProgress = terminalCallFailure ? completedCallCount : visualProgress
+  const targetConfig = TARGET_CONFIGS[kind]
 
-  const submit = async (kind: 'skill' | 'mcp') => {
-    const target = targets[kind].trim()
+  const submit = async (targetKind: CriticKind) => {
+    const target = targets[targetKind].trim()
     if (!target || !capabilities?.worker_available) return
-    setLoadingKind(kind)
-    setSubmittedKind(kind)
+    setLoadingKind(targetKind)
+    setSubmittedKind(targetKind)
     setError(null)
     setJob(null)
     try {
-      const response = await skillHubApi.submitCriticEvaluation({ kind, target })
+      const response = await skillHubApi.submitCriticEvaluation({ kind: targetKind, target })
       setJob(response.data)
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : '提交评测失败'
@@ -193,10 +215,10 @@ export default function CriticWorkbench() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
             <h3 id="critic-workbench-title" className="text-lg font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>
-              评测 Skill 与 MCP
+              {targetConfig.heading}
             </h3>
             <p className="mt-1 text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
-              登录后可提交公开仓库评测；仓库内容与任务摘要会发送给 SCNet 模型，并实施调用配额保护。
+              {targetConfig.description}
             </p>
             </div>
             <span
@@ -207,7 +229,7 @@ export default function CriticWorkbench() {
                 className={`h-2 w-2 rounded-full ${capabilities == null ? 'animate-pulse' : ''}`}
                 style={{ backgroundColor: capabilities == null ? '#94a3b8' : capabilities.worker_available ? '#10b981' : '#f59e0b' }}
               />
-              {capabilities == null ? '正在连接评测服务' : capabilities.worker_available ? '评测服务可用' : '评测服务暂不可用'}
+              {capabilities == null ? '正在准备评测' : capabilities.worker_available ? '可开始评测' : '暂时无法评测'}
             </span>
           </div>
 
@@ -235,52 +257,36 @@ export default function CriticWorkbench() {
               ) : null}
             </div>
           ) : (
-            <div className="mt-4 grid divide-y border-y sm:grid-cols-2 sm:divide-x sm:divide-y-0" style={{ borderColor: 'var(--border-default)' }}>
-            {([
-              {
-                kind: 'skill' as const,
-                title: 'Skill 评测',
-                label: 'Skill 仓库地址',
-                placeholder: 'https://github.com/owner/repo/tree/main/skills/example',
-              },
-              {
-                kind: 'mcp' as const,
-                title: 'MCP 评测',
-                label: 'MCP 仓库地址或包名',
-                placeholder: '@scope/mcp-server 或 https://github.com/owner/mcp-server',
-              },
-            ]).map((entry) => (
+            <div className="mt-4 border-y" style={{ borderColor: 'var(--border-default)' }}>
               <form
-                key={entry.kind}
-                className="min-w-0 py-4 first:pr-0 last:pl-0 sm:first:pr-4 sm:last:pl-4"
+                className="min-w-0 py-4"
                 onSubmit={(event) => {
                   event.preventDefault()
-                  void submit(entry.kind)
+                  void submit(targetConfig.kind)
                 }}
               >
-                <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{entry.title}</div>
+                <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{targetConfig.title}</div>
                 <label className="mt-2 block">
-                  <span className="sr-only">{entry.label}</span>
+                  <span className="sr-only">{targetConfig.label}</span>
                   <input
-                    aria-label={entry.label}
-                    value={targets[entry.kind]}
+                    aria-label={targetConfig.label}
+                    value={targets[targetConfig.kind]}
                     maxLength={2048}
-                    onChange={(event) => setTargets((current) => ({ ...current, [entry.kind]: event.target.value }))}
-                    placeholder={entry.placeholder}
+                    onChange={(event) => setTargets((current) => ({ ...current, [targetConfig.kind]: event.target.value }))}
+                    placeholder={targetConfig.placeholder}
                     className="h-11 w-full rounded-md border px-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500/30"
                     style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-page)', color: 'var(--text-primary)' }}
                   />
                 </label>
                 <button
                   type="submit"
-                  aria-label={`开始 ${entry.title}`}
-                  disabled={loadingKind !== null || !targets[entry.kind].trim() || !capabilities?.worker_available}
+                  aria-label={`开始 ${targetConfig.title}`}
+                  disabled={loadingKind !== null || !targets[targetConfig.kind].trim() || !capabilities?.worker_available}
                   className="mt-3 h-10 w-full rounded-md bg-indigo-700 px-4 text-sm font-medium text-white transition-colors hover:bg-indigo-800 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
-                  {loadingKind === entry.kind ? '提交中' : `评测 ${entry.kind === 'skill' ? 'Skill' : 'MCP'}`}
+                  {loadingKind === targetConfig.kind ? '提交中' : `评测 ${targetConfig.kind === 'skill' ? 'Skill' : 'MCP'}`}
                 </button>
               </form>
-            ))}
             </div>
           )}
           {error ? <p role="alert" className="mt-3 text-sm text-red-700">{error}</p> : null}

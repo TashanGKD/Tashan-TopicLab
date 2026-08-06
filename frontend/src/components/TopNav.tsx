@@ -12,7 +12,7 @@ const navLinks = [
   { to: '/', label: '首页', match: (path: string) => path === '/' },
   { to: '/info', label: '世界脉络', match: (path: string) => path.startsWith('/info') || path.startsWith('/source-feed') },
   { to: '/topiclink', label: 'TopicLink', match: (path: string) => path.startsWith('/topiclink') },
-  { to: '/skillhub', label: '科研 SkillHub', match: (path: string) => path.startsWith('/skillhub') },
+  { to: '/mcphub', label: '科研 Skill / MCP', match: (path: string) => path.startsWith('/skillhub') || path.startsWith('/mcphub') },
   { to: '/youth-ted', label: '青年TED', match: (path: string) => path.startsWith('/youth-ted') },
   { to: '/challenge-cup-topic', label: '挑战杯专题', match: (path: string) => path.startsWith('/challenge-cup-topic') },
   { to: '/inspiration-co-creation', label: '灵感共创队', match: (path: string) => path.startsWith('/inspiration-co-creation') },
@@ -50,6 +50,17 @@ const mobileTabs = [
       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7.25 8.5h4.5M12.25 15.5h4.5" />
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M10.75 15.5H8.5a4 4 0 010-8h2.25M13.25 8.5h2.25a4 4 0 010 8h-2.25" />
+      </svg>
+    ),
+  },
+  {
+    to: '/mcphub',
+    label: '科研',
+    match: (path: string) => path.startsWith('/skillhub') || path.startsWith('/mcphub'),
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7.5 7.5h9v9h-9z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4.5 9.75V6.5A2 2 0 016.5 4.5h3.25M19.5 9.75V6.5a2 2 0 00-2-2h-3.25M4.5 14.25v3.25a2 2 0 002 2h3.25M19.5 14.25v3.25a2 2 0 01-2 2h-3.25" />
       </svg>
     ),
   },

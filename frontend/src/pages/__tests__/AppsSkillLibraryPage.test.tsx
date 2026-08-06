@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { skillHubApi } from '../../api/client'
+import CriticWorkbench from '../../components/apps/CriticWorkbench'
 import AppsSkillLibraryPage from '../AppsSkillLibraryPage'
 import AppsSkillDetailPage from '../AppsSkillDetailPage'
 import AppsSkillProfilePage from '../AppsSkillProfilePage'
@@ -278,17 +279,21 @@ describe('SkillHub pages', () => {
     renderSkillHubHome()
 
     expect((await screen.findAllByText('AlphaFold2')).length).toBeGreaterThan(0)
+    expect(screen.getByRole('heading', { name: '科研 Skill / MCP' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '科研 Skill' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: '科研 MCP' })).toHaveAttribute('href', '/mcphub')
     expect(screen.getByLabelText('Skill 仓库地址')).toBeInTheDocument()
-    expect(screen.getByLabelText('MCP 仓库地址或包名')).toBeInTheDocument()
-    expect(screen.getByText(/收录上千项科研技能/)).toBeInTheDocument()
+    expect(screen.queryByLabelText('MCP 仓库地址或包名')).not.toBeInTheDocument()
+    expect(screen.getByText(/按研究领域、阶段和任务/)).toBeInTheDocument()
     expect(screen.queryByText(/1391/)).not.toBeInTheDocument()
-    expect(screen.getByText(/默认示例：生命科学 → 执行采集 → 模拟建模/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '知识图领域：生命科学' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: '知识图研究阶段：执行采集' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: '知识图功能分工：模拟建模' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText(/依次选择研究领域、阶段和功能/)).toBeInTheDocument()
+    const researchPath = screen.getByRole('group', { name: '科研路径选择' })
+    expect(within(researchPath).getByRole('button', { name: '领域：生命科学' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(researchPath).getByRole('button', { name: '研究阶段：执行采集' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(researchPath).getByRole('button', { name: '功能分工：模拟建模' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.queryByRole('button', { name: '社区应用' })).not.toBeInTheDocument()
     expect(mockedListSkills).not.toHaveBeenCalled()
-    expect(screen.getByText('评测服务暂不可用')).toBeInTheDocument()
+    expect(screen.getByText('暂时无法评测')).toBeInTheDocument()
     expect(screen.queryByText(/Critic Worker|隔离环境|执行第三方代码/)).not.toBeInTheDocument()
     await waitFor(() => expect(mockedListScienceCatalog).toHaveBeenLastCalledWith(
       expect.objectContaining({ domain: '生命科学', stage: '执行采集', function: '模拟建模' }),
@@ -304,11 +309,12 @@ describe('SkillHub pages', () => {
   it('renders as an independent module without an application breadcrumb', async () => {
     renderSkillHubHome()
 
-    expect(await screen.findByRole('heading', { name: '科研 SkillHub' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '科研 Skill / MCP' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '科研 SkillHub' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '应用' })).not.toBeInTheDocument()
   })
 
-  it('prefills one Skill and Context7 without showing example choices or submitting', async () => {
+  it('keeps evaluation targets empty until the user enters a repository or package', async () => {
     mockedGetCriticCapabilities.mockResolvedValue({
       data: {
         worker_available: true,
@@ -319,16 +325,14 @@ describe('SkillHub pages', () => {
     } as any)
 
     renderSkillHubHome()
-    await screen.findByText('评测服务可用')
-    expect(screen.getByText(/登录后可提交公开仓库评测/)).toBeInTheDocument()
-    expect(screen.getAllByText(/发送给 SCNet 模型/).length).toBeGreaterThan(0)
+    await screen.findByText('可开始评测')
+    expect(screen.getByText(/登录后可提交公开 Skill 仓库，查看适用范围/)).toBeInTheDocument()
+    expect(screen.queryByText(/SCNet|AgentScope|调用配额/)).not.toBeInTheDocument()
 
-    expect(screen.getByLabelText('Skill 仓库地址')).toHaveValue(
-      'https://github.com/anthropics/skills/tree/main/skills/doc-coauthoring',
-    )
-    expect(screen.getByRole('button', { name: '开始 Skill 评测' })).toBeEnabled()
-    expect(screen.getByLabelText('MCP 仓库地址或包名')).toHaveValue('https://github.com/upstash/context7')
-    expect(screen.getByRole('button', { name: '开始 MCP 评测' })).toBeEnabled()
+    expect(screen.getByLabelText('Skill 仓库地址')).toHaveValue('')
+    expect(screen.getByRole('button', { name: '开始 Skill 评测' })).toBeDisabled()
+    expect(screen.queryByLabelText('MCP 仓库地址或包名')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '开始 MCP 评测' })).not.toBeInTheDocument()
     expect(screen.queryByText('试用示例')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /使用 (Skill|MCP) 示例/ })).not.toBeInTheDocument()
     expect(mockedSubmitCriticEvaluation).not.toHaveBeenCalled()
@@ -369,9 +373,9 @@ describe('SkillHub pages', () => {
       },
     } as any)
     renderSkillHubHome()
-    await screen.findByText('评测服务可用')
+    await screen.findByText('可开始评测')
     expect(screen.getByLabelText('Skill 仓库地址')).toBeInTheDocument()
-    expect(screen.getByLabelText('MCP 仓库地址或包名')).toBeInTheDocument()
+    expect(screen.queryByLabelText('MCP 仓库地址或包名')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('评测深度')).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Skill 仓库地址'), { target: { value: 'https://github.com/example/research-skill' } })
     fireEvent.click(screen.getByRole('button', { name: '开始 Skill 评测' }))
@@ -398,7 +402,7 @@ describe('SkillHub pages', () => {
     })
   })
 
-  it('submits MCP evaluation from its always-visible entry without a depth option', async () => {
+  it('submits MCP evaluation from the MCP-only workbench without a depth option', async () => {
     mockedGetCriticCapabilities.mockResolvedValue({
       data: {
         worker_available: true,
@@ -462,8 +466,9 @@ describe('SkillHub pages', () => {
       })
     })
 
-    renderSkillHubHome()
-    await screen.findByText('评测服务可用')
+    render(<CriticWorkbench kind="mcp" />)
+    await screen.findByText('可开始评测')
+    expect(screen.queryByLabelText('Skill 仓库地址')).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('MCP 仓库地址或包名'), { target: { value: '@scope/mcp-server' } })
     fireEvent.click(screen.getByRole('button', { name: '开始 MCP 评测' }))
 
@@ -522,7 +527,7 @@ describe('SkillHub pages', () => {
     } as any)
 
     renderSkillHubHome()
-    await screen.findByText('评测服务可用')
+    await screen.findByText('可开始评测')
     fireEvent.change(screen.getByLabelText('Skill 仓库地址'), { target: { value: 'https://github.com/example/research-skill' } })
     fireEvent.click(screen.getByRole('button', { name: '开始 Skill 评测' }))
 
@@ -538,26 +543,27 @@ describe('SkillHub pages', () => {
   it('filters the built-in catalog by domain stage and function', async () => {
     renderSkillHubHome()
     await screen.findAllByText('AlphaFold2')
-    const finder = (await screen.findByRole('heading', { name: '科研技能 Wiki' })).closest('section')
+    const finder = (await screen.findByRole('heading', { name: '按研究路径浏览技能' })).closest('section')
     expect(finder).toBeTruthy()
-    const graph = within(finder as HTMLElement).getByRole('group', { name: '科研能力沙漏图' })
+    const graph = within(finder as HTMLElement).getByRole('group', { name: '科研路径选择' })
     const activePath = within(finder as HTMLElement).getByRole('status', { name: '当前筛选路径' })
     expect(within(activePath).getByText('生命科学')).toBeInTheDocument()
     expect(within(activePath).getByText('执行采集')).toBeInTheDocument()
     expect(within(activePath).getByText('模拟建模')).toBeInTheDocument()
     expect(within(activePath).getByText('3 / 3')).toBeInTheDocument()
-    expect(within(graph).getByRole('button', { name: '知识图领域：生命科学' })).toHaveAttribute('data-route-state', 'selected')
-    expect(within(graph).getByRole('button', { name: '知识图功能分工：检索获取' })).toHaveAttribute('data-route-state', 'dimmed')
+    expect(within(graph).getByRole('button', { name: '领域：生命科学' })).toHaveAttribute('data-route-state', 'selected')
+    expect(within(graph).getByRole('button', { name: '功能分工：检索获取' })).toHaveAttribute('data-route-state', 'dimmed')
     await waitFor(() => {
       expect(mockedListScienceCatalog).toHaveBeenLastCalledWith(
         expect.objectContaining({ domain: '生命科学', stage: '执行采集', function: '模拟建模' }),
       )
     })
-    expect(await within(graph).findByRole('group', { name: 'Skill 叶节点' })).toBeInTheDocument()
+    expect(await within(graph).findByRole('group', { name: '相关Skill' })).toBeInTheDocument()
     fireEvent.click(within(finder as HTMLElement).getByRole('button', { name: '查看 1 项匹配技能' }))
     expect(within(finder as HTMLElement).getByRole('region', { name: '科研技能筛选结果' })).toHaveFocus()
     fireEvent.click(within(graph).getByRole('button', { name: '查看技能：AlphaFold2' }))
-    expect(within(graph).getByText('排序：功能偏好 → 可信状态 → 质量分 → 名称')).toBeInTheDocument()
+    expect(within(graph).getByText('已按当前研究路径筛选，可选择一项查看详情。')).toBeInTheDocument()
+    expect(within(graph).queryByText(/质量分|固定规则/)).not.toBeInTheDocument()
     expect(within(graph).queryByText(/来源核验|上游已核验|上游新鲜度/)).not.toBeInTheDocument()
     expect(screen.queryByText('来源核验')).not.toBeInTheDocument()
     expect(within(graph).getByTestId('stage-mobile-connector')).toHaveClass('lg:hidden')
@@ -628,26 +634,26 @@ describe('SkillHub pages', () => {
       handlers.onDone?.(done)
     })
     renderSkillHubHome()
-    const finder = (await screen.findByRole('heading', { name: '科研技能 Wiki' })).closest('section')
+    const finder = (await screen.findByRole('heading', { name: '按研究路径浏览技能' })).closest('section')
     expect(finder).toBeTruthy()
-    const graph = within(finder as HTMLElement).getByRole('group', { name: '科研能力沙漏图' })
+    const graph = within(finder as HTMLElement).getByRole('group', { name: '科研路径选择' })
     expect(within(graph).getByTestId('science-graph-connections')).toBeInTheDocument()
-    expect(within(graph).getByRole('group', { name: '领域星簇' })).toBeInTheDocument()
-    expect(within(graph).getByRole('group', { name: '研究阶段星簇' })).toBeInTheDocument()
-    expect(within(graph).getByRole('group', { name: '功能分工星簇' })).toBeInTheDocument()
+    expect(within(graph).getByRole('group', { name: '领域分类' })).toBeInTheDocument()
+    expect(within(graph).getByRole('group', { name: '研究阶段分类' })).toBeInTheDocument()
+    expect(within(graph).getByRole('group', { name: '功能分工分类' })).toBeInTheDocument()
     expect(within(graph).getByText('科研需求')).toBeInTheDocument()
     expect(within(graph).getByRole('heading', { name: '领域' })).toBeInTheDocument()
     expect(within(graph).getByRole('heading', { name: '研究阶段' })).toBeInTheDocument()
     expect(within(graph).getByRole('heading', { name: '功能分工' })).toBeInTheDocument()
     expect(within(finder as HTMLElement).queryByText(/AgentScope|SCNet|降级|配置已发现/)).not.toBeInTheDocument()
     expect(within(finder as HTMLElement).queryByLabelText('描述科研需求')).not.toBeInTheDocument()
-    await within(graph).findByRole('group', { name: 'Skill 叶节点' })
+    await within(graph).findByRole('group', { name: '相关Skill' })
 
     const searchInput = screen.getByLabelText('描述科研需求')
     const functionAll = screen.getByRole('button', { name: '功能：全部' })
     expect(functionAll.compareDocumentPosition(searchInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     fireEvent.change(searchInput, { target: { value: '我想分析单细胞转录组细胞类型' } })
-    fireEvent.click(screen.getByRole('button', { name: '搜索科研技能' }))
+    fireEvent.click(screen.getByRole('button', { name: '查找科研技能' }))
 
     const catalogResults = await screen.findByRole('region', { name: '科研技能目录结果' })
     expect(screen.getByRole('button', { name: '领域：全部' })).toHaveAttribute('aria-pressed', 'true')
@@ -670,18 +676,18 @@ describe('SkillHub pages', () => {
     await act(async () => finishStream?.())
     expect(await screen.findByText('推荐结果 1 项')).toBeInTheDocument()
     expect(screen.getByRole('region', { name: '技能详情：Single Cell Annotation' })).toBeInTheDocument()
-    expect(within(finder as HTMLElement).getByRole('button', { name: '知识图领域：生命科学' })).toHaveAttribute('aria-pressed', 'true')
-    expect(within(finder as HTMLElement).getByRole('button', { name: '知识图研究阶段：执行采集' })).toHaveAttribute('aria-pressed', 'true')
-    expect(within(finder as HTMLElement).getByRole('button', { name: '知识图功能分工：模拟建模' })).toHaveAttribute('aria-pressed', 'true')
-    expect(within(graph).getByRole('group', { name: 'Skill 叶节点' })).toBeInTheDocument()
+    expect(within(finder as HTMLElement).getByRole('button', { name: '领域：生命科学' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(finder as HTMLElement).getByRole('button', { name: '研究阶段：执行采集' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(finder as HTMLElement).getByRole('button', { name: '功能分工：模拟建模' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(graph).getByRole('group', { name: '相关Skill' })).toBeInTheDocument()
     expect(graph.querySelector('[data-edge-id="domain:生命科学"]')).toHaveAttribute('data-active', 'true')
     expect(graph.querySelector('[data-edge-id="stage:执行采集"]')).toHaveAttribute('data-active', 'true')
     expect(graph.querySelector('[data-edge-id="function:模拟建模"]')).toHaveAttribute('data-active', 'true')
-    fireEvent.mouseEnter(within(finder as HTMLElement).getByRole('button', { name: '知识图功能分工：检索获取' }))
+    fireEvent.mouseEnter(within(finder as HTMLElement).getByRole('button', { name: '功能分工：检索获取' }))
     await waitFor(() => {
       expect(graph.querySelector('[data-edge-id="function:检索获取"]')).toHaveAttribute('data-hot', 'true')
     })
-    fireEvent.mouseLeave(within(finder as HTMLElement).getByRole('button', { name: '知识图功能分工：检索获取' }))
+    fireEvent.mouseLeave(within(finder as HTMLElement).getByRole('button', { name: '功能分工：检索获取' }))
     expect(within(finder as HTMLElement).queryByText('Single Cell Annotation')).not.toBeInTheDocument()
     expect(within(finder as HTMLElement).getAllByText('AlphaFold2')).toHaveLength(2)
     expect(within(finder as HTMLElement).getByRole('button', { name: '查看技能：AlphaFold2' })).toHaveAttribute('aria-pressed', 'true')
@@ -699,15 +705,15 @@ describe('SkillHub pages', () => {
 
   it('returns from a browsed path to the whole graph without coupling that action to search', async () => {
     renderSkillHubHome()
-    const finder = (await screen.findByRole('heading', { name: '科研技能 Wiki' })).closest('section')
+    const finder = (await screen.findByRole('heading', { name: '按研究路径浏览技能' })).closest('section')
     expect(finder).toBeTruthy()
     const resultRegion = within(finder as HTMLElement).getByRole('region', { name: '科研技能筛选结果' })
-    fireEvent.click(within(resultRegion).getByRole('button', { name: '返回全图' }))
+    fireEvent.click(within(resultRegion).getByRole('button', { name: '清除路径' }))
 
     expect(within(finder as HTMLElement).queryByRole('region', { name: '科研技能筛选结果' })).not.toBeInTheDocument()
-    expect(within(finder as HTMLElement).getByRole('button', { name: '知识图领域：生命科学' })).toHaveAttribute('aria-pressed', 'false')
-    expect(within(finder as HTMLElement).getByRole('button', { name: '知识图研究阶段：执行采集' })).toHaveAttribute('aria-pressed', 'false')
-    expect(within(finder as HTMLElement).getByRole('button', { name: '知识图功能分工：模拟建模' })).toHaveAttribute('aria-pressed', 'false')
+    expect(within(finder as HTMLElement).getByRole('button', { name: '领域：生命科学' })).toHaveAttribute('aria-pressed', 'false')
+    expect(within(finder as HTMLElement).getByRole('button', { name: '研究阶段：执行采集' })).toHaveAttribute('aria-pressed', 'false')
+    expect(within(finder as HTMLElement).getByRole('button', { name: '功能分工：模拟建模' })).toHaveAttribute('aria-pressed', 'false')
     expect(within(finder as HTMLElement).queryByLabelText('描述科研需求')).not.toBeInTheDocument()
     expect(screen.getAllByLabelText('描述科研需求')).toHaveLength(1)
     await waitFor(() => {
@@ -731,14 +737,14 @@ describe('SkillHub pages', () => {
     })
     renderSkillHubHome()
     fireEvent.change(screen.getByLabelText('描述科研需求'), { target: { value: 'zzqvorn blxkpt' } })
-    fireEvent.click(screen.getByRole('button', { name: '搜索科研技能' }))
+    fireEvent.click(screen.getByRole('button', { name: '查找科研技能' }))
     const catalogResults = await screen.findByRole('region', { name: '科研技能目录结果' })
     expect(await within(catalogResults).findByText(/没有找到可靠匹配/)).toBeInTheDocument()
     expect(within(catalogResults).getByText(/请补充研究对象、当前阶段或期望产物后再搜索/)).toBeInTheDocument()
 
     mockedStreamScienceSkills.mockRejectedValueOnce(new Error('network unavailable'))
     fireEvent.change(screen.getByLabelText('描述科研需求'), { target: { value: '蛋白质结构预测' } })
-    fireEvent.click(screen.getByRole('button', { name: '搜索科研技能' }))
+    fireEvent.click(screen.getByRole('button', { name: '查找科研技能' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('搜索暂时不可用，请稍后重试。')
     expect(screen.getByLabelText('描述科研需求')).toHaveValue('蛋白质结构预测')
 
@@ -765,7 +771,7 @@ describe('SkillHub pages', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
-  it('renders detail page with application-first framing and dual naming', async () => {
+  it('renders a reader-facing skill detail without implementation framing', async () => {
     render(
       <MemoryRouter initialEntries={['/apps/skills/literature-map']}>
         <Routes>
@@ -774,9 +780,9 @@ describe('SkillHub pages', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('该对象在前台按应用展示；其底层能力形态仍然是 Skill，因此会保留版本、安装命令、全文说明，以及按“几他山石”展示的售价信息。')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '下载 / 安装应用' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '查看 Skill 全文说明' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '下载 / 安装' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '查看完整使用说明' })).toBeInTheDocument()
+    expect(screen.queryByText(/底层能力形态|Skill 全文说明|应用 \/ Skill/)).not.toBeInTheDocument()
   })
 
   it('shows a login prompt in profile when user is not authenticated', async () => {
