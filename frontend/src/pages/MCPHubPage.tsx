@@ -58,10 +58,9 @@ function FinderStreamProgress({ phase, status, count }: { phase: FinderPhase; st
 }
 
 function finderResultSourceLabel(result: ScienceMcpFinderResponse) {
-  if (result.driver.mode === 'model') return 'AI 已完成科研路径理解与候选复核。'
-  if (result.driver.mode === 'model_route_local_rank') return 'AI 已完成科研路径理解；候选顺序由目录匹配完成。'
-  if (result.driver.configured) return 'AI 服务本次未完成；当前结果来自目录匹配。'
-  return '当前结果来自目录匹配。'
+  if (result.driver.mode === 'model') return '已结合需求语义与科研分类完成推荐。'
+  if (result.driver.mode === 'model_route_local_rank') return '已理解需求，并结合目录信息完成排序。'
+  return '已根据当前目录完成推荐。'
 }
 
 function isTrusted(item: ScienceMcpCatalogItem) {
@@ -168,7 +167,7 @@ function McpRow({ item, selected, onSelect }: { item: ScienceMcpCatalogItem; sel
 }
 
 function McpCatalogDetail({ item }: { item: ScienceMcpCatalogItem | null }) {
-  if (!item) return <AppsStatusCard>从左侧选择一个 MCP 查看详细信息。</AppsStatusCard>
+  if (!item) return <AppsStatusCard>选择一项 MCP 查看详细信息。</AppsStatusCard>
   const readiness = item.readiness === 'trusted' || isTrusted(item) ? READINESS_LABELS.trusted : READINESS_LABELS.provisional
   const toolNames = item.capability_evidence?.tool_names ?? []
   const capabilityMode = item.capability_evidence?.capability_mode || (toolNames.length ? 'tool_list' : 'task_description')
@@ -461,15 +460,6 @@ export default function MCPHubPage() {
     <div className="min-h-screen" style={{ backgroundColor: 'var(--bg-page)' }}>
       <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-7">
         <ResearchHubSwitch active="mcp" />
-        <section>
-          <h2 className="text-2xl font-serif font-semibold leading-tight sm:text-3xl" style={{ color: 'var(--text-primary)' }}>科研 MCP Hub</h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
-            收录科研 MCP，按领域、研究阶段与功能分工搜索与浏览。
-          </p>
-          <p className="mt-2 text-xs leading-5" style={{ color: 'var(--text-tertiary)' }}>
-            进入详情可收藏、提交评议并查看完整一手来源；候选提交会先进入待核对队列。
-          </p>
-        </section>
 
         <CriticWorkbench kind="mcp" />
 
@@ -498,7 +488,7 @@ export default function MCPHubPage() {
                 {searching ? `正在推荐 · 已找到 ${visibleItems.length} 项` : searchResult ? `推荐结果 ${visibleTotal} 项` : '科研 MCP 目录'}
               </h3>
               <p className="mt-1 text-xs leading-5" style={{ color: 'var(--text-tertiary)' }}>
-                {searchResult ? searchResult.route.rationale : `当前路径命中 ${total} 项，可继续筛选或打开详情。`}
+                {searchResult ? searchResult.route.rationale : `当前条件下有 ${total} 项，可调整筛选或选择一项查看详情。`}
               </p>
               {searchResult?.ranking?.criteria.length ? (
                 <p className="mt-1 text-xs leading-5" style={{ color: 'var(--text-tertiary)' }}>
@@ -532,8 +522,8 @@ export default function MCPHubPage() {
                 style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)', color: 'var(--text-secondary)' }}
               >
                 <option value="organized">按领域路径</option>
-                <option value="evidence">按资料核对</option>
-                <option value="tools">按工具数量</option>
+                <option value="evidence">资料较完整优先</option>
+                <option value="tools">工具较多优先</option>
                 <option value="name">按名称</option>
               </select>
             </label>
@@ -558,7 +548,7 @@ export default function MCPHubPage() {
               disabled={searching || !finderQuery.trim()}
               className="h-11 shrink-0 self-end rounded-md bg-teal-700 px-5 text-sm font-medium text-white transition-colors hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {searching ? '正在搜索…' : '搜索科研 MCP'}
+              {searching ? '正在搜索…' : '查找科研 MCP'}
             </button>
           </form>
           <p className="text-xs leading-5" style={{ color: 'var(--text-tertiary)' }}>
@@ -605,7 +595,7 @@ export default function MCPHubPage() {
                 {searchResult ? '没有找到匹配结果，请补充研究对象、当前阶段或期望产物后再搜索。' : '当前路径下没有匹配项，请减少一个筛选条件。'}
               </AppsStatusCard>
             ) : null}
-            {loading && !searchResult ? <AppsStatusCard>正在读取内置目录…</AppsStatusCard> : null}
+            {loading && !searchResult ? <AppsStatusCard>正在加载目录…</AppsStatusCard> : null}
             {!searchResult && !loading && items.length < total ? (
               <button
                 type="button"

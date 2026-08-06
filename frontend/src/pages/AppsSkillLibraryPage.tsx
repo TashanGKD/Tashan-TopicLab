@@ -175,7 +175,7 @@ function CatalogRow({ item, selected, onSelect }: { item: CatalogDisplayItem; se
 
 function CatalogDetail({ item }: { item: CatalogDisplayItem | null }) {
   if (!item) {
-    return <AppsStatusCard>从左侧选择一个 Skill 查看详细信息。</AppsStatusCard>
+    return <AppsStatusCard>选择一项 Skill 查看详细信息。</AppsStatusCard>
   }
   const readiness = READINESS_LABELS[item.readiness] || READINESS_LABELS.provisional
   const repositoryUrl = item.source_repository.startsWith('http')
@@ -403,14 +403,6 @@ export default function AppsSkillLibraryPage() {
     <div className="min-h-screen" style={{ backgroundColor: 'var(--bg-page)' }}>
       <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-7">
         <ResearchHubSwitch active="skill" />
-        <section>
-        <h2 className="text-2xl font-serif font-semibold leading-tight sm:text-3xl" style={{ color: 'var(--text-primary)' }}>
-          科研 SkillHub
-        </h2>
-        <p className="mt-2 max-w-3xl text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
-          收录上千项科研技能，按领域、研究阶段与功能分工搜索与浏览。
-        </p>
-      </section>
 
       <CriticWorkbench kind="skill" />
 
@@ -444,7 +436,7 @@ export default function AppsSkillLibraryPage() {
             <p className="mt-1 text-xs leading-5" style={{ color: 'var(--text-tertiary)' }}>
               {finderResult
                 ? finderResult.route.rationale
-                : `当前路径命中 ${catalogTotal} 项，可继续筛选或打开详情。`}
+                : `当前条件下有 ${catalogTotal} 项，可调整筛选或选择一项查看详情。`}
             </p>
             {finderResult?.ranking?.criteria.length ? (
               <p className="mt-1 text-xs leading-5" style={{ color: 'var(--text-tertiary)' }}>
@@ -485,7 +477,7 @@ export default function AppsSkillLibraryPage() {
             disabled={finderStreaming || !finderQuery.trim()}
             className="h-11 shrink-0 self-end rounded-md bg-teal-700 px-5 text-sm font-medium text-white transition-colors hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {finderStreaming ? '正在推荐…' : '搜索科研技能'}
+            {finderStreaming ? '正在推荐…' : '查找科研技能'}
           </button>
         </form>
         <p className="text-xs leading-5" style={{ color: 'var(--text-tertiary)' }}>
@@ -542,7 +534,7 @@ export default function AppsSkillLibraryPage() {
                 : '当前路径下没有匹配项，请减少一个筛选条件。'}
             </AppsStatusCard>
           ) : null}
-          {catalogLoading && !finderResult ? <AppsStatusCard>正在读取内置目录…</AppsStatusCard> : null}
+          {catalogLoading && !finderResult ? <AppsStatusCard>正在加载目录…</AppsStatusCard> : null}
         </div>
         <CatalogDetail item={selectedCatalogSkill} />
       </section>

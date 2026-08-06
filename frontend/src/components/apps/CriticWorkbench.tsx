@@ -229,7 +229,7 @@ export default function CriticWorkbench({ kind }: { kind: CriticKind }) {
                 className={`h-2 w-2 rounded-full ${capabilities == null ? 'animate-pulse' : ''}`}
                 style={{ backgroundColor: capabilities == null ? '#94a3b8' : capabilities.worker_available ? '#10b981' : '#f59e0b' }}
               />
-              {capabilities == null ? '正在连接评测服务' : capabilities.worker_available ? '评测服务可用' : '评测服务暂不可用'}
+              {capabilities == null ? '正在准备评测' : capabilities.worker_available ? '可开始评测' : '暂时无法评测'}
             </span>
           </div>
 

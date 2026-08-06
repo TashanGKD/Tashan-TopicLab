@@ -152,7 +152,7 @@ function TaxonomyBranch({
   onSelect: (value: string) => void
 }) {
   return (
-    <section className="relative z-10 min-w-0 lg:self-center" role="group" aria-label={`${title}星簇`}>
+    <section className="relative z-10 min-w-0 lg:self-center" role="group" aria-label={`${title}分类`}>
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: tone }} aria-hidden />
@@ -176,7 +176,7 @@ function TaxonomyBranch({
               <button
                 ref={(element) => registerNode(nodeId, element)}
                 type="button"
-                aria-label={`知识图${title}：${option}`}
+                aria-label={`${title}：${option}`}
                 aria-pressed={active}
                 data-route-state={active ? 'selected' : selectionDimmed ? 'dimmed' : 'available'}
                 onClick={() => onSelect(option)}
@@ -221,7 +221,7 @@ function ResearchStageHub({
 }) {
   const tone = '#2563eb'
   return (
-    <section className="relative z-10 min-w-0" role="group" aria-label="研究阶段星簇">
+    <section className="relative z-10 min-w-0" role="group" aria-label="研究阶段分类">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-blue-600" aria-hidden />
@@ -241,7 +241,7 @@ function ResearchStageHub({
               ref={(element) => registerNode(nodeId, element)}
               key={option}
               type="button"
-              aria-label={`知识图研究阶段：${option}`}
+              aria-label={`研究阶段：${option}`}
               aria-pressed={active}
               data-route-state={active ? 'selected' : selectionDimmed ? 'dimmed' : 'available'}
               onClick={() => onSelect(option)}
@@ -308,8 +308,8 @@ export default function FindScienceWorkbench({
   labels?: ScienceWorkbenchLabels
 }) {
   const copy = {
-    title: labels?.title ?? '科研技能 Wiki',
-    description: labels?.description ?? '从领域进入，选择研究阶段和需要完成的工作，即可查看相关技能。',
+    title: labels?.title ?? '按研究路径浏览技能',
+    description: labels?.description ?? '依次选择研究领域、阶段和功能，查看适合当前任务的技能。',
     resourceName: labels?.resourceName ?? '技能',
     resourcePlural: labels?.resourcePlural ?? '技能',
     resourceAriaName: labels?.resourceAriaName ?? 'Skill',
@@ -485,7 +485,7 @@ export default function FindScienceWorkbench({
           }
         `}</style>
         <div className="mb-4 flex items-center justify-between gap-3">
-          <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>点选节点浏览，逐层缩小{copy.resourcePlural}范围</p>
+          <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>依次选择领域、研究阶段和功能</p>
           <button
             type="button"
             onClick={resetGraph}
@@ -493,7 +493,7 @@ export default function FindScienceWorkbench({
             style={{ color: 'var(--text-secondary)' }}
             disabled={activeSteps === 0}
           >
-            查看全图
+            清除路径
           </button>
         </div>
 
@@ -541,7 +541,7 @@ export default function FindScienceWorkbench({
         <div
           ref={graphRef}
           role="group"
-          aria-label="科研能力沙漏图"
+          aria-label="科研路径选择"
           className={`relative isolate grid grid-cols-1 items-start ${showSkillBranch
             ? 'lg:grid-cols-[minmax(0,0.9fr)_minmax(0,0.68fr)_minmax(0,1fr)_minmax(0,0.9fr)] lg:gap-5'
             : 'lg:grid-cols-[minmax(0,1fr)_minmax(0,0.72fr)_minmax(0,1.15fr)] lg:gap-7'}`}
@@ -609,20 +609,20 @@ export default function FindScienceWorkbench({
                       className="text-xs font-medium underline underline-offset-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600/30"
                       style={{ color: '#0f766e' }}
                     >
-                      返回全图
+                      清除路径
                     </button>
                   </div>
                 </div>
                 <p className="mb-3 text-xs leading-5" style={{ color: 'var(--text-secondary)' }}>
-                  已按当前研究路径筛选，可继续点选查看详情。
+                  已按当前研究路径筛选，可选择一项查看详情。
                 </p>
                 {exploreLoading ? (
                   <div role="status" className="border-l-2 bg-white/80 px-3 py-3 text-sm" style={{ borderColor: '#7e22ce', color: 'var(--text-secondary)' }}>
-                    正在展开 {copy.resourceName} 叶节点…
+                    正在查找相关{copy.resourceName}…
                   </div>
                 ) : graphSkills.length > 0 ? (
                   <>
-                    <div className="relative grid gap-1.5" role="group" aria-label={`${copy.resourceAriaName} 叶节点`}>
+                    <div className="relative grid gap-1.5" role="group" aria-label={`相关${copy.resourceAriaName}`}>
                       {graphSkills.map((item, index) => {
                         const nodeId = `skill:${item.id}`
                         const active = focusedSkillId === item.id

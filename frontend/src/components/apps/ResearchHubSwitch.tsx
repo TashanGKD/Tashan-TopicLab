@@ -9,12 +9,12 @@ const options: Array<{ kind: ResearchHubKind; label: string; to: string }> = [
 
 export default function ResearchHubSwitch({ active }: { active: ResearchHubKind }) {
   return (
-    <section className="mb-6 border-b pb-5" style={{ borderColor: 'var(--border-default)' }}>
+    <section className="border-b pb-5" style={{ borderColor: 'var(--border-default)' }}>
       <h1 className="text-[2rem] font-serif font-semibold leading-tight sm:text-[2.5rem]" style={{ color: 'var(--text-primary)' }}>
         科研 Skill / MCP
       </h1>
       <p className="mt-2 max-w-3xl text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
-        从科研任务出发，切换浏览可复用的技能方法与可连接的 MCP 服务。
+        按研究领域、阶段和任务，查找可复用的科研技能或可连接的 MCP 服务。
       </p>
       <nav aria-label="科研资源类型" className="mt-4 inline-flex rounded-lg border p-1" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)' }}>
         {options.map((option) => {

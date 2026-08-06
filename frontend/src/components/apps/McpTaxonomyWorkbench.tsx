@@ -84,8 +84,8 @@ export default function McpTaxonomyWorkbench({
       initialSelection={selection}
       onExplore={onExplore}
       labels={{
-        title: '科研 MCP Wiki',
-        description: '从领域进入，选择研究阶段和需要完成的工作，即可查看相关 MCP。',
+        title: '按研究路径浏览 MCP',
+        description: '依次选择研究领域、阶段和功能，查看适合当前任务的 MCP。',
         resourceName: 'MCP',
         resourcePlural: 'MCP',
         resourceAriaName: 'MCP',
