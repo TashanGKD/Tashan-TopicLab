@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import os
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from threading import Lock
 
 from fastapi import HTTPException
 from sqlalchemy import text
@@ -17,10 +20,45 @@ LIMITS: dict[str, tuple[int, int, int]] = {
     "critic_evaluation": (600, 2, 5),
 }
 
+_memory_usage: dict[tuple[int, str], list[datetime]] = defaultdict(list)
+_memory_usage_lock = Lock()
+
 
 def _advisory_lock_id(user_id: int, operation: str) -> int:
     digest = hashlib.sha256(f"{user_id}:{operation}".encode("utf-8")).digest()
     return int.from_bytes(digest[:8], "big") & ((1 << 63) - 1)
+
+
+def _consume_in_memory_usage(
+    user_id: int,
+    operation: str,
+    *,
+    now: datetime,
+    window_seconds: int,
+    window_limit: int,
+    day_limit: int,
+) -> None:
+    """Apply the same quota contract for local development without a database."""
+
+    key = (user_id, operation)
+    window_start = now - timedelta(seconds=window_seconds)
+    day_start = now - timedelta(days=1)
+    with _memory_usage_lock:
+        recent = [created_at for created_at in _memory_usage[key] if created_at >= day_start]
+        if sum(created_at >= window_start for created_at in recent) >= window_limit:
+            raise HTTPException(
+                status_code=429,
+                detail="请求过于频繁，请稍后再试",
+                headers={"Retry-After": str(window_seconds)},
+            )
+        if len(recent) >= day_limit:
+            raise HTTPException(
+                status_code=429,
+                detail="今日模型调用额度已用完",
+                headers={"Retry-After": "3600"},
+            )
+        recent.append(now)
+        _memory_usage[key] = recent
 
 
 def consume_model_usage(user_id: int, operation: str) -> None:
@@ -33,6 +71,17 @@ def consume_model_usage(user_id: int, operation: str) -> None:
 
     window_seconds, window_limit, day_limit = LIMITS[operation]
     now = datetime.now(timezone.utc)
+    if not os.getenv("DATABASE_URL", "").strip():
+        _consume_in_memory_usage(
+            user_id,
+            operation,
+            now=now,
+            window_seconds=window_seconds,
+            window_limit=window_limit,
+            day_limit=day_limit,
+        )
+        return
+
     window_start = now - timedelta(seconds=window_seconds)
     day_start = now - timedelta(days=1)
     params = {

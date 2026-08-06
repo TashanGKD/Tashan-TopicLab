@@ -282,7 +282,7 @@ describe('SkillHub pages', () => {
     expect(screen.getByLabelText('MCP 仓库地址或包名')).toBeInTheDocument()
     expect(screen.getByText(/收录上千项科研技能/)).toBeInTheDocument()
     expect(screen.queryByText(/1391/)).not.toBeInTheDocument()
-    expect(screen.getByText(/默认示例：生命科学 → 执行采集 → 模拟建模/)).toBeInTheDocument()
+    expect(screen.getByText(/从领域进入，选择研究阶段和需要完成的工作/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '知识图领域：生命科学' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: '知识图研究阶段：执行采集' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: '知识图功能分工：模拟建模' })).toHaveAttribute('aria-pressed', 'true')
@@ -308,7 +308,7 @@ describe('SkillHub pages', () => {
     expect(screen.queryByRole('link', { name: '应用' })).not.toBeInTheDocument()
   })
 
-  it('prefills one Skill and Context7 without showing example choices or submitting', async () => {
+  it('keeps evaluation targets empty until the user enters a repository or package', async () => {
     mockedGetCriticCapabilities.mockResolvedValue({
       data: {
         worker_available: true,
@@ -320,15 +320,13 @@ describe('SkillHub pages', () => {
 
     renderSkillHubHome()
     await screen.findByText('评测服务可用')
-    expect(screen.getByText(/登录后可提交公开仓库评测/)).toBeInTheDocument()
-    expect(screen.getAllByText(/发送给 SCNet 模型/).length).toBeGreaterThan(0)
+    expect(screen.getByText(/登录后可提交公开仓库，查看适用范围/)).toBeInTheDocument()
+    expect(screen.queryByText(/SCNet|AgentScope|调用配额/)).not.toBeInTheDocument()
 
-    expect(screen.getByLabelText('Skill 仓库地址')).toHaveValue(
-      'https://github.com/anthropics/skills/tree/main/skills/doc-coauthoring',
-    )
-    expect(screen.getByRole('button', { name: '开始 Skill 评测' })).toBeEnabled()
-    expect(screen.getByLabelText('MCP 仓库地址或包名')).toHaveValue('https://github.com/upstash/context7')
-    expect(screen.getByRole('button', { name: '开始 MCP 评测' })).toBeEnabled()
+    expect(screen.getByLabelText('Skill 仓库地址')).toHaveValue('')
+    expect(screen.getByRole('button', { name: '开始 Skill 评测' })).toBeDisabled()
+    expect(screen.getByLabelText('MCP 仓库地址或包名')).toHaveValue('')
+    expect(screen.getByRole('button', { name: '开始 MCP 评测' })).toBeDisabled()
     expect(screen.queryByText('试用示例')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /使用 (Skill|MCP) 示例/ })).not.toBeInTheDocument()
     expect(mockedSubmitCriticEvaluation).not.toHaveBeenCalled()
@@ -557,7 +555,8 @@ describe('SkillHub pages', () => {
     fireEvent.click(within(finder as HTMLElement).getByRole('button', { name: '查看 1 项匹配技能' }))
     expect(within(finder as HTMLElement).getByRole('region', { name: '科研技能筛选结果' })).toHaveFocus()
     fireEvent.click(within(graph).getByRole('button', { name: '查看技能：AlphaFold2' }))
-    expect(within(graph).getByText('排序：功能偏好 → 可信状态 → 质量分 → 名称')).toBeInTheDocument()
+    expect(within(graph).getByText('已按当前研究路径筛选，可继续点选查看详情。')).toBeInTheDocument()
+    expect(within(graph).queryByText(/质量分|固定规则/)).not.toBeInTheDocument()
     expect(within(graph).queryByText(/来源核验|上游已核验|上游新鲜度/)).not.toBeInTheDocument()
     expect(screen.queryByText('来源核验')).not.toBeInTheDocument()
     expect(within(graph).getByTestId('stage-mobile-connector')).toHaveClass('lg:hidden')
@@ -765,7 +764,7 @@ describe('SkillHub pages', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
-  it('renders detail page with application-first framing and dual naming', async () => {
+  it('renders a reader-facing skill detail without implementation framing', async () => {
     render(
       <MemoryRouter initialEntries={['/apps/skills/literature-map']}>
         <Routes>
@@ -774,9 +773,9 @@ describe('SkillHub pages', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('该对象在前台按应用展示；其底层能力形态仍然是 Skill，因此会保留版本、安装命令、全文说明，以及按“几他山石”展示的售价信息。')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '下载 / 安装应用' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '查看 Skill 全文说明' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '下载 / 安装' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '查看完整使用说明' })).toBeInTheDocument()
+    expect(screen.queryByText(/底层能力形态|Skill 全文说明|应用 \/ Skill/)).not.toBeInTheDocument()
   })
 
   it('shows a login prompt in profile when user is not authenticated', async () => {

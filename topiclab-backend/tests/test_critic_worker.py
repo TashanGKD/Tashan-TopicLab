@@ -132,7 +132,7 @@ def test_worker_fails_closed_on_auth_contract_and_ownership(tmp_path):
 def test_worker_fails_closed_when_internal_auth_is_unconfigured(monkeypatch, tmp_path):
     from app.critic_worker import create_critic_worker_app
 
-    monkeypatch.delenv("skillhub_scnet_api_key", raising=False)
+    monkeypatch.delenv("SCNET_API_KEY", raising=False)
 
     async def fake_runner(request, job_dir):
         return {"status": "completed"}
@@ -299,10 +299,10 @@ def test_worker_uses_bundled_standard_runner_by_default(monkeypatch, tmp_path):
     assert client.get("/health").json()["ready"] is True
 
 
-def test_builtin_worker_stays_unready_without_the_single_skillhub_key(monkeypatch, tmp_path):
+def test_builtin_worker_stays_unready_without_the_shared_scnet_key(monkeypatch, tmp_path):
     from app import critic_worker
 
-    monkeypatch.delenv("skillhub_scnet_api_key", raising=False)
+    monkeypatch.delenv("SCNET_API_KEY", raising=False)
     app = critic_worker.create_critic_worker_app(state_dir=tmp_path)
 
     assert TestClient(app).get("/health").json()["ready"] is False

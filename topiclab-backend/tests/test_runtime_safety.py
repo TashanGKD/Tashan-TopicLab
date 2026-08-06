@@ -207,7 +207,7 @@ def test_critic_worker_compose_isolates_secrets_and_network():
     )[0]
 
     assert "env_file:" not in worker_block
-    assert "skillhub_scnet_api_key:" in worker_block
+    assert "SCNET_API_KEY:" in worker_block
     assert "HTTP_PROXY:" not in worker_block
     assert "HTTPS_PROXY:" not in worker_block
     assert '"host.docker.internal:host-gateway"' not in worker_block

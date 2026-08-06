@@ -806,7 +806,7 @@ def _critic_research_root(kernel_root: pathlib.Path) -> pathlib.Path:
 
 def _provider_environment(home: pathlib.Path | None = None) -> tuple[dict[str, str], str, str]:
     environment = _minimal_process_environment(home)
-    api_key = os.environ.get("skillhub_scnet_api_key", "").strip()
+    api_key = os.environ.get("SCNET_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError("CriticAgent provider credentials are unavailable")
     environment["CRITIC_WORKER_PROVIDER_KEY"] = api_key

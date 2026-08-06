@@ -19,7 +19,7 @@ NPM_PACKAGE_RE = re.compile(
 def derive_worker_token(api_key: str | None = None) -> str:
     """Derive a worker-only credential from the single configured provider key."""
 
-    secret = (api_key if api_key is not None else os.environ.get("skillhub_scnet_api_key", "")).strip()
+    secret = (api_key if api_key is not None else os.environ.get("SCNET_API_KEY", "")).strip()
     if not secret:
         return ""
     return hmac.new(secret.encode("utf-8"), WORKER_TOKEN_CONTEXT, hashlib.sha256).hexdigest()

@@ -12,8 +12,8 @@ const REVIEW_STEPS = [
 ] as const
 
 const DEFAULT_TARGETS = {
-  skill: 'https://github.com/anthropics/skills/tree/main/skills/doc-coauthoring',
-  mcp: 'https://github.com/upstash/context7',
+  skill: '',
+  mcp: '',
 } as const
 
 const EVALUATION_CALLS = [
@@ -196,7 +196,7 @@ export default function CriticWorkbench() {
               评测 Skill 与 MCP
             </h3>
             <p className="mt-1 text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
-              登录后可提交公开仓库评测；仓库内容与任务摘要会发送给 SCNet 模型，并实施调用配额保护。
+              登录后可提交公开仓库，查看适用范围、使用建议与社区评测结果。
             </p>
             </div>
             <span

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import type {
   ScienceSkillCatalogItem,
@@ -9,6 +9,15 @@ import type {
 
 
 type RouteSelection = Pick<ScienceSkillRoute, 'domain' | 'stage' | 'function'>
+export type ScienceWorkbenchRouteSelection = RouteSelection
+export type ScienceWorkbenchLabels = {
+  title?: string
+  description?: string
+  resourceName?: string
+  resourcePlural?: string
+  resourceAriaName?: string
+  showQualityScore?: boolean
+}
 type RouteKey = keyof RouteSelection
 type NodeRegistrar = (id: string, element: HTMLElement | null) => void
 
@@ -42,6 +51,8 @@ function readinessLabel(value: string) {
 function sourceReviewLabel(value: string) {
   if (value === 'manual_confirmed' || value === 'model_assisted_full_source_review') return '已复核原文'
   if (value === 'metadata_reviewed') return '已核对目录信息'
+  if (value === 'source_reviewed') return '已核对项目说明'
+  if (value === 'fast_metadata_triage') return '已核对公开资料'
   return '来源待核对'
 }
 
@@ -283,20 +294,41 @@ export default function FindScienceWorkbench({
   exploreTotal,
   exploreLoading,
   onExplore,
+  selection: controlledSelection,
+  initialSelection,
+  labels,
 }: {
   meta: ScienceSkillCatalogMeta | null
   exploreSkills: ScienceSkillCatalogItem[]
   exploreTotal: number
   exploreLoading: boolean
   onExplore: (route: RouteSelection) => void
+  selection?: RouteSelection
+  initialSelection?: RouteSelection
+  labels?: ScienceWorkbenchLabels
 }) {
-  const [selection, setSelection] = useState<RouteSelection>(DEFAULT_SELECTION)
+  const copy = {
+    title: labels?.title ?? '科研技能 Wiki',
+    description: labels?.description ?? '从领域进入，选择研究阶段和需要完成的工作，即可查看相关技能。',
+    resourceName: labels?.resourceName ?? '技能',
+    resourcePlural: labels?.resourcePlural ?? '技能',
+    resourceAriaName: labels?.resourceAriaName ?? 'Skill',
+    showQualityScore: labels?.showQualityScore ?? true,
+  }
+  const [selection, setSelection] = useState<RouteSelection>(controlledSelection ?? initialSelection ?? DEFAULT_SELECTION)
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null)
   const resultRegionRef = useRef<HTMLDivElement>(null)
   const graphRef = useRef<HTMLDivElement>(null)
   const nodeRefs = useRef(new Map<string, HTMLElement>())
   const [edges, setEdges] = useState<GraphEdge[]>([])
   const [hoveredNode, setHoveredNode] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (controlledSelection) {
+      setSelection(controlledSelection)
+      setSelectedSkillId(null)
+    }
+  }, [controlledSelection?.domain, controlledSelection?.stage, controlledSelection?.function])
   const columns = useMemo(() => [
     meta?.dimensions.domains ?? [],
     meta?.dimensions.stages ?? [],
@@ -410,10 +442,10 @@ export default function FindScienceWorkbench({
     >
       <div className="border-b px-4 py-4 sm:px-5" style={{ borderColor: 'var(--border-default)', backgroundColor: '#f8fafc' }}>
         <h3 id="science-wiki-title" className="text-xl font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>
-          科研技能 Wiki
+          {copy.title}
         </h3>
         <p className="mt-2 text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
-          默认示例：生命科学 → 执行采集 → 模拟建模。也可点选节点逐层浏览其他路径。
+          {copy.description}
         </p>
       </div>
 
@@ -453,7 +485,7 @@ export default function FindScienceWorkbench({
           }
         `}</style>
         <div className="mb-4 flex items-center justify-between gap-3">
-          <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>点选节点浏览，逐层缩小技能范围</p>
+          <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>点选节点浏览，逐层缩小{copy.resourcePlural}范围</p>
           <button
             type="button"
             onClick={resetGraph}
@@ -468,11 +500,11 @@ export default function FindScienceWorkbench({
         {activeSteps === 3 && graphSkills.length > 0 ? (
           <button
             type="button"
-            aria-label={`查看 ${exploreTotal} 项匹配技能`}
+            aria-label={`查看 ${exploreTotal} 项匹配${copy.resourcePlural}`}
             onClick={() => resultRegionRef.current?.focus()}
             className="mb-5 flex w-full items-center justify-between rounded-md border border-purple-200 bg-purple-50 px-3 py-2.5 text-sm font-semibold text-purple-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/30 lg:hidden"
           >
-            <span>查看匹配技能</span>
+            <span>查看匹配{copy.resourcePlural}</span>
             <span className="tabular-nums">{exploreTotal} 项 ↓</span>
           </button>
         ) : null}
@@ -559,7 +591,7 @@ export default function FindScienceWorkbench({
               <section
                 ref={resultRegionRef}
                 role="region"
-                aria-label="科研技能筛选结果"
+                aria-label={`科研${copy.resourceName}筛选结果`}
                 aria-live="polite"
                 tabIndex={-1}
                 className="skill-leaf-reveal relative z-10 scroll-mt-16 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600/30 lg:ml-2 lg:self-center"
@@ -567,7 +599,7 @@ export default function FindScienceWorkbench({
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-2">
                     <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-purple-700" aria-hidden />
-                    <h4 className="truncate text-sm font-semibold text-purple-800">匹配技能</h4>
+                    <h4 className="truncate text-sm font-semibold text-purple-800">匹配{copy.resourcePlural}</h4>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
                     <span className="text-xs tabular-nums" style={{ color: 'var(--text-tertiary)' }}>{exploreTotal} 项</span>
@@ -582,20 +614,15 @@ export default function FindScienceWorkbench({
                   </div>
                 </div>
                 <p className="mb-3 text-xs leading-5" style={{ color: 'var(--text-secondary)' }}>
-                  已按三维路径筛选，以下技能采用固定规则稳定排序。
+                  已按当前研究路径筛选，可继续点选查看详情。
                 </p>
-                {activeSteps === 3 ? (
-                  <p className="mb-3 rounded border border-slate-200 bg-white/80 px-2.5 py-1.5 text-[11px] leading-5" style={{ color: 'var(--text-tertiary)' }}>
-                    排序：功能偏好 → 可信状态 → 质量分 → 名称
-                  </p>
-                ) : null}
                 {exploreLoading ? (
                   <div role="status" className="border-l-2 bg-white/80 px-3 py-3 text-sm" style={{ borderColor: '#7e22ce', color: 'var(--text-secondary)' }}>
-                    正在展开 Skill 叶节点…
+                    正在展开 {copy.resourceName} 叶节点…
                   </div>
                 ) : graphSkills.length > 0 ? (
                   <>
-                    <div className="relative grid gap-1.5" role="group" aria-label="Skill 叶节点">
+                    <div className="relative grid gap-1.5" role="group" aria-label={`${copy.resourceAriaName} 叶节点`}>
                       {graphSkills.map((item, index) => {
                         const nodeId = `skill:${item.id}`
                         const active = focusedSkillId === item.id
@@ -613,7 +640,7 @@ export default function FindScienceWorkbench({
                           <button
                             ref={(element) => registerNode(nodeId, element)}
                             type="button"
-                            aria-label={`查看技能：${item.name}`}
+                            aria-label={`查看${copy.resourceName}：${item.name}`}
                             aria-pressed={active}
                             onClick={() => setSelectedSkillId(active ? null : item.id)}
                             onMouseEnter={() => setHoveredNode(nodeId)}
@@ -643,11 +670,11 @@ export default function FindScienceWorkbench({
                       <section
                         className="mt-3 border-l-2 bg-white/90 px-3 py-3"
                         style={{ borderColor: '#7e22ce' }}
-                        aria-label={`技能详情：${selectedSkill.name}`}
+                        aria-label={`${copy.resourceName}详情：${selectedSkill.name}`}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <h5 className="min-w-0 truncate text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{selectedSkill.name}</h5>
-                          <span className="shrink-0 text-xs tabular-nums" style={{ color: 'var(--text-tertiary)' }}>{selectedSkill.quality_score} 分</span>
+                          {copy.showQualityScore ? <span className="shrink-0 text-xs tabular-nums" style={{ color: 'var(--text-tertiary)' }}>{selectedSkill.quality_score} 分</span> : null}
                         </div>
                         <div className="mt-1 text-base font-semibold" style={{ color: '#0f766e' }}>{selectedSkill.function}</div>
                         <p className="mt-1 text-xs leading-5" style={{ color: 'var(--text-secondary)' }}>{selectedSkill.summary}</p>

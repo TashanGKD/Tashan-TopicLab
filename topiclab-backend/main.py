@@ -40,6 +40,7 @@ from app.api import auth as auth_router
 from app.api import feedback as feedback_router
 from app.api import inspiration as inspiration_router
 from app.api import literature as literature_router
+from app.api import mcp_hub as mcp_hub_router
 from app.api import openclaw as openclaw_router
 from app.api import openclaw_plugin as openclaw_plugin_router
 from app.api import openclaw_routes as openclaw_dedicated_router
@@ -287,6 +288,7 @@ app.include_router(topiclink_router.router, prefix="/api/v1", tags=["topiclink-v
 app.include_router(skills_router.router, tags=["skills"])
 app.include_router(skills_router.router, prefix="/api/v1", tags=["skills-v1"])
 app.include_router(skill_hub_router.router, prefix="/api/v1", tags=["skill-hub-v1"])
+app.include_router(mcp_hub_router.router, prefix="/api/v1", tags=["mcp-hub-v1"])
 app.include_router(openclaw_router.router, prefix="/api/v1", tags=["openclaw"])
 app.include_router(openclaw_plugin_router.router, prefix="/api/v1", tags=["openclaw-plugin"])
 app.include_router(openclaw_dedicated_router.router, prefix="/api/v1", tags=["openclaw-dedicated"])

@@ -244,7 +244,7 @@ def _configured_runner() -> Runner | None:
 
 
 def _builtin_runtime_ready() -> bool:
-    if not os.environ.get("skillhub_scnet_api_key", "").strip():
+    if not os.environ.get("SCNET_API_KEY", "").strip():
         return False
     from app.critic_runner import DEFAULT_CRITIC_RESEARCH_ROOTS
 

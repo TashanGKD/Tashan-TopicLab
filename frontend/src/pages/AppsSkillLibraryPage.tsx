@@ -20,6 +20,20 @@ const READINESS_LABELS: Record<string, { label: string; color: string; backgroun
   restricted: { label: '受限', color: '#b91c1c', background: '#fef2f2' },
 }
 
+function skillLicenseLabel(item: ScienceSkillCatalogItem) {
+  if (item.license_status === 'unavailable') return '来源暂不可访问'
+  if (item.license_status === 'unknown' || !item.license) return '未明确'
+  return item.license
+}
+
+function skillLicenseSourceLabel(value?: string | null) {
+  if (value === 'license_file') return '许可证文件'
+  if (value === 'package_metadata') return '软件包说明'
+  if (value === 'repository_metadata') return '项目资料'
+  if (value === 'readme') return '项目说明'
+  return value || '未记录'
+}
+
 function FilterRail({
   label,
   value,
@@ -145,8 +159,8 @@ function CatalogRow({ item, selected, onSelect }: { item: CatalogDisplayItem; se
           ) : null}
         </div>
         <div className="shrink-0 text-right">
-          <div className="text-lg font-semibold tabular-nums" style={{ color: 'var(--text-primary)' }}>{item.quality_score}</div>
-          <div className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-tertiary)' }}>质量分</div>
+          <div className="text-lg font-semibold tabular-nums" style={{ color: 'var(--text-primary)' }}>{Math.round(item.quality_score)}</div>
+          <div className="text-[10px] tracking-wide" style={{ color: 'var(--text-tertiary)' }}>资料完整度</div>
         </div>
       </div>
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs" style={{ color: 'var(--text-tertiary)' }}>
@@ -204,14 +218,20 @@ function CatalogDetail({ item }: { item: CatalogDisplayItem | null }) {
       </dl>
       {item.classification_rationale ? (
         <div className="mt-4 border-l-2 border-teal-600 pl-3 text-xs leading-5" style={{ color: 'var(--text-secondary)' }}>
-          {item.classification_rationale}
+          <span className="font-semibold">适用说明：</span>{item.classification_rationale}
         </div>
       ) : null}
+      <details open className="mt-4 border-t pt-4" style={{ borderColor: 'var(--border-default)' }}>
+        <summary className="cursor-pointer text-sm font-semibold text-teal-700">来源与许可证</summary>
+        <dl className="mt-3 space-y-2 text-xs">
+          <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-2"><dt style={{ color: 'var(--text-tertiary)' }}>许可证</dt><dd style={{ color: 'var(--text-secondary)' }}>{skillLicenseLabel(item)}</dd></div>
+          <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-2"><dt style={{ color: 'var(--text-tertiary)' }}>出处</dt><dd style={{ color: 'var(--text-secondary)' }}>{skillLicenseSourceLabel(item.license_source)}</dd></div>
+          {item.source_verification?.checked_at ? <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-2"><dt style={{ color: 'var(--text-tertiary)' }}>核对时间</dt><dd style={{ color: 'var(--text-secondary)' }}>{new Date(item.source_verification.checked_at).toLocaleDateString('zh-CN')}</dd></div> : null}
+        </dl>
+        {item.license_evidence?.final_url || item.license_evidence?.source_url ? <a href={item.license_evidence.final_url || item.license_evidence.source_url || repositoryUrl} target="_blank" rel="noreferrer" className="mt-3 block text-xs font-medium text-teal-700 underline underline-offset-4">查看许可证出处</a> : null}
+        <a href={repositoryUrl} target="_blank" rel="noreferrer" className="mt-2 block text-xs font-medium text-teal-700 underline underline-offset-4">查看来源仓库</a>
+      </details>
       <div className="mt-4 border-t pt-4" style={{ borderColor: 'var(--border-default)' }}>
-        <a href={repositoryUrl} target="_blank" rel="noreferrer" className="text-sm font-medium text-teal-700 underline underline-offset-4">
-          查看来源仓库
-        </a>
-        <div className="mt-2 break-all font-mono text-[11px] leading-5" style={{ color: 'var(--text-tertiary)' }}>{item.source_path}</div>
         <p className="mt-3 text-xs leading-5" style={{ color: 'var(--text-secondary)' }}>
           目录信息来自公开来源；采用前请结合来源说明与评测结果判断。
         </p>
@@ -251,7 +271,7 @@ export default function AppsSkillLibraryPage() {
         if (alive) setCatalogMeta(response.data)
       })
       .catch(() => {
-        if (alive) setCatalogError('科研 Skill 目录元数据加载失败')
+        if (alive) setCatalogError('科研技能目录加载失败')
       })
     return () => {
       alive = false
@@ -422,7 +442,7 @@ export default function AppsSkillLibraryPage() {
             <p className="mt-1 text-xs leading-5" style={{ color: 'var(--text-tertiary)' }}>
               {finderResult
                 ? finderResult.route.rationale
-                : `当前路径命中 ${catalogTotal} 项；质量与证据状态按目录记录显示。`}
+                : `当前路径命中 ${catalogTotal} 项，可继续筛选或打开详情。`}
             </p>
             {finderResult?.ranking?.criteria.length ? (
               <p className="mt-1 text-xs leading-5" style={{ color: 'var(--text-tertiary)' }}>
@@ -467,7 +487,7 @@ export default function AppsSkillLibraryPage() {
           </button>
         </form>
         <p className="text-xs leading-5" style={{ color: 'var(--text-tertiary)' }}>
-          未登录时仅使用本地目录匹配；登录后会将这段科研需求发送给 SCNet 模型进行语义复核。
+          输入研究对象、数据类型或预期产物，我们会结合科研分类为你推荐合适的技能。
         </p>
         {finderError ? (
           <div role="alert" className="flex flex-wrap items-center gap-3 text-sm" style={{ color: 'var(--accent-error)' }}>
