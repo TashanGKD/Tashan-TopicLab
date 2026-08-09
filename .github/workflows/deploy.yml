@@ -59,6 +59,32 @@ jobs:
             }
             for i in 1 2 3; do git fetch origin && break || { [ $i -eq 3 ] && echo "git fetch failed after 3 retries" && exit 1; sleep 5; }; done
             git reset --hard origin/main
+
+            # Keep the TopicLab gitlink aligned with the independently deployed
+            # same-host WorldWeave repository. A mismatch must stop TopicLab
+            # deployment instead of silently testing one revision while serving another.
+            WORLDWEAVE_EXPECTED_REVISION="$(git ls-tree HEAD worldweave | awk '{print $3}')"
+            WORLDWEAVE_RUNTIME_DIR="$BASE_DIR/worldweave"
+            if ! printf '%s' "$WORLDWEAVE_EXPECTED_REVISION" | grep -Eq '^[0-9a-f]{40}$'; then
+              echo "::error::Invalid WorldWeave gitlink revision: $WORLDWEAVE_EXPECTED_REVISION"
+              exit 1
+            fi
+            if [ -d "$WORLDWEAVE_RUNTIME_DIR/.git" ]; then
+              WORLDWEAVE_RUNTIME_REVISION="$(git -C "$WORLDWEAVE_RUNTIME_DIR" rev-parse HEAD)"
+              if [ "$WORLDWEAVE_RUNTIME_REVISION" != "$WORLDWEAVE_EXPECTED_REVISION" ]; then
+                echo "::error::WorldWeave runtime $WORLDWEAVE_RUNTIME_REVISION does not match TopicLab gitlink $WORLDWEAVE_EXPECTED_REVISION."
+                echo "::error::Deploy WorldWeave first, then update and commit the TopicLab submodule pointer."
+                exit 1
+              fi
+              if [ -n "$(git -C "$WORLDWEAVE_RUNTIME_DIR" status --porcelain --untracked-files=no)" ]; then
+                echo "::error::WorldWeave runtime repository contains tracked local changes: $WORLDWEAVE_RUNTIME_DIR"
+                exit 1
+              fi
+              echo "[deploy] WorldWeave runtime revision aligned: $WORLDWEAVE_EXPECTED_REVISION"
+            else
+              echo "::notice::No same-host WorldWeave repository at $WORLDWEAVE_RUNTIME_DIR; skipping local revision alignment."
+            fi
+
             git submodule sync --recursive
             # Configure submodule URLs after sync; otherwise cached SSH URLs or .gitmodules defaults can win.
             set_submodule_url backend TashanGKD/Resonnet
@@ -270,8 +296,10 @@ jobs:
             done
             for i in $(seq 1 30); do
               if docker compose exec -T frontend wget -q -O /dev/null http://127.0.0.1/worldweave/ \
+                && docker compose exec -T frontend wget -q -O /dev/null http://127.0.0.1/worldweave/demo/asean \
+                && docker compose exec -T frontend wget -q -O /dev/null http://127.0.0.1/api/v1/world/asean/decision-model \
                 && docker compose exec -T frontend wget -q -O /dev/null http://127.0.0.1/info/source; then
-                echo "[deploy] WorldWeave proxy and source page are reachable"
+                echo "[deploy] WorldWeave proxy, ASEAN page, decision API, and source page are reachable"
                 break
               fi
               if [ "$i" = "30" ]; then

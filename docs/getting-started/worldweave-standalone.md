@@ -56,6 +56,27 @@ docker compose ps
 docker compose logs --tail=120 worldweave-refresh
 ```
 
+## 与 TopicLab 版本锁同步
+
+TopicLab 中的 `worldweave` 子模块指针是集成版本锁；线上运行仍由独立
+`TashanGKD/worldweave` 仓库部署。发布顺序必须是：
+
+1. 先将 WorldWeave 提交推送到其 `main`，等待独立 CI、Deploy 和线上健康检查成功。
+2. 在 TopicLab 中把 `worldweave` 子模块切到线上实际运行的同一 SHA。
+3. 提交并合并 TopicLab 的子模块指针，再执行 TopicLab 部署。
+
+```bash
+git -C worldweave fetch origin main
+git -C worldweave checkout --detach <deployed-worldweave-sha>
+git add worldweave
+```
+
+同机部署时，TopicLab 工作流会比较父仓库记录的 gitlink 与
+`<DEPLOY_PATH>/worldweave` 独立仓库的当前 HEAD。两者不同或独立仓库含有
+已跟踪的本地热补丁时，TopicLab 部署会直接失败，不会在版本不一致的情况下
+继续重建主栈。远程 WorldWeave 不在同一部署目录时会跳过这个本机校验，
+仍由独立服务自己的发布与健康检查负责版本确认。
+
 ## 接入 TopicLab
 
 确认独立服务通过验收后，再更新 TopicLab 的 `DEPLOY_ENV`：

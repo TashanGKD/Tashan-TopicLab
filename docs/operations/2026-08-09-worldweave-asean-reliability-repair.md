@@ -1,9 +1,10 @@
 # WorldWeave 超时与东盟专题可靠性修复清单
 
-状态：主要修复已完成，保留 4 项非阻塞观察/瘦身工作
+状态：主要修复及东盟点击复发专项修复已完成，保留 4 项非阻塞观察/瘦身工作
 建立日期：2026-08-09
+最新复测：2026-08-10
 生产站点：`https://world.tashan.chat`
-生产项目：`/var/www/github-actions/repos/Tashan-TopicLab`
+生产项目：`/var/www/github-actions/repos/worldweave`
 
 ## 目标
 
@@ -167,7 +168,7 @@
 ### H2. TopicLab 主仓库
 
 - 最新 `public/main` 已在本次处理期间把 WorldWeave 改为独立部署，并会拒绝重新加入旧的内嵌 Compose 服务。因此没有把过时的内嵌 `docker-compose.yml`/deploy patch 合入主线。
-- 主仓库只需更新子模块指针；已在分支 `codex/worldweave-asean-reliability` 提交 `dfa7165`，指向 `worldweave@8d295c8`，分支 CI 成功。未直接合并到 `main`，避免仅为指针更新触发 TopicLab 全栈停机部署。
+- 主仓库只需更新子模块指针；分支 `codex/worldweave-asean-reliability` 已继续从 `worldweave@8d295c8` 更新到线上 `worldweave@96ffb63`，并在草稿 PR #67 中增加部署一致性预检。
 
 ### H3. 环境变量
 
@@ -180,7 +181,7 @@
 
 - 备份目录：`/var/backups/topiclab-worldweave-20260809-reliability`；包含原 crontab、容器 inspect、镜像/Compose/override 记录及逐轮热修备份。
 - 删除固定 restart cron；恢复命令仅在确需回退旧策略时使用：`crontab /var/backups/topiclab-worldweave-20260809-reliability/root.crontab`。
-- 生产机已建立独立仓库 `/var/www/github-actions/repos/worldweave`，当前提交 `8d295c8`。
+- 生产机已建立独立仓库 `/var/www/github-actions/repos/worldweave`，当前提交 `96ffb63`。
 - 新容器为 `worldweave-worldweave-1` 与 `worldweave-worldweave-refresh-1`，共享原卷 `tashan-topiclab_worldweave-cache`；旧内嵌容器保持 stopped，未删除，可快速回滚。
 - 回滚到旧容器：先在独立仓库执行 `docker compose down`，再依次 `docker start tashan-topiclab-worldweave-1`、`docker start tashan-topiclab-worldweave-refresh-1`。旧镜像和 inspect 备份均保留。
 
@@ -188,13 +189,15 @@
 
 - 本地最终：29/29 单测通过，TypeScript 通过，Next.js 生产构建通过，独立 Compose 配置验证通过。
 - GitHub：`worldweave@8d295c8` 的 CI 与 Deploy 均成功；Deploy 内部 Web、refresh、source status、东盟缓存/状态检查通过，`world.tashan.chat/worldweave` 公网 smoke 通过。
-- TopicLab 分支：`dfa7165` CI 成功。
+- TopicLab 分支最终 head `4ff79fe`：WorldWeave checks、前端代理测试和总 CI 均成功。
 - 迁移前缓存 API 连续 5 次 0.180–0.232 秒；迁移后冷启动窗口连续 5 次 0.407–0.485 秒，均低于 1 秒验收线。
 - 迁移后东盟页面连续 3 次 0.486–0.696 秒；响应约 556 KiB。
+- 最终 `/info/source`、东盟页面、东盟缓存 API 分别为 0.123、0.589、0.473 秒，HTTP 均为 200。
 - 迁移后 3 次并发提交全部复用 `asean-20260809145610637-41a62d53`，两次返回 `reused=true`；任务 25.258 秒成功，80 条线索、217 项指标。刷新期间缓存读取 0.445–0.500 秒。
 - 更早的最终连续三轮东盟刷新约 25.220、25.281、25.227 秒；另有取消、超时恢复和跨容器锁测试。
 - 独立 refresh 在真实 World 任务运行 97.684 秒时被停止：状态 `canceled`、`error_code=CANCELED`、容器退出 0、`OOMKilled=false`；重新启动后健康。
 - World 超时/恢复实测包含 191.743 秒、176.376 秒和 95.976 秒降级轮次；超时端点后 worker 均被回收并获得新 PID，最终健康探针为 6–7 毫秒。
+- 迁移后的独立栈首轮完整 World 任务在 149.062 秒内以 `degraded/REFRESH_DEGRADED` 有界结束；随后 Web/refresh 均为 healthy，`RestartCount=0`、`OOMKilled=false`、`StopTimeout=45`。
 - watchdog 故障注入中，连续两次探针失败后自动替换被 `SIGSTOP` 的 worker；Docker health failing streak 恢复为 0。
 - Playwright 最终页面显示“数据更新 08/09 22:19”，点击立即显示“已排队”，任务 25.227 秒成功；控制台 0 错误、0 警告，研究 SSE 首字节 0.134 秒。
 
@@ -204,3 +207,76 @@
 2. 将约 556 KiB 的东盟初始页面继续拆分为按需指标/研究结果；当前缓存化后延迟已达标。
 3. 增加独立的 HTTP 429、故意损坏缓存，以及“超时后静置 5 分钟比较全部缓存 mtime”自动化用例。
 4. 跨过下一次原 04:00 cron 时点再做一次自然观察；当前 crontab 匹配数为 0，人工和故障注入均未再出现 refresh 退出码 137。
+
+## K. 2026-08-10 东盟点击复发专项修复
+
+### K1. 本轮复现出的独立根因
+
+1. 顶部“东盟专题”原本使用 Next.js 客户端 RSC 导航；点击时会与仪表盘 `/api/v1/world/subworlds` 请求竞争。该请求对当前页面没有实际用途。
+2. 仪表盘每 60 秒自动读取完整 `/api/v1/world/state`。生产状态文件约 213 MiB，点击恰好与该请求重叠时，东盟文档曾在 60.210 秒后返回 504。这解释了“刚打开快，放一会儿又慢”。
+3. 东盟页面加载后立即请求 `/api/v1/world/asean/decision-model`；该 GET 曾在缓存过期时隐式启动刷新，造成页面虽然已返回，交互仍被后续重活拖住。
+4. 东盟专题服务端渲染会重复解析五份缓存文件，且初始 HTML 约 556 KiB；在没有进程内快照缓存时，重复点击的延迟容易受磁盘和公网抖动放大。
+5. 仪表盘时间格式依赖服务端时区，造成 React hydration #418；这不是主延迟来源，但会干扰浏览器端稳定性判断。
+
+### K2. 已完成修改
+
+- [x] `ASEAN-NAV-01` 顶部东盟入口改为硬文档导航，避免 RSC 路由与后台请求竞争。
+- [x] `ASEAN-NAV-02` 删除未使用的 `/api/v1/world/subworlds` 页面请求。
+- [x] `ASEAN-NAV-03` 移除仪表盘 60 秒 `/world/state` 自动刷新，以及初始后台、focus、online、AI 摘要和地图的隐式全状态读取；保留人工刷新和时间线标签页按需读取。
+- [x] `ASEAN-NAV-04` 默认场景改为 `geo-politics-daily`，首屏 SSR 已包含所需地图数据。
+- [x] `ASEAN-NAV-05` 时间格式统一按 UTC+8 确定性计算，消除 hydration #418。
+- [x] `ASEAN-NAV-06` 决策模型 GET 默认只读缓存；只有显式刷新请求才允许更新数据。
+- [x] `ASEAN-NAV-07` 为东盟原始专题数据增加基于五份缓存文件 `size + mtimeMs` 指纹的进程内快照缓存和 single-flight；文件原子更新后自动失效，刷新/force/signal 路径绕过缓存。
+- [x] `ASEAN-NAV-08` 为客户端安全化后的专题数据增加 `WeakMap` 复用，避免同一请求重复转换大对象。
+- [x] `ASEAN-NAV-09` 增加 Web 健康脚本；新镜像启动时完整预热一次 `/demo/asean`，之后健康检查只访问轻量 Skill 接口。
+
+对应 WorldWeave 提交：
+
+- `3caed62`：导航竞争、无用 subworlds 请求和时区 hydration 修复。
+- `84e99b1`：移除 60 秒全状态刷新链路、默认场景调整和容器健康预热。
+- `96ffb63`：东盟快照缓存、决策接口缓存只读及客户端转换复用。
+
+以上提交均已推送到 `TashanGKD/worldweave` 的 `main`，生产独立仓库和容器当前均运行 `96ffb63`。
+
+### K3. 本轮验证证据
+
+- 本地最终：31/31 单测通过，TypeScript 通过，Next.js 生产构建通过，Compose 配置验证通过。
+- GitHub `96ffb63` 的 CI（run `31323452146`）和 Deploy（run `31323452139`）均成功。
+- 冷镜像第一次线上浏览器点击：文档 1.138 秒、决策接口 0.428 秒，HTTP 均为 200。
+- 等待超过 60 秒后执行“东盟 → 整体态势 → 东盟”第二次往返：文档 0.173 秒、决策接口 0.066 秒。
+- 两轮之间未再出现 `/api/v1/world/state` 或 `/api/v1/world/subworlds` 请求；未出现 504。
+- 最终 Playwright 控制台：0 错误、0 警告。
+- 服务器 localhost 连续 10 次东盟页面请求：总耗时 0.037–0.055 秒；随后公网连续测试稳定段为 0.250–0.285 秒。
+- 新 Web 与 refresh 容器均为 `healthy`、`RestartCount=0`；部署后 7 分钟持续健康，未再出现服务自行终止。
+- WorldWeave 本地与远程仓库均为 `96ffb63`，`main...origin/main` 无差异。
+
+### K4. 本轮修改归类
+
+1. **WorldWeave 源码**：导航、仪表盘刷新策略、东盟决策 GET、专题快照缓存、确定性时间格式和相关测试。
+2. **WorldWeave Compose/部署**：新增专用 Web 健康/预热脚本并调整 `docker-compose.yml` 健康检查。
+3. **仅远程服务器**：拉取 `96ffb63`、重建镜像并无损重建两个独立容器；未新增手工热补丁。
+4. **TopicLab 主项目**：性能修复本身没有修改 TopicLab 运行源码；子模块锁与部署一致性配置见 K6。
+5. **GitHub Actions/workflow**：WorldWeave 性能修复本身没有修改 workflow；随后在 K6 增加 TopicLab 部署版本预检。
+6. **环境变量**：本轮没有修改 `.env.deploy` 或生产 `.env`，也未新增密钥。
+
+### K5. 运行镜像与公网链路反向核验
+
+- 两个运行容器的 Compose 标签均指向 `/var/www/github-actions/repos/worldweave/docker-compose.yml`，不是 TopicLab 父仓库中的旧子模块目录。
+- 生产仓库、GitHub `worldweave/main` 和本地 WorldWeave 均为 `96ffb63acbf7e96d4cb2aa6efe90eaa846ba4879`。
+- Web 与 refresh 容器共同运行镜像 `sha256:3d926d6801220f9b7e39d63ed45c7f840015514f6e9531ad75e101e34f36d191`；镜像创建于 00:20:55，晚于提交时间 00:18:31。
+- 运行容器内 7 个本轮关键文件与生产仓库逐文件 SHA-256 完全一致，覆盖仪表盘、导航、东盟页面、决策路由、快照缓存和健康脚本。
+- 容器内 Next Build ID 为 `sqKGpBdvTt_IXD4hL-E_Y`，构建时间 00:19:33；编译产物中包含新增 `cacheOnly` 路径，证明不是只复制新源码却继续运行旧构建产物。
+- TopicLab 前端容器的实际 Nginx 配置将 `/worldweave/` 与 `/api/v1/world/` 代理至 `host.docker.internal:3020`；运行 Web 容器正绑定宿主机 `3020 -> 5000`。
+- 新独立浏览器会话从公开 `/info/source` 点击东盟：页面 0.147 秒、决策接口 0.078 秒；等待超过 60 秒并往返后为 0.602 秒和 0.378 秒，均为 200。
+- 两轮浏览器请求均无 `/api/v1/world/state`、无 `/api/v1/world/subworlds`、无控制台错误或警告。
+- 公开决策 GET 前后五份生产缓存文件的大小与 mtime 完全一致，证明 GET 不再隐式触发数据刷新。
+- 同一时刻容器内直连连续 5 次总耗时 0.034–0.095 秒，公网连续 5 次 0.295–0.392 秒；Web/refresh 均为 `healthy`、`RestartCount=0`。
+
+### K6. TopicLab 与线上版本同步配置
+
+- TopicLab 的 `worldweave` gitlink 已从 `8d295c8` 更新为线上实际运行的 `96ffb63`。
+- `.gitmodules` 已经配置独立仓库 `https://github.com/TashanGKD/worldweave.git` 和 `branch = main`，无需修改。
+- `.env.example`、`.env.deploy.example`、Compose 默认值及线上容器均已使用 `host.docker.internal:3020`，无需新增环境变量或改动密钥。
+- TopicLab 部署新增同机版本预检：父仓库 gitlink 必须等于 `<DEPLOY_PATH>/worldweave` 的 HEAD，且独立仓库不得包含已跟踪的本地热补丁；不一致时停止部署。
+- TopicLab 部署 smoke test 新增东盟页面和决策接口，避免只验证 WorldWeave 首页可达。
+- 版本顺序固定为“先部署并验收独立 WorldWeave，再更新 TopicLab gitlink，最后部署 TopicLab”，避免父仓库与线上运行版本漂移。
