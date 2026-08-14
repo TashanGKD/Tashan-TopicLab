@@ -24,7 +24,7 @@ class InspirationLLMConfig:
     chat_completions_url: str
     api_key: str
     model: str
-    timeout_seconds: float = 45.0
+    timeout_seconds: float = 300.0
     max_tokens: int = 900
     response_format_json: bool = True
 
@@ -33,7 +33,7 @@ class InspirationLLMConfig:
         url = os.getenv("INSPIRATION_LLM_CHAT_COMPLETIONS_URL", "").strip()
         api_key = os.getenv("INSPIRATION_LLM_API_KEY", "").strip()
         model = os.getenv("INSPIRATION_LLM_MODEL", "").strip()
-        timeout_raw = os.getenv("INSPIRATION_LLM_TIMEOUT_SECONDS", "45").strip()
+        timeout_raw = os.getenv("INSPIRATION_LLM_TIMEOUT_SECONDS", "300").strip()
         max_tokens_raw = os.getenv("INSPIRATION_LLM_MAX_TOKENS", "900").strip()
         response_format_json = os.getenv("INSPIRATION_LLM_RESPONSE_FORMAT_JSON", "1").strip().lower() not in {"0", "false", "no"}
         if not url or not api_key or not model:
@@ -43,7 +43,7 @@ class InspirationLLMConfig:
         try:
             timeout_seconds = float(timeout_raw)
         except ValueError:
-            timeout_seconds = 45.0
+            timeout_seconds = 300.0
         try:
             max_tokens = int(max_tokens_raw)
         except ValueError:

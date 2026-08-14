@@ -60,7 +60,7 @@ TopicLab 的主业务后端。负责账号、topic 主业务、数据库持久�
 - `RESONNET_BASE_URL` - 可选；TopicLab Backend 调用 Resonnet 执行 discussion / expert reply 的地址。Docker Compose 内默认 `http://backend:8000`，本地分开运行时可设为 `http://127.0.0.1:8000`
 - `WORLDWEAVE_BASE_URL` - 可选；信息页主信源流的独立 WorldWeave 地址。同机部署使用宿主机端口 `http://host.docker.internal:3020`（WorldWeave 容器内仍为 5000）；异机生产使用独立服务的 HTTPS URL
 - `INSPIRATION_LLM_CHAT_COMPLETIONS_URL` / `INSPIRATION_LLM_API_KEY` / `INSPIRATION_LLM_MODEL` - 可选；灵感共创线索预诊断、脱敏改写等同一条线索的大模型调用统一使用这个 OpenAI-compatible Chat Completions 接口
-- `INSPIRATION_LLM_TIMEOUT_SECONDS` - 可选；灵感共创线索 LLM 请求超时秒数，默认 `45`
+- `INSPIRATION_LLM_TIMEOUT_SECONDS` - 可选；灵感共创线索 LLM 请求超时秒数，默认 `300`
 - `AI_GENERATION_BASE_URL` / `AI_GENERATION_API_KEY` / `AI_GENERATION_MODEL` - 必填；普通发帖内容审核使用的 OpenAI-compatible Chat Completions 接口。SCNet 可填 `https://api.scnet.cn/api/llm/v1` 与 `DeepSeek-V4-Flash`
 - `SCNET_BASE_URL` / `SCNET_API_KEY` - TopicLink 增量向量化和 DeepSeek-V4-Flash 辅助文案共用；部署环境已有时直接复用
 - WorldWeave 的模型与信源密钥只配置在独立 WorldWeave 服务器，不进入 TopicLab 部署环境
