@@ -184,7 +184,11 @@ jobs:
             ZVEC_MANAGER="$REPO_DIR/scripts/topiclink_zvec_release.py"
             ZVEC_MIN_DOC_COUNT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["min_doc_count"])' "$ZVEC_LOCK")"
             ZVEC_EXPECTED_DIMENSIONS="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["expected_dimensions"])' "$ZVEC_LOCK")"
-            printf '\nTOPICLINK_ZVEC_MIN_DOC_COUNT=%s\n' "$ZVEC_MIN_DOC_COUNT" >> .env
+            # The lock count validates the immutable candidate before activation.
+            # The active cache is mutable and may shrink under its documented TTL,
+            # so runtime readiness must verify access/schema rather than that seed count.
+            sed -i -E '/^TOPICLINK_ZVEC_MIN_DOC_COUNT=/d' .env
+            printf '\nTOPICLINK_ZVEC_MIN_DOC_COUNT=0\n' >> .env
 
             WORKSPACE_PATH_VALUE="$(python3 - <<'PY'
             from pathlib import Path

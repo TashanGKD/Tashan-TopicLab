@@ -266,11 +266,11 @@ SCNET_BASE_URL=https://api.scnet.cn/api/llm/v1
 SCNET_API_KEY=<SCNet API Key>
 ```
 
-将预构建的 `Qwen3-Embedding-8B` / 4096 维 Zvec 压缩包解压到宿主机 `${WORKSPACE_PATH}/topiclink-zvec`。解压后应能直接看到 `${WORKSPACE_PATH}/topiclink-zvec/qwen3-embedding-8b-4096/manifest.*`，不要再多套一层同名目录。Docker Compose 会把 `${WORKSPACE_PATH}` 挂载为 `/app/workspace`，因此无需再配置 `TOPICLINK_ZVEC_PATH`。生产部署要求初始集合至少包含 2386 个文档；本地开发仍可将 `TOPICLINK_ZVEC_MIN_DOC_COUNT=0` 以使用空集合。
+将预构建的 `Qwen3-Embedding-8B` / 4096 维 Zvec 压缩包解压到宿主机 `${WORKSPACE_PATH}/topiclink-zvec`。解压后应能直接看到 `${WORKSPACE_PATH}/topiclink-zvec/qwen3-embedding-8b-4096/manifest.*`，不要再多套一层同名目录。Docker Compose 会把 `${WORKSPACE_PATH}` 挂载为 `/app/workspace`，因此无需再配置 `TOPICLINK_ZVEC_PATH`。生产部署通过发布锁要求初始候选集合至少包含 2386 个文档；运行集合会按 TTL 回收旧 hash，因此 `TOPICLINK_ZVEC_MIN_DOC_COUNT` 保持为 `0`，不把发布时数量误作长期存活下限。
 
 正式合并或手动触发部署前，先把向量包上传并解压到服务器，再执行 `chown -R 1000:1000 "${WORKSPACE_PATH}/topiclink-zvec"`。部署工作流会在停止旧容器前检查 `manifest.*`，在 Linux 镜像中打开真实集合，并要求至少 2386 个文档、4096 维且索引完整度为 1.0；检查失败时不会继续切换 TopicLab 栈。GitHub Actions 会把仓库 Secret `DEPLOY_ENV` 写成服务器上的 `.env`，不要修改数据库配置。
 
-TopicLink 不在 SQL 中创建向量表。已有文本直接命中 Zvec；新增或更新内容会按文本 hash 自动增量写入，旧 hash 按默认 30 天 TTL 回收。Docker Compose 会自动启动单写 `topiclink-zvec` 内网服务，TopicLab 后端仍保持两个 Uvicorn worker。上线后分别检查 TopicLab 的 `GET /health/ready` 与 TopicLink 的 `GET /api/v1/topiclink/health/ready`。
+TopicLink 不在 SQL 中创建向量表。已有文本直接命中 Zvec；新增或更新内容会按文本 hash 自动增量写入，旧 hash 按默认 30 天 TTL 回收。候选包数量只在激活前验证；运行时 readiness 检查集合可打开、结构正确且服务可读写。Docker Compose 会自动启动单写 `topiclink-zvec` 内网服务，TopicLab 后端仍保持两个 Uvicorn worker。上线后分别检查 TopicLab 的 `GET /health/ready` 与 TopicLink 的 `GET /api/v1/topiclink/health/ready`。
 
 TopicLink 辅助文案默认使用同一 SCNet 接口上的 `DeepSeek-V4-Flash`，无需新增 `TOPICLINK_CHAT_MODEL`。该模型只负责话题摘要、检索串联和“先替我看看”等辅助文案；真实外派仍写入原 TopicLab 讨论并 `@` 绑定 OpenClaw。
 

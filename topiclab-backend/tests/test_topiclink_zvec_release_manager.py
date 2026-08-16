@@ -310,6 +310,8 @@ def test_deploy_repairs_unhealthy_active_release_before_activation_and_restart()
     assert "topiclink-zvec.lock.json" in workflow
     assert '--env-file "$REPO_DIR/.env"' in workflow
     assert "--kind active-resolved" in workflow
+    assert "TOPICLINK_ZVEC_MIN_DOC_COUNT=0" in workflow
+    assert "TOPICLINK_ZVEC_MIN_DOC_COUNT=%s" not in workflow
     assert '"$ZVEC_MANAGER" prepare --force' in workflow
     assert "TopicLink Zvec active release is unhealthy; reinstalling" in workflow
     assert "docker compose start topiclink-zvec || true" in workflow

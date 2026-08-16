@@ -302,6 +302,7 @@
 - [x] `DEPLOY-02` 独立 WorldWeave 已先部署并验收 `02e8aded490b333b985c95c0f31085f1a86b13b7`。
 - [x] `TOPICLAB-01` TopicLab 的 `worldweave` gitlink 从 `96ffb63` 更新为同一线上 SHA；既有部署预检继续强制 gitlink 与同机运行仓库一致。
 - [x] `TOPICLAB-02` 修复 TopicLab 部署被既有 Zvec 集合不足阻断的问题：运行集合不健康时先停写入进程，从校验过的锁定压缩包原子重装，再离线验证文档数、向量维度和索引完整度后激活；发布管理器显式保留运行 UID 所需的父目录穿越权限，不受部署 `umask 077` 影响。
+- [x] `TOPICLAB-03` 分离 Zvec 候选包验收与运行时 readiness：2386 条只用于激活前校验，运行缓存按 30 天 TTL 回收后继续以可打开、结构正确和可读写为健康条件；部署会清理旧 `DEPLOY_ENV` 中误设的长期数量下限。
 
 对应 WorldWeave 提交：
 
@@ -321,6 +322,7 @@
 - `worldweave-worldweave-1` 与 `worldweave-worldweave-refresh-1` 均为 `healthy`、`RestartCount=0`。
 - 本地 WorldWeave 32/32 单测、TypeScript、生产构建、Compose 配置和本次变更文件 lint 均通过；全仓 lint 仍有与本次修改无关的既有 `ecosystem.config.js` CommonJS 规则错误。
 - TopicLab 锁定的 Zvec 压缩包已在服务器临时隔离目录重新解压并真实打开：2386 条、4096 维、索引完整度 1.0；修复前运行集合只有 694 条。临时验证目录已自动清理。
+- 线上复现显示恢复后的 2386 条集合会在首轮 30 天 TTL 清理后降至 47 条；这证明 2386 是种子资产验收线，不适合作为可变运行缓存的永久 readiness 下限。
 
 ### L4. 后续发布不变量
 

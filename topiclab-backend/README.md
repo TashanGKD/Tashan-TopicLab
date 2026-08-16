@@ -111,7 +111,7 @@ TopicLink 推荐固定使用 `Qwen3-Embedding-8B`，辅助文案默认使用同�
 ### TopicLink + Zvec 上线步骤
 
 1. 向量包上传到私有阿里云 OSS 的版本化对象路径；仓库内 `deploy/topiclink-zvec.lock.json` 固定 OSS 对象 key、资产名、SHA-256、文档数和维度。部署会使用 `.env` 中的 OSS 凭据签名下载到 `${WORKSPACE_PATH}/topiclink-zvec/.downloads`，校验后解压到版本目录；凭据和 Bucket 名不写入仓库。
-2. GitHub Actions 会先验证压缩包路径和校验和，再使用 Zvec 容器检查文档数、维度和索引完整度；全部通过后才原子切换 `${WORKSPACE_PATH}/topiclink-zvec/qwen3-embedding-8b-4096`，并设置 UID/GID `1000:1000`。失败时保留现有活动目录和容器。
+2. GitHub Actions 会先验证压缩包路径和校验和，再使用 Zvec 容器检查候选包的文档数、维度和索引完整度；全部通过后才原子切换 `${WORKSPACE_PATH}/topiclink-zvec/qwen3-embedding-8b-4096`，并设置 UID/GID `1000:1000`。候选包的 2386 条下限只用于发布验收，不作为 TTL 回收后的运行时 readiness 下限；失败时保留现有活动目录和容器。
 3. GitHub Actions 会把仓库 Secret `DEPLOY_ENV` 写成服务器 `.env`。其中需包含 `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`、`OSS_BUCKET`、`OSS_ENDPOINT`；若已有 `SCNET_BASE_URL` 和 `SCNET_API_KEY`，无需新增模型配置。不要重复配置 Zvec 开关、目录、模型、维度和后台批量参数。发布新向量包时只需上传新的私有 OSS 对象并更新锁文件。
 4. 其余值使用代码默认：Zvec 开启，路径为 `/app/workspace/topiclink-zvec/qwen3-embedding-8b-4096`，embedding 为 `Qwen3-Embedding-8B` / `4096` 维，后台增量补齐开启，每个数据源每轮最多 `24` 条，旧 hash 默认 `30` 天回收。后台 worker 会循环扫描 TopicLab 全部话题与 `status='published' AND allow_public=TRUE` 的灵感共创队需求；已有文本命中 Zvec 时不调用模型，新增或更新文本会按新 hash 生成向量并写回同一目录。
 5. 直接用 `docker-compose.yml` 启动。Compose 会自动创建单 worker `topiclink-zvec` 服务并挂载 `${WORKSPACE_PATH}`；TopicLab 后端仍按 Dockerfile 使用两个 worker。不要把同一个 Zvec 目录再挂给第二个写进程。
