@@ -280,3 +280,49 @@
 - TopicLab 部署新增同机版本预检：父仓库 gitlink 必须等于 `<DEPLOY_PATH>/worldweave` 的 HEAD，且独立仓库不得包含已跟踪的本地热补丁；不一致时停止部署。
 - TopicLab 部署 smoke test 新增东盟页面和决策接口，避免只验证 WorldWeave 首页可达。
 - 版本顺序固定为“先部署并验收独立 WorldWeave，再更新 TopicLab gitlink，最后部署 TopicLab”，避免父仓库与线上运行版本漂移。
+
+## L. 2026-08-16 信源日期停滞与部署再对齐
+
+### L1. 本轮根因
+
+1. `/info/source` 的 TopicLab 前端入口与 `/worldweave/` 代理配置已经生效；页面显示旧日期的直接原因是 WorldWeave API 快照没有按预期更新，并非浏览器缓存或旧前端 bundle。
+2. 生产服务器直连 `world-monitor.com` 会超时，宿主机代理可正常访问；refresh 容器此前没有使用该代理，导致真实信源刷新不稳定。
+3. 旧调度把 5 个重端点按 `batch=1` 轮转，而每天只有 3 个刷新时点。地缘与 AI 各自可能约 40 小时才轮到一次，不能满足专题日期持续更新要求。
+4. 旧重端点的 30/60 秒超时低于真实完整刷新耗时，任务容易在已经取得部分结果时被终止。
+5. `generated_at` 原先在读取信号前赋值；当信号缓存的完成时间晚于该时间时，AI 状态会被误判为陈旧。
+
+### L2. 已完成修改清单
+
+- [x] `REFRESH-01` 每一轮固定刷新地缘和 AI；全局/技术信源知识同步等维护任务继续轮转，避免重任务互相挤占。
+- [x] `REFRESH-02` 整轮 deadline 调整为 20 分钟，维护与专题重端点单项预算调整为 300 秒。
+- [x] `REFRESH-03` 辅助快照采用 30 秒预算，并在重 worker 恢复后重试；LiveBench、东盟、全局与 AI 信源状态均要求成功写入快照。
+- [x] `REFRESH-04` refresh 容器通过 `host.docker.internal:1081` 使用宿主机 HTTP(S) 代理，部署增加真实出口连通性检查及瞬时失败重试。
+- [x] `REFRESH-05` 仪表盘 `generated_at` 改为信号加载完成后的时间，并增加回归测试。
+- [x] `DEPLOY-01` 修正 WorldWeave GitHub Actions 的服务器目标与 SSH/`DEPLOY_ENV` Secrets；没有把密钥写入仓库。
+- [x] `DEPLOY-02` 独立 WorldWeave 已先部署并验收 `02e8aded490b333b985c95c0f31085f1a86b13b7`。
+- [x] `TOPICLAB-01` TopicLab 的 `worldweave` gitlink 从 `96ffb63` 更新为同一线上 SHA；既有部署预检继续强制 gitlink 与同机运行仓库一致。
+
+对应 WorldWeave 提交：
+
+- `6910264`：固定刷新公共专题、代理出口配置与部署出口门禁。
+- `d547256`：部署出口检查增加瞬时失败重试。
+- `8eb54b0`：延长重任务预算并增强快照恢复。
+- `02e8ade`：按仪表盘实际完成时间记录 `generated_at`。
+
+### L3. 线上验收证据
+
+- WorldWeave 最终 Deploy run `31931861455` 成功，生产仓库与两个运行容器均为 `02e8ade`。
+- 最终自动刷新从 `2026-08-16T06:39:48.942Z` 运行至 `06:43:33.177Z`，耗时 224235 ms；`state=success`、`ok=true`、`exit=0`、`timed_out=false`。
+- 本轮全局信源知识同步、地缘状态与 AI 状态分别耗时 109854、56523、46434 ms，均返回 200；5 个辅助快照均返回 200 且写入成功。
+- 健康脚本显示信源 freshness 为 `fresh`、信号数 326、数据库与快照表正常；AI 与地缘均为 `staleState=false`、`staleVisibleSignals=false`。
+- 公网连续 3 轮直连两个专题 API，6 次请求全部 200 且均无 `x-world-stale-snapshot`：地缘 `generated_at=2026-08-16T06:42:40.160Z`、95 条；AI `generated_at=2026-08-16T06:43:26.975Z`、9 条。
+- `/worldweave/` 服务端 HTML 显示“最近更新 8月16日 14:42”；`/info/source` 返回 200 且为 `no-cache/no-store`。
+- `worldweave-worldweave-1` 与 `worldweave-worldweave-refresh-1` 均为 `healthy`、`RestartCount=0`。
+- 本地 WorldWeave 32/32 单测、TypeScript、生产构建、Compose 配置和本次变更文件 lint 均通过；全仓 lint 仍有与本次修改无关的既有 `ecosystem.config.js` CommonJS 规则错误。
+
+### L4. 后续发布不变量
+
+1. 先部署 WorldWeave，并以生产仓库 HEAD、容器镜像、自动刷新状态和公网 API 共同验收。
+2. 再把 TopicLab `worldweave` gitlink 更新到该生产 SHA，并提交到 TopicLab `main`。
+3. TopicLab Deploy 会在构建前比较 gitlink 与 `$DEPLOY_PATH/worldweave` 的 HEAD；不一致或独立仓库含已跟踪热补丁时直接失败。
+4. TopicLab 部署完成后继续直连验证 `/info/source`、`/worldweave/`、东盟页面与决策 API，避免只以 GitHub Actions 绿色状态代替公网验收。
