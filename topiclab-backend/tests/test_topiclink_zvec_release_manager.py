@@ -98,6 +98,26 @@ def test_prepares_and_atomically_activates_release_while_preserving_legacy(tmp_p
     assert paths.active_collection.resolve() == paths.release_collection
 
 
+def test_force_prepare_reinstalls_mutated_release_from_verified_archive(tmp_path):
+    archive = tmp_path / "topiclink-zvec-qwen3-embedding-8b-4096-20260717.zip"
+    lock = tmp_path / "topiclink-zvec.lock.json"
+    workspace = tmp_path / "workspace"
+    _write_archive(archive)
+    _write_lock(lock, archive)
+
+    spec = load_release_spec(lock)
+    paths = build_release_paths(workspace, spec)
+    prepared = prepare_release(spec, paths, archive_override=archive)
+    index = prepared / "0" / "embedding.index"
+    index.write_text("mutated", encoding="utf-8")
+
+    prepare_release(spec, paths, archive_override=archive)
+    assert index.read_text(encoding="utf-8") == "mutated"
+
+    prepare_release(spec, paths, archive_override=archive, force=True)
+    assert index.read_text(encoding="utf-8") == "vectors"
+
+
 def test_rejects_archive_with_wrong_checksum(tmp_path):
     archive = tmp_path / "topiclink-zvec-qwen3-embedding-8b-4096-20260717.zip"
     lock = tmp_path / "topiclink-zvec.lock.json"
@@ -260,19 +280,23 @@ def test_rejects_unsafe_oss_object_key(tmp_path):
         load_release_spec(lock)
 
 
-def test_deploy_validates_candidate_before_activation_and_restart():
+def test_deploy_repairs_unhealthy_active_release_before_activation_and_restart():
     workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "deploy.yml").read_text(
         encoding="utf-8"
     )
 
     prepare = workflow.index('"$ZVEC_MANAGER" prepare')
-    validate = workflow.index("validate_topiclink_zvec_collection.py")
+    health_probe = workflow.index("if docker compose exec -T topiclink-zvec")
     stop_writer = workflow.index("docker compose stop -t 30 topiclink-zvec")
+    force_prepare = workflow.index('"$ZVEC_MANAGER" prepare --force')
+    validate = workflow.index("validate_topiclink_zvec_collection.py")
     activate = workflow.index('"$ZVEC_MANAGER" activate')
     restart = workflow.index("docker compose down")
 
-    assert prepare < validate < stop_writer < activate < restart
+    assert prepare < health_probe < stop_writer < force_prepare < validate < activate < restart
     assert "topiclink-zvec.lock.json" in workflow
     assert '--env-file "$REPO_DIR/.env"' in workflow
     assert "--kind active-resolved" in workflow
+    assert '"$ZVEC_MANAGER" prepare --force' in workflow
+    assert "TopicLink Zvec active release is unhealthy; reinstalling" in workflow
     assert "docker compose start topiclink-zvec || true" in workflow

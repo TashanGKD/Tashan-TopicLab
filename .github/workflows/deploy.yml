@@ -244,11 +244,38 @@ jobs:
             ZVEC_ACTIVE_RESOLVED="$(python3 "$ZVEC_MANAGER" path --lock "$ZVEC_LOCK" --workspace "$WORKSPACE_HOST_PATH" --kind active-resolved)"
             CURRENT_ZVEC_ID="$(docker compose ps -q topiclink-zvec 2>/dev/null || true)"
             ZVEC_WAS_RUNNING=false
+            ZVEC_WRITER_STOPPED=false
             if [ -n "$CURRENT_ZVEC_ID" ] \
               && [ "$(docker inspect -f '{{.State.Running}}' "$CURRENT_ZVEC_ID")" = "true" ] \
               && [ "$ZVEC_ACTIVE_RESOLVED" = "$ZVEC_RELEASE_HOST_PATH" ]; then
               ZVEC_WAS_RUNNING=true
-              docker compose exec -T topiclink-zvec python -c "import json, urllib.request; payload=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=15)); count=int(payload.get('doc_count') or 0); assert count >= $ZVEC_MIN_DOC_COUNT, payload; print(payload)"
+              if docker compose exec -T topiclink-zvec python -c "import json, urllib.request; payload=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=15)); count=int(payload.get('doc_count') or 0); assert count >= $ZVEC_MIN_DOC_COUNT, payload; print(payload)"; then
+                echo "[deploy] Active TopicLink Zvec release is ready"
+              else
+                echo "::warning::TopicLink Zvec active release is unhealthy; reinstalling it from the verified archive."
+                docker compose stop -t 30 topiclink-zvec
+                ZVEC_WRITER_STOPPED=true
+                if ! python3 "$ZVEC_MANAGER" prepare --force \
+                  --lock "$ZVEC_LOCK" \
+                  --workspace "$WORKSPACE_HOST_PATH" \
+                  --env-file "$REPO_DIR/.env"; then
+                  docker compose start topiclink-zvec || true
+                  exit 1
+                fi
+                if [ "$(id -u)" -eq 0 ]; then
+                  chown -R 1000:1000 "$ZVEC_RELEASE_HOST_PATH"
+                else
+                  sudo -n chown -R 1000:1000 "$ZVEC_RELEASE_HOST_PATH"
+                fi
+                if ! docker compose run --rm --no-deps topiclink-zvec \
+                  python scripts/validate_topiclink_zvec_collection.py \
+                  "$ZVEC_RELEASE_CONTAINER_PATH" \
+                  --min-doc-count "$ZVEC_MIN_DOC_COUNT" \
+                  --expected-dimensions "$ZVEC_EXPECTED_DIMENSIONS"; then
+                  docker compose start topiclink-zvec || true
+                  exit 1
+                fi
+              fi
             else
               if [ -n "$CURRENT_ZVEC_ID" ] && [ "$(docker inspect -f '{{.State.Running}}' "$CURRENT_ZVEC_ID")" = "true" ]; then
                 ZVEC_WAS_RUNNING=true
@@ -259,7 +286,7 @@ jobs:
                 --min-doc-count "$ZVEC_MIN_DOC_COUNT" \
                 --expected-dimensions "$ZVEC_EXPECTED_DIMENSIONS"
             fi
-            if [ "$ZVEC_WAS_RUNNING" = "true" ]; then
+            if [ "$ZVEC_WAS_RUNNING" = "true" ] && [ "$ZVEC_WRITER_STOPPED" != "true" ]; then
               docker compose stop -t 30 topiclink-zvec
             fi
             if ! python3 "$ZVEC_MANAGER" activate --lock "$ZVEC_LOCK" --workspace "$WORKSPACE_HOST_PATH"; then

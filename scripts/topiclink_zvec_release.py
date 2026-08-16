@@ -393,12 +393,20 @@ def release_is_prepared(spec: ReleaseSpec, paths: ReleasePaths) -> bool:
     )
 
 
-def prepare_from_archive(spec: ReleaseSpec, paths: ReleasePaths, archive: Path) -> Path:
+def prepare_from_archive(
+    spec: ReleaseSpec,
+    paths: ReleasePaths,
+    archive: Path,
+    *,
+    force: bool = False,
+) -> Path:
     verify_checksum(archive, spec.sha256)
     validate_archive(archive, spec.collection_dir)
-    if release_is_prepared(spec, paths):
+    if release_is_prepared(spec, paths) and not force:
         log(f"release {spec.version} is already prepared")
         return paths.release_collection
+    if force and release_is_prepared(spec, paths):
+        log(f"reinstalling prepared release {spec.version} from verified archive")
 
     paths.releases_root.mkdir(parents=True, exist_ok=True)
     staging = paths.releases_root / f".staging-{spec.version}-{uuid.uuid4().hex}"
@@ -439,6 +447,7 @@ def prepare_release(
     *,
     archive_override: Path | None = None,
     oss_credentials: OssCredentials | None = None,
+    force: bool = False,
 ) -> Path:
     paths.package_root.mkdir(parents=True, exist_ok=True)
     if archive_override is None:
@@ -448,7 +457,7 @@ def prepare_release(
         archive = paths.archive
     else:
         archive = archive_override.expanduser().resolve(strict=True)
-    return prepare_from_archive(spec, paths, archive)
+    return prepare_from_archive(spec, paths, archive, force=force)
 
 
 def active_resolved_path(paths: ReleasePaths) -> str:
@@ -518,6 +527,11 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common_arguments(prepare)
     prepare.add_argument("--archive", type=Path, help="use a local archive instead of downloading")
     prepare.add_argument(
+        "--force",
+        action="store_true",
+        help="atomically reinstall a prepared release from the verified archive",
+    )
+    prepare.add_argument(
         "--env-file",
         type=Path,
         help="read OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET, OSS_BUCKET, and OSS_ENDPOINT",
@@ -550,6 +564,7 @@ def main(argv: list[str] | None = None) -> int:
                 paths,
                 archive_override=args.archive,
                 oss_credentials=credentials,
+                force=args.force,
             )
             print(json.dumps({"status": "prepared", "path": str(prepared)}, sort_keys=True))
         elif args.command == "activate":
