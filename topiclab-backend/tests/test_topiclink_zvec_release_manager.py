@@ -3,6 +3,8 @@ import hashlib
 import hmac
 import io
 import json
+import os
+import stat
 import sys
 import zipfile
 from pathlib import Path
@@ -107,15 +109,26 @@ def test_force_prepare_reinstalls_mutated_release_from_verified_archive(tmp_path
 
     spec = load_release_spec(lock)
     paths = build_release_paths(workspace, spec)
-    prepared = prepare_release(spec, paths, archive_override=archive)
+    previous_umask = os.umask(0o077)
+    try:
+        prepared = prepare_release(spec, paths, archive_override=archive)
+    finally:
+        os.umask(previous_umask)
+    for parent in (paths.package_root, paths.releases_root, paths.release_root):
+        assert stat.S_IMODE(parent.stat().st_mode) & 0o011 == 0o011
     index = prepared / "0" / "embedding.index"
     index.write_text("mutated", encoding="utf-8")
 
     prepare_release(spec, paths, archive_override=archive)
     assert index.read_text(encoding="utf-8") == "mutated"
 
-    prepare_release(spec, paths, archive_override=archive, force=True)
+    previous_umask = os.umask(0o077)
+    try:
+        prepare_release(spec, paths, archive_override=archive, force=True)
+    finally:
+        os.umask(previous_umask)
     assert index.read_text(encoding="utf-8") == "vectors"
+    assert stat.S_IMODE(paths.release_root.stat().st_mode) & 0o011 == 0o011
 
 
 def test_rejects_archive_with_wrong_checksum(tmp_path):

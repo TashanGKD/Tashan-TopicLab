@@ -301,7 +301,7 @@
 - [x] `DEPLOY-01` 修正 WorldWeave GitHub Actions 的服务器目标与 SSH/`DEPLOY_ENV` Secrets；没有把密钥写入仓库。
 - [x] `DEPLOY-02` 独立 WorldWeave 已先部署并验收 `02e8aded490b333b985c95c0f31085f1a86b13b7`。
 - [x] `TOPICLAB-01` TopicLab 的 `worldweave` gitlink 从 `96ffb63` 更新为同一线上 SHA；既有部署预检继续强制 gitlink 与同机运行仓库一致。
-- [x] `TOPICLAB-02` 修复 TopicLab 部署被既有 Zvec 集合不足阻断的问题：运行集合不健康时先停写入进程，从校验过的锁定压缩包原子重装，再离线验证文档数、向量维度和索引完整度后激活。
+- [x] `TOPICLAB-02` 修复 TopicLab 部署被既有 Zvec 集合不足阻断的问题：运行集合不健康时先停写入进程，从校验过的锁定压缩包原子重装，再离线验证文档数、向量维度和索引完整度后激活；发布管理器显式保留运行 UID 所需的父目录穿越权限，不受部署 `umask 077` 影响。
 
 对应 WorldWeave 提交：
 

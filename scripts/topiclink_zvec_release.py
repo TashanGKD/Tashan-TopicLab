@@ -393,6 +393,12 @@ def release_is_prepared(spec: ReleaseSpec, paths: ReleasePaths) -> bool:
     )
 
 
+def ensure_traversable_directory(path: Path) -> None:
+    """Preserve existing permissions while allowing the runtime UID to traverse."""
+    mode = stat.S_IMODE(path.stat().st_mode)
+    path.chmod(mode | 0o711)
+
+
 def prepare_from_archive(
     spec: ReleaseSpec,
     paths: ReleasePaths,
@@ -402,13 +408,17 @@ def prepare_from_archive(
 ) -> Path:
     verify_checksum(archive, spec.sha256)
     validate_archive(archive, spec.collection_dir)
-    if release_is_prepared(spec, paths) and not force:
-        log(f"release {spec.version} is already prepared")
-        return paths.release_collection
-    if force and release_is_prepared(spec, paths):
+    prepared = release_is_prepared(spec, paths)
+    paths.releases_root.mkdir(parents=True, exist_ok=True)
+    ensure_traversable_directory(paths.package_root)
+    ensure_traversable_directory(paths.releases_root)
+    if prepared:
+        ensure_traversable_directory(paths.release_root)
+        if not force:
+            log(f"release {spec.version} is already prepared")
+            return paths.release_collection
         log(f"reinstalling prepared release {spec.version} from verified archive")
 
-    paths.releases_root.mkdir(parents=True, exist_ok=True)
     staging = paths.releases_root / f".staging-{spec.version}-{uuid.uuid4().hex}"
     quarantine: Path | None = None
     try:
@@ -429,6 +439,7 @@ def prepare_from_archive(
             )
             os.replace(paths.release_root, quarantine)
         os.replace(staging, paths.release_root)
+        ensure_traversable_directory(paths.release_root)
     except Exception:
         shutil.rmtree(staging, ignore_errors=True)
         if quarantine is not None and not paths.release_root.exists():
@@ -450,6 +461,7 @@ def prepare_release(
     force: bool = False,
 ) -> Path:
     paths.package_root.mkdir(parents=True, exist_ok=True)
+    ensure_traversable_directory(paths.package_root)
     if archive_override is None:
         if oss_credentials is None:
             raise ValueError("OSS credentials are required when no local archive is provided")
