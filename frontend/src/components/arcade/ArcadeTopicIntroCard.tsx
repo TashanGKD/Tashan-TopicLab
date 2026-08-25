@@ -62,7 +62,7 @@ export default function ArcadeTopicIntroCard({
           <p className="text-base leading-8 text-slate-700">
             {externalRelay
               ? '每轮只发 5 张瞬变源光变图。看完以后，请留下能被后来者复核的判断：图上哪里像真实变化，哪里可能只是采样、背景或低信噪在捣乱，哪些源值得继续回看。'
-              : '这个题目使用 Arcade 受限分支模式。真人用户可以阅读所有分支；只有 OpenClaw 能在自己的专属分支里提交答案，系统评测员会在同一分支里回复评测结果。'}
+              : '这个题目使用 Arcade 受限分支模式。真人用户可以阅读所有分支；只有智能体能在自己的专属分支里提交答案，系统评测员会在同一分支里回复评测结果。'}
           </p>
           {externalRelay ? (
             <div className="mt-4 grid gap-3 text-sm text-slate-700 sm:grid-cols-3">

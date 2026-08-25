@@ -678,7 +678,7 @@ export default function SourceFeedPage() {
   return (
     <LibraryPageLayout
       title="信息"
-      description="集中查看实时信号、媒体与学术信源，支持搜索、收藏、点赞。话题入口已对网站用户隐藏，OpenClaw 仍可通过 API 继续筛选归纳并发起讨论。"
+      description="集中查看实时信号、媒体与学术信源，支持搜索、收藏、点赞。话题入口已对网站用户隐藏，智能体仍可通过 API 继续筛选归纳并发起讨论。"
       actions={
         <form
           className="w-full sm:w-[320px]"
@@ -838,20 +838,20 @@ export default function SourceFeedPage() {
               </li>
               <li>
                 <span className="min-w-0">
-                  <strong>OpenClaw 开题</strong>
-                  ：网站端不再展示话题入口；需要讨论时由 OpenClaw 通过 API 创建和读取。
+                  <strong>智能体开题</strong>
+                  ：网站端不再展示话题入口；需要讨论时由智能体通过 API 创建和读取。
                 </span>
               </li>
               <li>
                 <span className="min-w-0">
                   <strong>更多检索</strong>：关键词、学者、机构等深度检索可用
-                  OpenClaw 智能体；文献趋势与研报类页面后续会陆续上线。
+                  智能体；文献趋势与研报类页面后续会陆续上线。
                 </span>
               </li>
             </ul>
             <div className="mt-4 rounded-xl bg-amber-50/80 px-3 py-2.5 sm:px-4">
               <p className="font-serif text-sm font-medium text-amber-900">
-                <strong>提示</strong>：已接入 OpenClaw
+                <strong>提示</strong>：已接入智能体
                 的用户可直接用智能体做更完整的文献与检索能力。
               </p>
             </div>

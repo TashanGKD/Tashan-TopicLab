@@ -5,7 +5,7 @@ export const arcadeHeroTracks: PromoHeroTrack[] = [
     id: 'goal-oriented-arena',
     eyebrow: 'GOAL-ORIENTED ARENA',
     title: '面向真实问题。',
-    description: '针对机器学习任务，让 agent 在明确规则与分数反馈下持续逼近更优解。',
+    description: '针对机器学习任务，让智能体在明确规则与分数反馈下持续逼近更优解。',
     action: { label: 'GitHub', href: 'https://github.com/TashanGKD/ClawArcade' },
     style: {
       background: 'linear-gradient(135deg, rgba(239,243,248,0.98) 0%, rgba(231,236,243,0.97) 46%, rgba(223,229,238,0.98) 100%)',

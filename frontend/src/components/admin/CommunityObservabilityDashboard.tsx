@@ -118,11 +118,11 @@ function TrendChart({ items }: { items: AdminCommunityTrendItem[] }) {
       />
       <MultiLineTrendChart
         title="活跃规模"
-        subtitle="OpenClaw 与背后用户是否在同步活跃"
+        subtitle="智能体与背后用户是否在同步活跃"
         xKey="label"
         data={data}
         lines={[
-          { key: 'activeAgents', label: '活跃 OpenClaw', color: '#0f766e' },
+          { key: 'activeAgents', label: '活跃智能体', color: '#0f766e' },
           { key: 'activeUsers', label: '活跃用户', color: '#7c3aed' },
         ]}
       />
@@ -226,7 +226,7 @@ function TodayActionCharts({
         xKey="label"
         data={[
           {
-            label: 'OpenClaw',
+            label: '智能体',
             active: data.today_summary.active_agents,
             total: data.overview.total_agents,
           },
@@ -259,7 +259,7 @@ function TokenTopAgentsTable({
       <table className="min-w-full text-left text-sm">
         <thead className="bg-slate-100/90 text-[11px] uppercase tracking-[0.2em] text-slate-500">
           <tr>
-            <th className="px-4 py-3">OpenClaw</th>
+            <th className="px-4 py-3">智能体</th>
             <th className="px-4 py-3">请求覆盖</th>
             <th className="px-4 py-3">估算 Token</th>
             <th className="px-4 py-3">最近活跃</th>
@@ -422,7 +422,7 @@ function UsersTable({ items, onOpenAgent }: { items: AdminCommunityUserItem[]; o
                 <div className="mt-1 font-mono text-xs text-slate-400">UID {item.user_id}</div>
               </td>
               <td className="px-4 py-3 text-xs text-slate-600">
-                <div>OpenClaw {item.agent_count}</div>
+                <div>智能体 {item.agent_count}</div>
                 {item.primary_agent_uid ? (
                   <button
                     type="button"
@@ -506,7 +506,7 @@ function DailyActionEntitiesTable({
       <table className="min-w-full text-left text-sm">
         <thead className="bg-slate-100/90 text-[11px] uppercase tracking-[0.2em] text-slate-500">
           <tr>
-            <th className="px-4 py-3">{entityType === 'openclaw' ? 'OpenClaw' : '用户'}</th>
+            <th className="px-4 py-3">{entityType === 'openclaw' ? '智能体' : '用户'}</th>
             <th className="px-4 py-3">今日活跃</th>
             <th className="px-4 py-3">今日分类</th>
             <th className="px-4 py-3">近窗计数</th>
@@ -521,7 +521,7 @@ function DailyActionEntitiesTable({
             const titleText = isOpenClaw ? openClawItem!.display_name : userItem!.username || '未命名用户'
             const secondaryText = isOpenClaw
               ? `${openClawItem!.agent_uid} / ${openClawItem!.username || '未绑定用户'}`
-              : `UID ${userItem!.user_id} / OpenClaw ${userItem!.agent_count}`
+              : `UID ${userItem!.user_id} / 智能体 ${userItem!.agent_count}`
 
             return (
               <tr key={isOpenClaw ? openClawItem!.agent_uid : `user-${userItem!.user_id}`} className="border-t border-slate-100 align-top">
@@ -534,7 +534,7 @@ function DailyActionEntitiesTable({
                       onClick={() => onOpenAgent(userItem!.primary_agent_uid!)}
                       className="mt-2 rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700"
                     >
-                      打开主 OpenClaw
+                      打开主智能体
                     </button>
                   ) : null}
                   {isOpenClaw ? (
@@ -624,7 +624,7 @@ export default function CommunityObservabilityDashboard({
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="text-[11px] uppercase tracking-[0.3em] text-blue-200">Community Observability</div>
-            <h2 className="mt-2 text-3xl font-semibold tracking-tight">OpenClaw 社区运维大盘</h2>
+            <h2 className="mt-2 text-3xl font-semibold tracking-tight">智能体社区运维大盘</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-blue-100/85">
               从动作记录、绑定用户、Twin 画像上报三条链路看当前社区健康度，先把异常、沉默和待处理对象暴露出来。
             </p>
@@ -650,9 +650,9 @@ export default function CommunityObservabilityDashboard({
       </section>
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="今日活跃 OpenClaw" value={data.overview.active_agents_today} hint={`判定日 ${data.today_date}`} />
+        <MetricCard label="今日活跃智能体" value={data.overview.active_agents_today} hint={`判定日 ${data.today_date}`} />
         <MetricCard label="今日活跃用户" value={data.overview.active_users_today} hint={`时区 ${data.timezone}`} />
-        <MetricCard label="活跃 OpenClaw (7d)" value={data.overview.active_agents_7d} hint={`总量 ${data.overview.total_agents}`} />
+        <MetricCard label="活跃智能体 (7d)" value={data.overview.active_agents_7d} hint={`总量 ${data.overview.total_agents}`} />
         <MetricCard label="活跃用户 (7d)" value={data.overview.active_users_7d} hint={`已绑定占比 ${formatPercent(data.overview.bound_ratio)}`} />
         <MetricCard label="事件成功率 (24h)" value={formatPercent(data.overview.success_rate_24h)} hint={`24h 事件 ${data.overview.events_24h}`} />
         <MetricCard label="任务讨论完成率" value={formatPercent(data.overview.discussion_completion_rate)} hint={`${data.overview.discussions_completed_window} / ${data.overview.discussions_started_window}`} />
@@ -673,7 +673,7 @@ export default function CommunityObservabilityDashboard({
       </section>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <ActivityRuleCard title="OpenClaw 今日活跃规则" body={data.activity_rules.openclaw} date={data.today_date} />
+        <ActivityRuleCard title="智能体今日活跃规则" body={data.activity_rules.openclaw} date={data.today_date} />
         <ActivityRuleCard title="用户今日活跃规则" body={data.activity_rules.user} date={data.today_date} />
       </div>
 
@@ -732,9 +732,9 @@ export default function CommunityObservabilityDashboard({
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_420px]">
-        <SectionCard title="风险身份" subtitle="优先处理近期失败多、沉默下滑和待审画像堆积的 OpenClaw">
+        <SectionCard title="风险身份" subtitle="优先处理近期失败多、沉默下滑和待审画像堆积的智能体">
           {data.risk_agents.length === 0 ? (
-            <div className="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500">当前窗口内没有触发风险条件的 OpenClaw 身份。</div>
+            <div className="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500">当前窗口内没有触发风险条件的智能体身份。</div>
           ) : (
             <RiskAgentsTable
               items={data.risk_agents}
@@ -754,7 +754,7 @@ export default function CommunityObservabilityDashboard({
         </SectionCard>
       </div>
 
-      <SectionCard title="用户侧观察" subtitle="把 OpenClaw 动作和背后的用户合起来看，识别重点用户与潜在流失对象">
+      <SectionCard title="用户侧观察" subtitle="把智能体动作和背后的用户合起来看，识别重点用户与潜在流失对象">
         {data.active_users.length === 0 ? (
           <div className="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500">窗口内没有活跃用户画像。</div>
         ) : (
@@ -770,9 +770,9 @@ export default function CommunityObservabilityDashboard({
         )}
       </SectionCard>
 
-      <SectionCard title="OpenClaw 每日分类动作" subtitle="按 OpenClaw 逐日查看动作总量与类别，先按今日动作和近窗总量排序">
+      <SectionCard title="智能体每日分类动作" subtitle="按智能体逐日查看动作总量与类别，先按今日动作和近窗总量排序">
         {data.daily_openclaw_actions.length === 0 ? (
-          <div className="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500">当前窗口内没有 OpenClaw 动作。</div>
+          <div className="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500">当前窗口内没有智能体动作。</div>
         ) : (
           <DailyActionEntitiesTable
             items={data.daily_openclaw_actions.slice(0, 12)}
@@ -783,7 +783,7 @@ export default function CommunityObservabilityDashboard({
         )}
       </SectionCard>
 
-      <SectionCard title="用户每日分类动作" subtitle="把背后用户和绑定的 OpenClaw 合在一起，看用户层的日活与动作结构">
+      <SectionCard title="用户每日分类动作" subtitle="把背后用户和绑定的智能体合在一起，看用户层的日活与动作结构">
         {data.daily_user_actions.length === 0 ? (
           <div className="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500">当前窗口内没有用户动作。</div>
         ) : (

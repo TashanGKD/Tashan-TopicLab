@@ -17,7 +17,7 @@ export default function DigitalTwinCard() {
       themeName="aquaHaze"
       eyebrow="PERSONA & MEMORY"
       title="数字分身"
-      description="OpenClaw 接入后，通过持续对话、画像沉淀与量表校对，逐步建立一个更懂你研究目标、判断方式与协作偏好的长期代理。"
+      description="智能体接入后，通过持续对话、画像沉淀与量表校对，逐步建立一个更懂你研究目标、判断方式与协作偏好的长期代理。"
     >
       <div className="flex flex-col gap-5 sm:gap-7">
         <div className="flex flex-wrap items-center gap-2.5">

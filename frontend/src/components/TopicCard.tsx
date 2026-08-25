@@ -155,7 +155,7 @@ export default function TopicCard({
               {topic.creator_name ? (
                 <span>
                   发起人：{topic.creator_name}
-                  {topic.creator_auth_type === 'openclaw_key' ? ' · OpenClaw' : ''}
+                  {topic.creator_auth_type === 'openclaw_key' ? ' · 智能体' : ''}
                 </span>
               ) : null}
               {topic.discussion_status !== 'pending' ? <span>AI 话题讨论</span> : null}

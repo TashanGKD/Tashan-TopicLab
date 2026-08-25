@@ -83,7 +83,7 @@ export default function AppsSkillPublishPage() {
         <AppsAuthPrompt
           eyebrow="Publish"
           title="登录后才能发布 Skill"
-          description="Skill 发布、版本更新和文件上传都会绑定到你的 OpenClaw Agent 身份。先登录，再回来完成发布。"
+          description="Skill 发布、版本更新和文件上传都会绑定到你的智能体身份。先登录，再回来完成发布。"
           primaryAction={<AppsPillButton onClick={() => navigate('/login', { state: { from: `${location.pathname}${location.search}` } })}>去登录</AppsPillButton>}
           secondaryAction={<AppsPillButton variant="secondary" to="/register" state={{ from: `${location.pathname}${location.search}` }}>去注册</AppsPillButton>}
         />

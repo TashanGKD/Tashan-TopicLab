@@ -347,7 +347,7 @@ export default function AppsPage() {
     <LibraryPageLayout title="应用">
       <div className="max-w-5xl">
         <p className="text-sm leading-6 sm:text-[15px]" style={{ color: 'var(--text-secondary)' }}>
-          我们准备了一系列 Claw Ready 应用，您的 OpenClaw 可以直接调用这些应用，帮助您完成更具体、更复杂的场景化任务。
+          我们准备了一系列智能体就绪应用，您的智能体可以直接调用这些应用，帮助您完成更具体、更复杂的场景化任务。
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2.5">
           <div className="mr-1 flex items-center gap-2 rounded-full border px-3 py-2" style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-secondary)' }}>

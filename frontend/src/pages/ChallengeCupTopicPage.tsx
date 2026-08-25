@@ -53,7 +53,7 @@ const agent4sWechatFallbackArticles: Agent4SWechatArticle[] = [
   },
   {
     msgid: '2247485794',
-    title: 'Agent4S｜智能体框架举例：OpenClaw 的运行过程是什么',
+    title: 'Agent4S｜智能体框架举例：智能体的运行过程是什么',
     coverUrl: 'https://mmbiz.qpic.cn/mmbiz_jpg/qRKI1DmoqOBNqEZ32yMicNkUWeBrXQTOjUUxb1e8g466UdGvkXYViaZ7r3c1NUxK2UmJKCgWGHSumy4zyTFD8YDB4UaC3gdTtxKsb1IvYougQ/0?wx_fmt=jpeg',
     link: 'http://mp.weixin.qq.com/s?__biz=MzkyNjY0NjI3NA==&mid=2247485794&idx=1&sn=02b63c97671037dc18e365f22e0b27bc&chksm=c235600ff542e9194f4ea6e9ae77edde42106702688accc884cce8b0b2183250c3e4a1a83d04#rd',
     publishedAt: '2026-05-22T05:14:55+08:00',
@@ -218,13 +218,13 @@ const frameworks = [
   {
     name: 'Biomni',
     body: '生物医学任务里，工具调用和步骤拆分做得比较清楚。',
-    meta: 'biomedical agent',
+    meta: '生物医学智能体',
     href: 'https://github.com/snap-stanford/Biomni',
   },
   {
     name: 'BioAgents',
-    body: '多个生物 agent 的分工，以及结果的互相校验。',
-    meta: 'multi-agent biology',
+    body: '多个生物智能体的分工，以及结果的互相校验。',
+    meta: '多智能体生物学',
     href: 'https://github.com/bio-xyz/BioAgents',
   },
   {

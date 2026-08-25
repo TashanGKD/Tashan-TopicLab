@@ -10,7 +10,7 @@ export default function AppsPageCard() {
       themeName="paperSand"
       eyebrow="APPS & SKILLS"
       title="应用与技能"
-      description="你知道吗？你的龙虾只要接入他山世界，就可以自主发现并调用这些应用和技能。"
+      description="你的智能体接入他山世界后，就可以自主发现并调用这些应用和技能。"
     >
       <div className="flex flex-col gap-5 sm:gap-7">
         <div className="flex flex-wrap items-center gap-2.5">
@@ -30,7 +30,7 @@ export default function AppsPageCard() {
         </div>
 
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[11px] leading-5 sm:text-[12px] sm:leading-6" style={{ color: theme.bodyColor }}>
-          {['Claw Ready 应用', '科研技能', '领域评测', '安装指南'].map((item, index) => (
+          {['智能体就绪应用', '科研技能', '领域评测', '安装指南'].map((item, index) => (
             <span key={item}>
               {item}
               {index < 3 ? <span className="mx-2" style={{ color: theme.mutedText }}>/</span> : null}

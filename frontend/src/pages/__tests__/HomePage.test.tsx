@@ -62,7 +62,7 @@ vi.mock('../../components/OpenClawSkillCard', () => ({
     onCopyAction?: () => void
   }) => (
     <section>
-      <h2>OpenClaw 注册</h2>
+      <h2>智能体注册</h2>
       <button
         type="button"
         onClick={() => {
@@ -138,8 +138,8 @@ describe('HomePage', () => {
     expect(screen.getByRole('heading', { name: /保持专注/i })).toBeInTheDocument()
     expect(screen.getByText('科教生态')).toBeInTheDocument()
     expect(screen.getByText('信息专栏')).toBeInTheDocument()
-    expect(screen.getByText('OpenClaw 专属')).toBeInTheDocument()
-    expect(getEntryButton('OpenClaw 接入')).toBeInTheDocument()
+    expect(screen.getByText('智能体专属')).toBeInTheDocument()
+    expect(getEntryButton('智能体接入')).toBeInTheDocument()
     expect(getEntryButton('世界脉络')).toBeEnabled()
     expect(getEntryButton('学术热力图')).toBeEnabled()
     expect(getEntryButton('春招季')).toBeDisabled()
@@ -156,7 +156,7 @@ describe('HomePage', () => {
     expect(screen.queryByRole('button', { name: '2050专题' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /他山世界 2.0，来看看我们的思考/i })).toHaveAttribute('href', '/thinking')
     expect(getStage()).toBeInTheDocument()
-    expect(within(getStage()).getByText('OpenClaw 接入')).toBeInTheDocument()
+    expect(within(getStage()).getByText('智能体接入')).toBeInTheDocument()
   })
 
   it('opens the research apps zone directly to the apps page', () => {
@@ -287,7 +287,7 @@ describe('HomePage', () => {
     renderHomePage()
 
     expect(Math.random).toHaveBeenCalled()
-    expect(within(getStage()).getByText('OpenClaw 接入')).toBeInTheDocument()
+    expect(within(getStage()).getByText('智能体接入')).toBeInTheDocument()
 
     act(() => {
       vi.advanceTimersByTime(5200)
@@ -300,19 +300,19 @@ describe('HomePage', () => {
     renderHomePage()
 
     fireEvent.click(screen.getAllByRole('button', { name: '触发复制暂停' })[0])
-    expect(within(getStage()).getByText('OpenClaw 接入')).toBeInTheDocument()
+    expect(within(getStage()).getByText('智能体接入')).toBeInTheDocument()
 
     act(() => {
       vi.advanceTimersByTime(5200)
     })
 
-    expect(within(getStage()).getByText('OpenClaw 接入')).toBeInTheDocument()
+    expect(within(getStage()).getByText('智能体接入')).toBeInTheDocument()
 
     act(() => {
       vi.advanceTimersByTime(30000)
     })
 
-    expect(within(getStage()).getByText('OpenClaw 接入')).toBeInTheDocument()
+    expect(within(getStage()).getByText('智能体接入')).toBeInTheDocument()
 
     act(() => {
       vi.advanceTimersByTime(5200)
@@ -327,14 +327,14 @@ describe('HomePage', () => {
     fireEvent.click(getEntryButton('竞技场'))
     expect(within(getStage()).getByText('竞技场')).toBeInTheDocument()
 
-    fireEvent.click(getEntryButton('OpenClaw 接入'))
-    expect(within(getStage()).getByText('OpenClaw 接入')).toBeInTheDocument()
+    fireEvent.click(getEntryButton('智能体接入'))
+    expect(within(getStage()).getByText('智能体接入')).toBeInTheDocument()
 
     act(() => {
       vi.advanceTimersByTime(5200)
     })
 
-    expect(within(getStage()).getByText('OpenClaw 接入')).toBeInTheDocument()
+    expect(within(getStage()).getByText('智能体接入')).toBeInTheDocument()
 
     act(() => {
       vi.advanceTimersByTime(30000)
@@ -359,15 +359,15 @@ describe('HomePage', () => {
     fireEvent.click(getEntryButton('竞技场'))
     expect(within(getStage()).getByText('竞技场')).toBeInTheDocument()
 
-    fireEvent.click(getEntryButton('OpenClaw 接入'))
+    fireEvent.click(getEntryButton('智能体接入'))
     expect(scrollIntoViewMock).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' })
-    expect(within(getStage()).getByText('OpenClaw 接入')).toBeInTheDocument()
+    expect(within(getStage()).getByText('智能体接入')).toBeInTheDocument()
 
     act(() => {
       vi.advanceTimersByTime(5200)
     })
 
-    expect(within(getStage()).getByText('OpenClaw 接入')).toBeInTheDocument()
+    expect(within(getStage()).getByText('智能体接入')).toBeInTheDocument()
 
     act(() => {
       vi.advanceTimersByTime(30000)

@@ -135,7 +135,7 @@ describe('AdminDashboardPage', () => {
       </MemoryRouter>,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'OpenClaw 身份' }))
+    fireEvent.click(screen.getByRole('button', { name: '智能体身份' }))
 
     await waitFor(() => {
       expect(mockListOpenClawAgents).toHaveBeenCalled()

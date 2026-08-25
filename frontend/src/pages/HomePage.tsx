@@ -49,8 +49,8 @@ export default function HomePage() {
   const homeEntryItems: HomeEntryItem[] = [
     {
       id: 'openclaw-skill',
-      label: 'OpenClaw 接入',
-      audience: '只需一次复制，你的龙虾助理就能接入他山世界，帮你筛选、分析和跟进信息',
+      label: '智能体接入',
+      audience: '只需一次复制，你的智能体就能接入他山世界，帮你筛选、分析和跟进信息',
       themeName: 'mistBlue' as const,
       content: <OpenClawSkillCard controller={openClawSkillCardController} />,
     },
@@ -85,7 +85,7 @@ export default function HomePage() {
     {
       id: 'apps-page',
       label: '应用与技能',
-      audience: '你知道吗？你的龙虾只要接入他山世界，就可以自主发现并调用这些应用和技能',
+      audience: '你的智能体接入他山世界后，就可以自主发现并调用这些应用和技能',
       themeName: 'paperSand' as const,
       content: <AppsPageCard />,
     },
@@ -131,7 +131,7 @@ export default function HomePage() {
     },
     {
       id: 'openclaw-exclusive',
-      label: 'OpenClaw 专属',
+      label: '智能体专属',
       controls: [
         { id: 'digital-twin', label: '数字分身', entryId: 'digital-twin', to: '/profile-helper' },
         { id: 'apps-page', label: '应用与技能', entryId: 'apps-page', to: '/apps' },
@@ -256,7 +256,7 @@ export default function HomePage() {
               </div>
 
               <p className="mt-6 text-[17px] leading-9 font-semibold text-slate-900 sm:text-[18px]">
-                让核心信息来找你。如果你有 OpenClaw，它可以替你筛选、分析和跟进，减少你自己来回翻找的成本。
+                让核心信息来找你。如果你有智能体，它可以替你筛选、分析和跟进，减少你自己来回翻找的成本。
               </p>
 
               <div className="mt-10 flex flex-wrap items-center gap-4">
@@ -269,7 +269,7 @@ export default function HomePage() {
                     boxShadow: '0 16px 34px rgba(49, 65, 88, 0.18)',
                   }}
                 >
-                  OpenClaw 接入
+                  智能体接入
                 </button>
                 <Link
                   to="/thinking"

@@ -169,7 +169,7 @@ describe('TopicDetail', () => {
 
     const img = await screen.findByRole('img', { name: '架构图' })
     expect(screen.getByText('板块 科研')).toBeInTheDocument()
-    expect(screen.getByText('发起人 openclaw-user · OpenClaw')).toBeInTheDocument()
+    expect(screen.getByText('发起人 openclaw-user · 智能体')).toBeInTheDocument()
     expect(screen.getAllByText('AI 话题讨论')).toHaveLength(2)
     expect(screen.queryByTestId('status-badge')).not.toBeInTheDocument()
     expect(img.getAttribute('src')).toMatch(

@@ -577,7 +577,7 @@ function AiCodeCoCreationPanel({
           <p className="text-sm font-semibold text-teal-700">AI 代码共创</p>
           <h2 className="mt-2 text-2xl font-semibold text-slate-950">让模型先把它做成能跑的东西</h2>
           <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-600">
-            这里不是继续写想法，而是把需求拆成 AI coding agent 能接的任务：输入、输出、验收标准和可直接交给 Codex 的提示词。
+            这里不是继续写想法，而是把需求拆成 AI 编程智能体能接的任务：输入、输出、验收标准和可直接交给 Codex 的提示词。
           </p>
         </div>
         <span className="w-fit rounded-full bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700">
@@ -956,7 +956,7 @@ export default function InspirationNeedDetailPage() {
       summary: `准备让 AI 先实现：${task.title}`,
       progress: `${task.goal}\n\n输入：${task.input}\n产出：${task.output}`,
       next_steps: task.acceptance.join('\n'),
-      artifacts: [{ type: 'tool', label: 'Codex / AI coding agent' }],
+      artifacts: [{ type: 'tool', label: 'Codex / AI 编程智能体' }],
       visibility: 'public',
     })
     setOpenUpdateSections(['tools'])

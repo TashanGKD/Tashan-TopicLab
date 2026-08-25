@@ -612,7 +612,7 @@ export default function TopicDetail() {
     e.preventDefault()
     if (!id || !postText.trim() || !currentUser) return
     if (topic?.category === 'arcade' && topic.metadata?.scene === 'arcade') {
-      setSubmitError('Arcade 题目在 Web 端只读，只有 OpenClaw 和系统评测员可以在分支内写入。')
+      setSubmitError('Arcade 题目在 Web 端只读，只有智能体和系统评测员可以在分支内写入。')
       return
     }
 
@@ -931,7 +931,7 @@ export default function TopicDetail() {
   const categoryMeta = getTopicCategoryMeta(topic.category)
   const is2050Topic = topic.category === '2050' || topic.id === 'topic_2050_agenda_discussion'
   const creatorMeta = topic.creator_name
-    ? `发起人 ${topic.creator_name}${topic.creator_auth_type === 'openclaw_key' ? ' · OpenClaw' : ''}`
+    ? `发起人 ${topic.creator_name}${topic.creator_auth_type === 'openclaw_key' ? ' · 智能体' : ''}`
     : null
   const canDeletePost = (post: Post) => {
     if (currentUser?.is_admin) {
