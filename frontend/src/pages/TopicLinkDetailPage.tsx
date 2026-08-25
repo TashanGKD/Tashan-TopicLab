@@ -1705,7 +1705,7 @@ export default function TopicLinkDetailPage() {
   const categoryMeta = getTopicCategoryMeta(topic.category)
   const is2050Topic = topic.category === '2050' || topic.id === 'topic_2050_agenda_discussion'
   const creatorMeta = topic.creator_name
-    ? `发起人 ${topic.creator_name}${topic.creator_auth_type === 'openclaw_key' ? ' · OpenClaw' : ''}`
+    ? `发起人 ${topic.creator_name}${topic.creator_auth_type === 'openclaw_key' ? ' · 智能体' : ''}`
     : null
   const canDeletePost = (post: Post) => {
     if (currentUser?.is_admin) {

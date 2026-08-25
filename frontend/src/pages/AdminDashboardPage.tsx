@@ -415,7 +415,7 @@ export default function AdminDashboardPage() {
         setOpenClawAgentLedger(ledgerRes.items)
       } catch (err) {
         if (cancelled) return
-        setError(err instanceof Error ? err.message : 'OpenClaw 详情加载失败')
+        setError(err instanceof Error ? err.message : '智能体详情加载失败')
       } finally {
         if (!cancelled) setInspectorLoading(false)
       }
@@ -481,9 +481,9 @@ export default function AdminDashboardPage() {
         : tab === 'feedback'
           ? '反馈记录'
           : tab === 'openclaw_agents'
-            ? 'OpenClaw 身份'
+            ? '智能体身份'
             : tab === 'openclaw_events'
-              ? 'OpenClaw 事件'
+              ? '智能体事件'
               : '画像上报'
 
   const selectedLabel =
@@ -589,7 +589,7 @@ export default function AdminDashboardPage() {
 
   const suspendOpenClawAgent = async () => {
     if (!selectedOpenClawAgentUid) return
-    if (!window.confirm(`确认封禁 OpenClaw 身份 ${selectedOpenClawAgentUid}？`)) return
+    if (!window.confirm(`确认封禁智能体身份 ${selectedOpenClawAgentUid}？`)) return
     setSaving(true)
     setError('')
     try {
@@ -662,7 +662,7 @@ export default function AdminDashboardPage() {
           : tab === 'openclaw_agents'
             ? '搜索 agent_uid / display_name / handle / 用户'
             : tab === 'openclaw_events'
-              ? '搜索 user_id / openclaw_id / agent_uid / 用户 / 路由 / 事件'
+              ? '搜索 user_id / 智能体 ID / agent_uid / 用户 / 路由 / 事件'
               : '搜索 twin / 用户 / instance / topic / normalized'
 
   const inspectorHint =
@@ -676,7 +676,7 @@ export default function AdminDashboardPage() {
             ? '查看身份详情、事件流水、他山石账本，并执行运维动作'
             : tab === 'openclaw_events'
               ? '查看全局事件明细、路由、请求上下文和结果载荷'
-              : '查看 OpenClaw 主动上报的用户画像、偏好和阶段目标'
+              : '查看智能体主动上报的用户画像、偏好和阶段目标'
 
   return (
     <div
@@ -690,7 +690,7 @@ export default function AdminDashboardPage() {
               <div className="text-[11px] uppercase tracking-[0.32em] text-blue-200">Isolated Admin Surface</div>
               <h1 className="mt-2 text-3xl font-semibold tracking-tight">数据库管理后台</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-blue-100/85">
-                统一管理站内数据和通过 topiclab-cli 接入的 OpenClaw 身份、事件、他山石，以及 twin 画像上报能力。
+                统一管理站内数据和通过 topiclab-cli 接入的智能体身份、事件、他山石，以及 twin 画像上报能力。
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
@@ -698,8 +698,8 @@ export default function AdminDashboardPage() {
                 ['community_observability', '社区观测'],
                 ['users', '用户'],
                 ['feedback', '用户反馈'],
-                ['openclaw_agents', 'OpenClaw 身份'],
-                ['openclaw_events', 'OpenClaw 事件'],
+                ['openclaw_agents', '智能体身份'],
+                ['openclaw_events', '智能体事件'],
                 ['twin_observations', '画像上报'],
               ].map(([value, label]) => (
                 <button
@@ -758,9 +758,9 @@ export default function AdminDashboardPage() {
                         : tab === 'feedback'
                           ? '反馈列表'
                           : tab === 'openclaw_agents'
-                            ? 'OpenClaw 身份列表'
+                            ? '智能体身份列表'
                             : tab === 'openclaw_events'
-                              ? 'OpenClaw 事件流'
+                              ? '智能体事件流'
                               : 'Twin 画像上报'}
                   </div>
                   <div className="mt-1 text-xs text-slate-500">总计 {total} 条，当前第 {currentPage} / {totalPages} 页</div>
@@ -1175,7 +1175,7 @@ export default function AdminDashboardPage() {
                         </td>
                         <td className="px-4 py-3 align-top text-xs text-slate-600">
                           <div className="line-clamp-1">{item.display_name || item.username || '--'}</div>
-                          <div className="mt-1 font-mono">openclaw_id {item.openclaw_agent_id ?? '--'}</div>
+                          <div className="mt-1 font-mono">智能体 ID {item.openclaw_agent_id ?? '--'}</div>
                           <div className="mt-1 font-mono">{item.agent_uid || '--'}</div>
                           <div className="mt-1">用户 {item.resolved_user_id ?? item.bound_user_id ?? '--'} / {item.username || item.phone || '--'}</div>
                         </td>
@@ -1614,7 +1614,7 @@ export default function AdminDashboardPage() {
                     {openClawAgentDetail?.profile_json ? <JsonPanel title="Profile JSON" value={openClawAgentDetail.profile_json} /> : null}
                   </>
                 ) : (
-                  <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">左侧选择一个 OpenClaw 身份后可查看详情和执行运维操作。</div>
+                  <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">左侧选择一个智能体身份后可查看详情和执行运维操作。</div>
                 )
               ) : null}
 
@@ -1630,7 +1630,7 @@ export default function AdminDashboardPage() {
                       </div>
                       <div className="mt-2">{selectedOpenClawEvent.action_name}</div>
                       <div className="font-mono">{selectedOpenClawEvent.event_uid}</div>
-                      <div>openclaw_id {selectedOpenClawEvent.openclaw_agent_id ?? '--'}</div>
+                      <div>智能体 ID {selectedOpenClawEvent.openclaw_agent_id ?? '--'}</div>
                       <div>agent_uid {selectedOpenClawEvent.agent_uid || '--'}</div>
                       <div>user {selectedOpenClawEvent.resolved_user_id ?? selectedOpenClawEvent.bound_user_id ?? '--'} / {selectedOpenClawEvent.username || selectedOpenClawEvent.phone || '--'}</div>
                       <div>route {selectedOpenClawEvent.route || '--'}</div>
@@ -1645,7 +1645,7 @@ export default function AdminDashboardPage() {
                           onClick={() => jumpToOpenClawAgent(selectedOpenClawEvent.agent_uid!)}
                           className="w-full rounded-2xl border border-blue-200 px-4 py-3 text-sm font-medium text-blue-700"
                         >
-                          跳转到该 OpenClaw 身份
+                          跳转到该智能体身份
                         </button>
                       ) : null}
                       {(selectedOpenClawEvent.resolved_user_id ?? selectedOpenClawEvent.bound_user_id) ? (
@@ -1663,7 +1663,7 @@ export default function AdminDashboardPage() {
                     <JsonPanel title="Result" value={selectedOpenClawEvent.result} />
                   </>
                 ) : (
-                  <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">左侧选择一条 OpenClaw 事件后可查看明细。</div>
+                  <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">左侧选择一条智能体事件后可查看明细。</div>
                 )
               ) : null}
 

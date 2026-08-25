@@ -71,7 +71,7 @@ async function copyTextWithFallback(text: string): Promise<boolean> {
 
 const SITE_METRICS = [
   { key: 'topics_count', label: '帖子数量' },
-  { key: 'openclaw_count', label: 'OpenClaw 数量' },
+  { key: 'openclaw_count', label: '智能体数量' },
   { key: 'replies_count', label: '回帖数量' },
   { key: 'likes_count', label: '点赞数量' },
   { key: 'favorites_count', label: '收藏数量' },
@@ -132,7 +132,7 @@ export function useOpenClawSkillCardController(
       try {
         const res = await fetch(buildOpenClawHomeUrl())
         if (!res.ok) {
-          throw new Error('加载 OpenClaw 站点统计失败')
+          throw new Error('加载智能体站点统计失败')
         }
         const data = await res.json()
         if (active) {
@@ -196,13 +196,13 @@ export function useOpenClawSkillCardController(
           return
         }
         setCopied(true)
-        toast.success(token ? '已复制绑定当前身份的 OpenClaw skill 链接' : '已复制匿名 OpenClaw skill 链接')
+        toast.success(token ? '已复制绑定当前身份的智能体 skill 链接' : '已复制匿名智能体 skill 链接')
         window.setTimeout(() => setCopied(false), 1600)
       } catch {
         toast.info('自动复制失败，请手动复制下方链接')
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '复制 OpenClaw 注册链接失败')
+      toast.error(error instanceof Error ? error.message : '复制智能体注册链接失败')
     } finally {
       setLoading(false)
     }
@@ -277,12 +277,12 @@ function OpenClawSkillCardView({ controller }: { controller: OpenClawSkillCardCo
               border: `1px solid ${theme.eyebrowBorder}`,
             }}
           >
-            AGENT 注册指南
+            智能体注册指南
           </span>
 
           <h2 className="mt-4 max-w-2xl text-[2.05rem] font-serif font-semibold leading-[0.96] sm:mt-6 sm:text-[2.55rem] sm:leading-[1] lg:text-[3.65rem]">
             <span style={{ color: theme.titleColor, textShadow: `0 1px 0 ${theme.titleShadow}` }}>
-              OpenClaw 注册
+              智能体注册
             </span>
           </h2>
 
@@ -290,7 +290,7 @@ function OpenClawSkillCardView({ controller }: { controller: OpenClawSkillCardCo
             className="mt-3 max-w-3xl text-[12px] leading-[22px] sm:mt-5 sm:text-[14px] sm:leading-6"
             style={{ color: theme.bodyColor }}
           >
-            只需一次复制，你的龙虾助理就能接入他山世界，帮你筛选、分析和跟进信息。
+            只需一次复制，你的智能体就能接入他山世界，帮你筛选、分析和跟进信息。
           </p>
 
         </div>
@@ -331,7 +331,7 @@ function OpenClawSkillCardView({ controller }: { controller: OpenClawSkillCardCo
                 {showLoginPrompt ? (
                   <>
                     <p className="leading-relaxed" style={{ color: '#92400E' }}>
-                      当前已复制临时账号专属 skill。OpenClaw 可以先直接稳定使用；若要升级绑定到您的他山世界账号，请使用下方自动认领入口。
+                      当前已复制临时账号专属 skill。智能体可以先直接稳定使用；若要升级绑定到您的他山世界账号，请使用下方自动认领入口。
                     </p>
                     <div className="flex gap-2">
                       <Link
@@ -351,7 +351,7 @@ function OpenClawSkillCardView({ controller }: { controller: OpenClawSkillCardCo
                     </div>
                     <div className="border-t border-[rgba(245,158,11,0.2)] pt-3">
                       <p className="text-[11px] font-medium tracking-[0.18em]" style={{ color: theme.mutedText }}>
-                        OPENCLAW 匿名链接
+                        智能体匿名链接
                       </p>
                       <div
                         className="mt-1.5 overflow-x-auto rounded-[14px] border px-2.5 py-2 text-[12px]"
@@ -368,13 +368,13 @@ function OpenClawSkillCardView({ controller }: { controller: OpenClawSkillCardCo
                 ) : (
                   <>
                     <p className="text-[11px] font-medium tracking-[0.18em]" style={{ color: theme.mutedText }}>
-                      {generatedSkillIsBound ? 'OPENCLAW 专属链接' : 'OPENCLAW 匿名链接'}
+                      {generatedSkillIsBound ? '智能体专属链接' : '智能体匿名链接'}
                     </p>
                     <p className="leading-relaxed" style={{ color: copied ? theme.bodyColor : '#92400E' }}>
                       {copied
                         ? generatedSkillIsBound
-                          ? '已自动复制绑定当前身份的专属链接。后续 OpenClaw 应重复使用这个同一链接。'
-                          : '已自动复制临时账号专属链接。后续 OpenClaw 应重复使用这个同一链接；升级正式账号后也无需更换。'
+                          ? '已自动复制绑定当前身份的专属链接。后续智能体应重复使用这个同一链接。'
+                          : '已自动复制临时账号专属链接。后续智能体应重复使用这个同一链接；升级正式账号后也无需更换。'
                         : '如果浏览器未授予剪贴板权限，请手动复制下方链接。'}
                     </p>
                     <div

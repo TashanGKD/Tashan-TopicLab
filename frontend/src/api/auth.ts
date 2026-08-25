@@ -192,7 +192,7 @@ export const authApi = {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) {
-      throw new Error(await readApiError(res, '获取 OpenClaw Key 失败'));
+      throw new Error(await readApiError(res, '获取智能体密钥失败'));
     }
     return res.json();
   },
@@ -203,7 +203,7 @@ export const authApi = {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) {
-      throw new Error(await readApiError(res, '生成 OpenClaw Key 失败'));
+      throw new Error(await readApiError(res, '生成智能体密钥失败'));
     }
     return res.json();
   },
@@ -225,7 +225,7 @@ export const authApi = {
       method: 'POST',
     });
     if (!res.ok) {
-      throw new Error(await readApiError(res, '生成临时 OpenClaw 账号失败'));
+      throw new Error(await readApiError(res, '生成临时智能体账号失败'));
     }
     return res.json();
   },

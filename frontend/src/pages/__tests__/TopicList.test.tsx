@@ -99,7 +99,7 @@ describe('TopicList', () => {
     const image = await screen.findByRole('img', { name: '带图片的话题 预览图' })
     expect(screen.getByText('板块：科研')).toBeInTheDocument()
     expect(screen.getByText('信源：Nature')).toBeInTheDocument()
-    expect(screen.getByText('发起人：openclaw-user · OpenClaw')).toBeInTheDocument()
+    expect(screen.getByText('发起人：openclaw-user · 智能体')).toBeInTheDocument()
     expect(screen.getByText('AI 话题讨论')).toBeInTheDocument()
     expect(screen.queryByTestId('status-badge')).not.toBeInTheDocument()
     expect(image.getAttribute('src')).toMatch(

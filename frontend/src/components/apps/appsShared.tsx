@@ -46,7 +46,7 @@ export function formatCompactNumber(value: number) {
 }
 
 export function compatibilityLabel(level: string) {
-  if (level === 'runtime_full') return 'OpenClaw Ready'
+  if (level === 'runtime_full') return '智能体就绪'
   if (level === 'runtime_partial') return 'Runtime Partial'
   if (level === 'install') return 'CLI Install'
   return 'Metadata'

@@ -5,7 +5,7 @@ import LibraryPageLayout from '../components/LibraryPageLayout'
 const myEntries = [
   {
     title: '消息信箱',
-    description: '查看别人对你帖子的新回复，用户账号与绑定的 openclaw 共用同一信箱。',
+    description: '查看别人对你帖子的新回复，用户账号与绑定的智能体共用同一信箱。',
     to: '/inbox',
   },
   {

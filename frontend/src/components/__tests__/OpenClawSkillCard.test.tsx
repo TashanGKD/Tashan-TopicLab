@@ -58,15 +58,15 @@ describe('OpenClawSkillCard', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByRole('heading', { name: /OpenClaw\s*注册/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /智能体注册/ })).toBeInTheDocument()
     expect(within(view.container).getByRole('button', { name: '一键复制' })).toBeInTheDocument()
     expect(screen.getAllByText('帖子数量').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('OpenClaw 数量').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('智能体数量').length).toBeGreaterThan(0)
     expect(screen.getAllByText('回帖数量').length).toBeGreaterThan(0)
     expect(screen.getAllByText('点赞数量').length).toBeGreaterThan(0)
     expect(screen.getAllByText('收藏数量').length).toBeGreaterThan(0)
     expect(screen.getAllByText('应用/技能数量').length).toBeGreaterThan(0)
-    expect(screen.getByText('只需一次复制，你的龙虾助理就能接入他山世界，帮你筛选、分析和跟进信息。')).toBeInTheDocument()
+    expect(screen.getByText('只需一次复制，你的智能体就能接入他山世界，帮你筛选、分析和跟进信息。')).toBeInTheDocument()
     const expectedBase = import.meta.env.BASE_URL || '/'
     const expectedHomeHref = new URL(
       `${expectedBase.endsWith('/') ? expectedBase : `${expectedBase}/`}api/v1/home`,
@@ -110,11 +110,11 @@ describe('OpenClawSkillCard', () => {
 
     expect(mockedCreateOpenClawKey).not.toHaveBeenCalled()
     expect(mockedCreateGuestOpenClawKey).toHaveBeenCalled()
-    expect(await screen.findByText('当前已复制临时账号专属 skill。OpenClaw 可以先直接稳定使用；若要升级绑定到您的他山世界账号，请使用下方自动认领入口。')).toBeInTheDocument()
+    expect(await screen.findByText('当前已复制临时账号专属 skill。智能体可以先直接稳定使用；若要升级绑定到您的他山世界账号，请使用下方自动认领入口。')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '去登录' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '去注册' })).toHaveAttribute('href', '/register?openclaw_claim=oc_claim_guest')
     expect(screen.getByRole('link', { name: '去登录' })).toHaveAttribute('href', '/login?openclaw_claim=oc_claim_guest')
-    expect(screen.getByText('OPENCLAW 匿名链接')).toBeInTheDocument()
+    expect(screen.getByText('智能体匿名链接')).toBeInTheDocument()
     expect(screen.getByText(expectedSkillHref)).toBeInTheDocument()
   })
 
@@ -130,7 +130,7 @@ describe('OpenClawSkillCard', () => {
     fireEvent.click(within(view.container).getByRole('button', { name: '一键复制' }))
 
     expect(onCopyAction).toHaveBeenCalledTimes(1)
-    expect(await screen.findByText('OPENCLAW 匿名链接')).toBeInTheDocument()
+    expect(await screen.findByText('智能体匿名链接')).toBeInTheDocument()
   })
 
   it('shows personalized skill url after generating a bound key', async () => {
@@ -197,7 +197,7 @@ describe('OpenClawSkillCard', () => {
       window.location.origin,
     ).toString()
 
-    expect(await within(view.container).findByText('OPENCLAW 专属链接')).toBeInTheDocument()
+    expect(await within(view.container).findByText('智能体专属链接')).toBeInTheDocument()
     expect(within(view.container).getByText(expectedSkillHref)).toBeInTheDocument()
     expect(await within(view.container).findByText('已复制')).toBeInTheDocument()
     expect(document.execCommand).toHaveBeenCalledWith('copy')
@@ -241,7 +241,7 @@ describe('OpenClawSkillCard', () => {
       window.location.origin,
     ).toString()
 
-    expect(await within(view.container).findByText('OPENCLAW 专属链接')).toBeInTheDocument()
+    expect(await within(view.container).findByText('智能体专属链接')).toBeInTheDocument()
     expect(within(view.container).getByText(expectedSkillHref)).toBeInTheDocument()
     expect(within(view.container).getByText('如果浏览器未授予剪贴板权限，请手动复制下方链接。')).toBeInTheDocument()
   })

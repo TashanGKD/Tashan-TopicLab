@@ -48,23 +48,23 @@ export default function AppsSkillProfilePage() {
       const data = res.data as { key?: string; masked_key?: string }
       if (data.key) {
         await copyText(data.key)
-        toast.success('已生成并复制新的 OpenClaw Key')
+        toast.success('已生成并复制新的智能体密钥')
       } else {
-        toast.success('已生成新的 OpenClaw Key')
+        toast.success('已生成新的智能体密钥')
       }
       await load()
     } catch (err) {
-      handleApiError(err, '生成 OpenClaw Key 失败')
+      handleApiError(err, '生成智能体密钥失败')
     }
   }
 
   return (
-    <ImmersiveAppShell title="OpenClaw 绑定中心" subtitle="查看绑定的 agent、Key、他山石和你在 SkillHub 的发布与互动记录。">
+    <ImmersiveAppShell title="智能体绑定中心" subtitle="查看绑定的智能体、密钥、他山石和你在 SkillHub 的发布与互动记录。">
       {!isLoggedIn ? (
         <AppsAuthPrompt
           eyebrow="Account"
           title="登录后再进入绑定中心"
-          description="这里会聚合你的 OpenClaw Agent、Key、他山石余额，以及你在 SkillHub 的发布、评测、下载和收藏记录。"
+          description="这里会聚合你的智能体、密钥、他山石余额，以及你在 SkillHub 的发布、评测、下载和收藏记录。"
           primaryAction={<AppsPillButton onClick={() => navigate('/login', { state: { from: `${location.pathname}${location.search}` } })}>去登录</AppsPillButton>}
           secondaryAction={<AppsPillButton variant="secondary" to="/register" state={{ from: `${location.pathname}${location.search}` }}>去注册</AppsPillButton>}
         />
@@ -74,13 +74,13 @@ export default function AppsSkillProfilePage() {
         <AppsPanel className="p-6">
           <div className="text-[11px] tracking-[0.2em] uppercase" style={{ color: 'var(--text-tertiary)' }}>Agent</div>
           <h2 className="mt-2 text-2xl font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>
-            还没有 OpenClaw Agent
+            还没有智能体
           </h2>
           <p className="mt-3 max-w-2xl text-sm leading-7" style={{ color: 'var(--text-secondary)' }}>
             你已经登录 TopicLab，但还没有在 SkillHub 里产生发布、评测或下载记录。先生成 Key，或直接去发布第一个科研 Skill。
           </p>
           <div className="mt-5 flex flex-wrap gap-3">
-            <AppsPillButton onClick={rotateKey}>生成 OpenClaw Key</AppsPillButton>
+            <AppsPillButton onClick={rotateKey}>生成智能体密钥</AppsPillButton>
             <AppsPillButton variant="secondary" to="/apps/skills/publish">发布第一个 Skill</AppsPillButton>
           </div>
         </AppsPanel>
@@ -90,7 +90,7 @@ export default function AppsSkillProfilePage() {
             <AppsPanel>
               <div className="text-[11px] tracking-[0.2em] uppercase" style={{ color: 'var(--text-tertiary)' }}>Agent</div>
               <h2 className="mt-2 text-2xl font-serif font-semibold" style={{ color: 'var(--text-primary)' }}>
-                {profile.openclaw_agent?.display_name ?? '未绑定 OpenClaw Agent'}
+                {profile.openclaw_agent?.display_name ?? '未绑定智能体'}
               </h2>
               <div className="mt-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
                 handle: {profile.openclaw_agent?.handle ?? '—'}

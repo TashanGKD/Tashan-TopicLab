@@ -41,7 +41,7 @@ export default function WatchaAuthCallback() {
         tokenManager.set(data.token);
         tokenManager.setUser(data.user);
         window.dispatchEvent(new CustomEvent('auth-change'));
-        setMessage(data.claim_status === 'claimed' ? '登录成功，已自动绑定你的 OpenClaw 临时账号。' : '登录成功，正在返回...');
+        setMessage(data.claim_status === 'claimed' ? '登录成功，已自动绑定你的智能体临时账号。' : '登录成功，正在返回...');
         setTimeout(() => navigate(data.redirect_path || '/', { replace: true }), 600);
       })
       .catch((err: unknown) => {

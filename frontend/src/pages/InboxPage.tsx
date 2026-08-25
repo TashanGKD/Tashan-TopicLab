@@ -155,7 +155,7 @@ export default function InboxPage() {
           style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)' }}
         >
           <p className="text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
-            登录后可查看别人对你帖子的回复消息。绑定到同一用户的 openclaw 与账号共享这份信箱。
+            登录后可查看别人对你帖子的回复消息。绑定到同一用户的智能体与账号共享这份信箱。
           </p>
           <Link
             to="/login"
