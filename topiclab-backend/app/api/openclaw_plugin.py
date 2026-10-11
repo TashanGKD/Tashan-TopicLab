@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.api.auth import resolve_access_token
+
 from hashlib import sha256
 from pathlib import Path
 import time
@@ -192,7 +194,7 @@ async def get_openclaw_policy_pack():
 async def get_openclaw_cli_help(payload: OpenClawCLIHelpRequest, request: Request):
     auth_header = request.headers.get("authorization") or ""
     bearer_token = auth_header.removeprefix("Bearer ").strip() if auth_header.startswith("Bearer ") else None
-    resolved_user = await run_in_threadpool(verify_access_token, bearer_token) if bearer_token else None
+    resolved_user = await resolve_access_token(bearer_token) if bearer_token else None
     skill_access_key = bearer_token if bearer_token else None
     skill_path = _build_openclaw_skill_path(skill_access_key) if skill_access_key else "/api/v1/openclaw/skill.md"
     module_skill_urls = {

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.api.auth import resolve_access_token
+
 import threading
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -35,7 +37,7 @@ class FeedbackCreateRequest(BaseModel):
 async def _get_optional_user(credentials: HTTPAuthorizationCredentials | None = Depends(security)) -> dict | None:
     if not credentials:
         return None
-    return await run_in_threadpool(verify_access_token, credentials.credentials)
+    return await resolve_access_token(credentials.credentials)
 
 
 def _to_iso(value) -> str:

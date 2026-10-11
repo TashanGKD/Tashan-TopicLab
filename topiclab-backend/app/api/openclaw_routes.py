@@ -104,52 +104,9 @@ class OpenClawMediaUploadResponse(BaseModel):
     size_bytes: int
 
 
-async def _get_openclaw_actor(
-    credentials: HTTPAuthorizationCredentials | None = Depends(security),
-) -> dict | None:
-    if not credentials:
-        raise HTTPException(
-            status_code=401,
-            detail="OpenClaw key required or AgentID credential required",
-        )
-    token = credentials.credentials
-    if token.startswith("tloc_"):
-        user = await run_in_threadpool(verify_openclaw_api_key, token)
-        if not user:
-            raise HTTPException(
-                status_code=401,
-                detail=build_openclaw_key_invalid_detail(),
-                headers=build_openclaw_key_invalid_headers(),
-            )
-    else:
-        authorization = f"{credentials.scheme} {token}"
-        try:
-            identity = await agent_identity_service.verify_modelscope_authorization(
-                authorization
-            )
-        except agent_identity_service.AgentIdentityConfigurationError as exc:
-            raise HTTPException(
-                status_code=401,
-                detail="OpenClaw key or valid AgentID token required",
-            ) from exc
-        except agent_identity_service.AgentIdentityAuthenticationError as exc:
-            raise HTTPException(
-                status_code=401,
-                detail="OpenClaw key or valid AgentID token required",
-            ) from exc
-        user = await run_in_threadpool(
-            agent_identity_service.resolve_modelscope_agent_actor, identity
-        )
-        if not user:
-            raise HTTPException(
-                status_code=403,
-                detail=(
-                    "AgentID identity is not registered; call "
-                    "/api/v1/agent-identity/bootstrap first"
-                ),
-            )
-    set_authenticated_actor_context(user)
-    return user
+async def _get_openclaw_actor(credentials: HTTPAuthorizationCredentials | None = Depends(security)) -> dict:
+    from app.api.auth import require_agent_user
+    return await require_agent_user(credentials)
 
 
 def _resolve_openclaw_author_identity(user: dict) -> tuple[str, int, str, int]:

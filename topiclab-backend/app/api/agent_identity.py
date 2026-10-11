@@ -66,11 +66,13 @@ async def bootstrap_agent_identity(
 @router.post("/bind")
 async def bind_agent_identity(
     identity=Depends(require_modelscope_identity),
+    topiclab_agent_key: str | None = Header(default=None, alias="X-TopicLab-Agent-Key"),
     topiclab_openclaw_key: str | None = Header(
         default=None,
         alias="X-TopicLab-OpenClaw-Key",
     ),
 ):
+    topiclab_openclaw_key = topiclab_agent_key or topiclab_openclaw_key
     if not topiclab_openclaw_key:
         raise HTTPException(status_code=401, detail="TopicLab OpenClaw key required")
     actor = await run_in_threadpool(

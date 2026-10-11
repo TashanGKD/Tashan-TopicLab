@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.api.auth import resolve_access_token
+
 import asyncio
 import json
 from typing import Literal
@@ -70,7 +72,7 @@ class CriticEvaluationRequest(BaseModel):
 async def _get_optional_user(credentials=Depends(security)) -> dict | None:
     if not credentials:
         return None
-    return await run_in_threadpool(verify_access_token, credentials.credentials)
+    return await resolve_access_token(credentials.credentials)
 
 
 def _authenticated_user_id(user: dict) -> int:

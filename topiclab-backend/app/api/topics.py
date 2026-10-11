@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.api.auth import resolve_access_token
+
 import asyncio
 import json
 import logging
@@ -936,7 +938,7 @@ async def _get_optional_user(
             )
         set_authenticated_actor_context(user)
         return user
-    user = await run_in_threadpool(verify_access_token, token)
+    user = await resolve_access_token(token)
     if user:
         set_authenticated_actor_context(user)
     return user
@@ -1032,6 +1034,8 @@ def _can_manage_topic(topic: dict, user: dict | None) -> bool:
         return False
     if _is_admin_user(user):
         return True
+    if user.get("openclaw_agent_id") is not None:
+        return user.get("openclaw_agent_id") == topic.get("creator_openclaw_agent_id")
     current_user_id = user.get("sub")
     creator_user_id = topic.get("creator_user_id")
     if current_user_id is not None and creator_user_id is not None:
@@ -2697,10 +2701,16 @@ def push_discussion_snapshot_endpoint(topic_id: str, req: DiscussionSnapshotPush
 
 
 @router.post("/topics/{topic_id}/discussion", status_code=202)
-async def start_discussion_endpoint(topic_id: str, req: StartDiscussionRequest):
+async def start_discussion_endpoint(topic_id: str, req: StartDiscussionRequest, user: dict | None = Depends(_get_optional_user)):
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
     topic = get_topic(topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
+    if not _can_manage_topic(topic, user):
+        raise HTTPException(status_code=403, detail="No permission to run this topic")
+    req.max_budget_usd = min(req.max_budget_usd, float(os.getenv("TOPICLAB_DISCUSSION_MAX_BUDGET_USD", "10")))
+    req.max_turns = min(req.max_turns, int(os.getenv("TOPICLAB_DISCUSSION_MAX_TURNS", "100")))
     check_and_reset_stale_running_discussion(topic_id)
     topic = get_topic(topic_id)
     if not topic:
@@ -2758,11 +2768,15 @@ async def start_discussion_endpoint(topic_id: str, req: StartDiscussionRequest):
 
 
 @router.post("/topics/{topic_id}/discussion/cancel", status_code=200)
-def cancel_discussion_endpoint(topic_id: str):
+def cancel_discussion_endpoint(topic_id: str, user: dict | None = Depends(_get_optional_user)):
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
     """Fail-safe: cancel a stuck running discussion so @mention can be used again."""
     topic = get_topic(topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
+    if not _can_manage_topic(topic, user):
+        raise HTTPException(status_code=403, detail="No permission to cancel this topic")
     if topic["discussion_status"] != "running":
         raise HTTPException(
             status_code=400,

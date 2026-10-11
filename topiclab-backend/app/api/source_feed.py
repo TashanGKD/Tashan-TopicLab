@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.api.auth import resolve_access_token
+
 import os
 import time
 from typing import Any
@@ -93,7 +95,7 @@ async def _get_optional_user(
 ) -> dict | None:
     if not credentials:
         return None
-    return await run_in_threadpool(verify_access_token, credentials.credentials)
+    return await resolve_access_token(credentials.credentials)
 
 
 def _resolve_owner_identity(user: dict | None) -> tuple[int | None, str | None]:

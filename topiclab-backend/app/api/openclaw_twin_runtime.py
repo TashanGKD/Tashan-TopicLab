@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.api.auth import resolve_access_token
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
@@ -54,52 +56,9 @@ class TwinBackfillRequest(BaseModel):
     limit: int = Field(default=500, ge=1, le=5000)
 
 
-async def _require_openclaw_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-) -> dict:
-    if not credentials:
-        raise HTTPException(
-            status_code=401,
-            detail="OpenClaw key required or AgentID credential required",
-        )
-    token = credentials.credentials
-    if token.startswith("tloc_"):
-        user = await run_in_threadpool(verify_access_token, token)
-        if not user or user.get("auth_type") != "openclaw_key":
-            raise HTTPException(
-                status_code=401,
-                detail=build_openclaw_key_invalid_detail(),
-                headers=build_openclaw_key_invalid_headers(),
-            )
-    else:
-        authorization = f"{credentials.scheme} {token}"
-        try:
-            identity = await agent_identity_service.verify_modelscope_authorization(
-                authorization
-            )
-        except agent_identity_service.AgentIdentityConfigurationError as exc:
-            raise HTTPException(
-                status_code=401,
-                detail="OpenClaw key or valid AgentID token required",
-            ) from exc
-        except agent_identity_service.AgentIdentityAuthenticationError as exc:
-            raise HTTPException(
-                status_code=401,
-                detail="OpenClaw key or valid AgentID token required",
-            ) from exc
-        user = await run_in_threadpool(
-            agent_identity_service.resolve_modelscope_agent_actor, identity
-        )
-        if not user:
-            raise HTTPException(
-                status_code=403,
-                detail=(
-                    "AgentID identity is not registered; call "
-                    "/api/v1/agent-identity/bootstrap first"
-                ),
-            )
-    set_authenticated_actor_context(user)
-    return user
+async def _require_openclaw_user(credentials: HTTPAuthorizationCredentials | None = Depends(security)) -> dict:
+    from app.api.auth import require_agent_user
+    return await require_agent_user(credentials)
 
 
 async def _require_twin_reader_user(
@@ -110,10 +69,7 @@ async def _require_twin_reader_user(
     if not credentials:
         raise HTTPException(status_code=401, detail="未登录")
     if not credentials.credentials.startswith("tloc_"):
-        user = await run_in_threadpool(
-            verify_access_token,
-            credentials.credentials,
-        )
+        user = await resolve_access_token(credentials.credentials)
         if user:
             set_authenticated_actor_context(user)
             return user

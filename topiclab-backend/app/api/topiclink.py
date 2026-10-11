@@ -7,6 +7,8 @@ the TopicLink surface without changing the normal topic plaza behavior.
 
 from __future__ import annotations
 
+from app.api.auth import resolve_access_token
+
 import asyncio
 import contextlib
 import hashlib
@@ -216,13 +218,13 @@ def _fallback_topiclink_profile() -> dict[str, Any]:
     }
 
 
-def _optional_topiclink_user(
+async def _optional_topiclink_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
 ) -> dict[str, Any] | None:
     if not credentials:
         return None
     try:
-        return verify_access_token(credentials.credentials)
+        return await resolve_access_token(credentials.credentials)
     except Exception:
         return None
 

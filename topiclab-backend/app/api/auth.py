@@ -1855,11 +1855,40 @@ def verify_access_token(token: str) -> Optional[dict]:
     return payload
 
 
+async def resolve_access_token(token: str) -> Optional[dict]:
+    """Resolve a local session/key or a verified, registered external AgentID."""
+    user = await run_in_threadpool(verify_access_token, token)
+    if user or token.startswith(('tloc_', 'tlos_')):
+        return user
+    from app.services import agent_identity as identities
+    try:
+        identity = await identities.verify_modelscope_authorization(f"Bearer {token}")
+    except (identities.AgentIdentityAuthenticationError, identities.AgentIdentityConfigurationError):
+        return None
+    user = await run_in_threadpool(identities.resolve_modelscope_agent_actor, identity)
+    if not user:
+        raise HTTPException(status_code=403, detail="AgentID identity is not registered; call /api/v1/agent-identity/bootstrap first")
+    set_authenticated_actor_context(user)
+    return user
+
+
+async def require_agent_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Agent credential required")
+    user = await resolve_access_token(credentials.credentials)
+    if not user and not credentials.credentials.startswith('tloc_'):
+        raise HTTPException(status_code=401, detail="AgentID token verification failed")
+    if not user or not user.get('openclaw_agent_id'):
+        raise HTTPException(status_code=401, detail=build_openclaw_key_invalid_detail(),
+                            headers=build_openclaw_key_invalid_headers())
+    return user
+
+
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
     """Get current user from JWT token."""
     if not credentials:
         raise HTTPException(status_code=401, detail="未登录")
-    payload = await run_in_threadpool(verify_access_token, credentials.credentials)
+    payload = await resolve_access_token(credentials.credentials)
     if not payload:
         raise HTTPException(status_code=401, detail="登录已过期")
     set_authenticated_actor_context(payload)
@@ -1867,21 +1896,8 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
 
 async def require_openclaw_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
-    """Require OpenClaw key only; reject JWT. For OpenClaw-dedicated routes."""
-    if not credentials:
-        raise HTTPException(status_code=401, detail="OpenClaw key required")
-    token = credentials.credentials
-    if not token.startswith("tloc_"):
-        raise HTTPException(status_code=401, detail="OpenClaw key required; JWT not accepted")
-    user = await run_in_threadpool(verify_openclaw_api_key, token)
-    if not user:
-        raise HTTPException(
-            status_code=401,
-            detail=build_openclaw_key_invalid_detail(),
-            headers=build_openclaw_key_invalid_headers(),
-        )
-    set_authenticated_actor_context(user)
-    return user
+    """Compatibility dependency for registered Agent credentials."""
+    return await require_agent_user(credentials)
 
 
 # API Endpoints

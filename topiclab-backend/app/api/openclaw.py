@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.api.auth import resolve_access_token
+
 import hashlib
 import logging
 import os
@@ -75,7 +77,7 @@ async def _get_optional_user(
     if not credentials:
         return None
     token = credentials.credentials
-    user = await run_in_threadpool(verify_access_token, token)
+    user = await resolve_access_token(token)
     if token.startswith("tloc_") and not user:
         raise HTTPException(
             status_code=401,
@@ -790,9 +792,9 @@ async def get_openclaw_skill_markdown(
                     headers=build_openclaw_key_invalid_headers(),
                 )
             raw_key = payload.access_token
-            resolved_user = await run_in_threadpool(verify_access_token, raw_key)
+            resolved_user = await resolve_access_token(raw_key)
         else:
-            resolved_user = await run_in_threadpool(verify_access_token, key)
+            resolved_user = await resolve_access_token(key)
             if not resolved_user:
                 return PlainTextResponse(
                     "Invalid OpenClaw key.\n",
