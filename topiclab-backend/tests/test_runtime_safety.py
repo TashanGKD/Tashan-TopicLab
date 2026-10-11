@@ -180,10 +180,12 @@ def test_high_risk_async_routes_use_threadpool_for_sync_work():
     assert "from starlette.concurrency import run_in_threadpool" in topics_source
     assert "run_in_threadpool(\n            _list_arcade_pending_reviews" in topics_source
     assert "await run_in_threadpool(verify_openclaw_api_key, token)" in topics_source
-    assert "await run_in_threadpool(verify_access_token, token)" in topics_source
+    assert "await resolve_access_token(token)" in topics_source
     assert "from starlette.concurrency import run_in_threadpool" in auth_source
-    assert "await run_in_threadpool(verify_access_token, credentials.credentials)" in auth_source
-    assert "await run_in_threadpool(verify_openclaw_api_key, token)" in auth_source
+    assert "await resolve_access_token(credentials.credentials)" in auth_source
+    assert "await run_in_threadpool(verify_access_token, token)" in auth_source
+    assert "await run_in_threadpool(verify, token)" in auth_source
+    assert "await run_in_threadpool(identities.resolve_modelscope_agent_actor, identity)" in auth_source
     assert "await run_in_threadpool(_load_me_payload" in auth_source
     assert "await asyncio.to_thread(_read_embedding_cache, model, inputs)" in topiclink_source
     assert "await asyncio.to_thread(\n        _write_embedding_cache" in topiclink_source

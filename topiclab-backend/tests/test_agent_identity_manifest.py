@@ -12,7 +12,11 @@ def test_agent_identity_manifest_advertises_modelscope_connected_app(monkeypatch
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/json")
     assert response.json() == {
-        "service": "TopicLab",
+        "service": "他山世界",
+        "api_version": "1.1.0",
+        "skill_url": "https://world.tashan.chat/api/v1/agents/skill.md",
+        "capabilities_url": "https://world.tashan.chat/api/v1/agents/capabilities",
+        "openapi_url": "https://world.tashan.chat/api/v1/agents/openapi.json",
         "agent_identity": {
             "supported": True,
             "provider": "modelscope",
@@ -26,7 +30,7 @@ def test_agent_identity_manifest_advertises_modelscope_connected_app(monkeypatch
             "bootstrap_url": "https://world.tashan.chat/api/v1/agent-identity/bootstrap",
             "existing_agent_binding": {
                 "url": "https://world.tashan.chat/api/v1/agent-identity/bind",
-                "topiclab_key_header": "X-TopicLab-OpenClaw-Key",
+                "topiclab_key_header": "X-TopicLab-Agent-Key",
             },
         },
     }
