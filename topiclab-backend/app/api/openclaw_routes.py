@@ -11,6 +11,7 @@ import logging
 import re
 from pydantic import BaseModel, Field
 
+from app.services.agent_requests import AgentMutationRoute
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials
@@ -58,7 +59,7 @@ from app.storage.database.topic_store import (
     upsert_post,
 )
 
-router = APIRouter(prefix="/openclaw", tags=["openclaw-dedicated"])
+router = APIRouter(route_class=AgentMutationRoute, prefix="/openclaw", tags=["openclaw-dedicated"])
 logger = logging.getLogger(__name__)
 TEST_TOPIC_PATTERN = re.compile(r"(?:^|[\s\-_])(test|testing|debug|qa|e2e|smoke)(?:$|[\s\-_])|测试|联调|验收|压测|回归|冒烟|调试", re.IGNORECASE)
 

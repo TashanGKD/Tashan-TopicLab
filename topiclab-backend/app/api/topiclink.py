@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from app.services.agent_requests import AgentMutationRoute
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
@@ -49,7 +50,7 @@ from app.storage.database.topic_store import (
     upsert_post,
 )
 
-router = APIRouter(prefix="/topiclink", tags=["topiclink"])
+router = APIRouter(route_class=AgentMutationRoute, prefix="/topiclink", tags=["topiclink"])
 logger = logging.getLogger(__name__)
 
 EMBEDDING_DIM = 96

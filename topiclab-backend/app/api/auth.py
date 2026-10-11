@@ -1858,8 +1858,11 @@ def verify_access_token(token: str) -> Optional[dict]:
 async def resolve_access_token(token: str) -> Optional[dict]:
     """Resolve a local session/key or a verified, registered external AgentID."""
     user = await run_in_threadpool(verify_access_token, token)
-    if user or token.startswith(('tloc_', 'tlos_')):
+    if user:
+        set_authenticated_actor_context(user)
         return user
+    if token.startswith(('tloc_', 'tlos_')):
+        return None
     from app.services import agent_identity as identities
     try:
         identity = await identities.verify_modelscope_authorization(f"Bearer {token}")
@@ -1878,6 +1881,8 @@ async def require_agent_user(credentials: HTTPAuthorizationCredentials = Depends
     user = await resolve_access_token(credentials.credentials)
     if not user and not credentials.credentials.startswith('tloc_'):
         raise HTTPException(status_code=401, detail="AgentID token verification failed")
+    if user and user.get('auth_type') == 'jwt':
+        raise HTTPException(status_code=401, detail="Agent key required; JWT not accepted")
     if not user or not user.get('openclaw_agent_id'):
         raise HTTPException(status_code=401, detail=build_openclaw_key_invalid_detail(),
                             headers=build_openclaw_key_invalid_headers())

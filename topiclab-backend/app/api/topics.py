@@ -18,6 +18,8 @@ import tempfile
 from typing import Any
 
 import httpx
+from app.services.agent_requests import AgentMutationRoute
+from app.services import agent_runs
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import FileResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials
@@ -109,7 +111,7 @@ from app.storage.database.topic_store import (
     upsert_post,
 )
 
-router = APIRouter()
+router = APIRouter(route_class=AgentMutationRoute, )
 
 _PREVIEW_CACHE_DIRNAME = ".generated_image_previews"
 _ARCADE_IMAGE_CACHE_DIRNAME = ".arcade_image_cache"
@@ -1544,6 +1546,7 @@ def _mode_name_from_id(mode_id: str | None) -> str:
 
 
 async def _run_discussion_background(topic_id: str, payload: dict) -> None:
+    run_id = payload.get("run_id")
     try:
         discussion_task = asyncio.create_task(
             request_json("POST", "/executor/discussions", json_body=payload, timeout=3600.0)
@@ -1551,6 +1554,8 @@ async def _run_discussion_background(topic_id: str, payload: dict) -> None:
         while not discussion_task.done():
             await asyncio.wait({discussion_task}, timeout=_DISCUSSION_SYNC_INTERVAL_SECONDS)
             await _sync_discussion_snapshot(topic_id)
+            if run_id:
+                agent_runs.update_run(run_id, "running")
         result = await discussion_task
         turns = result.get("turns") or []
         discussion_history = result.get("discussion_history") or _build_discussion_history(turns)
@@ -1575,9 +1580,9 @@ async def _run_discussion_background(topic_id: str, payload: dict) -> None:
         if preview_markdown_ref:
             update_topic(topic_id, {"preview_image": preview_markdown_ref})
         topic = get_topic(topic_id)
-        if topic and topic.get("creator_openclaw_agent_id"):
+        if topic and payload.get("actor_agent_id", topic.get("creator_openclaw_agent_id")):
             event = record_activity_event(
-                openclaw_agent_id=int(topic["creator_openclaw_agent_id"]),
+                openclaw_agent_id=int(payload.get("actor_agent_id") or topic["creator_openclaw_agent_id"]),
                 bound_user_id=topic.get("creator_user_id"),
                 event_type="discussion.completed",
                 action_name="discussion_completed",
@@ -1590,22 +1595,30 @@ async def _run_discussion_background(topic_id: str, payload: dict) -> None:
                 result={"completed_at": result.get("completed_at")},
             )
             apply_rule_points(
-                openclaw_agent_id=int(topic["creator_openclaw_agent_id"]),
+                openclaw_agent_id=int(payload.get("actor_agent_id") or topic["creator_openclaw_agent_id"]),
                 reason_code="discussion.completed",
                 related_event_id=int(event["id"]),
                 target_type="topic",
                 target_id=topic_id,
             )
+        if run_id:
+            agent_runs.update_run(run_id, "completed")
         _invalidate_status_cache(topic_id)
     except Exception as exc:
         logging.getLogger(__name__).exception(
             "Discussion failed for topic %s: %s", topic_id, exc
         )
+        if run_id:
+            run = await agent_runs.reconcile_run(agent_runs.get_run(run_id))
+            if run['status'] not in agent_runs.TERMINAL:
+                agent_runs.update_run(run_id, "running", "executor_response_lost")
+            _invalidate_status_cache(topic_id)
+            return
         set_discussion_status(topic_id, "failed")
         topic = get_topic(topic_id)
-        if topic and topic.get("creator_openclaw_agent_id"):
+        if topic and payload.get("actor_agent_id", topic.get("creator_openclaw_agent_id")):
             record_activity_event(
-                openclaw_agent_id=int(topic["creator_openclaw_agent_id"]),
+                openclaw_agent_id=int(payload.get("actor_agent_id") or topic["creator_openclaw_agent_id"]),
                 bound_user_id=topic.get("creator_user_id"),
                 event_type="discussion.failed",
                 action_name="discussion_failed",
@@ -2711,7 +2724,9 @@ async def start_discussion_endpoint(topic_id: str, req: StartDiscussionRequest, 
         raise HTTPException(status_code=403, detail="No permission to run this topic")
     req.max_budget_usd = min(req.max_budget_usd, float(os.getenv("TOPICLAB_DISCUSSION_MAX_BUDGET_USD", "10")))
     req.max_turns = min(req.max_turns, int(os.getenv("TOPICLAB_DISCUSSION_MAX_TURNS", "100")))
-    check_and_reset_stale_running_discussion(topic_id)
+    active_run = agent_runs.latest_run(topic_id)
+    if not active_run or active_run["status"] in agent_runs.TERMINAL:
+        check_and_reset_stale_running_discussion(topic_id)
     topic = get_topic(topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
@@ -2729,7 +2744,6 @@ async def start_discussion_endpoint(topic_id: str, req: StartDiscussionRequest, 
     updated = update_topic(topic_id, {"num_rounds": num_rounds})
     if not updated:
         raise HTTPException(status_code=404, detail="Topic not found")
-    set_discussion_status(topic_id, "running", turns_count=0, discussion_summary="", discussion_history="")
     expert_names = req.expert_names if req.expert_names is not None else topic["expert_names"]
     payload = {
         "topic_id": topic_id,
@@ -2748,11 +2762,17 @@ async def start_discussion_endpoint(topic_id: str, req: StartDiscussionRequest, 
     sync_url = _get_topiclab_sync_url()
     if sync_url:
         payload["topiclab_sync_url"] = sync_url
-    asyncio.create_task(_run_discussion_background(topic_id, payload))
-    if topic.get("creator_openclaw_agent_id"):
+    payload['actor_agent_id'] = user.get('openclaw_agent_id')
+    actor_uid = user.get('agent_uid') or 'user:' + str(user['sub'])
+    run, created = agent_runs.create_run(topic_id, actor_uid, payload)
+    payload['run_id'] = run['run_id']
+    if created:
+        set_discussion_status(topic_id, "running", turns_count=0, discussion_summary="", discussion_history="")
+        asyncio.create_task(_run_discussion_background(topic_id, payload))
+    if user.get("openclaw_agent_id"):
         record_activity_event(
-            openclaw_agent_id=int(topic["creator_openclaw_agent_id"]),
-            bound_user_id=topic.get("creator_user_id"),
+            openclaw_agent_id=int(user["openclaw_agent_id"]),
+            bound_user_id=int(user["sub"]),
             event_type="discussion.started",
             action_name="start_discussion",
             target_type="topic",
@@ -2764,11 +2784,11 @@ async def start_discussion_endpoint(topic_id: str, req: StartDiscussionRequest, 
             payload={"num_rounds": num_rounds},
             result={"status": "running"},
         )
-    return {"status": "running", "result": None, "progress": None}
+    return {"status": "running", "result": None, "progress": None, "run": agent_runs.public_run(run)}
 
 
 @router.post("/topics/{topic_id}/discussion/cancel", status_code=200)
-def cancel_discussion_endpoint(topic_id: str, user: dict | None = Depends(_get_optional_user)):
+async def cancel_discussion_endpoint(topic_id: str, user: dict | None = Depends(_get_optional_user)):
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required")
     """Fail-safe: cancel a stuck running discussion so @mention can be used again."""
@@ -2782,6 +2802,17 @@ def cancel_discussion_endpoint(topic_id: str, user: dict | None = Depends(_get_o
             status_code=400,
             detail=f"Discussion is not running (current: {topic['discussion_status']}); nothing to cancel",
         )
+    run = agent_runs.latest_run(topic_id)
+    if not run:
+        raise HTTPException(409, detail="Legacy discussion has no run receipt; reconcile executor before cancelling")
+    try:
+        receipt = await request_json('POST', f"/executor/runs/{run['run_id']}/cancel", timeout=15.0)
+    except Exception:
+        raise HTTPException(503, detail={"code": "cancel_unconfirmed", "message": "Executor did not confirm cancellation; the run may still be active", "retryable": False})
+    if receipt.get('status') != 'cancelled':
+        await agent_runs.reconcile_run(run)
+        raise HTTPException(409, detail="Run already ended or cannot be cancelled")
+    agent_runs.update_run(run['run_id'], 'cancelled')
     set_discussion_status(topic_id, "failed")
     if topic.get("creator_openclaw_agent_id"):
         record_activity_event(
@@ -2814,7 +2845,9 @@ async def get_discussion_status_endpoint(topic_id: str):
     topic = get_topic(topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
-    check_and_reset_stale_running_discussion(topic_id)
+    active_run = agent_runs.latest_run(topic_id)
+    if not active_run or active_run["status"] in agent_runs.TERMINAL:
+        check_and_reset_stale_running_discussion(topic_id)
     topic = get_topic(topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
@@ -2831,6 +2864,9 @@ async def get_discussion_status_endpoint(topic_id: str):
     if topic["discussion_status"] == "running":
         progress = _discussion_progress_from_turns(topic, list_discussion_turns(topic_id))
     payload = {"status": topic["discussion_status"], "result": topic.get("discussion_result"), "progress": progress}
+    run = agent_runs.latest_run(topic_id)
+    if run:
+        payload['run'] = agent_runs.public_run(run)
     if topic["discussion_status"] == "running" and _STATUS_CACHE_TTL_SECONDS > 0:
         _status_cache[topic_id] = (now + _STATUS_CACHE_TTL_SECONDS, payload)
     return payload

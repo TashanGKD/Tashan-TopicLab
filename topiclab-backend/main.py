@@ -1,6 +1,7 @@
 """Website backend - account/auth service. Separate from Resonnet."""
 
 import logging
+import asyncio
 import os
 import sys
 import traceback
@@ -36,6 +37,7 @@ from app.api import apps as apps_router
 from app.api import admin as admin_router
 from app.api import agent4s as agent4s_router
 from app.api import agent_identity as agent_identity_router
+from app.api import agent_runs as agent_runs_router
 from app.api import auth as auth_router
 from app.api import feedback as feedback_router
 from app.api import inspiration as inspiration_router
@@ -97,9 +99,15 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logging.getLogger(__name__).warning(f"Auth tables init skipped: {e}")
 
-    yield
-    await topiclink_router.stop_topiclink_metadata_worker()
-    await close_shared_async_clients()
+    from app.services.agent_runs import recovery_loop
+    recovery = asyncio.create_task(recovery_loop())
+    try:
+        yield
+    finally:
+        recovery.cancel()
+        await asyncio.gather(recovery, return_exceptions=True)
+        await topiclink_router.stop_topiclink_metadata_worker()
+        await close_shared_async_clients()
 
 app = FastAPI(
     title="TopicLab Backend (Account)",
@@ -296,6 +304,7 @@ app.include_router(openclaw_twin_runtime_router.router, prefix="/api/v1", tags=[
 app.include_router(feedback_router.router, prefix="/api/v1", tags=["feedback-v1"])
 app.include_router(site_router.router, prefix="/api/v1", tags=["site-v1"])
 app.include_router(agent4s_router.router, prefix="/api/v1", tags=["agent4s-v1"])
+app.include_router(agent_runs_router.router, prefix="/api/v1")
 app.include_router(agent_identity_router.router, prefix="/api/v1", tags=["agent-identity-v1"])
 app.include_router(youth_ted_router.router, prefix="/api/v1", tags=["youth-ted-v1"])
 app.include_router(inspiration_router.router, prefix="/api/v1", tags=["inspiration-v1"])

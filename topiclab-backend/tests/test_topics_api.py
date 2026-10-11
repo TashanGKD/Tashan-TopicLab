@@ -1814,6 +1814,8 @@ def test_worldweave_source_feed_defaults_to_standalone_port(monkeypatch):
 
 
 def test_discussion_and_mention_complete_via_executor(client, monkeypatch):
+    owner = register_and_login(client, phone="13800001001", username="discussion-owner")
+    headers = {"Authorization": f"Bearer {owner['token']}"}
     monkeypatch.setattr(
         "app.api.topics.moderate_post_content",
         lambda body, scenario: asyncio.sleep(
@@ -1827,7 +1829,7 @@ def test_discussion_and_mention_complete_via_executor(client, monkeypatch):
         ),
     )
 
-    topic = client.post("/topics", json={"title": "执行测试", "body": "验证异步任务"}).json()
+    topic = client.post("/topics", headers=headers, json={"title": "执行测试", "body": "验证异步任务"}).json()
     topic_id = topic["id"]
 
     experts = client.get(f"/topics/{topic_id}/experts")
@@ -1836,6 +1838,7 @@ def test_discussion_and_mention_complete_via_executor(client, monkeypatch):
 
     start = client.post(
         f"/topics/{topic_id}/discussion",
+        headers=headers,
         json={"num_rounds": 1, "max_turns": 20, "max_budget_usd": 1.0},
     )
     assert start.status_code == 202
@@ -2111,11 +2114,14 @@ def test_internal_discussion_snapshot_push_updates_db(client):
 
 
 def test_discussion_status_syncs_running_turns_into_database(client):
-    topic = client.post("/topics", json={"title": "实时状态", "body": "观察进行中 turn"}).json()
+    owner = register_and_login(client, phone="13800001001", username="discussion-owner")
+    headers = {"Authorization": f"Bearer {owner['token']}"}
+    topic = client.post("/topics", headers=headers, json={"title": "实时状态", "body": "观察进行中 turn"}).json()
     topic_id = topic["id"]
 
     start = client.post(
         f"/topics/{topic_id}/discussion",
+        headers=headers,
         json={"num_rounds": 1, "max_turns": 20, "max_budget_usd": 1.0},
     )
     assert start.status_code == 202
@@ -2222,11 +2228,14 @@ def test_topic_experts_fall_back_to_local_data_when_resonnet_returns_502(client,
 
 
 def test_discussion_generated_image_is_served_from_database_after_workspace_file_removed(client):
-    topic = client.post("/topics", json={"title": "图片入库", "body": "验证图片"}).json()
+    owner = register_and_login(client, phone="13800001001", username="discussion-owner")
+    headers = {"Authorization": f"Bearer {owner['token']}"}
+    topic = client.post("/topics", headers=headers, json={"title": "图片入库", "body": "验证图片"}).json()
     topic_id = topic["id"]
 
     start = client.post(
         f"/topics/{topic_id}/discussion",
+        headers=headers,
         json={"num_rounds": 1, "max_turns": 20, "max_budget_usd": 1.0},
     )
     assert start.status_code == 202
@@ -2953,7 +2962,7 @@ def test_openclaw_dedicated_routes_require_openclaw_key_reject_jwt(client):
         json={"title": "JWT 开题", "body": "应被拒绝"},
     )
     assert topic_resp.status_code == 401, topic_resp.text
-    assert "OpenClaw key" in topic_resp.json().get("detail", "")
+    assert "Agent key" in topic_resp.json().get("detail", "")
 
 
 def test_openclaw_invalid_key_rejected_on_general_routes(client):
@@ -2976,14 +2985,14 @@ def test_openclaw_dedicated_routes_require_openclaw_key(client):
         json={"title": "匿名开题", "body": "无需绑定真人用户"},
     )
     assert topic_resp.status_code == 401, topic_resp.text
-    assert "OpenClaw key required" in topic_resp.json().get("detail", "")
+    assert "Agent credential required" in topic_resp.json().get("detail", "")
 
     post_resp = client.post(
         "/api/v1/openclaw/topics/topic_x/posts",
         json={"body": "匿名 openclaw 回帖"},
     )
     assert post_resp.status_code == 401, post_resp.text
-    assert "OpenClaw key required" in post_resp.json().get("detail", "")
+    assert "Agent credential required" in post_resp.json().get("detail", "")
 
 
 def test_openclaw_dedicated_routes_create_topic_and_post(client):

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from app.api.auth import resolve_access_token
 
+from app.services.agent_requests import AgentMutationRoute
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
@@ -30,7 +31,7 @@ from app.services.twin_runtime import (
     upsert_runtime_state,
 )
 
-router = APIRouter(prefix="/openclaw/twins", tags=["openclaw-twins"])
+router = APIRouter(route_class=AgentMutationRoute, prefix="/openclaw/twins", tags=["openclaw-twins"])
 
 
 class TwinObservationRequest(BaseModel):
