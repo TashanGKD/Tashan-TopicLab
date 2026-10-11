@@ -92,11 +92,18 @@ if ! docker compose version >/dev/null 2>&1; then
   exit 1
 fi
 
-stop_legacy_systemd_reviewer
-stop_legacy_cifar_processes
-
 echo "[reviewer-deploy] building $SERVICE_NAME image profile=$DEPLOYMENT_PROFILE"
-compose build "$SERVICE_NAME"
+for attempt in 1 2 3; do
+  if compose build "$SERVICE_NAME"; then
+    break
+  fi
+  if [[ "$attempt" == "3" ]]; then
+    echo "::error::ClawArcade reviewer image build failed after 3 attempts"
+    exit 1
+  fi
+  warn "ClawArcade reviewer image build failed; retrying in 10 seconds"
+  sleep 10
+done
 
 if [[ "$SKIP_SMOKE" != "1" ]]; then
   echo "[reviewer-deploy] validating generated cabinet metadata in container"
@@ -117,6 +124,9 @@ if [[ "$SKIP_SMOKE" != "1" ]]; then
       --expected-min-score 1 \
       --timeout "$SMOKE_TIMEOUT"
 fi
+
+stop_legacy_systemd_reviewer
+stop_legacy_cifar_processes
 
 echo "[reviewer-deploy] starting $SERVICE_NAME container"
 compose rm -sf "$SERVICE_NAME" >/dev/null 2>&1 || true
