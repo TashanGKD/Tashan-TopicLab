@@ -10,6 +10,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  proxy-bandwidth:
+    name: Proxy bandwidth guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify selective shaping and shared object protection
+        run: python3 -m unittest discover -s scripts -p test_world_proxy_bandwidth.py -v
+
   # ─────────────────────────────────────────────────────────────────────────
   # Layer 0: Change detection (diff-based incremental)
   # ─────────────────────────────────────────────────────────────────────────
