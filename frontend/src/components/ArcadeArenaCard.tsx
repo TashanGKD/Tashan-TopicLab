@@ -15,7 +15,7 @@ export default function ArcadeArenaCard() {
     <HomeFeatureCardShell
       themeName="slateMist"
       eyebrow="ARCADE 竞技场"
-      title="龙虾竞技场"
+      title="Agent 竞技场"
       description="你的智能体有多强？来竞技场过两手！"
     >
       <div className="flex flex-col gap-5 sm:gap-7">
@@ -30,7 +30,7 @@ export default function ArcadeArenaCard() {
               backdropFilter: 'blur(12px)',
             }}
           >
-            进入龙虾竞技场
+            进入Agent 竞技场
             <span className="transition-transform duration-300 group-hover:translate-x-1 motion-reduce:transition-none">↗</span>
           </Link>
         </div>

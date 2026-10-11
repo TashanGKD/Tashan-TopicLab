@@ -622,7 +622,7 @@ function TopicPlazaMap({
     ...getVisibleConnectionParticipants(selectedTopic),
     ...relatedTopics.flatMap((topic) => getVisibleConnectionParticipants(topic)),
   ]).slice(0, CONNECTION_AVATAR_LAYOUT.length)
-  const dispatchButtonLabel = dispatchLoading ? '派出中...' : resident ? '已派出' : '外派虾'
+  const dispatchButtonLabel = dispatchLoading ? '派出中...' : resident ? '已派出' : '派出 Agent'
   const detailPath = getTopicDetailPath(selectedTopic, viewerProfile)
   const primaryActionLabel = detailPath.startsWith('/inspiration-co-creation') ? '进入共创' : '进入讨论'
   const connectionNeed = getTopicConnectionNeed(recommendation.role)
@@ -938,7 +938,7 @@ function TopicSideConnectionPanel({
 }) {
   const recommendation = getTopicRecommendation(topic)
   const profileCards = getProfileSignalCards(topic, viewerProfile)
-  const dispatchButtonLabel = dispatchLoading ? '派出中...' : resident ? '已派出' : '外派虾'
+  const dispatchButtonLabel = dispatchLoading ? '派出中...' : resident ? '已派出' : '派出 Agent'
   const detailPath = getTopicDetailPath(topic, viewerProfile)
   const primaryActionLabel = detailPath.startsWith('/inspiration-co-creation') ? '进入共创' : '进入讨论'
   const people = getVisibleConnectionParticipants(topic).slice(0, 4)

@@ -22,15 +22,6 @@ const EMPTY_SITE_STATS: OpenClawSiteStats = {
   skills_count: 0,
 }
 
-function buildSkillUrl(rawKey?: string | null): string {
-  const basePath = import.meta.env.BASE_URL || '/'
-  const normalizedBase = basePath.endsWith('/') ? basePath : `${basePath}/`
-  const url = new URL(`${normalizedBase}api/v1/openclaw/skill.md`, window.location.origin)
-  if (rawKey) {
-    url.searchParams.set('key', rawKey)
-  }
-  return url.toString()
-}
 
 function buildOpenClawHomeUrl(): string {
   const basePath = import.meta.env.BASE_URL || '/'
@@ -159,30 +150,16 @@ export function useOpenClawSkillCardController(
   }, [])
 
   const handleCopy = async () => {
-    const OPENCLAW_SKILL_PROMPT = '将这个写入你的 skill：'
+    const OPENCLAW_SKILL_PROMPT = '请阅读这个限时邀请，按说明接入他山世界：'
     onCopyAction?.()
     setLoading(true)
     try {
       let nextUrl: string | null = null
-      if (token) {
-        const data = await authApi.createOpenClawKey(token)
-        nextUrl = data.bootstrap_path
-          ? new URL(data.bootstrap_path, window.location.origin).toString()
-          : data.skill_path
-            ? new URL(data.skill_path, window.location.origin).toString()
-            : buildSkillUrl(data.key ?? null)
-        setGuestClaimLoginPath(null)
-        setGuestClaimRegisterPath(null)
-      } else {
-        const data = await authApi.createGuestOpenClawKey()
-        nextUrl = data.bootstrap_path
-          ? new URL(data.bootstrap_path, window.location.origin).toString()
-          : data.skill_path
-            ? new URL(data.skill_path, window.location.origin).toString()
-            : buildSkillUrl(data.key ?? null)
-        setGuestClaimLoginPath(data.claim_login_path ?? null)
-        setGuestClaimRegisterPath(data.claim_register_path ?? null)
-      }
+      const data = await authApi.createAgentInvitation(token ?? undefined)
+      const basePath = import.meta.env.BASE_URL || '/'
+      nextUrl = new URL(`${basePath.endsWith('/') ? basePath : basePath + '/'}${data.onboarding_path.replace(/^\//, '')}`, window.location.origin).toString()
+      setGuestClaimLoginPath(null)
+      setGuestClaimRegisterPath(null)
 
       const copyText = `${OPENCLAW_SKILL_PROMPT}\n${nextUrl}`
       setGeneratedSkillUrl(nextUrl)
@@ -192,11 +169,11 @@ export function useOpenClawSkillCardController(
       try {
         const copySucceeded = await copyTextWithFallback(copyText)
         if (!copySucceeded) {
-          toast.info(token ? '当前浏览器不支持自动复制，请手动复制下方专属链接' : '当前浏览器不支持自动复制，请手动复制下方匿名链接')
+          toast.info(token ? '当前浏览器不支持自动复制，请手动复制下方限时邀请' : '当前浏览器不支持自动复制，请手动复制下方限时邀请')
           return
         }
         setCopied(true)
-        toast.success(token ? '已复制绑定当前身份的智能体 skill 链接' : '已复制匿名智能体 skill 链接')
+        toast.success(token ? '已复制绑定当前身份的智能体邀请链接' : '已复制匿名智能体邀请链接')
         window.setTimeout(() => setCopied(false), 1600)
       } catch {
         toast.info('自动复制失败，请手动复制下方链接')
@@ -331,7 +308,7 @@ function OpenClawSkillCardView({ controller }: { controller: OpenClawSkillCardCo
                 {showLoginPrompt ? (
                   <>
                     <p className="leading-relaxed" style={{ color: '#92400E' }}>
-                      当前已复制临时账号专属 skill。智能体可以先直接稳定使用；若要升级绑定到您的他山世界账号，请使用下方自动认领入口。
+                      邀请十分钟内有效，只能兑换一次。接入后可以登录网站管理账号。
                     </p>
                     <div className="flex gap-2">
                       <Link
@@ -351,7 +328,7 @@ function OpenClawSkillCardView({ controller }: { controller: OpenClawSkillCardCo
                     </div>
                     <div className="border-t border-[rgba(245,158,11,0.2)] pt-3">
                       <p className="text-[11px] font-medium tracking-[0.18em]" style={{ color: theme.mutedText }}>
-                        智能体匿名链接
+                        智能体限时邀请
                       </p>
                       <div
                         className="mt-1.5 overflow-x-auto rounded-[14px] border px-2.5 py-2 text-[12px]"
@@ -368,13 +345,13 @@ function OpenClawSkillCardView({ controller }: { controller: OpenClawSkillCardCo
                 ) : (
                   <>
                     <p className="text-[11px] font-medium tracking-[0.18em]" style={{ color: theme.mutedText }}>
-                      {generatedSkillIsBound ? '智能体专属链接' : '智能体匿名链接'}
+                      {generatedSkillIsBound ? '智能体限时邀请' : '智能体限时邀请'}
                     </p>
                     <p className="leading-relaxed" style={{ color: copied ? theme.bodyColor : '#92400E' }}>
                       {copied
                         ? generatedSkillIsBound
-                          ? '已自动复制绑定当前身份的专属链接。后续智能体应重复使用这个同一链接。'
-                          : '已自动复制临时账号专属链接。后续智能体应重复使用这个同一链接；升级正式账号后也无需更换。'
+                          ? '已自动复制绑定当前身份的限时邀请。后续智能体应重复使用这个同一链接。'
+                          : '邀请十分钟内有效，只能兑换一次。兑换后由智能体保存凭据；邀请失效时请重新生成。'
                         : '如果浏览器未授予剪贴板权限，请手动复制下方链接。'}
                     </p>
                     <div

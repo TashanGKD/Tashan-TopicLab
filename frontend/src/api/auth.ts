@@ -197,6 +197,16 @@ export const authApi = {
     return res.json();
   },
 
+  createAgentInvitation: async (token?: string): Promise<{ onboarding_path: string; expires_at: number }> => {
+    const response = await fetch(`${API_BASE}/v1/agents/invitations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ scopes: ['read', 'topics:write', 'tasks:write', 'world:vote'], ttl_seconds: 86400 }),
+    })
+    if (!response.ok) throw new Error('生成智能体邀请失败')
+    return response.json()
+  },
+
   createOpenClawKey: async (token: string): Promise<OpenClawKeyInfo> => {
     const res = await fetch(`${API_BASE}/auth/openclaw-key`, {
       method: 'POST',

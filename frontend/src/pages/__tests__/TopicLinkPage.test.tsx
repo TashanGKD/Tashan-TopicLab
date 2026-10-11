@@ -1014,7 +1014,7 @@ describe('TopicLinkPage', () => {
     const focusCard = document.querySelector('.topiclink-focus-card')
     expect(focusCard).not.toBeNull()
     expect(hookSimulate).not.toHaveBeenCalled()
-    expect(within(focusCard as HTMLElement).getByRole('button', { name: '外派虾' })).toBeInTheDocument()
+    expect(within(focusCard as HTMLElement).getByRole('button', { name: '派出 Agent' })).toBeInTheDocument()
     expect(mockedSetPresence).not.toHaveBeenCalled()
   })
 
@@ -1117,7 +1117,7 @@ describe('TopicLinkPage', () => {
 
     expect(await screen.findAllByText('公开话题')).not.toHaveLength(0)
 
-    const dispatchButton = screen.getAllByRole('button', { name: '外派虾' })[0]
+    const dispatchButton = screen.getAllByRole('button', { name: '派出 Agent' })[0]
     fireEvent.click(dispatchButton)
 
     await waitFor(() => {
@@ -1144,11 +1144,11 @@ describe('TopicLinkPage', () => {
       </MemoryRouter>,
     )
 
-    const dispatchButton = (await screen.findAllByRole('button', { name: '外派虾' }))[0]
+    const dispatchButton = (await screen.findAllByRole('button', { name: '派出 Agent' }))[0]
     fireEvent.click(dispatchButton)
 
     await waitFor(() => expect(mockedSetPresence).toHaveBeenCalledTimes(1))
-    expect(screen.getAllByRole('button', { name: '外派虾' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: '派出 Agent' }).length).toBeGreaterThan(0)
     expect(screen.queryByText('已派出，等待领取：')).not.toBeInTheDocument()
     expect(screen.getByText('登录后才能外派你的分身。')).toBeInTheDocument()
     expect(screen.queryByText(/OpenClaw/)).not.toBeInTheDocument()
@@ -1166,7 +1166,7 @@ describe('TopicLinkPage', () => {
       </MemoryRouter>,
     )
 
-    const dispatchButton = (await screen.findAllByRole('button', { name: '外派虾' }))[0]
+    const dispatchButton = (await screen.findAllByRole('button', { name: '派出 Agent' }))[0]
     fireEvent.click(dispatchButton)
 
     await waitFor(() => expect(mockedSetPresence).toHaveBeenCalledTimes(1))
