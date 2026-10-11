@@ -10,6 +10,7 @@ from __future__ import annotations
 from app.api.auth import resolve_access_token
 
 import asyncio
+import base64
 import contextlib
 import hashlib
 import json
@@ -1848,7 +1849,7 @@ def _get_topiclink_agent_task(*, task_id: str, requested_by_user_id: int) -> Any
         ).fetchone()
 
 
-def _list_topiclink_agent_tasks(*, agent_id: int, status: str) -> list[dict[str, Any]]:
+def _list_topiclink_agent_tasks(*, agent_id: int, status: str, limit: int = 50, cursor: str | None = None) -> list[dict[str, Any]]:
     with get_db_session() as session:
         _ensure_topiclink_agent_tasks_table(session)
         status_sql = (
@@ -1857,6 +1858,17 @@ def _list_topiclink_agent_tasks(*, agent_id: int, status: str) -> list[dict[str,
             if status == "pending"
             else "status = :status"
         )
+        cursor_sql = ""
+        params = {"agent_id": agent_id, "status": status, "page_limit": limit + 1}
+        if cursor:
+            try:
+                created, task_id = json.loads(base64.urlsafe_b64decode(cursor + '=' * (-len(cursor) % 4)))
+                if not isinstance(created, str) or not isinstance(task_id, str):
+                    raise ValueError()
+            except (ValueError, TypeError):
+                raise HTTPException(status_code=400, detail="Invalid task cursor")
+            cursor_sql = "AND (created_at > :cursor_created OR (created_at = :cursor_created AND id > :cursor_id))"
+            params.update(cursor_created=created, cursor_id=task_id)
         rows = session.execute(
             text(
                 f"""
@@ -1864,11 +1876,12 @@ def _list_topiclink_agent_tasks(*, agent_id: int, status: str) -> list[dict[str,
                 FROM topiclink_agent_tasks
                 WHERE target_openclaw_agent_id = :agent_id
                   AND {status_sql}
+                  {cursor_sql}
                 ORDER BY created_at ASC, id ASC
-                LIMIT 50
+                LIMIT :page_limit
                 """
             ),
-            {"agent_id": agent_id, "status": status},
+            params,
         ).fetchall()
     return [_serialize_topiclink_agent_task(row) for row in rows]
 
@@ -1890,6 +1903,15 @@ def _transition_topiclink_agent_task(
         ).fetchone()
         if not current or int(current.target_openclaw_agent_id) != agent_id:
             raise HTTPException(status_code=404, detail="调度单不存在")
+        claim_token_hash = hashlib.sha256(claim_token.encode("utf-8")).hexdigest()
+        if str(current.status) in {"replied", "failed"}:
+            same_result = (str(current.status) == status and
+                secrets.compare_digest(str(current.claim_token_hash or ""), claim_token_hash) and
+                _topiclink_json_object(current.output_json) == (output or {}) and
+                (current.error_message or None) == (error_message or None))
+            if same_result:
+                return _serialize_topiclink_agent_task(current)
+            raise HTTPException(status_code=409, detail="Task already ended with a different result or claim")
         if status == "claimed" and str(current.status) not in {"pending", "claimed"}:
             raise HTTPException(status_code=409, detail="调度单已被领取或结束")
         if status in {"replied", "failed"} and str(current.status) != "claimed":
@@ -1928,7 +1950,7 @@ def _transition_topiclink_agent_task(
                 "AND claim_expires_at IS NOT NULL AND claim_expires_at > CURRENT_TIMESTAMP"
             )
         )
-        claim_token_set_sql = ":claim_token_hash" if status == "claimed" else "NULL"
+        claim_token_set_sql = ":claim_token_hash"
         claim_expires_set_sql = claim_expires_sql if status == "claimed" else "NULL"
         result = session.execute(
             text(
@@ -1961,6 +1983,9 @@ def _transition_topiclink_agent_task(
             },
         )
         if result.rowcount != 1:
+            latest = session.execute(text("SELECT * FROM topiclink_agent_tasks WHERE id = :id"), {"id": task_id}).fetchone()
+            if latest and status in {"replied", "failed"} and latest.status == status and secrets.compare_digest(str(latest.claim_token_hash or ""), claim_token_hash) and _topiclink_json_object(latest.output_json) == (output or {}) and (latest.error_message or None) == (error_message or None):
+                return _serialize_topiclink_agent_task(latest)
             raise HTTPException(status_code=409, detail="调度单已被领取或结束")
         updated = session.execute(
             text("SELECT * FROM topiclink_agent_tasks WHERE id = :id"),
@@ -3073,16 +3098,27 @@ async def get_topiclink_dispatch(
 @router.get("/agent-tasks")
 async def list_topiclink_agent_tasks(
     status: str = Query(default="pending"),
+    limit: int = Query(default=50, ge=1, le=100),
+    cursor: str | None = Query(default=None),
     user: dict[str, Any] = Depends(require_openclaw_user),
 ) -> dict[str, Any]:
     if status not in {"pending", "claimed", "replied", "failed"}:
         raise HTTPException(status_code=400, detail="不支持的调度状态")
-    return {
-        "items": _list_topiclink_agent_tasks(
-            agent_id=int(user["openclaw_agent_id"]),
-            status=status,
-        )
-    }
+    rows = _list_topiclink_agent_tasks(agent_id=int(user["openclaw_agent_id"]), status=status, limit=limit, cursor=cursor)
+    more = len(rows) > limit
+    items = rows[:limit]
+    next_cursor = base64.urlsafe_b64encode(json.dumps([items[-1]["created_at"], items[-1]["id"]]).encode()).decode().rstrip('=') if more else None
+    return {"items": items, "next_cursor": next_cursor, "has_more": more}
+
+
+@router.get("/agent-tasks/{task_id}")
+async def get_agent_task(task_id: str, user: dict[str, Any] = Depends(require_openclaw_user)):
+    with get_db_session() as session:
+        _ensure_topiclink_agent_tasks_table(session)
+        task = session.execute(text("SELECT * FROM topiclink_agent_tasks WHERE id = :id AND target_openclaw_agent_id = :agent_id"), {"id": task_id, "agent_id": int(user["openclaw_agent_id"])}).fetchone()
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return {"task": _serialize_topiclink_agent_task(task)}
 
 
 @router.post("/agent-tasks/{task_id}/claim")
@@ -3099,6 +3135,11 @@ async def claim_topiclink_agent_task(
         claim_token=claim_token,
     )
     return {"task": task, "claim_token": claim_token}
+
+
+@router.post("/agent-tasks/{task_id}/renew")
+async def renew_agent_task(task_id: str, req: TopicLinkTaskClaimRequest, user: dict[str, Any] = Depends(require_openclaw_user)):
+    return await claim_topiclink_agent_task(task_id, req, user)
 
 
 @router.post("/agent-tasks/{task_id}/complete")
