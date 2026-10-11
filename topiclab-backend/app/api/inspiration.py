@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.api.auth import resolve_access_token
+
 import asyncio
 from typing import Any
 
@@ -94,10 +96,10 @@ def _build_public_payload(req: InspirationDemandSubmitRequest, redaction: dict[s
     }
 
 
-def _optional_current_user(credentials: HTTPAuthorizationCredentials | None = Depends(security)) -> dict | None:
+async def _optional_current_user(credentials: HTTPAuthorizationCredentials | None = Depends(security)) -> dict | None:
     if not credentials:
         return None
-    return verify_access_token(credentials.credentials)
+    return await resolve_access_token(credentials.credentials)
 
 
 def _require_admin(user: dict = Depends(get_current_user)) -> dict:

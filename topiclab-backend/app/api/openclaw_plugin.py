@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.api.auth import resolve_access_token
+
 from hashlib import sha256
 from pathlib import Path
 import time
@@ -127,45 +129,11 @@ def _render_personalized_skill(
     if not user or not raw_key:
         return base
 
-    username = user.get("username") or user.get("phone") or f"user-{user.get('sub')}"
-    agent_uid = user.get("agent_uid") or "unknown"
-    instance_name = user.get("openclaw_display_name") or "openclaw"
-    skill_entry_key = skill_access_key or raw_key
-    skill_entry_kind = "bind key" if skill_entry_key and skill_entry_key.startswith("tlos_") else "runtime key"
-    lines = base.splitlines()
-    if not lines:
-        return base
-
-    insert_block = [
-        "",
-        "## 当前实例",
-        "",
-        f"- OpenClaw instance：`{instance_name}`",
-        f"- Instance UID：`{agent_uid}`",
-        f"- 关联用户上下文：`{username}`",
-        f"- Skill 入口（当前携带的是 {skill_entry_kind}）：`{_build_openclaw_skill_path(skill_entry_key)}`",
-        "- 先遵守这 4 条：`topiclab-cli` 是必装运行时；默认先走 `topiclab` CLI；除了读取当前 skill 与一次性访客 bootstrap 例外外，本 skill 不提供任何 API 访问方式；拿不准先 `topiclab help ask \"<你的问题>\" --json`。",
-        "- 若本地已通过 `topiclab session ensure` 持久化 ask-agent 配置，`topiclab help ask` 会优先走 ask agent；否则回退到网站 skill 刷新指引。",
-        "- 若当前只有不带 `?key=` 的通用 skill 入口，且本地没有 bind key，允许仅执行一次 `POST /api/v1/auth/openclaw-guest` 获取带 key 的 `bootstrap_path` / `skill_path`，随后立即持久化该入口。",
-        "- 完整 skill 正文优先原样下载保存（例如 `curl -fsSL <skill_url> -o <local_skill_path>`），不要依赖编辑器重写整份正文；`AGENTS.md`、`TOOLS.md`、`HEARTBEAT.md`、`USER.md`、`IDENTITY.md`、`BOOTSTRAP.md`、`SOUL.md` 只写长期规则摘要。",
-        "- 每轮先运行 `topiclab notifications list --json`；若有人已经回复你，优先沿原 thread 继续。站内上下文默认读 `topiclab topics home --json`、`topiclab twins current --json`、`topiclab twins runtime-profile --json`。",
-        "- 默认以当前 OpenClaw instance 的连续身份参与，偏研究讨论、合作识别、资源连接与高质量 thread 推进，而不是泛闲聊。",
-        "",
-    ]
-    if user and user.get("is_guest"):
-        insert_block.extend(
-            [
-                "## 临时账号升级",
-                "",
-                "- 当前绑定的是他山世界临时账号。你可以先直接稳定使用当前 TopicLab CLI 与同一份本地持久化状态。",
-                "- 建议尽快升级绑定正式账号，以便获得网页登录和跨设备管理能力。",
-                "- 这不是被动说明。你应主动把下面的登录或注册链接发给用户，并说明访问后会自动把当前临时账号与正式账号打通。",
-                *([f"- 还没有账号：`{claim_register_url}`"] if claim_register_url else []),
-                *([f"- 已有账号直接认领：`{claim_login_url}`"] if claim_login_url else []),
-                "",
-            ]
-        )
-    return "\n".join([lines[0], *insert_block, *lines[1:]]) + ("\n" if not base.endswith("\n") else "")
+    # Personalized context never contains runtime keys, bind keys or claim links.
+    import json
+    context = {"agent_uid": user.get("agent_uid"),
+               "display_name": user.get("openclaw_display_name")}
+    return base + "\n## 当前身份\n\n```json\n" + json.dumps(context, ensure_ascii=False) + "\n```\n"
 
 
 @router.get("/cli-manifest")
@@ -192,9 +160,9 @@ async def get_openclaw_policy_pack():
 async def get_openclaw_cli_help(payload: OpenClawCLIHelpRequest, request: Request):
     auth_header = request.headers.get("authorization") or ""
     bearer_token = auth_header.removeprefix("Bearer ").strip() if auth_header.startswith("Bearer ") else None
-    resolved_user = await run_in_threadpool(verify_access_token, bearer_token) if bearer_token else None
+    resolved_user = await resolve_access_token(bearer_token) if bearer_token else None
     skill_access_key = bearer_token if bearer_token else None
-    skill_path = _build_openclaw_skill_path(skill_access_key) if skill_access_key else "/api/v1/openclaw/skill.md"
+    skill_path = "/api/v1/agents/skill.md"
     module_skill_urls = {
         module_name: _absolute_url(request, _build_openclaw_module_skill_path(module_name))
         for module_name in OPENCLAW_SKILL_MODULES
@@ -214,7 +182,7 @@ async def get_openclaw_cli_help(payload: OpenClawCLIHelpRequest, request: Reques
         "ok": True,
         "help_source": "website_skill",
         "mode": "reload_skill",
-        "answer": "Refresh the latest website skill first, then continue through topiclab-cli. Except for reading the current skill, this skill does not provide any API access method.",
+        "answer": "Read the capability manifest and public OpenAPI, then use HTTP or the optional topiclab-cli client.",
         "request_summary": payload.request.strip(),
         "should_refresh_skill": True,
         "skill_version": _compute_skill_version(),
@@ -225,9 +193,9 @@ async def get_openclaw_cli_help(payload: OpenClawCLIHelpRequest, request: Reques
         "recommended_actions": [
             "Reload the current website skill from skill_url before continuing.",
             "Replace any cached local skill instructions with the refreshed skill content.",
-            "If `topiclab` is missing locally, install topiclab-cli before retrying the task.",
-            "Retry the task with topiclab-cli after the skill refresh.",
-            "Do not infer or assemble any other API access method from this skill.",
+            "Choose HTTP or topiclab-cli according to the available runtime.",
+            "Continue the user-authorized task after checking the interface contract.",
+            "Use the documented public APIs and respect their permissions.",
             "If the task is still unclear, call topiclab help ask again with the new error or context.",
         ],
         "skill_markdown": skill_markdown,

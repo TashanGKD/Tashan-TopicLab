@@ -146,13 +146,13 @@ class RegisterRequest(BaseModel):
     phone: str = Field(..., pattern=r"^1[3-9]\d{9}$", description="手机号")
     code: str = Field(default="", max_length=6, description="验证码；限时免验证期间可留空")
     password: str = Field(..., min_length=6, description="密码")
-    claim_token: Optional[str] = Field(default=None, max_length=128, description="OpenClaw 临时账号认领 token")
+    claim_token: Optional[str] = Field(default=None, max_length=128, description="Agent 临时账号认领 token")
 
 
 class LoginRequest(BaseModel):
     phone: str = Field(..., pattern=r"^1[3-9]\d{9}$", description="手机号")
     password: str = Field(..., min_length=6, description="密码")
-    claim_token: Optional[str] = Field(default=None, max_length=128, description="OpenClaw 临时账号认领 token")
+    claim_token: Optional[str] = Field(default=None, max_length=128, description="Agent 临时账号认领 token")
 
 
 class TwinUpsertRequest(BaseModel):
@@ -206,7 +206,7 @@ class AuthResponse(BaseModel):
 class WatchaOAuthStartRequest(BaseModel):
     redirect_uri: str = Field(..., min_length=1, max_length=2048, description="前端 OAuth 回调地址")
     next_path: Optional[str] = Field(default="/", max_length=2048, description="登录成功后跳转路径")
-    claim_token: Optional[str] = Field(default=None, max_length=128, description="OpenClaw 临时账号认领 token")
+    claim_token: Optional[str] = Field(default=None, max_length=128, description="Agent 临时账号认领 token")
 
 
 class WatchaOAuthStartResponse(BaseModel):
@@ -306,7 +306,7 @@ def _generate_guest_phone(session) -> str:
 
 
 def _generate_guest_username() -> str:
-    return f"OpenClaw Guest {secrets.token_hex(2)}"
+    return f"Agent Guest {secrets.token_hex(2)}"
 
 
 def _generate_guest_claim_token() -> str:
@@ -1456,8 +1456,21 @@ def _transfer_guest_openclaw_identity(
         {
             "guest_user_id": guest_user_id,
             "target_user_id": target_user_id,
-            "display_name": f"{target_username}'s openclaw" if target_username else None,
+            "display_name": f"{target_username} Agent" if target_username else None,
             "updated_at": datetime.now(timezone.utc),
+        },
+    )
+    session.execute(
+        text(
+            """
+            UPDATE agent_external_identities
+            SET bound_user_id = :target_user_id
+            WHERE bound_user_id = :guest_user_id
+            """
+        ),
+        {
+            "guest_user_id": guest_user_id,
+            "target_user_id": target_user_id,
         },
     )
     session.execute(
@@ -1520,12 +1533,12 @@ def claim_guest_openclaw_account(
             {"claim_token": token},
         ).fetchone()
         if not guest_row:
-            return "not_found", "OpenClaw 临时账号认领链接无效或已失效"
+            return "not_found", "Agent 临时账号认领链接无效或已失效"
         guest_user_id = int(guest_row.id)
         if guest_user_id == target_user_id:
             return "already_bound", "当前账号已经绑定到这个 OpenClaw 临时身份"
         if guest_row.guest_claimed_at:
-            return "already_claimed", "该 OpenClaw 临时账号已经完成绑定"
+            return "already_claimed", "该 Agent 临时账号已经完成绑定"
 
         touched_topic_rows = session.execute(
             text(
@@ -1549,7 +1562,7 @@ def claim_guest_openclaw_account(
         _merge_guest_favorite_categories(session, guest_user_id=guest_user_id, target_user_id=target_user_id)
         _merge_guest_legacy_twins(session, guest_user_id=guest_user_id, target_user_id=target_user_id)
         _transfer_guest_runtime_twins(session, guest_user_id=guest_user_id, target_user_id=target_user_id)
-        openclaw_display_name = f"{target_username}'s openclaw" if target_username else None
+        openclaw_display_name = f"{target_username} Agent" if target_username else None
         transferred_agent_uid = _transfer_guest_openclaw_identity(
             session,
             guest_user_id=guest_user_id,
@@ -1784,7 +1797,7 @@ def claim_guest_openclaw_account(
         for topic_id in touched_topic_ids:
             _invalidate_read_cache(topic_id=topic_id, invalidate_topic_lists=True)
         return "claimed", (
-            "OpenClaw 临时账号已自动绑定到当前他山世界账号"
+            "Agent 临时账号已自动绑定到当前他山世界账号"
             + (f"（实例 {transferred_agent_uid} 已继承）" if transferred_agent_uid else "")
         )
     finally:
@@ -1842,11 +1855,49 @@ def verify_access_token(token: str) -> Optional[dict]:
     return payload
 
 
+async def resolve_access_token(token: str) -> Optional[dict]:
+    """Resolve a local session/key or a verified, registered external AgentID."""
+    if token.startswith("tlag_"):
+        from app.services.agent_credentials import verify
+        user = await run_in_threadpool(verify, token)
+    else:
+        user = await run_in_threadpool(verify_access_token, token)
+    if user:
+        set_authenticated_actor_context(user)
+        return user
+    if token.startswith(('tloc_', 'tlos_', 'tlag_')):
+        return None
+    from app.services import agent_identity as identities
+    try:
+        identity = await identities.verify_modelscope_authorization(f"Bearer {token}")
+    except (identities.AgentIdentityAuthenticationError, identities.AgentIdentityConfigurationError):
+        return None
+    user = await run_in_threadpool(identities.resolve_modelscope_agent_actor, identity)
+    if not user:
+        raise HTTPException(status_code=403, detail="AgentID identity is not registered; call /api/v1/agent-identity/bootstrap first")
+    set_authenticated_actor_context(user)
+    return user
+
+
+async def require_agent_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Agent credential required")
+    user = await resolve_access_token(credentials.credentials)
+    if not user and not credentials.credentials.startswith('tloc_'):
+        raise HTTPException(status_code=401, detail="AgentID token verification failed")
+    if user and user.get('auth_type') == 'jwt':
+        raise HTTPException(status_code=401, detail="Agent key required; JWT not accepted")
+    if not user or not user.get('openclaw_agent_id'):
+        raise HTTPException(status_code=401, detail=build_openclaw_key_invalid_detail(),
+                            headers=build_openclaw_key_invalid_headers())
+    return user
+
+
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
     """Get current user from JWT token."""
     if not credentials:
         raise HTTPException(status_code=401, detail="未登录")
-    payload = await run_in_threadpool(verify_access_token, credentials.credentials)
+    payload = await resolve_access_token(credentials.credentials)
     if not payload:
         raise HTTPException(status_code=401, detail="登录已过期")
     set_authenticated_actor_context(payload)
@@ -1854,21 +1905,8 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
 
 async def require_openclaw_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
-    """Require OpenClaw key only; reject JWT. For OpenClaw-dedicated routes."""
-    if not credentials:
-        raise HTTPException(status_code=401, detail="OpenClaw key required")
-    token = credentials.credentials
-    if not token.startswith("tloc_"):
-        raise HTTPException(status_code=401, detail="OpenClaw key required; JWT not accepted")
-    user = await run_in_threadpool(verify_openclaw_api_key, token)
-    if not user:
-        raise HTTPException(
-            status_code=401,
-            detail=build_openclaw_key_invalid_detail(),
-            headers=build_openclaw_key_invalid_headers(),
-        )
-    set_authenticated_actor_context(user)
-    return user
+    """Compatibility dependency for registered Agent credentials."""
+    return await require_agent_user(credentials)
 
 
 # API Endpoints
@@ -2291,7 +2329,7 @@ async def create_openclaw_guest():
         record["claim_token"] = claim_token
         record["claim_register_path"] = _build_openclaw_claim_register_path(claim_token)
         record["claim_login_path"] = _build_openclaw_claim_login_path(claim_token)
-        twin_display_name = guest_user.get("username") or "OpenClaw Guest"
+        twin_display_name = guest_user.get("username") or "Agent Guest"
         create_or_update_active_twin_for_user(
             int(guest_user["id"]),
             source_agent_name=record.get("openclaw_agent", {}).get("handle") if isinstance(record.get("openclaw_agent"), dict) else None,
@@ -2302,7 +2340,7 @@ async def create_openclaw_guest():
             base_profile_markdown=(
                 f"# {twin_display_name}\n\n"
                 "## Identity\n\n"
-                "Temporary OpenClaw account for TopicLab CLI-first access.\n\n"
+                "Temporary Agent account for 他山世界.\n\n"
                 "## Discussion Style\n\n"
                 "Build identity and preferences continuously from future conversations."
             ),

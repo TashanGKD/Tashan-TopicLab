@@ -1,16 +1,18 @@
 """OpenClaw-dedicated write routes.
 
-These routes require a valid OpenClaw key and derive the acting identity
-from the bound OpenClaw agent. JWT is rejected on these routes.
+These routes derive the acting identity from a bound OpenClaw agent. They accept
+either the legacy OpenClaw key or a mapped ModelScope AgentID JWT.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 from pydantic import BaseModel, Field
 
+from app.services.agent_requests import AgentMutationRoute
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials
@@ -23,6 +25,7 @@ from app.api.auth import (
     verify_openclaw_api_key,
 )
 from app.services.openclaw_runtime import apply_rule_points, record_activity_event
+from app.services import agent_identity as agent_identity_service
 from app.services.request_audit import set_authenticated_actor_context
 from app.api.topics import (
     MentionExpertResponse,
@@ -57,7 +60,7 @@ from app.storage.database.topic_store import (
     upsert_post,
 )
 
-router = APIRouter(prefix="/openclaw", tags=["openclaw-dedicated"])
+router = APIRouter(route_class=AgentMutationRoute, prefix="/openclaw", tags=["openclaw-dedicated"])
 logger = logging.getLogger(__name__)
 TEST_TOPIC_PATTERN = re.compile(r"(?:^|[\s\-_])(test|testing|debug|qa|e2e|smoke)(?:$|[\s\-_])|测试|联调|验收|压测|回归|冒烟|调试", re.IGNORECASE)
 
@@ -103,28 +106,17 @@ class OpenClawMediaUploadResponse(BaseModel):
     size_bytes: int
 
 
-async def _get_openclaw_actor(
-    credentials: HTTPAuthorizationCredentials | None = Depends(security),
-) -> dict | None:
-    if not credentials:
-        raise HTTPException(status_code=401, detail="OpenClaw key required")
-    token = credentials.credentials
-    if not token.startswith("tloc_"):
-        raise HTTPException(status_code=401, detail="OpenClaw dedicated routes only accept OpenClaw key, not JWT")
-    user = await run_in_threadpool(verify_openclaw_api_key, token)
-    if not user:
-        raise HTTPException(
-            status_code=401,
-            detail=build_openclaw_key_invalid_detail(),
-            headers=build_openclaw_key_invalid_headers(),
-        )
-    set_authenticated_actor_context(user)
-    return user
+async def _get_openclaw_actor(credentials: HTTPAuthorizationCredentials | None = Depends(security)) -> dict:
+    from app.api.auth import require_agent_user
+    return await require_agent_user(credentials)
 
 
 def _resolve_openclaw_author_identity(user: dict) -> tuple[str, int, str, int]:
     owner_user_id = int(user["sub"])
-    author_name = _resolve_author_name("", user) or "openclaw"
+    if user.get("credential_type") == "modelscope_agentid":
+        author_name = user.get("openclaw_display_name") or "openclaw"
+    else:
+        author_name = _resolve_author_name("", user) or "openclaw"
     return author_name, owner_user_id, "openclaw_key", int(user["openclaw_agent_id"])
 
 
@@ -561,6 +553,8 @@ async def mention_expert_openclaw(
             )
         )
         payload = {
+            "max_turns": min(50, int(os.getenv("TOPICLAB_DISCUSSION_MAX_TURNS", "100"))),
+            "max_budget_usd": min(1.0, float(os.getenv("TOPICLAB_DISCUSSION_MAX_BUDGET_USD", "10"))),
             "topic_id": topic_id,
             "topic_title": topic["title"],
             "topic_body": topic["body"],

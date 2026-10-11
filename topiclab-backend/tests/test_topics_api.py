@@ -22,6 +22,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{database_path}")
     monkeypatch.setenv("WORKSPACE_BASE", str(workspace_base))
     monkeypatch.setenv("JWT_SECRET", "test-secret")
+    monkeypatch.setenv("TOPICLAB_EXECUTOR_TOKEN", "test-service-token")
     monkeypatch.setenv("RESONNET_BASE_URL", "http://resonnet.test")
     monkeypatch.setenv("ADMIN_PHONE_NUMBERS", "13800000001")
     monkeypatch.setenv("ADMIN_PANEL_PASSWORD", "admin-panel-secret")
@@ -1805,7 +1806,19 @@ def test_worldweave_source_feed_detail_uses_cached_list_snapshot(client, monkeyp
     source_feed_module._worldweave_source_article_cache.clear()
 
 
+def test_worldweave_source_feed_defaults_to_standalone_port(monkeypatch):
+    import app.api.source_feed as source_feed_module
+
+    monkeypatch.delenv("WORLDWEAVE_BASE_URL", raising=False)
+
+    assert source_feed_module._get_worldweave_base_url() == "http://127.0.0.1:3020"
+
+
 def test_discussion_and_mention_complete_via_executor(client, monkeypatch):
+    mention_auth = register_and_login(client, phone="13800002001", username="mention-tester")
+    mention_headers = {"Authorization": f"Bearer {mention_auth['token']}"}
+    owner = register_and_login(client, phone="13800001001", username="discussion-owner")
+    headers = {"Authorization": f"Bearer {owner['token']}"}
     monkeypatch.setattr(
         "app.api.topics.moderate_post_content",
         lambda body, scenario: asyncio.sleep(
@@ -1819,7 +1832,7 @@ def test_discussion_and_mention_complete_via_executor(client, monkeypatch):
         ),
     )
 
-    topic = client.post("/topics", json={"title": "执行测试", "body": "验证异步任务"}).json()
+    topic = client.post("/topics", headers=headers, json={"title": "执行测试", "body": "验证异步任务"}).json()
     topic_id = topic["id"]
 
     experts = client.get(f"/topics/{topic_id}/experts")
@@ -1828,6 +1841,7 @@ def test_discussion_and_mention_complete_via_executor(client, monkeypatch):
 
     start = client.post(
         f"/topics/{topic_id}/discussion",
+        headers=headers,
         json={"num_rounds": 1, "max_turns": 20, "max_budget_usd": 1.0},
     )
     assert start.status_code == 202
@@ -1846,6 +1860,7 @@ def test_discussion_and_mention_complete_via_executor(client, monkeypatch):
 
     mention = client.post(
         f"/topics/{topic_id}/posts/mention",
+        headers=mention_headers,
         json={"author": "alice", "body": "@physicist 请回答", "expert_name": "physicist"},
     )
     assert mention.status_code == 202, mention.text
@@ -1965,6 +1980,55 @@ def test_topic_delete_permissions(client):
     assert deleted.status_code == 200, deleted.text
 
 
+def test_topic_update_and_close_permissions(client):
+    owner = register_and_login(client, phone="13800000012", username="owner-uc")
+    other = register_and_login(client, phone="13800000013", username="other-uc")
+    admin = register_and_login(client, phone="13800000001", username="admin")
+
+    owner_topic = client.post(
+        "/topics",
+        json={"title": "可编辑话题", "body": "原始正文"},
+        headers={"Authorization": f"Bearer {owner['token']}"},
+    ).json()
+    topic_id = owner_topic["id"]
+
+    # Anonymous update is rejected.
+    anon_update = client.patch(f"/topics/{topic_id}", json={"body": "匿名篡改"})
+    assert anon_update.status_code == 401, anon_update.text
+
+    # A different logged-in user cannot update someone else's topic.
+    forbidden_update = client.patch(
+        f"/topics/{topic_id}",
+        json={"body": "越权篡改"},
+        headers={"Authorization": f"Bearer {other['token']}"},
+    )
+    assert forbidden_update.status_code == 403, forbidden_update.text
+
+    # The creator can update.
+    owner_update = client.patch(
+        f"/topics/{topic_id}",
+        json={"body": "更新后的正文"},
+        headers={"Authorization": f"Bearer {owner['token']}"},
+    )
+    assert owner_update.status_code == 200, owner_update.text
+    assert owner_update.json()["body"] == "更新后的正文"
+
+    # Non-owner cannot close.
+    forbidden_close = client.post(
+        f"/topics/{topic_id}/close",
+        headers={"Authorization": f"Bearer {other['token']}"},
+    )
+    assert forbidden_close.status_code == 403, forbidden_close.text
+
+    # Admin can close any topic.
+    admin_close = client.post(
+        f"/topics/{topic_id}/close",
+        headers={"Authorization": f"Bearer {admin['token']}"},
+    )
+    assert admin_close.status_code == 200, admin_close.text
+    assert admin_close.json()["status"] == "closed"
+
+
 def test_create_post_rejects_when_content_moderation_fails(client, monkeypatch):
     monkeypatch.setattr(
         "app.api.topics.moderate_post_content",
@@ -1995,6 +2059,8 @@ def test_create_post_rejects_when_content_moderation_fails(client, monkeypatch):
 
 
 def test_mention_rejects_when_content_moderation_fails(client, monkeypatch):
+    mention_auth = register_and_login(client, phone="13800002001", username="mention-tester")
+    mention_headers = {"Authorization": f"Bearer {mention_auth['token']}"}
     monkeypatch.setattr(
         "app.api.topics.moderate_post_content",
         lambda body, scenario: asyncio.sleep(
@@ -2011,6 +2077,7 @@ def test_mention_rejects_when_content_moderation_fails(client, monkeypatch):
     topic = client.post("/topics", json={"title": "审核测试", "body": "正文"}).json()
     response = client.post(
         f"/topics/{topic['id']}/posts/mention",
+        headers=mention_headers,
         json={"author": "alice", "body": "@physicist 你闭嘴", "expert_name": "physicist"},
     )
 
@@ -2024,8 +2091,11 @@ def test_internal_discussion_snapshot_push_updates_db(client):
     topic = client.post("/topics", json={"title": "快照推送", "body": "测试"}).json()
     topic_id = topic["id"]
 
+    denied = client.post(f"/internal/discussion-snapshot/{topic_id}", json={"turns":[]})
+    assert denied.status_code == 401
     push = client.post(
         f"/internal/discussion-snapshot/{topic_id}",
+        headers={"X-TopicLab-Executor-Token":"test-service-token"},
         json={
             "turns": [
                 {"turn_key": "round1_physicist", "round_num": 1, "expert_name": "physicist", "expert_label": "Physicist", "body": "第一轮观点"}
@@ -2048,17 +2118,21 @@ def test_internal_discussion_snapshot_push_updates_db(client):
     # 404 for non-existent topic
     bad_push = client.post(
         "/internal/discussion-snapshot/nonexistent-id",
+        headers={"X-TopicLab-Executor-Token":"test-service-token"},
         json={"turns": [], "turns_count": 0, "discussion_history": "", "discussion_summary": "", "generated_images": []},
     )
     assert bad_push.status_code == 404
 
 
 def test_discussion_status_syncs_running_turns_into_database(client):
-    topic = client.post("/topics", json={"title": "实时状态", "body": "观察进行中 turn"}).json()
+    owner = register_and_login(client, phone="13800001001", username="discussion-owner")
+    headers = {"Authorization": f"Bearer {owner['token']}"}
+    topic = client.post("/topics", headers=headers, json={"title": "实时状态", "body": "观察进行中 turn"}).json()
     topic_id = topic["id"]
 
     start = client.post(
         f"/topics/{topic_id}/discussion",
+        headers=headers,
         json={"num_rounds": 1, "max_turns": 20, "max_budget_usd": 1.0},
     )
     assert start.status_code == 202
@@ -2085,6 +2159,8 @@ def test_discussion_status_syncs_running_turns_into_database(client):
 
 def test_discussion_timeout_failsafe_allows_mention(client):
     """After 45min timeout, stale running discussion is reset to failed; @mention is allowed."""
+    mention_auth = register_and_login(client, phone="13800002001", username="mention-tester")
+    mention_headers = {"Authorization": f"Bearer {mention_auth['token']}"}
     from datetime import datetime, timedelta, timezone
 
     from sqlalchemy import text
@@ -2126,6 +2202,7 @@ def test_discussion_timeout_failsafe_allows_mention(client):
     # @mention should succeed (no longer blocked)
     mention = client.post(
         f"/topics/{topic_id}/posts/mention",
+        headers=mention_headers,
         json={"author": "测试", "body": "请问专家", "expert_name": "physicist"},
     )
     assert mention.status_code == 202
@@ -2144,12 +2221,35 @@ def test_topic_detail_related_proxy_bootstraps_workspace_on_demand(client):
     assert mode.json()["mode_id"] == "standard"
 
 
+def test_topic_experts_fall_back_to_local_data_when_resonnet_returns_502(client, monkeypatch):
+    from app.storage.database.topic_store import list_topic_experts
+
+    topic = client.post("/topics", json={"title": "相关人降级", "body": "下游暂不可用"}).json()
+    topic_id = topic["id"]
+    local_experts = list_topic_experts(topic_id)
+
+    async def unavailable_resonnet(*args, **kwargs):
+        request = httpx.Request("POST", "http://resonnet.test/executor/topics/bootstrap")
+        response = httpx.Response(502, request=request)
+        raise httpx.HTTPStatusError("bad gateway", request=request, response=response)
+
+    monkeypatch.setattr("app.api.topics.request_json", unavailable_resonnet)
+
+    response = client.get(f"/topics/{topic_id}/experts")
+
+    assert response.status_code == 200, response.text
+    assert response.json() == local_experts
+
+
 def test_discussion_generated_image_is_served_from_database_after_workspace_file_removed(client):
-    topic = client.post("/topics", json={"title": "图片入库", "body": "验证图片"}).json()
+    owner = register_and_login(client, phone="13800001001", username="discussion-owner")
+    headers = {"Authorization": f"Bearer {owner['token']}"}
+    topic = client.post("/topics", headers=headers, json={"title": "图片入库", "body": "验证图片"}).json()
     topic_id = topic["id"]
 
     start = client.post(
         f"/topics/{topic_id}/discussion",
+        headers=headers,
         json={"num_rounds": 1, "max_turns": 20, "max_budget_usd": 1.0},
     )
     assert start.status_code == 202
@@ -2358,15 +2458,12 @@ def test_openclaw_key_can_bind_user_identity_and_render_personal_skill(client):
 
     skill_resp = client.get(key_payload["skill_path"])
     assert skill_resp.status_code == 200, skill_resp.text
-    assert "本 skill 不提供任何 API 访问方式" in skill_resp.text
-    assert "/api/v1/auth/openclaw-guest" in skill_resp.text
-    assert "curl -fsSL" in skill_resp.text
-    assert "## 二、核心文件只写摘要" in skill_resp.text
-    assert "`AGENTS.md`" in skill_resp.text
-    assert "`TOOLS.md`" in skill_resp.text
-    assert "ask agent" in skill_resp.text
+    assert "通用客户端可直接使用 HTTP" in skill_resp.text
+    assert "用户目标优先" in skill_resp.text
+    assert "本 skill 不提供任何 API 访问方式" not in skill_resp.text
     assert raw_key not in skill_resp.text
-    assert "完整 API 清单" not in skill_resp.text
+    assert bind_key not in skill_resp.text
+    assert skill_resp.headers['Cache-Control'] == 'no-store'
 
     home_resp = client.get("/api/v1/home?include_source_preview=false", headers={"Authorization": f"Bearer {raw_key}"})
     assert home_resp.status_code == 200, home_resp.text
@@ -2381,7 +2478,7 @@ def test_openclaw_key_can_bind_user_identity_and_render_personal_skill(client):
     )
     assert topic_resp.status_code == 201, topic_resp.text
     topic = topic_resp.json()
-    assert topic["creator_name"] == "openclaw-user's openclaw"
+    assert topic["creator_name"] == "openclaw-user Agent"
     assert topic["creator_auth_type"] == "openclaw_key"
     topic_id = topic["id"]
     post_resp = client.post(
@@ -2391,9 +2488,9 @@ def test_openclaw_key_can_bind_user_identity_and_render_personal_skill(client):
     )
     assert post_resp.status_code == 201, post_resp.text
     created_post = post_resp.json()["post"]
-    assert created_post["author"] == "openclaw-user's openclaw"
+    assert created_post["author"] == "openclaw-user Agent"
 
-    # 回帖：用 openclaw key 无需登录，作者显示为 xxx's openclaw
+    # 回帖：用 openclaw key 无需登录，作者显示为 xxx Agent
     reply_resp = client.post(
         f"/api/v1/topics/{topic_id}/posts",
         headers={"Authorization": f"Bearer {raw_key}"},
@@ -2401,7 +2498,7 @@ def test_openclaw_key_can_bind_user_identity_and_render_personal_skill(client):
     )
     assert reply_resp.status_code == 201, reply_resp.text
     reply_post = reply_resp.json()["post"]
-    assert reply_post["author"] == "openclaw-user's openclaw"
+    assert reply_post["author"] == "openclaw-user Agent"
     assert reply_post["in_reply_to_id"] == created_post["id"]
 
     # 先删回复再删根帖
@@ -2480,10 +2577,9 @@ def test_openclaw_guest_bootstrap_returns_claim_links_and_guest_twin(client):
 
     skill_resp = client.get(guest["skill_path"])
     assert skill_resp.status_code == 200, skill_resp.text
-    assert "## 临时账号升级" in skill_resp.text
-    assert "可以先直接稳定使用当前 TopicLab CLI" in skill_resp.text
-    assert f"http://testserver{guest['claim_register_path']}" in skill_resp.text
-    assert f"http://testserver{guest['claim_login_path']}" in skill_resp.text
+    assert "用户目标优先" in skill_resp.text
+    assert guest["claim_token"] not in skill_resp.text
+    assert guest["bind_key"] not in skill_resp.text
 
     twin_resp = client.get(
         "/api/v1/openclaw/twins/current",
@@ -2491,13 +2587,46 @@ def test_openclaw_guest_bootstrap_returns_claim_links_and_guest_twin(client):
     )
     assert twin_resp.status_code == 200, twin_resp.text
     twin_payload = twin_resp.json()
-    assert twin_payload["twin"]["display_name"].startswith("OpenClaw Guest")
+    assert twin_payload["twin"]["display_name"].startswith("Agent Guest")
 
 
 def test_openclaw_guest_claim_on_register_preserves_identity_and_rebinds_account(client):
     guest_resp = client.post("/api/v1/auth/openclaw-guest")
     assert guest_resp.status_code == 200, guest_resp.text
     guest = guest_resp.json()
+
+    from app.storage.database.postgres_client import get_db_session
+
+    with get_db_session() as session:
+        guest_agent = session.execute(
+            text(
+                """
+                SELECT id, bound_user_id
+                FROM openclaw_agents
+                WHERE agent_uid = :agent_uid
+                """
+            ),
+            {"agent_uid": guest["agent_uid"]},
+        ).fetchone()
+        session.execute(
+            text(
+                """
+                INSERT INTO agent_external_identities (
+                    provider, issuer, external_agent_id,
+                    openclaw_agent_id, bound_user_id
+                ) VALUES (
+                    'modelscope', :issuer, :external_agent_id,
+                    :openclaw_agent_id, :bound_user_id
+                )
+                """
+            ),
+            {
+                "issuer": "https://www.modelscope.cn/openapi/v1",
+                "external_agent_id": "agent_id:modelscope:guest_claim_test",
+                "openclaw_agent_id": int(guest_agent.id),
+                "bound_user_id": int(guest_agent.bound_user_id),
+            },
+        )
 
     topic_resp = client.post(
         "/api/v1/topics",
@@ -2507,9 +2636,7 @@ def test_openclaw_guest_claim_on_register_preserves_identity_and_rebinds_account
     assert topic_resp.status_code == 201, topic_resp.text
     topic_payload = topic_resp.json()
     topic_id = topic_payload["id"]
-    assert topic_payload["creator_name"].startswith("OpenClaw Guest")
-
-    from app.storage.database.postgres_client import get_db_session
+    assert topic_payload["creator_name"].startswith("Agent Guest")
 
     claim_phone = "13800009989"
     with get_db_session() as session:
@@ -2551,7 +2678,7 @@ def test_openclaw_guest_claim_on_register_preserves_identity_and_rebinds_account
 
     claimed_topic = client.get(f"/api/v1/topics/{topic_id}", headers={"Authorization": f"Bearer {guest['key']}"})
     assert claimed_topic.status_code == 200, claimed_topic.text
-    assert claimed_topic.json()["creator_name"] == "claimed-user's openclaw"
+    assert claimed_topic.json()["creator_name"] == "claimed-user Agent"
 
     me_resp = client.get(
         "/auth/me",
@@ -2575,10 +2702,21 @@ def test_openclaw_guest_claim_on_register_preserves_identity_and_rebinds_account
             ),
             {"agent_uid": guest["agent_uid"]},
         ).fetchone()
-    assert topic_row.creator_name == "claimed-user's openclaw"
+        external_identity_owner = session.execute(
+            text(
+                """
+                SELECT bound_user_id
+                FROM agent_external_identities
+                WHERE external_agent_id = :external_agent_id
+                """
+            ),
+            {"external_agent_id": "agent_id:modelscope:guest_claim_test"},
+        ).scalar_one()
+    assert topic_row.creator_name == "claimed-user Agent"
     assert topic_row.creator_user_id == register_payload["user"]["id"]
     assert agent_row.bound_user_id == register_payload["user"]["id"]
-    assert agent_row.display_name == "claimed-user's openclaw"
+    assert agent_row.display_name == "claimed-user Agent"
+    assert external_identity_owner == register_payload["user"]["id"]
 
 
 def test_openclaw_renew_rejects_runtime_key(client):
@@ -2604,7 +2742,7 @@ def test_openclaw_key_creates_primary_agent_and_home_summary(client):
     assert account["authenticated"] is True
     assert account["username"] == "summary-user"
     assert account["openclaw_agent"]["agent_uid"] == auth["agent_uid"]
-    assert account["openclaw_agent"]["display_name"] == "summary-user's openclaw"
+    assert account["openclaw_agent"]["display_name"] == "summary-user Agent"
     assert account["points_balance"] == 0
 
     user_me_resp = client.get(
@@ -2834,7 +2972,7 @@ def test_openclaw_dedicated_routes_require_openclaw_key_reject_jwt(client):
         json={"title": "JWT 开题", "body": "应被拒绝"},
     )
     assert topic_resp.status_code == 401, topic_resp.text
-    assert "OpenClaw key" in topic_resp.json().get("detail", "")
+    assert "Agent key" in topic_resp.json().get("detail", "")
 
 
 def test_openclaw_invalid_key_rejected_on_general_routes(client):
@@ -2857,14 +2995,14 @@ def test_openclaw_dedicated_routes_require_openclaw_key(client):
         json={"title": "匿名开题", "body": "无需绑定真人用户"},
     )
     assert topic_resp.status_code == 401, topic_resp.text
-    assert "OpenClaw key required" in topic_resp.json().get("detail", "")
+    assert "Agent credential required" in topic_resp.json().get("detail", "")
 
     post_resp = client.post(
         "/api/v1/openclaw/topics/topic_x/posts",
         json={"body": "匿名 openclaw 回帖"},
     )
     assert post_resp.status_code == 401, post_resp.text
-    assert "OpenClaw key required" in post_resp.json().get("detail", "")
+    assert "Agent credential required" in post_resp.json().get("detail", "")
 
 
 def test_openclaw_dedicated_routes_create_topic_and_post(client):
@@ -2879,7 +3017,7 @@ def test_openclaw_dedicated_routes_create_topic_and_post(client):
     )
     assert topic_resp.status_code == 201, topic_resp.text
     topic = topic_resp.json()
-    assert topic["creator_name"] == "dedicated-user's openclaw"
+    assert topic["creator_name"] == "dedicated-user Agent"
     assert topic["creator_auth_type"] == "openclaw_key"
     assert topic["creator_openclaw_agent_id"] is not None
     assert topic["openclaw_agent"]["agent_uid"] == auth["agent_uid"]
@@ -2892,13 +3030,15 @@ def test_openclaw_dedicated_routes_create_topic_and_post(client):
     )
     assert post_resp.status_code == 201, post_resp.text
     created_post = post_resp.json()["post"]
-    assert created_post["author"] == "dedicated-user's openclaw"
+    assert created_post["author"] == "dedicated-user Agent"
     assert created_post["owner_auth_type"] == "openclaw_key"
     assert created_post["owner_openclaw_agent_id"] == topic["creator_openclaw_agent_id"]
     assert post_resp.json()["openclaw_agent"]["agent_uid"] == auth["agent_uid"]
 
 
 def test_mention_requires_completed_discussion_on_general_and_openclaw_routes(client):
+    mention_auth = register_and_login(client, phone="13800002001", username="mention-tester")
+    mention_headers = {"Authorization": f"Bearer {mention_auth['token']}"}
     from app.storage.database.topic_store import set_discussion_status
 
     auth = register_login_and_openclaw_key(client, phone="13800009989", username="mention-guard-user")
@@ -2908,6 +3048,7 @@ def test_mention_requires_completed_discussion_on_general_and_openclaw_routes(cl
 
     general_resp = client.post(
         f"/topics/{topic_id}/posts/mention",
+        headers=mention_headers,
         json={"author": "alice", "body": "@physicist 请回答", "expert_name": "physicist"},
     )
     assert general_resp.status_code == 409, general_resp.text
@@ -3200,7 +3341,7 @@ def test_openclaw_skill_mentions_worldweave_research_surface(client):
 def test_openclaw_skill_invalid_key_returns_recovery_hint(client):
     resp = client.get("/api/v1/openclaw/skill.md?key=tloc_invalid_key_12345")
     assert resp.status_code == 401, resp.text
-    assert "Invalid OpenClaw key." in resp.text
+    assert "Invalid Agent credential." in resp.text
     assert "重新拉取你当前持有的 skill 链接" not in resp.text
     assert resp.headers.get("X-OpenClaw-Auth-Error") == "key_invalid_or_expired"
     assert resp.headers.get("X-OpenClaw-Auth-Recovery") == "reload_skill_url"
@@ -3226,33 +3367,25 @@ def test_openclaw_skill_link_is_stable_and_reusable(client):
 
     first = client.get(skill_url)
     assert first.status_code == 200, first.text
-    assert auth["bind_key"] in first.text
+    assert auth["bind_key"] not in first.text
     assert auth["openclaw_key"] not in first.text
 
     second = client.get(skill_url)
     assert second.status_code == 200, second.text
-    assert auth["bind_key"] in second.text
+    assert auth["bind_key"] not in second.text
     assert auth["openclaw_key"] not in second.text
 
 
-def test_openclaw_personalized_skill_enforces_cli_first(client):
-    auth = register_login_and_openclaw_key(client, phone="13800009992", username="cli-first-skill")
-    resp = client.get(auth["skill_path"])
-    assert resp.status_code == 200, resp.text
-    body = resp.text
-    assert "先遵守这 4 条" in body
-    assert "`topiclab-cli` 是必装运行时" in body
-    assert "本 skill 不提供任何 API 访问方式" in body
-    assert "/api/v1/auth/openclaw-guest" in body
-    assert "curl -fsSL" in body
-    assert "只写长期规则摘要" in body
-    assert "`AGENTS.md`" in body
-    assert "`TOOLS.md`" in body
-    assert "topiclab notifications list --json" in body
-    assert "topiclab help ask" in body
-    assert "ask agent" in body
-    assert "之后所有 API 请求都使用 `Authorization: Bearer YOUR_OPENCLAW_KEY`。" not in body
-    assert "先查看 `/api/v1/me/inbox`" not in body
+def test_personalized_skill_supports_http_and_preserves_user_authority(client):
+    auth = register_login_and_openclaw_key(client, phone="13800009992", username="generic-agent-skill")
+    response = client.get(auth['skill_path'])
+    assert response.status_code == 200
+    assert '通用客户端可直接使用 HTTP' in response.text
+    assert '用户目标优先' in response.text
+    assert '必装运行时' not in response.text
+    assert auth['bind_key'] not in response.text
+    assert auth['openclaw_key'] not in response.text
+    assert response.headers['Cache-Control'] == 'no-store'
 
 
 def test_openclaw_home_includes_skill_version_in_quick_links(client):

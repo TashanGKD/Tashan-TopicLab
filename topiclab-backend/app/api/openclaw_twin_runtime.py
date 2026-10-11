@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from app.api.auth import resolve_access_token
+
+from app.services.agent_requests import AgentMutationRoute
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 from typing import Optional
 
 from app.api.auth import (
@@ -15,6 +19,8 @@ from app.api.auth import (
     verify_access_token,
 )
 from app.services.openclaw_policy_pack import DEFAULT_SCENE
+from app.services import agent_identity as agent_identity_service
+from app.services.request_audit import set_authenticated_actor_context
 from app.services.twin_runtime import (
     append_observation,
     backfill_twins_from_legacy,
@@ -25,7 +31,7 @@ from app.services.twin_runtime import (
     upsert_runtime_state,
 )
 
-router = APIRouter(prefix="/openclaw/twins", tags=["openclaw-twins"])
+router = APIRouter(route_class=AgentMutationRoute, prefix="/openclaw/twins", tags=["openclaw-twins"])
 
 
 class TwinObservationRequest(BaseModel):
@@ -51,26 +57,24 @@ class TwinBackfillRequest(BaseModel):
     limit: int = Field(default=500, ge=1, le=5000)
 
 
-def _require_openclaw_user(
+async def _require_openclaw_user(credentials: HTTPAuthorizationCredentials | None = Depends(security)) -> dict:
+    from app.api.auth import require_agent_user
+    return await require_agent_user(credentials)
+
+
+async def _require_twin_reader_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> dict:
+    """Allow regular TopicLab users plus both supported agent credentials."""
+
     if not credentials:
-        raise HTTPException(status_code=401, detail="OpenClaw key required")
-    token = credentials.credentials
-    if not token.startswith("tloc_"):
-        raise HTTPException(
-            status_code=401,
-            detail="OpenClaw runtime key required",
-            headers=build_openclaw_key_invalid_headers(),
-        )
-    user = verify_access_token(token)
-    if not user or user.get("auth_type") != "openclaw_key":
-        raise HTTPException(
-            status_code=401,
-            detail=build_openclaw_key_invalid_detail(),
-            headers=build_openclaw_key_invalid_headers(),
-        )
-    return user
+        raise HTTPException(status_code=401, detail="未登录")
+    if not credentials.credentials.startswith("tloc_"):
+        user = await resolve_access_token(credentials.credentials)
+        if user:
+            set_authenticated_actor_context(user)
+            return user
+    return await _require_openclaw_user(credentials)
 
 
 def _require_admin_user(user: dict = Depends(get_current_user)) -> dict:
@@ -181,7 +185,7 @@ async def get_twin_observations(
     scene: Optional[str] = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(_require_twin_reader_user),
 ):
     requester_user_id = int(user["sub"]) if user.get("sub") is not None else None
     try:

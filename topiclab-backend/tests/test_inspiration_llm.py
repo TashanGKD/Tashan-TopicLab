@@ -65,7 +65,7 @@ async def test_request_inspiration_llm_reuses_shared_client(monkeypatch):
     await llm_module.request_inspiration_llm([{"role": "user", "content": "hi again"}])
 
     assert len(calls) == 2
-    assert calls[0][1]["timeout"] == 45.0
+    assert calls[0][1]["timeout"] == 300.0
 
 
 @pytest.mark.asyncio

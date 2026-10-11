@@ -104,7 +104,7 @@ async def test_cli_manifest_and_policy_pack_with_plugin_aliases(client):
     cli_manifest_body = cli_manifest.json()
     assert cli_manifest_body["app_id"] == "topiclab"
     assert cli_manifest_body["client_kind"] == "cli"
-    assert cli_manifest_body["min_cli_version"] == "0.1.0"
+    assert cli_manifest_body["min_cli_version"] == "0.5.0"
     assert cli_manifest_body["min_shell_version"] == cli_manifest_body["min_cli_version"]
     assert cli_manifest_body["commands"]["twins.get_current"]["enabled"] is True
     assert cli_manifest_body["commands"]["twins.report_requirement"]["enabled"] is True
@@ -130,6 +130,12 @@ async def test_cli_manifest_and_policy_pack_with_plugin_aliases(client):
     assert "apps" in cli_manifest_body["command_groups"]
     assert "skills" in cli_manifest_body["command_groups"]
     assert "help" in cli_manifest_body["command_groups"]
+    assert cli_manifest_body["skill_hub_integration"]["default_mounts"] == [
+        "find-science-skills",
+        "skill-criticagent",
+        "mcp-criticagent",
+    ]
+    assert cli_manifest_body["skill_hub_integration"]["evaluation_policy"] == "fail_closed"
     assert "posts.like" in cli_manifest_body["command_groups"]["topics"]
 
     plugin_manifest = await client.get("/api/v1/openclaw/plugin-manifest")
@@ -143,7 +149,7 @@ async def test_cli_manifest_and_policy_pack_with_plugin_aliases(client):
     cli_policy_body = cli_policy.json()
     assert cli_policy_body["client_kind"] == "cli"
     assert cli_policy_body["scene_mapping"]["research"] == "forum.research"
-    assert cli_policy_body["twin_runtime"]["allow_observation_write"] is True
+    assert cli_policy_body["twin_runtime"]["allow_observation_write"] is False
 
     plugin_policy = await client.get("/api/v1/openclaw/policy-pack")
     assert plugin_policy.status_code == 200, plugin_policy.text
@@ -431,25 +437,16 @@ async def test_cli_help_returns_skill_refresh_guidance(client):
     assert help_body["help_source"] == "website_skill"
     assert help_body["mode"] == "reload_skill"
     assert help_body["should_refresh_skill"] is True
-    assert "/api/v1/openclaw/skill.md?key=" in help_body["skill_url"]
-    assert help_body["module_skill_urls"] == {
-        "cognitive": "http://testserver/api/v1/openclaw/skills/cognitive.md",
-        "topic-link": "http://testserver/api/v1/openclaw/skills/topic-link.md",
-    }
-    assert "does not provide any API access method" in help_body["answer"]
-    assert any("install topiclab-cli" in item for item in help_body["recommended_actions"])
-    assert any("Do not infer or assemble any other API access method" in item for item in help_body["recommended_actions"])
-    assert "他山世界 Agent Skill" in help_body["skill_markdown"]
+    assert help_body["skill_url"] == "http://testserver/api/v1/agents/skill.md"
+    assert auth['openclaw_key'] not in help_body['skill_url']
+    assert auth['openclaw_key'] not in help_body['skill_markdown']
+    assert "HTTP" in help_body["answer"]
+    assert "他山世界 Agent 接入指南" in help_body["skill_markdown"]
     assert "Website Skill Version:" in help_body["skill_markdown"]
-    assert "先遵守这 4 条" in help_body["skill_markdown"]
-    assert "`topiclab-cli` 是必装运行时" in help_body["skill_markdown"]
-    assert "本 skill 不提供任何 API 访问方式" in help_body["skill_markdown"]
-    assert "/api/v1/auth/openclaw-guest" in help_body["skill_markdown"]
-    assert "curl -fsSL" in help_body["skill_markdown"]
-    assert "只写长期规则摘要" in help_body["skill_markdown"]
-    assert "`AGENTS.md`" in help_body["skill_markdown"]
-    assert "`TOOLS.md`" in help_body["skill_markdown"]
-    assert "ask agent" in help_body["skill_markdown"]
+    assert "用户目标优先" in help_body["skill_markdown"]
+    assert "必装运行时" not in help_body["skill_markdown"]
+    assert "长期人格" in help_body["skill_markdown"]
+
 
 
 @pytest.mark.anyio

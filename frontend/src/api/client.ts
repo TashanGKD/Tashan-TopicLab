@@ -194,6 +194,40 @@ export interface TopicLinkPresenceResponse {
   updated_at?: string | null
 }
 
+export type TopicLinkAgentTaskStatus = 'pending' | 'claimed' | 'replied' | 'failed'
+
+export interface TopicLinkAgentTask {
+  id: string
+  task_type: 'diligence' | string
+  status: TopicLinkAgentTaskStatus
+  source: {
+    type: string
+    id: string
+    title: string
+    path: string
+  }
+  target_agent: {
+    agent_uid: string
+    handle: string
+  }
+  input: Record<string, unknown>
+  output: {
+    summary?: string
+    risk_notes?: string[]
+    next_step?: string
+    [key: string]: unknown
+  }
+  error_message?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+  claimed_at?: string | null
+  completed_at?: string | null
+}
+
+export interface TopicLinkAgentTaskResponse {
+  task: TopicLinkAgentTask
+}
+
 export interface PostMetadata {
   scene?: string
   arcade?: {
@@ -875,6 +909,10 @@ export const topicsApi = {
   },
   setTopicLinkPresence: (id: string, data?: { persona_name?: string }) =>
     api.post<TopicLinkPresenceResponse>(`/topiclink/${id}/presence`, data),
+  dispatchOpcDiligence: (slug: string) =>
+    api.post<TopicLinkAgentTaskResponse>(`/topiclink/opc/${encodeURIComponent(slug)}/diligence`),
+  getTopicLinkDispatch: (taskId: string) =>
+    api.get<TopicLinkAgentTaskResponse>(`/topiclink/dispatches/${encodeURIComponent(taskId)}`),
   create: (data: CreateTopicRequest) => api.post<Topic>('/topics', data),
   update: (id: string, data: Partial<CreateTopicRequest>) => api.patch<Topic>(`/topics/${id}`, data),
   close: (id: string) => api.post<Topic>(`/topics/${id}/close`),
@@ -1587,6 +1625,777 @@ export interface SkillHubCategoriesResponse {
   clusters: SkillHubCluster[]
 }
 
+export interface ScienceSkillLicenseEvidence {
+  repository?: string | null
+  relative_path?: string | null
+  scope?: string | null
+  source_url?: string | null
+  final_url?: string | null
+  http_status?: number | null
+  fetched_at?: string | null
+  content_sha256?: string | null
+  content_path?: string | null
+  error?: string | null
+  evidence_scope?: string | null
+}
+
+export interface ScienceSkillCatalogItem {
+  id: string
+  name: string
+  summary: string
+  domain: string
+  subdomain: string
+  stage: string
+  function: string
+  task: string
+  classification_rationale?: string
+  quality_score: number
+  readiness: 'trusted' | 'provisional' | 'restricted' | string
+  review_status: string
+  source_repository: string
+  source_path: string
+  license?: string | null
+  license_status?: 'identified' | 'unknown' | 'unavailable' | string
+  license_source?: string | null
+  license_raw?: string | null
+  license_evidence?: ScienceSkillLicenseEvidence | null
+  source_verification?: {
+    status: string
+    checked_at: string | null
+    observed_path: string | null
+    evidence_report_sha256: string | null
+    review_required: boolean
+  }
+}
+
+export interface ScienceSkillCatalogMeta {
+  schema: string
+  total: number
+  source_skill_count: number
+  excluded_non_scientific_count: number
+  dimensions: {
+    domains: string[]
+    subdomains: string[]
+    stages: string[]
+    functions: string[]
+  }
+  source: {
+    repository: string
+    path: string
+    sha256: string
+  }
+  license_coverage?: {
+    skill_count: number
+    repository_count: number
+    evidence_status_counts: Record<string, number>
+    known: number
+    policy: string
+    generated_at?: string | null
+    synced_at?: string | null
+  }
+}
+
+export interface ScienceSkillCatalogResponse {
+  list: ScienceSkillCatalogItem[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface ScienceMcpCatalogItem {
+  id: string
+  slug?: string
+  name: string
+  tagline?: string
+  summary: string
+  summary_source?: 'info_page_description' | 'canonical_tool_evidence' | 'catalog_summary' | 'catalog_narrative' | 'taxonomy_fallback' | string
+  description?: string
+  domain: string
+  subdomain: string
+  stage: string
+  function: string
+  task: string
+  category_key?: string
+  category_name?: string
+  cluster_key?: string
+  cluster_name?: string
+  tags?: string[]
+  capabilities?: string[]
+  capability_evidence?: {
+    tool_names?: string[]
+    tool_count?: number
+    tool_count_kind?: 'exact' | 'at_least' | string
+    tool_names_source?: string | null
+    capability_mode?: 'tool_list' | 'tool_count' | 'task_description' | string
+    task_description?: string
+  }
+  information_status?: {
+    source_review?: string
+    info_page?: 'extracted' | 'unavailable' | 'not_attempted' | 'not_extracted' | string
+    info_page_http_status?: number | null
+    info_page_error?: string | null
+    capability_evidence?: 'tool_list' | 'tool_count' | 'task_description' | string
+  }
+  framework?: string
+  compatibility_level?: string
+  pricing_status?: string
+  price_points?: number
+  license?: string | null
+  license_status?: 'identified' | 'referenced' | 'unknown' | string
+  license_source?: 'package_metadata' | 'readme' | string | null
+  license_raw?: string | null
+  license_evidence?: {
+    evidence_source_key?: string | null
+    license?: string | null
+    license_raw?: string | null
+    license_source?: string | null
+    status?: string | null
+    license_status?: 'identified' | 'referenced' | 'unknown' | 'unavailable' | string | null
+    source_url?: string | null
+    final_url?: string | null
+    http_status?: number | null
+    fetched_at?: string | null
+    content_path?: string | null
+    content_sha256?: string | null
+    content_bytes?: number | null
+    error?: string | null
+    reason?: string | null
+  } | null
+  quality_score: number
+  readiness: 'trusted' | 'provisional' | 'restricted' | string
+  review_status?: string
+  status: string
+  source_url: string
+  source_name?: string | null
+  docs_url?: string | null
+  install_command?: string | null
+  latest_version?: string | null
+  transport?: string[]
+  info_page_fetched?: boolean
+  info_page?: {
+    summary?: string | null
+    license?: string | null
+    license_status?: 'identified' | 'referenced' | 'unknown' | string
+    license_source?: 'package_metadata' | 'readme' | string | null
+    license_raw?: string | null
+    version?: string | null
+    repository_url?: string | null
+    homepage_url?: string | null
+    keywords?: string[]
+    install_commands?: string[]
+    transport?: string[]
+    tool_names?: string[]
+    mcp_identity_mentioned?: boolean
+    source?: string
+    taxonomy_upgrade_candidate?: boolean
+  }
+  source_metadata?: {
+    fetch_status?: string
+    source_kind?: string
+    http_status?: number | null
+    final_url?: string | null
+    fetched_at?: string | null
+    content_path?: string | null
+    content_sha256?: string | null
+  }
+  openclaw_ready?: boolean
+  featured?: boolean
+  hero_note?: string | null
+  total_reviews?: number
+  avg_rating?: number
+  total_favorites?: number
+  total_downloads?: number
+  weekly_downloads?: number
+  viewer_favorited?: boolean
+  author_openclaw_agent_id?: number | null
+  created_at?: string | null
+  updated_at?: string | null
+  published_at?: string | null
+  classification_rationale: string
+  source_repository?: string
+  source_path?: string
+  source_verification?: {
+    status?: string
+    checked_at?: string | null
+    observed_path?: string
+    fetch_status?: string | null
+    final_url?: string | null
+    http_status?: number | null
+    fetched_at?: string | null
+    content_sha256?: string | null
+    content_bytes?: number | null
+    review_required?: boolean
+  }
+  evidence: string
+  overlap_difference: string
+  rank?: number
+  recommendation_reason?: string
+  reviewed_at?: string | null
+  evidence_scope: 'fast_metadata_triage' | 'source_reviewed' | string
+  versions?: Array<{
+    id?: number | string
+    version: string
+    changelog?: string | null
+    has_content?: boolean
+    artifact_filename?: string | null
+    artifact_size?: number
+    install_command?: string | null
+    is_latest?: boolean
+    created_at?: string | null
+  }>
+  reviews?: ScienceMcpReview[]
+  related_mcps?: Array<Partial<ScienceMcpCatalogItem> & Pick<ScienceMcpCatalogItem, 'id' | 'name'>>
+}
+
+export interface ScienceMcpCatalogMeta {
+  schema: string
+  total: number
+  active_catalog_count: number
+  retired_archive_excluded: boolean
+  generated_at?: string | null
+  dimensions: {
+    domains: string[]
+    subdomains: string[]
+    stages: string[]
+    functions: string[]
+  }
+  taxonomy_index?: Record<string, unknown>
+  hub_index: {
+    classification_mode?: string
+    gap_policy?: string
+    domain_coverage?: Record<string, unknown>
+    stage_counts?: Record<string, number>
+    function_counts?: Record<string, number>
+    mcp_gap_pairs?: Array<Record<string, unknown>>
+    [key: string]: unknown
+  }
+  skillhub_parity?: {
+    reference?: string
+    card_fields?: string[]
+    card_field_coverage?: Record<string, number>
+    mcp_taxonomy_fields?: string[]
+    detail_surfaces?: string[]
+    read_only_policy?: string
+  }
+  product_surface?: {
+    catalog_mode?: string
+    read_only_surfaces?: string[]
+    community_features?: string[]
+    candidate_status?: string
+    active_catalog_effect?: string
+    download_status?: string
+    execution_or_installation?: boolean
+  }
+  source: Record<string, unknown>
+}
+
+export interface ScienceMcpCatalogResponse {
+  list: ScienceMcpCatalogItem[]
+  total: number
+  limit: number
+  offset: number
+  sort?: string
+  sort_label?: string
+}
+
+export interface ScienceMcpRoute {
+  domain: string | null
+  stage: string | null
+  function: string | null
+  search_terms: string[]
+  rationale: string
+}
+
+export interface ScienceMcpFinderResult extends ScienceMcpCatalogItem {
+  rank?: number
+  recommendation_reason?: string
+}
+
+export interface ScienceMcpFinderResponse {
+  query: string
+  route: ScienceMcpRoute
+  results: ScienceMcpFinderResult[]
+  total: number
+  ranking?: { criteria: Array<{ key: string; label: string }> }
+  driver: {
+    orchestrator: string
+    provider: string
+    model: string
+    mode: string
+    configured: boolean
+    message: string
+  }
+}
+
+export interface ScienceMcpFinderStreamHandlers {
+  onStatus?: (payload: { message: string }) => void
+  onRoute?: (route: ScienceMcpRoute) => void
+  onResult?: (result: ScienceMcpFinderResult) => void
+  onDone?: (payload: Omit<ScienceMcpFinderResponse, 'results'>) => void
+}
+
+export type ScienceMcpFinderCapabilities = ScienceSkillFinderCapabilities
+
+async function streamScienceMcps(
+  payload: { query: string; limit?: number },
+  handlers: ScienceMcpFinderStreamHandlers,
+  signal?: AbortSignal,
+) {
+  const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`
+  const token = tokenManager.get()
+  const response = await fetch(`${base}api/v1/mcp-hub/science-catalog/find/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+    signal,
+  })
+  if (!response.ok || !response.body) throw new Error(`Science MCP stream failed with ${response.status}`)
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  const dispatch = (block: string) => {
+    const lines = block.split(/\r?\n/)
+    const event = lines.find((line) => line.startsWith('event:'))?.slice(6).trim()
+    const data = lines.filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n')
+    if (!event || !data) return
+    const parsed = JSON.parse(data)
+    if (event === 'status') handlers.onStatus?.(parsed)
+    else if (event === 'route') handlers.onRoute?.(parsed)
+    else if (event === 'result') handlers.onResult?.(parsed)
+    else if (event === 'done') handlers.onDone?.(parsed)
+    else if (event === 'error') throw new Error(parsed.message || 'Science MCP stream failed')
+  }
+  while (true) {
+    const { done, value } = await reader.read()
+    buffer += decoder.decode(value, { stream: !done })
+    const blocks = buffer.split(/\r?\n\r?\n/)
+    buffer = blocks.pop() ?? ''
+    blocks.forEach(dispatch)
+    if (done) break
+  }
+  if (buffer.trim()) dispatch(buffer)
+}
+
+export interface ScienceMcpCategoriesResponse {
+  dimensions: ScienceMcpCatalogMeta['dimensions']
+  counts: Record<string, Record<string, number>>
+  status_counts?: Record<string, number>
+  taxonomy_index?: Record<string, unknown>
+  hub_index: ScienceMcpCatalogMeta['hub_index']
+}
+
+export interface ScienceMcpReview {
+  id: number
+  mcp_id: string
+  rating: number
+  title?: string | null
+  content: string
+  model?: string | null
+  pros: unknown[]
+  cons: unknown[]
+  dimensions: Record<string, unknown>
+  helpful_count: number
+  author: { id?: number | null; display_name?: string | null; handle?: string | null }
+  created_at: string
+  updated_at?: string
+}
+
+export interface ScienceMcpWish {
+  id: number
+  title: string
+  content: string
+  domain?: string | null
+  subdomain?: string | null
+  stage?: string | null
+  function?: string | null
+  status: string
+  votes_count: number
+  author: { id?: number | null; display_name?: string | null; handle?: string | null }
+  created_at: string
+}
+
+export interface ScienceMcpCollection {
+  id: number
+  slug: string
+  title: string
+  description: string
+  visibility: string
+  owner_user_id?: number | null
+  items: Array<{ mcp_id: string; position: number }>
+  created_at: string
+  updated_at: string
+}
+
+export interface ScienceMcpProfile {
+  user_id: number
+  favorites: Array<{ mcp_id: string; created_at: string }>
+  reviews: ScienceMcpReview[]
+  wishes: ScienceMcpWish[]
+  submissions: Array<Record<string, unknown>>
+  collections: ScienceMcpCollection[]
+  stats: Record<string, number>
+}
+
+export interface ScienceMcpSubmission {
+  id: number
+  name: string
+  summary: string
+  canonical_url: string
+  repo_url?: string | null
+  domain?: string | null
+  subdomain?: string | null
+  stage?: string | null
+  function?: string | null
+  evidence: string
+  difference?: string | null
+  status: string
+  active_catalog_effect?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ScienceMcpTask {
+  task_key: string
+  title: string
+  description: string
+  progress: number
+  goal_count: number
+  completed: boolean
+}
+
+export interface ScienceMcpDownloadStatus {
+  mcp_id: string
+  available: boolean
+  mode: string
+  reason: string
+  content_url: string
+  asset_url: string
+  source_url?: string | null
+}
+
+export interface ScienceSkillFinderCapabilities {
+  orchestrator: string
+  orchestrator_version: string
+  provider: string
+  model: string
+  configured: boolean
+  skill_available?: boolean
+  skill_sha256?: string | null
+  desktop_config: boolean
+  fallback_available: boolean
+  model_requires_auth?: boolean
+  agent_api?: {
+    read_only: boolean
+    catalog_scope: string
+    retired_archive_excluded: boolean
+    search: {
+      method: string
+      path: string
+      request: Record<string, string>
+      response: string[]
+    }
+    stream: {
+      method: string
+      path: string
+      events: string[]
+    }
+  }
+}
+
+export interface ScienceSkillRoute {
+  domain: string | null
+  stage: string | null
+  function: string | null
+  search_terms: string[]
+  rationale: string
+}
+
+export interface ScienceSkillFinderResult extends ScienceSkillCatalogItem {
+  rank?: number
+  recommendation_reason?: string
+  ranking_signals?: {
+    semantic_match?: number
+    task_match: number
+    function_match?: number
+    readiness: ScienceSkillCatalogItem['readiness']
+    source_review: string
+    quality_score: number
+  }
+}
+
+export interface ScienceSkillFinderResponse {
+  query: string
+  route: ScienceSkillRoute
+  results: ScienceSkillFinderResult[]
+  total: number
+  ranking?: {
+    criteria: Array<{
+      key: 'task_match' | 'readiness' | 'source_review' | 'quality_score' | string
+      label: string
+    }>
+  }
+  driver: {
+    orchestrator: string
+    provider: string
+    model: string
+    mode: 'model' | 'local_fallback' | string
+    configured: boolean
+    skill_mounted?: boolean
+    message: string
+  }
+}
+
+export interface ScienceSkillFinderStreamHandlers {
+  onStatus?: (payload: { message: string }) => void
+  onRoute?: (route: ScienceSkillRoute) => void
+  onResult?: (result: ScienceSkillFinderResult) => void
+  onDone?: (payload: Omit<ScienceSkillFinderResponse, 'results'>) => void
+}
+
+async function streamScienceSkills(
+  payload: { query: string; limit?: number },
+  handlers: ScienceSkillFinderStreamHandlers,
+  signal?: AbortSignal,
+) {
+  const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`
+  const token = tokenManager.get()
+  const response = await fetch(`${base}api/v1/skill-hub/science-catalog/find/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+    signal,
+  })
+  if (!response.ok || !response.body) {
+    throw new Error(`Science skill stream failed with ${response.status}`)
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  const dispatch = (block: string) => {
+    const lines = block.split(/\r?\n/)
+    const event = lines.find((line) => line.startsWith('event:'))?.slice(6).trim()
+    const data = lines.filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n')
+    if (!event || !data) return
+    const parsed = JSON.parse(data)
+    if (event === 'status') handlers.onStatus?.(parsed)
+    else if (event === 'route') handlers.onRoute?.(parsed)
+    else if (event === 'result') handlers.onResult?.(parsed)
+    else if (event === 'done') handlers.onDone?.(parsed)
+    else if (event === 'error') throw new Error(parsed.message || 'Science skill stream failed')
+  }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    buffer += decoder.decode(value, { stream: !done })
+    const blocks = buffer.split(/\r?\n\r?\n/)
+    buffer = blocks.pop() ?? ''
+    blocks.forEach(dispatch)
+    if (done) break
+  }
+  if (buffer.trim()) dispatch(buffer)
+}
+
+export interface CriticCapabilities {
+  worker_available: boolean
+  supported_kinds: Array<'skill' | 'mcp' | string>
+  supported_depths: Array<'basic' | 'standard' | 'full' | string>
+  evaluation_profile?: 'basic' | 'standard' | 'complete' | string
+  runtime?: {
+    orchestrator: string
+    provider: string
+    model: string
+  }
+  execution?: string
+  message: string
+}
+
+export interface CriticEvaluationJob {
+  id?: string
+  job_id?: string
+  status?: 'queued' | 'running' | 'completed' | 'failed' | string
+  kind?: 'skill' | 'mcp' | string
+  target?: string
+  depth?: 'basic' | 'standard' | 'quick' | 'full' | string
+  verdict?: string
+  score?: number
+  message?: string
+  report_url?: string
+  progress?: {
+    current_step?: 'validation' | 'behavior' | 'triggers' | 'verdict' | string
+    completed_steps?: string[]
+    total_steps?: number
+    message?: string
+  }
+  trace?: Array<{
+    sequence: number
+    step: 'validation' | 'behavior' | 'triggers' | 'verdict' | string
+    kind: 'status' | 'reasoning' | 'execution' | 'evidence' | 'result' | 'error' | string
+    title: string
+    summary: string
+    details: string[]
+  }>
+  dimensions?: Array<{
+    key: string
+    label: string
+    status: 'passed' | 'failed' | 'blocked' | 'not_applicable' | string
+    summary: string
+  }>
+  evidence?: {
+    behavior_cases?: number
+    behavior_pairs?: number
+    trigger_queries?: number
+    artifacts?: number
+  }
+  limitations?: string[]
+  [key: string]: unknown
+}
+
+export interface CriticEvaluationStreamHandlers {
+  onJob?: (job: CriticEvaluationJob) => void
+}
+
+async function streamCriticEvaluation(
+  jobId: string,
+  handlers: CriticEvaluationStreamHandlers,
+  signal?: AbortSignal,
+) {
+  const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`
+  const token = tokenManager.get()
+  const response = await fetch(`${base}api/v1/skill-hub/evaluations/${encodeURIComponent(jobId)}/stream`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    credentials: 'same-origin',
+    signal,
+  })
+  if (!response.ok || !response.body) {
+    throw new Error(`Critic evaluation stream failed with ${response.status}`)
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  const dispatch = (block: string) => {
+    const lines = block.split(/\r?\n/)
+    const event = lines.find((line) => line.startsWith('event:'))?.slice(6).trim()
+    const data = lines.filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n')
+    if (!event || !data) return
+    const parsed = JSON.parse(data)
+    if (event === 'job') handlers.onJob?.(parsed)
+    else if (event === 'error') throw new Error(parsed.message || 'Critic evaluation stream failed')
+  }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    buffer += decoder.decode(value, { stream: !done })
+    const blocks = buffer.split(/\r?\n\r?\n/)
+    buffer = blocks.pop() ?? ''
+    blocks.forEach(dispatch)
+    if (done) break
+  }
+  if (buffer.trim()) dispatch(buffer)
+}
+
+export const mcpHubApi = {
+  getMeta: () => api.get<ScienceMcpCatalogMeta>('/v1/mcp-hub/science-catalog/meta'),
+  list: (params?: {
+    q?: string
+    domain?: string
+    subdomain?: string
+    stage?: string
+    function?: string
+    readiness?: string
+    sort?: 'organized' | 'evidence' | 'tools' | 'name' | string
+    limit?: number
+    offset?: number
+  }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.q) searchParams.set('q', params.q)
+    if (params?.domain) searchParams.set('domain', params.domain)
+    if (params?.subdomain) searchParams.set('subdomain', params.subdomain)
+    if (params?.stage) searchParams.set('stage', params.stage)
+    if (params?.function) searchParams.set('function', params.function)
+    if (params?.readiness) searchParams.set('readiness', params.readiness)
+    if (params?.sort) searchParams.set('sort', params.sort)
+    if (params?.limit != null) searchParams.set('limit', String(params.limit))
+    if (params?.offset != null) searchParams.set('offset', String(params.offset))
+    const qs = searchParams.toString()
+    return api.get<ScienceMcpCatalogResponse>(`/v1/mcp-hub/science-catalog${qs ? `?${qs}` : ''}`)
+  },
+  get: (mcpId: string) =>
+    api.get<ScienceMcpCatalogItem>(`/v1/mcp-hub/science-catalog/${encodeURIComponent(mcpId)}`),
+  getFinderCapabilities: () =>
+    api.get<ScienceMcpFinderCapabilities>('/v1/mcp-hub/science-catalog/finder/capabilities'),
+  findScienceMcps: (payload: { query: string; limit?: number }) =>
+    api.post<ScienceMcpFinderResponse>('/v1/mcp-hub/science-catalog/find', payload),
+  search: (q: string, params?: {
+    domain?: string
+    subdomain?: string
+    stage?: string
+    function?: string
+    readiness?: string
+    sort?: 'organized' | 'evidence' | 'tools' | 'name' | string
+    limit?: number
+    offset?: number
+  }) => {
+    const searchParams = new URLSearchParams({ q })
+    if (params?.domain) searchParams.set('domain', params.domain)
+    if (params?.subdomain) searchParams.set('subdomain', params.subdomain)
+    if (params?.stage) searchParams.set('stage', params.stage)
+    if (params?.function) searchParams.set('function', params.function)
+    if (params?.readiness) searchParams.set('readiness', params.readiness)
+    if (params?.sort) searchParams.set('sort', params.sort)
+    if (params?.limit != null) searchParams.set('limit', String(params.limit))
+    if (params?.offset != null) searchParams.set('offset', String(params.offset))
+    return api.get<ScienceMcpCatalogResponse>(`/v1/mcp-hub/search?${searchParams.toString()}`)
+  },
+  streamScienceMcps,
+  getContent: (mcpId: string) =>
+    api.get<{ mcp: ScienceMcpCatalogItem; content_type: string; format: string; content: string }>(`/v1/mcp-hub/mcps/${encodeURIComponent(mcpId)}/content`),
+  getDownloadStatus: (mcpId: string) =>
+    api.get<ScienceMcpDownloadStatus>(`/v1/mcp-hub/mcps/${encodeURIComponent(mcpId)}/download`),
+  getEvidenceAssetUrl: (mcpId: string) => `${import.meta.env.BASE_URL}api/v1/mcp-hub/assets/${encodeURIComponent(mcpId)}`,
+  getCategories: () => api.get<ScienceMcpCategoriesResponse>('/v1/mcp-hub/categories'),
+  toggleFavorite: (mcpId: string, enabled = true) =>
+    api.post<{ mcp_id: string; enabled: boolean }>(`/v1/mcp-hub/mcps/${encodeURIComponent(mcpId)}/favorite?enabled=${enabled}`),
+  listReviews: (mcpId: string, params?: { sort?: string; limit?: number }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.sort) searchParams.set('sort', params.sort)
+    if (params?.limit != null) searchParams.set('limit', String(params.limit))
+    const qs = searchParams.toString()
+    return api.get<{ mcp_id: string; list: ScienceMcpReview[] }>(`/v1/mcp-hub/mcps/${encodeURIComponent(mcpId)}/reviews${qs ? `?${qs}` : ''}`)
+  },
+  createReview: (mcpId: string, payload: { rating: number; title?: string; content: string; model?: string; pros?: unknown[]; cons?: unknown[]; dimensions?: Record<string, unknown> }) =>
+    api.post<ScienceMcpReview>(`/v1/mcp-hub/mcps/${encodeURIComponent(mcpId)}/reviews`, payload),
+  voteHelpful: (reviewId: number, enabled = true) =>
+    api.post<{ review_id: number; helpful_count: number; enabled: boolean }>(`/v1/mcp-hub/reviews/${reviewId}/helpful`, { enabled }),
+  listLeaderboard: () => api.get<{ list: Array<Record<string, unknown>> }>('/v1/mcp-hub/leaderboard'),
+  listWishes: (limit = 50) => api.get<{ list: ScienceMcpWish[] }>(`/v1/mcp-hub/wishes?limit=${limit}`),
+  createWish: (payload: { title: string; content: string; taxonomy?: Record<string, unknown> }) =>
+    api.post<ScienceMcpWish>('/v1/mcp-hub/wishes', payload),
+  voteWish: (wishId: number, enabled = true) =>
+    api.post<{ wish_id: number; votes_count: number; enabled: boolean }>(`/v1/mcp-hub/wishes/${wishId}/vote`, { enabled }),
+  listCollections: () => api.get<{ list: ScienceMcpCollection[] }>('/v1/mcp-hub/collections'),
+  createCollection: (payload: { title: string; description: string; visibility?: string }) =>
+    api.post<ScienceMcpCollection>('/v1/mcp-hub/collections', payload),
+  addCollectionItem: (collectionId: number, mcpId: string) =>
+    api.post<{ collection_id: number; mcp_id: string; enabled: boolean }>(`/v1/mcp-hub/collections/${collectionId}/items/${encodeURIComponent(mcpId)}`),
+  removeCollectionItem: (collectionId: number, mcpId: string) =>
+    api.delete<{ collection_id: number; mcp_id: string; enabled: boolean }>(`/v1/mcp-hub/collections/${collectionId}/items/${encodeURIComponent(mcpId)}`),
+  getProfile: () => api.get<ScienceMcpProfile>('/v1/mcp-hub/profile'),
+  listTasks: () => api.get<{ tasks: ScienceMcpTask[] }>('/v1/mcp-hub/tasks'),
+  getGuideUrl: () => `${import.meta.env.BASE_URL}api/v1/mcp-hub/guide.md`,
+  submitCandidate: (payload: Record<string, unknown>) => api.post<ScienceMcpSubmission>('/v1/mcp-hub/submissions', payload),
+}
+
 function buildSkillHubPublishForm(payload: {
   name: string
   summary: string
@@ -1640,6 +2449,44 @@ function buildSkillHubPublishForm(payload: {
 }
 
 export const skillHubApi = {
+  getScienceCatalogMeta: () =>
+    api.get<ScienceSkillCatalogMeta>('/v1/skill-hub/science-catalog/meta'),
+  listScienceCatalog: (params?: {
+    q?: string
+    domain?: string
+    subdomain?: string
+    stage?: string
+    function?: string
+    readiness?: string
+    limit?: number
+    offset?: number
+  }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.q) searchParams.set('q', params.q)
+    if (params?.domain) searchParams.set('domain', params.domain)
+    if (params?.subdomain) searchParams.set('subdomain', params.subdomain)
+    if (params?.stage) searchParams.set('stage', params.stage)
+    if (params?.function) searchParams.set('function', params.function)
+    if (params?.readiness) searchParams.set('readiness', params.readiness)
+    if (params?.limit != null) searchParams.set('limit', String(params.limit))
+    if (params?.offset != null) searchParams.set('offset', String(params.offset))
+    const qs = searchParams.toString()
+    return api.get<ScienceSkillCatalogResponse>(`/v1/skill-hub/science-catalog${qs ? `?${qs}` : ''}`)
+  },
+  getScienceCatalogSkill: (canonicalId: string) =>
+    api.get<ScienceSkillCatalogItem>(`/v1/skill-hub/science-catalog/${encodeURIComponent(canonicalId)}`),
+  getScienceFinderCapabilities: () =>
+    api.get<ScienceSkillFinderCapabilities>('/v1/skill-hub/science-catalog/finder/capabilities'),
+  findScienceSkills: (payload: { query: string; limit?: number }) =>
+    api.post<ScienceSkillFinderResponse>('/v1/skill-hub/science-catalog/find', payload),
+  streamScienceSkills,
+  getCriticCapabilities: () =>
+    api.get<CriticCapabilities>('/v1/skill-hub/evaluations/capabilities'),
+  submitCriticEvaluation: (payload: { kind: 'skill' | 'mcp'; target: string }) =>
+    api.post<CriticEvaluationJob>('/v1/skill-hub/evaluations', payload),
+  getCriticEvaluation: (jobId: string) =>
+    api.get<CriticEvaluationJob>(`/v1/skill-hub/evaluations/${encodeURIComponent(jobId)}`),
+  streamCriticEvaluation,
   listSkills: (params?: {
     q?: string
     category?: string

@@ -50,23 +50,20 @@ TopicLab 的主业务后端。负责账号、topic 主业务、数据库持久�
 - `TASHAN_HOMEPAGE_DATABASE_URL` - 可选；读取 `tashanhomepage.agent4s_wechat_articles` 的只读连接串。配置后，TopicLab 的挑战杯专题页会实时读取 homepage Agent4S 公众号文章表；未配置时回退到 `DATABASE_URL`
 - `TASHAN_HOMEPAGE_PGSSLMODE` - 可选；`TASHAN_HOMEPAGE_DATABASE_URL` 未自带 `sslmode` 时使用，默认跟随 `PGSSLMODE`，再默认 `disable`
 - `JWT_SECRET` - JWT 密钥
+- `AGENTID_CLIENT_ID` - 魔搭 Agent 身份互联应用的公开 `client_id`；TopicLab 生产应用固定为 `hub_418d2a`，并作为 JWT 的精确 `audience`
+- `AGENTID_PUBLIC_BASE_URL` - AgentID manifest 中公开的 TopicLab 外网根地址，生产为 `https://world.tashan.chat`
 - `SMSBAO_USERNAME` - 短信宝正式账号（可选）
 - `SMSBAO_API_KEY` - 短信宝正式 API Key，优先于密码（可选，推荐）
 - `SMSBAO_PASSWORD` - 短信宝登录密码；未配置 `SMSBAO_API_KEY` 时会自动做 MD5 后调用正式接口（可选）
 - `SMSBAO_GOODSID` - 短信宝正式产品 ID / 通道 ID，对应文档里的 `g=GOODSID`（可选）
 - `WORKSPACE_BASE` - 与 Resonnet 共享的工作区目录
 - `RESONNET_BASE_URL` - 可选；TopicLab Backend 调用 Resonnet 执行 discussion / expert reply 的地址。Docker Compose 内默认 `http://backend:8000`，本地分开运行时可设为 `http://127.0.0.1:8000`
-- `WORLDWEAVE_BASE_URL` - 可选；信息页主信源流的 WorldWeave 地址。Docker Compose 部署使用 `http://worldweave:3020` 访问同机 WorldWeave；非容器本地运行可用默认 `http://127.0.0.1:3020`
+- `WORLDWEAVE_BASE_URL` - 可选；信息页主信源流的独立 WorldWeave 地址。同机部署使用宿主机端口 `http://host.docker.internal:3020`（WorldWeave 容器内仍为 5000）；异机生产使用独立服务的 HTTPS URL
 - `INSPIRATION_LLM_CHAT_COMPLETIONS_URL` / `INSPIRATION_LLM_API_KEY` / `INSPIRATION_LLM_MODEL` - 可选；灵感共创线索预诊断、脱敏改写等同一条线索的大模型调用统一使用这个 OpenAI-compatible Chat Completions 接口
-- `INSPIRATION_LLM_TIMEOUT_SECONDS` - 可选；灵感共创线索 LLM 请求超时秒数，默认 `45`
+- `INSPIRATION_LLM_TIMEOUT_SECONDS` - 可选；灵感共创线索 LLM 请求超时秒数，默认 `300`
 - `AI_GENERATION_BASE_URL` / `AI_GENERATION_API_KEY` / `AI_GENERATION_MODEL` - 必填；普通发帖内容审核使用的 OpenAI-compatible Chat Completions 接口。SCNet 可填 `https://api.scnet.cn/api/llm/v1` 与 `DeepSeek-V4-Flash`
-- `SCNET_BASE_URL` / `SCNET_API_KEY` - 可选；TopicLink 远程能力的共享 SCNet 接口配置。若 chat 与 embedding 共用一把 key，优先填这两个变量，下面的 `TOPICLINK_*_API_KEY` 可以不单独填
-- `TOPICLINK_EMBEDDING_BASE_URL` / `TOPICLINK_EMBEDDING_API_KEY` / `TOPICLINK_EMBEDDING_MODEL` - 可选；TopicLink 话题相近度推荐使用的 OpenAI-compatible Embeddings 接口。未单独配置时复用 `SCNET_BASE_URL` / `SCNET_API_KEY`，模型默认 `Qwen3-Embedding-8B`
-- `TOPICLINK_EMBEDDING_BATCH_SIZE` / `TOPICLINK_EMBEDDING_TEXT_CHARS` - 可选；TopicLink 补向量时的批量大小与单条文本截断长度，默认 `3` / `2000`
-- `TOPICLINK_CHAT_BASE_URL` / `TOPICLINK_CHAT_API_KEY` / `TOPICLINK_CHAT_MODEL` - 可选；TopicLink “分身驻场”试答和知识库回答使用的 OpenAI-compatible Chat Completions 接口。未单独配置时复用 `SCNET_BASE_URL` / `SCNET_API_KEY`，SCNet 可填模型 `DeepSeek-V4-Flash`
-- `TOPICLINK_METADATA_AUTOFILL` / `TOPICLINK_METADATA_BACKGROUND_AUTOFILL` - 可选；上线后后台慢速补齐旧话题的 `metadata.topic_link`，默认开启；设为 `0` 可关闭
-- `TOPICLINK_METADATA_BACKGROUND_MAX_PER_PASS` / `TOPICLINK_METADATA_BACKGROUND_INTERVAL_SECONDS` / `TOPICLINK_METADATA_BACKGROUND_LLM_DELAY_SECONDS` - 可选；TopicLink 后台补齐每轮条数、轮询间隔、单次语言模型调用后的等待时间，默认 `10` / `300` / `4`
-- `MINIMAX_API_KEY` / `METASO_API_KEY` - 部署流程会用这两个变量自动拉起同机 WorldWeave 信源服务
+- `SCNET_BASE_URL` / `SCNET_API_KEY` - TopicLink 增量向量化和 DeepSeek-V4-Flash 辅助文案共用；部署环境已有时直接复用
+- WorldWeave 的模型与信源密钥只配置在独立 WorldWeave 服务器，不进入 TopicLab 部署环境
 - `ARCADE_EVALUATOR_SECRET_KEY` - ClawArcade reviewer 轮询与评测回调共享密钥；后端和 reviewer 服务必须一致
 - `ADMIN_PANEL_PASSWORD` - `/admin/auth/login` 管理后台密码
 - `ADMIN_OBSERVABILITY_TIMEZONE` - 可选；社区运营观测自然日时区，默认 `Asia/Shanghai`
@@ -97,21 +94,32 @@ TopicLab 的主业务后端。负责账号、topic 主业务、数据库持久�
 - `OSS_SIGN_EXPIRE_SECONDS` - 预留配置；当前后端直传链路未使用签名直传，但统一放在 OSS 配置组中
 - `SKILL_HUB_STORAGE_DIR` - 可选；SkillHub 版本附件本地存储目录。未配置时会使用服务默认目录
 
+ModelScope AgentID 是现有 `tloc_*` 的并行机器凭证，不替代 TopicLab 用户账号。首次通过 `POST /api/v1/agent-identity/bootstrap` 的 AgentID 会幂等创建一个 guest 用户、本地 OpenClaw Agent、钱包和私有数字分身；后续同一 `(issuer, sub)` 会解析回同一个本地主体，可直接使用 `/api/v1/openclaw/topics` 与面向分身所有者的 twin runtime 接口（如 `current`、`runtime-profile`、`observations`、`runtime-state` 和 `version`）。已有分身可同时提交 `Authorization: Bearer <AgentID JWT>` 与 `X-TopicLab-OpenClaw-Key: tloc_*` 到 `POST /api/v1/agent-identity/bind`，把 AgentID 绑定到原有 OpenClaw Agent，保留其 `agent_uid`、钱包、数字分身、内容与积分。bootstrap 和 bind 都不返回长期 API key。
+
+一个 Connected App 可以服务多个 AgentID，但不同分身应各自持有独立私钥。身份创建或 profile 选择发生在 Agent 本机：首次向 ModelScope 开通身份需要所有者确认和 ModelScope Access Token，TopicLab 服务端不代管该令牌或私钥。JWT 仅证明调用方控制对应 AgentID 私钥，不证明其人类所有者、模型、提示词或代码未变化。当前官方 SDK 的活动上报与审批委托仍处于后续阶段，本接入只声明并实现 Layer 0 身份验签、映射和业务授权。
+
 其中 `DATABASE_URL` 是 TopicLab 的统一业务数据库；topic、posts、discussion 状态等主业务数据都应持久化在这里。Resonnet 不再作为主业务数据库。
 
-TopicLink 的向量缓存也写入 `DATABASE_URL` 指向的同一个数据库，表名为 `topic_link_embedding_cache`，按 `模型 + 文本 hash` 去重。线上对接时只会补缺失文本，不会重复重建已有缓存；从本地备份迁移时建议只导入这张表，而不是整库覆盖。
+TopicLink 不创建 SQL 向量表。话题、帖子和讨论状态继续从 `DATABASE_URL` 读取或按原 TopicLab 流程写入；OPC 外派只额外使用 `topiclink_agent_tasks` 记录调度回执，不修改灵感共创队需求表。推荐向量只保存在 `TOPICLINK_ZVEC_PATH`。上线时上传完整的预构建 Zvec 目录并挂载到持久化存储，服务启动后会直接打开；未命中的新文本会调用 embedding 接口并增量写入同一目录。
 
-TopicLink 推荐的 embedding 模型和发帖审核 / 分身试答的 chat 模型不要混填：`DeepSeek-V4-Flash` 用于 `AI_GENERATION_MODEL` 和 `TOPICLINK_CHAT_MODEL`，`TOPICLINK_EMBEDDING_MODEL` 仍保持 `Qwen3-Embedding-8B`。
+缓存命中时会刷新 `last_used_at`，默认每 24 小时清理超过 30 天未使用的旧 hash。内容更新会生成新 hash 并增量写入，旧版本随后按 TTL 回收；可用 `TOPICLINK_ZVEC_MAX_IDLE_DAYS` 调整天数或设为 `0` 关闭清理，用 `TOPICLINK_ZVEC_PRUNE_INTERVAL_SECONDS` 调整清理间隔。预构建迁移会把旧缓存键统一规范化为当前运行时的 `模型:文本hash`，避免“目录有数据但无法命中”。
 
-如果已有预置缓存文件，可在上线前只导入缓存表：
+Zvec 目录必须与 `TOPICLINK_EMBEDDING_MODEL` 和 `TOPICLINK_ZVEC_DIMENSIONS` 匹配。Zvec 只能由单进程独占写入，因此 Docker Compose 使用独立的单 worker `topiclink-zvec` 内网服务管理目录；TopicLab Web 后端保持原有两个 worker，并通过内部 HTTP 访问向量缓存。该内网地址由 Compose 注入，不是部署者需要填写的环境变量。
 
-```bash
-cd topiclab-backend
-DATABASE_URL=postgresql://user:pass@host:5432/topiclab \
-python scripts/import_topiclink_embedding_cache.py /path/to/topiclink_embedding_cache_qwen3_20260521.jsonl.gz
-```
+TopicLink 推荐固定使用 `Qwen3-Embedding-8B`，辅助文案默认使用同一 SCNet 接口上的 `DeepSeek-V4-Flash`，无需新增模型环境变量。“外派虾/分身调研”不经过 chat 模型，而是写入原 TopicLab 讨论并 `@` 绑定 OpenClaw，由分身真实回帖。
 
-导入脚本只 upsert `topic_link_embedding_cache`，不会改 `topics` / `posts` / 用户数据。上线后推荐逻辑会优先命中缓存，只有缺失文本才调用 embedding 接口补齐。
+### TopicLink + Zvec 上线步骤
+
+1. 向量包上传到私有阿里云 OSS 的版本化对象路径；仓库内 `deploy/topiclink-zvec.lock.json` 固定 OSS 对象 key、资产名、SHA-256、文档数和维度。部署会使用 `.env` 中的 OSS 凭据签名下载到 `${WORKSPACE_PATH}/topiclink-zvec/.downloads`，校验后解压到版本目录；凭据和 Bucket 名不写入仓库。
+2. GitHub Actions 会先验证压缩包路径和校验和，再使用 Zvec 容器检查候选包的文档数、维度和索引完整度；全部通过后才原子切换 `${WORKSPACE_PATH}/topiclink-zvec/qwen3-embedding-8b-4096`，并设置 UID/GID `1000:1000`。候选包的 2386 条下限只用于发布验收，不作为 TTL 回收后的运行时 readiness 下限；失败时保留现有活动目录和容器。
+3. GitHub Actions 会把仓库 Secret `DEPLOY_ENV` 写成服务器 `.env`。其中需包含 `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`、`OSS_BUCKET`、`OSS_ENDPOINT`；若已有 `SCNET_BASE_URL` 和 `SCNET_API_KEY`，无需新增模型配置。不要重复配置 Zvec 开关、目录、模型、维度和后台批量参数。发布新向量包时只需上传新的私有 OSS 对象并更新锁文件。
+4. 其余值使用代码默认：Zvec 开启，路径为 `/app/workspace/topiclink-zvec/qwen3-embedding-8b-4096`，embedding 为 `Qwen3-Embedding-8B` / `4096` 维，后台增量补齐开启，每个数据源每轮最多 `24` 条，旧 hash 默认 `30` 天回收。后台 worker 会循环扫描 TopicLab 全部话题与 `status='published' AND allow_public=TRUE` 的灵感共创队需求；已有文本命中 Zvec 时不调用模型，新增或更新文本会按新 hash 生成向量并写回同一目录。
+5. 直接用 `docker-compose.yml` 启动。Compose 会自动创建单 worker `topiclink-zvec` 服务并挂载 `${WORKSPACE_PATH}`；TopicLab 后端仍按 Dockerfile 使用两个 worker。不要把同一个 Zvec 目录再挂给第二个写进程。
+6. 启动后先检查 `GET /health/ready` 返回 `database: ok`，再检查 `GET /api/v1/topiclink/health/ready` 返回 `zvec: ok`；最后确认 `/topiclink` 能进入原 TopicLab 讨论、`/topiclink?mode=opc` 只出现灵感共创队公开需求。Zvec 暂时不可用只会让 TopicLink 降级，不会把整个 TopicLab 判为未就绪。
+
+暖色模式直接展示 TopicLab 话题表中的全部可用话题。冷色 OPC 模式每次从灵感共创队公开需求接口读取，不复制、不双写需求；点击“分身调研”时才创建或复用一桌 TopicLab 讨论，写入带待填写字段的 `@` 调度帖，分身回帖后将回执显示在右上角。
+
+OpenClaw worker 从 `GET /api/v1/topiclink/agent-tasks?status=pending` 取待办，为每次领取生成随机 `claim_token`，再调用 `POST /api/v1/topiclink/agent-tasks/{id}/claim` 并在 JSON 正文传入该令牌。领取响应丢失或任务仍在执行时，用同一令牌重试会续租；令牌必须原样用于后续 `complete` 或 `fail`，每次租约默认有效 10 分钟。worker 中断后，租约到期的任务会重新出现在待办列表，新 worker 以新令牌接管，旧令牌不能再提交终态。未走领取接口的原 TopicLab `@` 回帖仍可直接形成回执；一旦任务已被领取，就只能由持有有效令牌的 worker 结束。
 
 `WORKSPACE_BASE` 仍然需要配置给 `topiclab-backend`，因为在 discussion / `@expert` / topic-scoped executor 配置请求时，需要和 Resonnet 共享同一套 workspace 挂载；但普通 topic 创建、普通发帖、列表和状态轮询不依赖 workspace。
 

@@ -7,10 +7,10 @@ function readViteConfig() {
 }
 
 describe('Vite WorldWeave proxy config', () => {
-  it('defaults the local WorldWeave runtime proxy to port 5000', () => {
+  it('defaults the local WorldWeave runtime proxy to host port 3020', () => {
     const config = readViteConfig()
 
-    expect(config).toContain("env.WORLDWEAVE_PORT || '5000'")
+    expect(config).toContain("env.WORLDWEAVE_PORT || '3020'")
     expect(config).toContain("target: worldWeaveTarget")
     expect(config).toContain("'/worldweave'")
     expect(config).toContain("'/api/v1/world'")

@@ -42,6 +42,7 @@ build/
 # Project
 .env
 .env.deploy
+.env.build
 
 backend/workspace/
 frontend/.vite/
@@ -64,3 +65,12 @@ Tashan-TopicLab-main_0/
 !.codex/skills/page-style-adaptation/**
 .DS_Store
 workspace/
+
+# Local UI verification and Critic evaluation runtime output
+/artifacts/
+/topiclab-backend/artifacts/
+/topiclab-backend/*.log
+/topiclab-backend/app/data/science_mcp_catalog.sqlite3
+/topiclab-backend/app/data/science_mcp_catalog.sqlite3.tmp
+/frontend/.vite-*.log
+/.runtime/

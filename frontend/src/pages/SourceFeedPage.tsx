@@ -56,7 +56,7 @@ const ACADEMIC_MAX_RAW_PAGES = 24
 const WORLDWEAVE_FRONTEND_URL =
   import.meta.env.VITE_WORLDWEAVE_FRONTEND_URL || '/worldweave/'
 const WORLDWEAVE_FRAME_URL = WORLDWEAVE_FRONTEND_URL.replace(/\/?$/, '/')
-const WORLDWEAVE_LOCAL_PORT = import.meta.env.WORLDWEAVE_PORT || '5000'
+const WORLDWEAVE_LOCAL_PORT = import.meta.env.WORLDWEAVE_PORT || '3020'
 
 type WorldWeaveStatus = 'checking' | 'ready' | 'unavailable'
 

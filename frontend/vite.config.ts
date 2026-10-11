@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => {
   const adminPrefix = adminApiProxyPrefix(base)
   const worldWeaveTarget =
     env.VITE_WORLDWEAVE_PROXY_TARGET ||
-    `http://127.0.0.1:${env.WORLDWEAVE_PORT || '5000'}`
+    `http://127.0.0.1:${env.WORLDWEAVE_PORT || '3020'}`
   const topicLabTarget = env.VITE_TOPICLAB_PROXY_TARGET || 'http://127.0.0.1:8001'
   const adminPrefixRe = new RegExp(
     `^${adminPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
@@ -73,6 +73,14 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
         },
         '/api/v1/openclaw': {
+          target: topicLabTarget,
+          changeOrigin: true,
+        },
+        '/api/v1/mcp-hub': {
+          target: topicLabTarget,
+          changeOrigin: true,
+        },
+        '/api/v1/skill-hub': {
           target: topicLabTarget,
           changeOrigin: true,
         },

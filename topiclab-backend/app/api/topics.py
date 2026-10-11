@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.api.auth import resolve_access_token
+
 import asyncio
 import json
 import logging
@@ -16,6 +18,9 @@ import tempfile
 from typing import Any
 
 import httpx
+from app.services.agent_requests import AgentMutationRoute
+from app.api.agent_models import DiscussionState
+from app.services import agent_runs
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import FileResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials
@@ -107,7 +112,7 @@ from app.storage.database.topic_store import (
     upsert_post,
 )
 
-router = APIRouter()
+router = APIRouter(route_class=AgentMutationRoute, )
 
 _PREVIEW_CACHE_DIRNAME = ".generated_image_previews"
 _ARCADE_IMAGE_CACHE_DIRNAME = ".arcade_image_cache"
@@ -936,7 +941,7 @@ async def _get_optional_user(
             )
         set_authenticated_actor_context(user)
         return user
-    user = await run_in_threadpool(verify_access_token, token)
+    user = await resolve_access_token(token)
     if user:
         set_authenticated_actor_context(user)
     return user
@@ -971,7 +976,7 @@ def _resolve_author_name(requested_author: str, user: dict | None) -> str:
     actual = _row_user_name(int(user_id))
     if user.get("auth_type") == "openclaw_key":
         base_name = actual or user.get("username") or user.get("phone") or ""
-        return f"{base_name}'s openclaw" if base_name else "openclaw"
+        return user.get("openclaw_display_name") or (f"{base_name} Agent" if base_name else "Agent")
     base_name = actual or requested_author or user.get("username") or user.get("phone") or ""
     return base_name
 
@@ -1026,16 +1031,23 @@ def _is_admin_user(user: dict | None) -> bool:
     return bool(user and user.get("is_admin"))
 
 
-def _can_delete_topic(topic: dict, user: dict | None) -> bool:
+def _can_manage_topic(topic: dict, user: dict | None) -> bool:
+    """True when the user may modify/close/delete the topic (admin or creator)."""
     if not user:
         return False
     if _is_admin_user(user):
         return True
+    if user.get("openclaw_agent_id") is not None:
+        return user.get("openclaw_agent_id") == topic.get("creator_openclaw_agent_id")
     current_user_id = user.get("sub")
     creator_user_id = topic.get("creator_user_id")
     if current_user_id is not None and creator_user_id is not None:
         return int(current_user_id) == int(creator_user_id)
     return False
+
+
+def _can_delete_topic(topic: dict, user: dict | None) -> bool:
+    return _can_manage_topic(topic, user)
 
 
 def _can_delete_post(post: dict, user: dict | None) -> bool:
@@ -1434,7 +1446,7 @@ async def _sync_topic_experts_from_resonnet(topic_id: str, authorization: str | 
     try:
         await _ensure_executor_workspace(topic_id)
         experts = await _proxy_to_resonnet("GET", f"/topics/{topic_id}/experts", authorization=authorization)
-    except httpx.RequestError:
+    except httpx.HTTPError:
         return list_topic_experts(topic_id)
     # Only replace experts that were created during topic creation, preserve user-added experts
     replace_topic_experts(topic_id, experts, only_replace_creation_roles=True)
@@ -1535,6 +1547,7 @@ def _mode_name_from_id(mode_id: str | None) -> str:
 
 
 async def _run_discussion_background(topic_id: str, payload: dict) -> None:
+    run_id = payload.get("run_id")
     try:
         discussion_task = asyncio.create_task(
             request_json("POST", "/executor/discussions", json_body=payload, timeout=3600.0)
@@ -1542,6 +1555,8 @@ async def _run_discussion_background(topic_id: str, payload: dict) -> None:
         while not discussion_task.done():
             await asyncio.wait({discussion_task}, timeout=_DISCUSSION_SYNC_INTERVAL_SECONDS)
             await _sync_discussion_snapshot(topic_id)
+            if run_id:
+                agent_runs.update_run(run_id, "running")
         result = await discussion_task
         turns = result.get("turns") or []
         discussion_history = result.get("discussion_history") or _build_discussion_history(turns)
@@ -1566,9 +1581,9 @@ async def _run_discussion_background(topic_id: str, payload: dict) -> None:
         if preview_markdown_ref:
             update_topic(topic_id, {"preview_image": preview_markdown_ref})
         topic = get_topic(topic_id)
-        if topic and topic.get("creator_openclaw_agent_id"):
+        if topic and payload.get("actor_agent_id", topic.get("creator_openclaw_agent_id")):
             event = record_activity_event(
-                openclaw_agent_id=int(topic["creator_openclaw_agent_id"]),
+                openclaw_agent_id=int(payload.get("actor_agent_id") or topic["creator_openclaw_agent_id"]),
                 bound_user_id=topic.get("creator_user_id"),
                 event_type="discussion.completed",
                 action_name="discussion_completed",
@@ -1581,22 +1596,30 @@ async def _run_discussion_background(topic_id: str, payload: dict) -> None:
                 result={"completed_at": result.get("completed_at")},
             )
             apply_rule_points(
-                openclaw_agent_id=int(topic["creator_openclaw_agent_id"]),
+                openclaw_agent_id=int(payload.get("actor_agent_id") or topic["creator_openclaw_agent_id"]),
                 reason_code="discussion.completed",
                 related_event_id=int(event["id"]),
                 target_type="topic",
                 target_id=topic_id,
             )
+        if run_id:
+            agent_runs.update_run(run_id, "completed")
         _invalidate_status_cache(topic_id)
     except Exception as exc:
         logging.getLogger(__name__).exception(
             "Discussion failed for topic %s: %s", topic_id, exc
         )
+        if run_id:
+            run = await agent_runs.reconcile_run(agent_runs.get_run(run_id))
+            if run['status'] not in agent_runs.TERMINAL:
+                agent_runs.update_run(run_id, "running", "executor_response_lost")
+            _invalidate_status_cache(topic_id)
+            return
         set_discussion_status(topic_id, "failed")
         topic = get_topic(topic_id)
-        if topic and topic.get("creator_openclaw_agent_id"):
+        if topic and payload.get("actor_agent_id", topic.get("creator_openclaw_agent_id")):
             record_activity_event(
-                openclaw_agent_id=int(topic["creator_openclaw_agent_id"]),
+                openclaw_agent_id=int(payload.get("actor_agent_id") or topic["creator_openclaw_agent_id"]),
                 bound_user_id=topic.get("creator_user_id"),
                 event_type="discussion.failed",
                 action_name="discussion_failed",
@@ -1836,11 +1859,19 @@ async def get_topic_bundle_endpoint(
 
 
 @router.patch("/topics/{topic_id}")
-def update_topic_endpoint(topic_id: str, data: TopicUpdateRequest):
+def update_topic_endpoint(topic_id: str, data: TopicUpdateRequest, user: dict | None = Depends(_get_optional_user)):
+    user_id, auth_type = _resolve_owner_identity(user)
+    topic = get_topic(topic_id, user_id=user_id, auth_type=auth_type)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+    if not _can_manage_topic(topic, user):
+        raise HTTPException(status_code=403, detail="No permission to update this topic")
     payload = data.model_dump(exclude_unset=True)
     if "category" in payload:
         payload["category"] = _normalize_topic_category(payload["category"])
-    if payload.get("category") == "arcade":
+    if payload.get("category") == "arcade" or topic.get("category") == "arcade":
         raise HTTPException(status_code=403, detail="Arcade topics must be updated through protected internal APIs")
     updated = update_topic(topic_id, payload)
     if not updated:
@@ -1865,7 +1896,15 @@ def update_arcade_topic_endpoint(
 
 
 @router.post("/topics/{topic_id}/close")
-def close_topic_endpoint(topic_id: str):
+def close_topic_endpoint(topic_id: str, user: dict | None = Depends(_get_optional_user)):
+    user_id, auth_type = _resolve_owner_identity(user)
+    topic = get_topic(topic_id, user_id=user_id, auth_type=auth_type)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+    if not _can_manage_topic(topic, user):
+        raise HTTPException(status_code=403, detail="No permission to close this topic")
     closed = close_topic(topic_id)
     if not closed:
         raise HTTPException(status_code=404, detail="Topic not found")
@@ -2436,6 +2475,8 @@ async def mention_expert_endpoint(
     req: MentionExpertRequest,
     user: dict | None = Depends(_get_optional_user),
 ):
+    if not user:
+        raise HTTPException(401, 'Authentication required for a paid expert reply')
     topic = get_topic(topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
@@ -2496,6 +2537,8 @@ async def mention_expert_endpoint(
         ), user_post)
     )
     payload = {
+        "max_turns": min(50, int(os.getenv("TOPICLAB_DISCUSSION_MAX_TURNS", "100"))),
+        "max_budget_usd": min(1.0, float(os.getenv("TOPICLAB_DISCUSSION_MAX_BUDGET_USD", "10"))),
         "topic_id": topic_id,
         "topic_title": topic["title"],
         "topic_body": topic["body"],
@@ -2657,7 +2700,15 @@ def delete_post_endpoint(
     return {"ok": True, "topic_id": topic_id, "post_id": post_id, "deleted_count": deleted_count}
 
 
-@router.post("/internal/discussion-snapshot/{topic_id}", status_code=204)
+def require_executor_callback(x_topiclab_executor_token: str | None = Header(default=None)):
+    configured = os.getenv('TOPICLAB_EXECUTOR_TOKEN', '').strip()
+    if not configured:
+        raise HTTPException(503, 'Executor callback authentication is not configured')
+    if not x_topiclab_executor_token or not secrets.compare_digest(configured, x_topiclab_executor_token):
+        raise HTTPException(401, 'Executor callback authentication required')
+
+
+@router.post("/internal/discussion-snapshot/{topic_id}", status_code=204, dependencies=[Depends(require_executor_callback)])
 def push_discussion_snapshot_endpoint(topic_id: str, req: DiscussionSnapshotPushRequest):
     """Receive snapshot from Resonnet executor during discussion. Updates DB per-round."""
     _invalidate_status_cache(topic_id)
@@ -2675,12 +2726,22 @@ def push_discussion_snapshot_endpoint(topic_id: str, req: DiscussionSnapshotPush
     return Response(status_code=204)
 
 
-@router.post("/topics/{topic_id}/discussion", status_code=202)
-async def start_discussion_endpoint(topic_id: str, req: StartDiscussionRequest):
+@router.post("/topics/{topic_id}/discussion", status_code=202, response_model=DiscussionState)
+async def start_discussion_endpoint(topic_id: str, req: StartDiscussionRequest, user: dict | None = Depends(_get_optional_user)):
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if not os.getenv('TOPICLAB_EXECUTOR_TOKEN', '').strip():
+        raise HTTPException(503, detail={'code':'executor_not_configured', 'message':'Executor service credential must be configured before starting a paid run', 'retryable':False})
     topic = get_topic(topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
-    check_and_reset_stale_running_discussion(topic_id)
+    if not _can_manage_topic(topic, user):
+        raise HTTPException(status_code=403, detail="No permission to run this topic")
+    req.max_budget_usd = min(req.max_budget_usd, float(os.getenv("TOPICLAB_DISCUSSION_MAX_BUDGET_USD", "10")))
+    req.max_turns = min(req.max_turns, int(os.getenv("TOPICLAB_DISCUSSION_MAX_TURNS", "100")))
+    active_run = agent_runs.latest_run(topic_id)
+    if not active_run or active_run["status"] in agent_runs.TERMINAL:
+        check_and_reset_stale_running_discussion(topic_id)
     topic = get_topic(topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
@@ -2698,7 +2759,6 @@ async def start_discussion_endpoint(topic_id: str, req: StartDiscussionRequest):
     updated = update_topic(topic_id, {"num_rounds": num_rounds})
     if not updated:
         raise HTTPException(status_code=404, detail="Topic not found")
-    set_discussion_status(topic_id, "running", turns_count=0, discussion_summary="", discussion_history="")
     expert_names = req.expert_names if req.expert_names is not None else topic["expert_names"]
     payload = {
         "topic_id": topic_id,
@@ -2717,11 +2777,17 @@ async def start_discussion_endpoint(topic_id: str, req: StartDiscussionRequest):
     sync_url = _get_topiclab_sync_url()
     if sync_url:
         payload["topiclab_sync_url"] = sync_url
-    asyncio.create_task(_run_discussion_background(topic_id, payload))
-    if topic.get("creator_openclaw_agent_id"):
+    payload['actor_agent_id'] = user.get('openclaw_agent_id')
+    actor_uid = user.get('agent_uid') or 'user:' + str(user['sub'])
+    run, created = agent_runs.create_run(topic_id, actor_uid, payload)
+    payload['run_id'] = run['run_id']
+    if created:
+        set_discussion_status(topic_id, "running", turns_count=0, discussion_summary="", discussion_history="")
+        asyncio.create_task(_run_discussion_background(topic_id, payload))
+    if user.get("openclaw_agent_id"):
         record_activity_event(
-            openclaw_agent_id=int(topic["creator_openclaw_agent_id"]),
-            bound_user_id=topic.get("creator_user_id"),
+            openclaw_agent_id=int(user["openclaw_agent_id"]),
+            bound_user_id=int(user["sub"]),
             event_type="discussion.started",
             action_name="start_discussion",
             target_type="topic",
@@ -2733,25 +2799,40 @@ async def start_discussion_endpoint(topic_id: str, req: StartDiscussionRequest):
             payload={"num_rounds": num_rounds},
             result={"status": "running"},
         )
-    return {"status": "running", "result": None, "progress": None}
+    return {"status": "running", "result": None, "progress": None, "run": agent_runs.public_run(run)}
 
 
 @router.post("/topics/{topic_id}/discussion/cancel", status_code=200)
-def cancel_discussion_endpoint(topic_id: str):
+async def cancel_discussion_endpoint(topic_id: str, user: dict | None = Depends(_get_optional_user)):
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
     """Fail-safe: cancel a stuck running discussion so @mention can be used again."""
     topic = get_topic(topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
+    if not _can_manage_topic(topic, user):
+        raise HTTPException(status_code=403, detail="No permission to cancel this topic")
     if topic["discussion_status"] != "running":
         raise HTTPException(
             status_code=400,
             detail=f"Discussion is not running (current: {topic['discussion_status']}); nothing to cancel",
         )
+    run = agent_runs.latest_run(topic_id)
+    if not run:
+        raise HTTPException(409, detail="Legacy discussion has no run receipt; reconcile executor before cancelling")
+    try:
+        receipt = await request_json('POST', f"/executor/runs/{run['run_id']}/cancel", timeout=15.0)
+    except Exception:
+        raise HTTPException(503, detail={"code": "cancel_unconfirmed", "message": "Executor did not confirm cancellation; the run may still be active", "retryable": False})
+    if receipt.get('status') != 'cancelled':
+        await agent_runs.reconcile_run(run)
+        raise HTTPException(409, detail="Run already ended or cannot be cancelled")
+    agent_runs.update_run(run['run_id'], 'cancelled')
     set_discussion_status(topic_id, "failed")
-    if topic.get("creator_openclaw_agent_id"):
+    if user.get("openclaw_agent_id"):
         record_activity_event(
-            openclaw_agent_id=int(topic["creator_openclaw_agent_id"]),
-            bound_user_id=topic.get("creator_user_id"),
+            openclaw_agent_id=int(user["openclaw_agent_id"]),
+            bound_user_id=int(user["sub"]),
             event_type="discussion.cancelled",
             action_name="cancel_discussion",
             target_type="topic",
@@ -2767,7 +2848,7 @@ def cancel_discussion_endpoint(topic_id: str):
     return {"status": "failed", "result": topic.get("discussion_result"), "progress": None}
 
 
-@router.get("/topics/{topic_id}/discussion/status")
+@router.get("/topics/{topic_id}/discussion/status", response_model=DiscussionState)
 async def get_discussion_status_endpoint(topic_id: str):
     now = time.time()
     cached = _status_cache.get(topic_id)
@@ -2779,7 +2860,9 @@ async def get_discussion_status_endpoint(topic_id: str):
     topic = get_topic(topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
-    check_and_reset_stale_running_discussion(topic_id)
+    active_run = agent_runs.latest_run(topic_id)
+    if not active_run or active_run["status"] in agent_runs.TERMINAL:
+        check_and_reset_stale_running_discussion(topic_id)
     topic = get_topic(topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
@@ -2796,6 +2879,9 @@ async def get_discussion_status_endpoint(topic_id: str):
     if topic["discussion_status"] == "running":
         progress = _discussion_progress_from_turns(topic, list_discussion_turns(topic_id))
     payload = {"status": topic["discussion_status"], "result": topic.get("discussion_result"), "progress": progress}
+    run = agent_runs.latest_run(topic_id)
+    if run:
+        payload['run'] = agent_runs.public_run(run)
     if topic["discussion_status"] == "running" and _STATUS_CACHE_TTL_SECONDS > 0:
         _status_cache[topic_id] = (now + _STATUS_CACHE_TTL_SECONDS, payload)
     return payload

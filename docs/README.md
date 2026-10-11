@@ -33,6 +33,7 @@ docs/
 | [quickstart.md](getting-started/quickstart.md) | Quick start guide (Docker / local development) |
 | [config.md](getting-started/config.md) | Environment variables and configuration |
 | [deploy.md](getting-started/deploy.md) | Deploy via GitHub Actions; DEPLOY_ENV secret setup |
+| [worldweave-standalone.md](getting-started/worldweave-standalone.md) | Deploy WorldWeave web and refresh processes independently |
 
 ## Architecture & Technical
 

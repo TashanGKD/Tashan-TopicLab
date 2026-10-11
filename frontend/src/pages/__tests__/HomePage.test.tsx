@@ -9,7 +9,7 @@ vi.mock('../../components/AppsPageCard', () => ({
 }))
 
 vi.mock('../../components/ArcadeArenaCard', () => ({
-  default: () => <section><h2>龙虾竞技场</h2></section>,
+  default: () => <section><h2>Agent 竞技场</h2></section>,
 }))
 
 vi.mock('../../components/ResearchSkillZoneCard', () => ({

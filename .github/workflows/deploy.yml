@@ -27,10 +27,11 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           envs: GITHUB_TOKEN,REPO,DEPLOY_ENV,SUBMODULE_TOKEN
-          timeout: 120m
+          timeout: 30s
           command_timeout: 120m
           script: |
             set -euo pipefail
+            umask 077
             BASE_DIR="${{ secrets.DEPLOY_PATH || '/var/www/github-actions/repos' }}"
             REPO_NAME=$(basename "$REPO")
             REPO_DIR="$BASE_DIR/$REPO_NAME"
@@ -41,6 +42,12 @@ jobs:
               for i in 1 2 3; do git clone "$REPO_URL" "$REPO_DIR" && break || sleep 5; done
             fi
             cd "$REPO_DIR"
+            DEPLOY_LOCK_FILE="$REPO_DIR/.deploy.lock"
+            exec 9>"$DEPLOY_LOCK_FILE"
+            if ! flock -n 9; then
+              echo "::error::Another deployment or orphaned build still holds $DEPLOY_LOCK_FILE."
+              exit 1
+            fi
             git remote set-url origin "$REPO_URL"
             SUBMODULE_AUTH="${SUBMODULE_TOKEN:-$GITHUB_TOKEN}"
             set_submodule_url() {
@@ -52,18 +59,72 @@ jobs:
             }
             for i in 1 2 3; do git fetch origin && break || { [ $i -eq 3 ] && echo "git fetch failed after 3 retries" && exit 1; sleep 5; }; done
             git reset --hard origin/main
+
+            # Keep the TopicLab gitlink aligned with the independently deployed
+            # same-host WorldWeave repository. A mismatch must stop TopicLab
+            # deployment instead of silently testing one revision while serving another.
+            WORLDWEAVE_EXPECTED_REVISION="$(git ls-tree HEAD worldweave | awk '{print $3}')"
+            WORLDWEAVE_RUNTIME_DIR="$BASE_DIR/worldweave"
+            if ! printf '%s' "$WORLDWEAVE_EXPECTED_REVISION" | grep -Eq '^[0-9a-f]{40}$'; then
+              echo "::error::Invalid WorldWeave gitlink revision: $WORLDWEAVE_EXPECTED_REVISION"
+              exit 1
+            fi
+            if [ -d "$WORLDWEAVE_RUNTIME_DIR/.git" ]; then
+              WORLDWEAVE_RUNTIME_REVISION="$(git -C "$WORLDWEAVE_RUNTIME_DIR" rev-parse HEAD)"
+              if [ "$WORLDWEAVE_RUNTIME_REVISION" != "$WORLDWEAVE_EXPECTED_REVISION" ]; then
+                echo "::error::WorldWeave runtime $WORLDWEAVE_RUNTIME_REVISION does not match TopicLab gitlink $WORLDWEAVE_EXPECTED_REVISION."
+                echo "::error::Deploy WorldWeave first, then update and commit the TopicLab submodule pointer."
+                exit 1
+              fi
+              if [ -n "$(git -C "$WORLDWEAVE_RUNTIME_DIR" status --porcelain --untracked-files=no)" ]; then
+                echo "::error::WorldWeave runtime repository contains tracked local changes: $WORLDWEAVE_RUNTIME_DIR"
+                exit 1
+              fi
+              echo "[deploy] WorldWeave runtime revision aligned: $WORLDWEAVE_EXPECTED_REVISION"
+            else
+              echo "::notice::No same-host WorldWeave repository at $WORLDWEAVE_RUNTIME_DIR; skipping local revision alignment."
+            fi
+
             git submodule sync --recursive
             # Configure submodule URLs after sync; otherwise cached SSH URLs or .gitmodules defaults can win.
             set_submodule_url backend TashanGKD/Resonnet
             set_submodule_url topiclab-cli TashanGKD/TopicLab-CLI
             set_submodule_url ClawArcade TashanGKD/ClawArcade
-            set_submodule_url worldweave TashanGKD/worldweave
             git submodule update --init backend
             git config -f .git/modules/backend/config submodule.libs/assignable_skills/_submodules/ai-research.url "https://x-access-token:${SUBMODULE_AUTH}@github.com/Orchestra-Research/AI-Research-SKILLs.git"
             git config -f .git/modules/backend/config submodule.libs/assignable_skills/_submodules/anthropics.url "https://x-access-token:${SUBMODULE_AUTH}@github.com/anthropics/skills.git"
             git config -f .git/modules/backend/config submodule.libs/assignable_skills/_submodules/claude-scientific.url "https://x-access-token:${SUBMODULE_AUTH}@github.com/K-Dense-AI/claude-scientific-skills.git"
             git config -f .git/modules/backend/config --get submodule.libs/assignable_skills/_submodules/claude-scientific.url | sed -E 's#x-access-token:[^@]+@#x-access-token:***@#'
-            git submodule update --init --recursive
+            git submodule update --init --recursive backend topiclab-cli ClawArcade
+
+            CRITIC_RESEARCH_DIR="$REPO_DIR/.runtime/tashan-research-skills"
+            CRITIC_RESEARCH_URL="https://github.com/TashanGKD/tashan-research-skills.git"
+            CRITIC_RESEARCH_REVISION="$(tr -d '[:space:]' < "$REPO_DIR/.critic-research-revision")"
+            if ! printf '%s' "$CRITIC_RESEARCH_REVISION" | grep -Eq '^[0-9a-f]{40}$'; then
+              echo "Invalid Critic research revision lock"
+              exit 1
+            fi
+            mkdir -p "$REPO_DIR/.runtime"
+            if [ ! -d "$CRITIC_RESEARCH_DIR/.git" ]; then
+              for i in 1 2 3; do
+                git clone --filter=blob:none --no-checkout "$CRITIC_RESEARCH_URL" "$CRITIC_RESEARCH_DIR" && break || {
+                  rm -rf "$CRITIC_RESEARCH_DIR"
+                  [ "$i" = "3" ] && echo "Critic runtime clone failed after 3 retries" && exit 1
+                  sleep 5
+                }
+              done
+            else
+              git -C "$CRITIC_RESEARCH_DIR" remote set-url origin "$CRITIC_RESEARCH_URL"
+            fi
+            for i in 1 2 3; do
+              git -C "$CRITIC_RESEARCH_DIR" fetch --depth 1 origin "$CRITIC_RESEARCH_REVISION" && break || {
+                [ "$i" = "3" ] && echo "Critic runtime revision fetch failed after 3 retries" && exit 1
+                sleep 5
+              }
+            done
+            git -C "$CRITIC_RESEARCH_DIR" checkout --detach --force FETCH_HEAD
+            test "$(git -C "$CRITIC_RESEARCH_DIR" rev-parse HEAD)" = "$CRITIC_RESEARCH_REVISION"
+            python3 "$REPO_DIR/scripts/verify_critic_runtime.py" --runtime "$CRITIC_RESEARCH_DIR"
 
             if [ -z "${DEPLOY_ENV:-}" ]; then
               echo "::error::DEPLOY_ENV secret is not set. Add it in repo Settings → Secrets."
@@ -71,36 +132,214 @@ jobs:
             fi
             echo "$DEPLOY_ENV" > .env
 
+            # Ignore inherited COMPOSE_FILE values and stale Compose overrides;
+            # always operate on the versioned stack.
+            export COMPOSE_FILE="$REPO_DIR/docker-compose.yml"
+            COMPOSE_ENV_FILE="$REPO_DIR/.env"
+            DEPLOY_CHILD_PID=""
+            cleanup_deploy() {
+              local child_pid="${DEPLOY_CHILD_PID:-}"
+              if [ -n "$child_pid" ] && kill -0 "$child_pid" 2>/dev/null; then
+                echo "[deploy] stopping unfinished child process $child_pid"
+                kill -TERM "$child_pid" 2>/dev/null || true
+                for _ in $(seq 1 30); do
+                  kill -0 "$child_pid" 2>/dev/null || break
+                  sleep 1
+                done
+                kill -KILL "$child_pid" 2>/dev/null || true
+                wait "$child_pid" 2>/dev/null || true
+              fi
+            }
+            exit_on_signal() {
+              exit 143
+            }
+            trap cleanup_deploy EXIT
+            trap exit_on_signal HUP INT TERM
+            docker compose --env-file "$COMPOSE_ENV_FILE" config --quiet
+            COMPOSE_SERVICES="$(docker compose --env-file "$COMPOSE_ENV_FILE" config --services)"
+            printf '%s\n' "$COMPOSE_SERVICES" | sed 's/^/[deploy] compose service: /'
+            for required_service in topiclab-backend skillhub-critic-worker topiclink-zvec backend frontend; do
+              if ! printf '%s\n' "$COMPOSE_SERVICES" | grep -qx "$required_service"; then
+                echo "::error::Versioned Compose stack is missing $required_service."
+                exit 1
+              fi
+            done
+            if printf '%s\n' "$COMPOSE_SERVICES" | grep -Eq '^worldweave(-refresh)?$'; then
+              echo "::error::Obsolete bundled WorldWeave service is still active in the Compose stack."
+              exit 1
+            fi
+
+            # The same-host WorldWeave deployment exposes container port 5000
+            # on host port 3020. Migrate only the old default; explicit remote
+            # HTTPS origins and other custom upstreams remain untouched.
+            if grep -Eq '^WORLDWEAVE_(BASE_URL|UPSTREAM)=http://host\.docker\.internal:5000/?\r?$' .env; then
+              echo "::notice::Migrating legacy same-host WorldWeave port 5000 to 3020"
+              sed -i -E \
+                -e 's#^(WORLDWEAVE_BASE_URL=http://host\.docker\.internal):5000/?\r?$#\1:3020#' \
+                -e 's#^(WORLDWEAVE_UPSTREAM=http://host\.docker\.internal):5000/?\r?$#\1:3020#' \
+                .env
+            fi
+
+            ZVEC_LOCK="$REPO_DIR/deploy/topiclink-zvec.lock.json"
+            ZVEC_MANAGER="$REPO_DIR/scripts/topiclink_zvec_release.py"
+            ZVEC_MIN_DOC_COUNT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["min_doc_count"])' "$ZVEC_LOCK")"
+            ZVEC_EXPECTED_DIMENSIONS="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["expected_dimensions"])' "$ZVEC_LOCK")"
+            # The lock count validates the immutable candidate before activation.
+            # The active cache is mutable and may shrink under its documented TTL,
+            # so runtime readiness must verify access/schema rather than that seed count.
+            sed -i -E '/^TOPICLINK_ZVEC_MIN_DOC_COUNT=/d' .env
+            printf '\nTOPICLINK_ZVEC_MIN_DOC_COUNT=0\n' >> .env
+
+            WORKSPACE_PATH_VALUE="$(python3 - <<'PY'
+            from pathlib import Path
+
+            value = ""
+            for raw_line in Path(".env").read_text(encoding="utf-8").splitlines():
+                line = raw_line.strip()
+                if line.startswith("WORKSPACE_PATH="):
+                    value = line.split("=", 1)[1].strip().strip("\"'")
+            print(value)
+            PY
+            )"
+            if [ -z "$WORKSPACE_PATH_VALUE" ]; then
+              echo "::error::WORKSPACE_PATH is required for the TopicLink Zvec package."
+              exit 1
+            fi
+            if [[ "$WORKSPACE_PATH_VALUE" = /* ]]; then
+              WORKSPACE_HOST_PATH="${WORKSPACE_PATH_VALUE%/}"
+            else
+              WORKSPACE_HOST_PATH="$REPO_DIR/${WORKSPACE_PATH_VALUE%/}"
+            fi
+
+            python3 "$ZVEC_MANAGER" prepare \
+              --lock "$ZVEC_LOCK" \
+              --workspace "$WORKSPACE_HOST_PATH" \
+              --env-file "$REPO_DIR/.env"
+            ZVEC_RELEASE_HOST_PATH="$(python3 "$ZVEC_MANAGER" path --lock "$ZVEC_LOCK" --workspace "$WORKSPACE_HOST_PATH" --kind release-host)"
+            ZVEC_RELEASE_CONTAINER_PATH="$(python3 "$ZVEC_MANAGER" path --lock "$ZVEC_LOCK" --workspace "$WORKSPACE_HOST_PATH" --kind release-container)"
+            if [ "$(id -u)" -eq 0 ]; then
+              chown -R 1000:1000 "$ZVEC_RELEASE_HOST_PATH"
+            else
+              sudo -n chown -R 1000:1000 "$ZVEC_RELEASE_HOST_PATH"
+            fi
+            if ! find "$ZVEC_RELEASE_HOST_PATH" -maxdepth 1 -type f -name 'manifest.*' -print -quit | grep -q .; then
+              echo "::error::Prepared TopicLink Zvec release is missing: $ZVEC_RELEASE_HOST_PATH/manifest.*"
+              exit 1
+            fi
+
             run_with_heartbeat() {
               local label="$1"
               shift
               "$@" &
-              local pid="$!"
-              while kill -0 "$pid" 2>/dev/null; do
+              DEPLOY_CHILD_PID="$!"
+              while kill -0 "$DEPLOY_CHILD_PID" 2>/dev/null; do
                 echo "[deploy] ${label} still running at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
                 sleep 30
               done
-              wait "$pid"
+              local status=0
+              wait "$DEPLOY_CHILD_PID" || status="$?"
+              DEPLOY_CHILD_PID=""
+              return "$status"
             }
 
-            run_with_heartbeat "docker compose build" docker compose build
+            run_with_heartbeat "docker compose build" \
+              timeout --signal=TERM --kill-after=30s 60m \
+              docker compose --parallel 1 --env-file "$COMPOSE_ENV_FILE" build
+            ZVEC_ACTIVE_RESOLVED="$(python3 "$ZVEC_MANAGER" path --lock "$ZVEC_LOCK" --workspace "$WORKSPACE_HOST_PATH" --kind active-resolved)"
+            CURRENT_ZVEC_ID="$(docker compose ps -q topiclink-zvec 2>/dev/null || true)"
+            ZVEC_WAS_RUNNING=false
+            ZVEC_WRITER_STOPPED=false
+            if [ -n "$CURRENT_ZVEC_ID" ] \
+              && [ "$(docker inspect -f '{{.State.Running}}' "$CURRENT_ZVEC_ID")" = "true" ] \
+              && [ "$ZVEC_ACTIVE_RESOLVED" = "$ZVEC_RELEASE_HOST_PATH" ]; then
+              ZVEC_WAS_RUNNING=true
+              if docker compose exec -T topiclink-zvec python -c "import json, urllib.request; payload=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=15)); count=int(payload.get('doc_count') or 0); assert count >= $ZVEC_MIN_DOC_COUNT, payload; print(payload)"; then
+                echo "[deploy] Active TopicLink Zvec release is ready"
+              else
+                echo "::warning::TopicLink Zvec active release is unhealthy; reinstalling it from the verified archive."
+                docker compose stop -t 30 topiclink-zvec
+                ZVEC_WRITER_STOPPED=true
+                if ! python3 "$ZVEC_MANAGER" prepare --force \
+                  --lock "$ZVEC_LOCK" \
+                  --workspace "$WORKSPACE_HOST_PATH" \
+                  --env-file "$REPO_DIR/.env"; then
+                  docker compose start topiclink-zvec || true
+                  exit 1
+                fi
+                if [ "$(id -u)" -eq 0 ]; then
+                  chown -R 1000:1000 "$ZVEC_RELEASE_HOST_PATH"
+                else
+                  sudo -n chown -R 1000:1000 "$ZVEC_RELEASE_HOST_PATH"
+                fi
+                if ! docker compose run --rm --no-deps topiclink-zvec \
+                  python scripts/validate_topiclink_zvec_collection.py \
+                  "$ZVEC_RELEASE_CONTAINER_PATH" \
+                  --min-doc-count "$ZVEC_MIN_DOC_COUNT" \
+                  --expected-dimensions "$ZVEC_EXPECTED_DIMENSIONS"; then
+                  docker compose start topiclink-zvec || true
+                  exit 1
+                fi
+              fi
+            else
+              if [ -n "$CURRENT_ZVEC_ID" ] && [ "$(docker inspect -f '{{.State.Running}}' "$CURRENT_ZVEC_ID")" = "true" ]; then
+                ZVEC_WAS_RUNNING=true
+              fi
+              docker compose run --rm --no-deps topiclink-zvec \
+                python scripts/validate_topiclink_zvec_collection.py \
+                "$ZVEC_RELEASE_CONTAINER_PATH" \
+                --min-doc-count "$ZVEC_MIN_DOC_COUNT" \
+                --expected-dimensions "$ZVEC_EXPECTED_DIMENSIONS"
+            fi
+            if [ "$ZVEC_WAS_RUNNING" = "true" ] && [ "$ZVEC_WRITER_STOPPED" != "true" ]; then
+              docker compose stop -t 30 topiclink-zvec
+            fi
+            if ! python3 "$ZVEC_MANAGER" activate --lock "$ZVEC_LOCK" --workspace "$WORKSPACE_HOST_PATH"; then
+              if [ "$ZVEC_WAS_RUNNING" = "true" ]; then
+                docker compose start topiclink-zvec || true
+              fi
+              exit 1
+            fi
             docker compose down
             docker compose up -d
+            if grep -Eq '^(SCNET_API_KEY|skillhub_scnet_api_key)=.+$' .env; then
+              for i in $(seq 1 30); do
+                if docker compose exec -T skillhub-critic-worker python -c "import json,urllib.request; payload=json.load(urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=5)); assert payload.get('ready') is True, payload"; then
+                  break
+                fi
+                if [ "$i" = "30" ]; then
+                  echo "::error::SkillHub Critic Worker did not become ready."
+                  docker compose logs --tail=120 skillhub-critic-worker
+                  exit 1
+                fi
+                sleep 2
+              done
+            fi
             for i in $(seq 1 30); do
-              if docker compose exec -T worldweave node -e "fetch('http://127.0.0.1:3020/api/v1/openclaw/skill.md').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
+              if docker compose exec -T topiclab-backend python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/topiclink/health/ready', timeout=5)"; then
                 break
               fi
               if [ "$i" = "30" ]; then
-                echo "::error::WorldWeave container did not become healthy on port 3020."
-                docker compose logs --tail=120 worldweave
+                echo "::error::TopicLink or its Zvec sidecar did not become ready."
+                docker compose logs --tail=120 topiclab-backend topiclink-zvec
                 exit 1
               fi
               sleep 2
             done
-            if ! docker compose exec -T worldweave sh -lc "WORLD_HEALTH_BASE_URL=http://127.0.0.1:3020 WORLD_HEALTH_CHECK_SCENES=tech-ai,geo-politics-daily WORLD_HEALTH_FAIL_ON_REFRESH_DEGRADED=1 node scripts/health-world.mjs"; then
-              echo "::warning::WorldWeave scene freshness health check failed. Check the worldweave-refresh logs and source refresh status."
-              docker compose logs --tail=120 worldweave-refresh || true
-            fi
+            for i in $(seq 1 30); do
+              if docker compose exec -T frontend wget -q -O /dev/null http://127.0.0.1/worldweave/ \
+                && docker compose exec -T frontend wget -q -O /dev/null http://127.0.0.1/worldweave/demo/asean \
+                && docker compose exec -T frontend wget -q -O /dev/null http://127.0.0.1/api/v1/world/asean/decision-model \
+                && docker compose exec -T frontend wget -q -O /dev/null http://127.0.0.1/info/source; then
+                echo "[deploy] WorldWeave proxy, ASEAN page, decision API, and source page are reachable"
+                break
+              fi
+              if [ "$i" = "30" ]; then
+                echo "::error::Frontend WorldWeave proxy smoke check failed."
+                docker compose logs --tail=120 frontend
+                exit 1
+              fi
+              sleep 2
+            done
             docker image prune -f
 
             # Read frontend port from .env (default 3000); trim whitespace/CRLF to avoid nginx config issues

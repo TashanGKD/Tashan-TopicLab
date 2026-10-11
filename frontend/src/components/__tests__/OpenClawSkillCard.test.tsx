@@ -10,18 +10,21 @@ vi.mock('../../api/auth', async () => {
     ...actual,
     authApi: {
       ...actual.authApi,
+      createAgentInvitation: vi.fn(),
       createOpenClawKey: vi.fn(),
       createGuestOpenClawKey: vi.fn(),
     },
   }
 })
 
+const mockedCreateAgentInvitation = vi.mocked(authApi.createAgentInvitation)
 const mockedCreateOpenClawKey = vi.mocked(authApi.createOpenClawKey)
 const mockedCreateGuestOpenClawKey = vi.mocked(authApi.createGuestOpenClawKey)
 
 describe('OpenClawSkillCard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockedCreateAgentInvitation.mockResolvedValue({onboarding_path:"/api/v1/agents/onboarding.md?invitation=tli_test_invitation",expires_at:Date.now()/1000+600})
     localStorage.clear()
     vi.stubGlobal(
       'fetch',
@@ -88,9 +91,9 @@ describe('OpenClawSkillCard', () => {
       has_key: true,
       key: 'tloc_guest_key',
       bind_key: 'tlos_guest_bind_key',
-      bootstrap_path: '/api/v1/openclaw/bootstrap?key=tlos_guest_bind_key',
-      claim_register_path: '/register?openclaw_claim=oc_claim_guest',
-      claim_login_path: '/login?openclaw_claim=oc_claim_guest',
+      bootstrap_path: '/api/v1/agents/onboarding.md?invitation=tli_test_invitation',
+      claim_register_path: '/register',
+      claim_login_path: '/login',
       is_guest: true,
     })
 
@@ -104,17 +107,18 @@ describe('OpenClawSkillCard', () => {
 
     const expectedBase = import.meta.env.BASE_URL || '/'
     const expectedSkillHref = new URL(
-      `${expectedBase.endsWith('/') ? expectedBase : `${expectedBase}/`}api/v1/openclaw/bootstrap?key=tlos_guest_bind_key`,
+      `${expectedBase.endsWith('/') ? expectedBase : `${expectedBase}/`}api/v1/agents/onboarding.md?invitation=tli_test_invitation`,
       window.location.origin,
     ).toString()
 
     expect(mockedCreateOpenClawKey).not.toHaveBeenCalled()
-    expect(mockedCreateGuestOpenClawKey).toHaveBeenCalled()
-    expect(await screen.findByText('当前已复制临时账号专属 skill。智能体可以先直接稳定使用；若要升级绑定到您的他山世界账号，请使用下方自动认领入口。')).toBeInTheDocument()
+    expect(mockedCreateAgentInvitation).toHaveBeenCalledWith(undefined)
+    expect(mockedCreateGuestOpenClawKey).not.toHaveBeenCalled()
+    expect(await screen.findByText('邀请十分钟内有效，只能兑换一次。接入后可以登录网站管理账号。')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '去登录' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '去注册' })).toHaveAttribute('href', '/register?openclaw_claim=oc_claim_guest')
-    expect(screen.getByRole('link', { name: '去登录' })).toHaveAttribute('href', '/login?openclaw_claim=oc_claim_guest')
-    expect(screen.getByText('智能体匿名链接')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '去注册' })).toHaveAttribute('href', '/register')
+    expect(screen.getByRole('link', { name: '去登录' })).toHaveAttribute('href', '/login')
+    expect(screen.getByText('智能体限时邀请')).toBeInTheDocument()
     expect(screen.getByText(expectedSkillHref)).toBeInTheDocument()
   })
 
@@ -130,7 +134,7 @@ describe('OpenClawSkillCard', () => {
     fireEvent.click(within(view.container).getByRole('button', { name: '一键复制' }))
 
     expect(onCopyAction).toHaveBeenCalledTimes(1)
-    expect(await screen.findByText('智能体匿名链接')).toBeInTheDocument()
+    expect(await screen.findByText('智能体限时邀请')).toBeInTheDocument()
   })
 
   it('shows personalized skill url after generating a bound key', async () => {
@@ -146,7 +150,7 @@ describe('OpenClawSkillCard', () => {
       has_key: true,
       key: 'tloc_test_personal_key',
       bind_key: 'tlos_test_bind_key',
-      bootstrap_path: '/api/v1/openclaw/bootstrap?key=tlos_test_bind_key',
+      bootstrap_path: '/api/v1/agents/onboarding.md?invitation=tli_test_invitation',
       masked_key: 'tloc_tes..._key',
       created_at: '2026-03-14T00:00:00Z',
       last_used_at: null,
@@ -161,7 +165,7 @@ describe('OpenClawSkillCard', () => {
     fireEvent.click(within(view.container).getByRole('button', { name: '一键复制' }))
 
     await waitFor(() => {
-      expect(mockedCreateOpenClawKey).toHaveBeenCalledWith('jwt-token')
+      expect(mockedCreateAgentInvitation).toHaveBeenCalledWith('jwt-token')
     })
 
     expect(await within(view.container).findByText('已复制')).toBeInTheDocument()
@@ -173,7 +177,7 @@ describe('OpenClawSkillCard', () => {
       has_key: true,
       key: 'tloc_test_personal_key',
       bind_key: 'tlos_test_bind_key',
-      bootstrap_path: '/api/v1/openclaw/bootstrap?key=tlos_test_bind_key',
+      bootstrap_path: '/api/v1/agents/onboarding.md?invitation=tli_test_invitation',
       masked_key: 'tloc_tes..._key',
       created_at: '2026-03-14T00:00:00Z',
       last_used_at: null,
@@ -193,11 +197,11 @@ describe('OpenClawSkillCard', () => {
 
     const expectedBase = import.meta.env.BASE_URL || '/'
     const expectedSkillHref = new URL(
-      `${expectedBase.endsWith('/') ? expectedBase : `${expectedBase}/`}api/v1/openclaw/bootstrap?key=tlos_test_bind_key`,
+      `${expectedBase.endsWith('/') ? expectedBase : `${expectedBase}/`}api/v1/agents/onboarding.md?invitation=tli_test_invitation`,
       window.location.origin,
     ).toString()
 
-    expect(await within(view.container).findByText('智能体专属链接')).toBeInTheDocument()
+    expect(await within(view.container).findByText('智能体限时邀请')).toBeInTheDocument()
     expect(within(view.container).getByText(expectedSkillHref)).toBeInTheDocument()
     expect(await within(view.container).findByText('已复制')).toBeInTheDocument()
     expect(document.execCommand).toHaveBeenCalledWith('copy')
@@ -209,7 +213,7 @@ describe('OpenClawSkillCard', () => {
       has_key: true,
       key: 'tloc_test_personal_key',
       bind_key: 'tlos_test_bind_key',
-      bootstrap_path: '/api/v1/openclaw/bootstrap?key=tlos_test_bind_key',
+      bootstrap_path: '/api/v1/agents/onboarding.md?invitation=tli_test_invitation',
       masked_key: 'tloc_tes..._key',
       created_at: '2026-03-14T00:00:00Z',
       last_used_at: null,
@@ -237,11 +241,11 @@ describe('OpenClawSkillCard', () => {
 
     const expectedBase = import.meta.env.BASE_URL || '/'
     const expectedSkillHref = new URL(
-      `${expectedBase.endsWith('/') ? expectedBase : `${expectedBase}/`}api/v1/openclaw/bootstrap?key=tlos_test_bind_key`,
+      `${expectedBase.endsWith('/') ? expectedBase : `${expectedBase}/`}api/v1/agents/onboarding.md?invitation=tli_test_invitation`,
       window.location.origin,
     ).toString()
 
-    expect(await within(view.container).findByText('智能体专属链接')).toBeInTheDocument()
+    expect(await within(view.container).findByText('智能体限时邀请')).toBeInTheDocument()
     expect(within(view.container).getByText(expectedSkillHref)).toBeInTheDocument()
     expect(within(view.container).getByText('如果浏览器未授予剪贴板权限，请手动复制下方链接。')).toBeInTheDocument()
   })

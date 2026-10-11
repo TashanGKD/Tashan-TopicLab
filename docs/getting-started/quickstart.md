@@ -27,10 +27,10 @@ cp .env.example .env
 - Frontend: http://localhost:3000
 - Resonnet execution backend: http://localhost:8000
 - TopicLab business backend: http://localhost:8001
-- WorldWeave dashboard/API: http://localhost:3020
-- Health checks: `curl http://localhost:8000/health`, `curl http://localhost:8001/health`, `curl http://localhost:3020/api/v1/openclaw/skill.md`
+- WorldWeave dashboard/API: start the standalone runtime separately on host port http://localhost:3020 (container port 5000)
+- Health checks: `curl http://localhost:8000/health`, `curl http://localhost:8001/health`, plus the standalone WorldWeave health URL
 
-The default Compose stack starts `worldweave`, `worldweave-refresh`, `topiclab-backend`, Resonnet `backend`, frontend, and the optional `topiclab-cli-runner` profile. The refresh service keeps WorldWeave source knowledge and LiveBench snapshots current without putting heavy refresh work in the public web process.
+The default TopicLab Compose stack starts `topiclab-backend`, Resonnet `backend`, frontend, and the optional `topiclab-cli-runner` profile. WorldWeave public and refresh processes run independently; set `WORLDWEAVE_BASE_URL` and `WORLDWEAVE_UPSTREAM` to that service before opening the embedded dashboard.
 
 ## Option 2: Local development
 
@@ -55,7 +55,7 @@ npm run dev
 Frontend default: http://localhost:3000. Vite dev proxy routes:
 
 - `/api/auth`, `/api/source-feed`, `/api/topics`, `/api/v1/openclaw`, and base-path-aware `/api/admin/*` → topiclab-backend `http://localhost:8001`
-- `/worldweave`, `/_next`, `/demo`, `/api/v1/world`, `/api/v1/livebench`, `/api/v1/source-knowledge`, `/api/v1/signals`, `/signals`, `/source-knowledge`, `/livebench` → WorldWeave target (`VITE_WORLDWEAVE_PROXY_TARGET` or `WORLDWEAVE_PORT`, default `http://127.0.0.1:5000` for local Vite)
+- `/worldweave`, `/_next`, `/demo`, `/api/v1/world`, `/api/v1/livebench`, `/api/v1/source-knowledge`, `/api/v1/signals`, `/signals`, `/source-knowledge`, `/livebench` → WorldWeave target (`VITE_WORLDWEAVE_PROXY_TARGET` or `WORLDWEAVE_PORT`, default `http://127.0.0.1:3020` for local Vite)
 - Remaining `/api/*` → Resonnet `http://localhost:8000`
 
 With `VITE_BASE_PATH=/topic-lab/`, the admin rule applies under that prefix, for example `/topic-lab/api/admin/*`.
@@ -91,6 +91,6 @@ For a live bind-key smoke after installing `topiclab` globally:
 
 - **Submodule not initialized**: Run `git submodule update --init --recursive`
 - **Backend fails to start**: Check `.env` API keys
-- **WorldWeave is blank or 502**: Check `MINIMAX_API_KEY`, `METASO_API_KEY`, `WORLDWEAVE_BASE_URL`, and the `worldweave` / `worldweave-refresh` container health
+- **WorldWeave is blank or 502**: Check `WORLDWEAVE_BASE_URL`, `WORLDWEAVE_UPSTREAM`, the independent server health, and connectivity from the TopicLab host
 - **Arcade reviewer returns 503**: Ensure `ARCADE_EVALUATOR_SECRET_KEY` is set in the running `topiclab-backend` environment and in the reviewer service
 - **Discussion stuck at running**: After backend restart, in-progress discussions become `failed`; restart

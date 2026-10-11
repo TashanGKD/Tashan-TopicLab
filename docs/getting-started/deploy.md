@@ -49,17 +49,17 @@ Admin observability uses optional tuning variables:
 
 OpenClaw ask-agent is optional. Configure `OPENCLAW_ASK_AGENT_URL`, `OPENCLAW_ASK_AGENT_TOKEN`, `OPENCLAW_ASK_PROJECT_ID`, and `OPENCLAW_ASK_SESSION_ID` only when production should return ask-agent settings during bootstrap/renew so `topiclab help ask` can call the advisory service directly.
 
-**WorldWeave source service** is built from the checked-out `worldweave` submodule and started by Docker Compose. Configure these in `DEPLOY_ENV`:
-- `MINIMAX_API_KEY`: required for WorldWeave model calls and Qwen3 embeddings
-- `METASO_API_KEY`: required for Metaso enrichment when enabled
-- `MINIMAX_BASE_URL=https://api.scnet.cn/api/llm/v1`
-- `WORLDWEAVE_DATABASE_URL`: optional Postgres monitor sink for WorldWeave source refresh runs, source-health snapshots, and current signal rows
+**Research SkillHub and MCP Hub** serve their checked-in catalogs without additional secrets. Reuse `SCNET_API_KEY` to enable the shared AgentScope-assisted bilingual search and Critic evaluation; the SCNet endpoint, OpenAI-compatible protocol, and GLM-5.2 model have stable defaults. Existing deployments that only define `skillhub_scnet_api_key` remain compatible during the migration: `SCNET_API_KEY` takes precedence when both are present, and no immediate `DEPLOY_ENV` change is required. Only authenticated searches that can attempt the configured model consume model quota. Anonymous requests and deployments without a model key use deterministic local retrieval; provider failures are reported in the returned driver state before local retrieval is used.
 
-The `1.15.0` deployment baseline points the `worldweave` submodule at `3360d5d7686c94d8a0eb97a28ec92a01d6d2fbf5` (WorldWeave PR #12, ASEAN decision demo). If production shows an older WorldWeave surface after deploy, check that the parent repository checkout includes this submodule pointer and that `git submodule update --init --recursive` ran successfully on the host.
+Skill and MCP evaluation runs in the built-in isolated worker. Docker Compose wires its internal address automatically; split-process deployments can override that address with `CRITIC_WORKER_URL`. The runner, state directory, Critic sources, endpoint, and model retain application defaults.
 
-The public `worldweave` service is cache-first. Heavy source refresh runs in the separate `worldweave-refresh` service through `node scripts/world-source-refresh-daemon.mjs`, with `WORLD_SOURCE_REFRESH_MANAGE_WORKER=1` so it starts an internal heavy-refresh worker in the same container. Do not set `WORLD_BATCH_REFRESH_BASE_URL` to the public `worldweave` service in production.
+**WorldWeave is deployed independently.** Deploy and verify its public and refresh processes first, then configure these TopicLab `DEPLOY_ENV` values:
 
-Docker Compose restarts both WorldWeave containers unless they are stopped manually. The public web container maps `WORLDWEAVE_NODE_OPTIONS` to `NODE_OPTIONS` and defaults to `--max-old-space-size=3072` with `WORLDWEAVE_MEM_LIMIT=4g`; the refresh container maps `WORLDWEAVE_REFRESH_NODE_OPTIONS` to `NODE_OPTIONS` and defaults to `--max-old-space-size=3072` with `WORLDWEAVE_REFRESH_MEM_LIMIT=6g`. Override those environment variables in `DEPLOY_ENV` if the host needs tighter or larger limits.
+- `WORLDWEAVE_BASE_URL=https://<worldweave-domain>` for `topiclab-backend` source-snapshot calls.
+- `WORLDWEAVE_UPSTREAM=https://<worldweave-domain>` for the frontend Nginx same-origin proxy.
+- `VITE_WORLDWEAVE_FRONTEND_URL=/worldweave/` for the browser-facing embedded route.
+
+WorldWeave model/search keys, refresh settings and monitor database configuration stay on the independent server. TopicLab's workflow no longer initializes the WorldWeave submodule, starts WorldWeave containers or runs scene-freshness checks. Follow [worldweave-standalone.md](worldweave-standalone.md) for the independent deployment and health checks.
 
 **Arcade reviewer service** is built from the checked-out `ClawArcade` submodule when `ARCADE_EVALUATOR_SECRET_KEY` is present in `DEPLOY_ENV`. The deploy workflow triggers `scripts/deploy-clawarcade-reviewer.sh`, which builds the Dockerized reviewer, runs smoke checks inside the image, and starts the Compose `clawarcade-reviewer` service with the `reviewer` profile.
 
@@ -87,7 +87,38 @@ docker compose --profile reviewer ps clawarcade-reviewer
 docker compose --profile reviewer logs --tail=100 clawarcade-reviewer
 ```
 
-The reviewer service is optional. If `ARCADE_EVALUATOR_SECRET_KEY` is intentionally absent, production deploy can still serve TopicLab and WorldWeave; Arcade `local_subprocess` tasks simply will not receive automatic evaluator replies.
+### Science MCP Hub release gate
+
+The MCP Hub is a read-only research discovery surface. A deployment is ready to
+be called a local or external release only after the following contract checks
+pass against the same base URL:
+
+```bash
+# Browser entry and catalog invariants
+curl -fsS https://<host>/mcphub >/dev/null
+curl -fsS https://<host>/api/v1/mcp-hub/meta | jq '{active_catalog_count, retired_archive_excluded}'
+
+# Agent discovery contract
+curl -fsS https://<host>/api/v1/mcp-hub/science-catalog/finder/capabilities \
+  | jq '.agent_api | {read_only, catalog_scope, search, stream}'
+curl -fsS -X POST https://<host>/api/v1/mcp-hub/science-catalog/find \
+  -H 'content-type: application/json' \
+  -d '{"query":"UniProt 蛋白质数据","limit":5}' \
+  | jq '{query,total,results:(.results|length)}'
+
+# Detail and evidence page
+curl -fsS https://<host>/api/v1/mcp-hub/mcps/<mcp-id> >/dev/null
+curl -fsS https://<host>/api/v1/mcp-hub/mcps/<mcp-id>/content \
+  | jq '{format,content_type}'
+```
+
+The release gate does not install, start, invoke, or audit a third-party MCP;
+it only verifies the Hub's catalog, evidence, and read-only discovery
+contracts. The local acceptance target is `127.0.0.1:3000` / `127.0.0.1:8001`.
+An external URL, host, and deployment credentials must be supplied before a
+public release can be claimed.
+
+The reviewer service is optional. If `ARCADE_EVALUATOR_SECRET_KEY` is intentionally absent, production deploy can still serve TopicLab; Arcade `local_subprocess` tasks simply will not receive automatic evaluator replies.
 
 ### Branch Deploy (Preview)
 

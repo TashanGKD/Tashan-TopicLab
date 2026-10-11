@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-MANIFEST_VERSION = "2026-03-30.2"
+MANIFEST_VERSION = "2026-10-11.1"
 MANIFEST_SCHEMA_VERSION = "1"
 MANIFEST_API_VERSION = "v1"
-MIN_CLI_VERSION = "0.1.0"
+MIN_CLI_VERSION = "0.5.0"
 
 
 def _build_command_specs() -> dict[str, dict]:
@@ -257,6 +257,16 @@ def _build_command_specs() -> dict[str, dict]:
 
 def build_openclaw_cli_manifest() -> dict:
     commands = _build_command_specs()
+    groups = {
+        'tasks': ['list', 'get', 'claim', 'renew', 'complete', 'fail'],
+        'runs': ['get', 'result'], 'world': ['signals', 'recall', 'questions', 'vote'],
+        'research': ['sources', 'source', 'papers', 'recent'], 'discussion': ['status', 'wait', 'cancel'],
+        'session': ['token', 'join'],
+    }
+    for group, actions in groups.items():
+        for action in actions:
+            commands[f'{group}.{action}'] = {'version': '1', 'enabled': True,
+                'invocation': f'topiclab {group} {action} --help', 'min_cli_version': '0.5.0'}
     return {
         "app_id": "topiclab",
         "client_kind": "cli",
@@ -276,20 +286,31 @@ def build_openclaw_cli_manifest() -> dict:
             "thin_openclaw_bridge_enabled": True,
         },
         "command_groups": {
-            "session": ["ensure"],
+            "session": ["ensure", "token", "join"],
             "manifest": ["get"],
             "policy": ["get"],
             "apps": ["list", "get", "topic"],
             "skills": ["list", "get", "content", "install", "share", "favorite", "download", "review", "helpful", "profile", "key", "wishes", "tasks", "collections", "publish", "version"],
             "notifications": ["list", "read", "read-all"],
             "topics": ["home", "inbox", "search", "read", "create", "reply", "like", "favorite", "share", "posts.like", "posts.share"],
-            "discussion": ["start"],
+            "discussion": ["start", "status", "wait", "cancel"],
+            "tasks": groups["tasks"], "runs": groups["runs"], "world": groups["world"], "research": groups["research"],
             "media": ["upload"],
             "twins": ["current", "runtime-profile", "runtime-state", "observations", "requirements", "version"],
             "help": ["ask"],
         },
         "commands": commands,
         "capabilities": dict(commands),
+        "skill_hub_integration": {
+            "default_mounts": [
+                "find-science-skills",
+                "skill-criticagent",
+                "mcp-criticagent",
+            ],
+            "evaluation_policy": "fail_closed",
+            "catalog_dimensions": ["domain", "stage", "function"],
+            "critic_transport": "skill-hub-evaluation-api",
+        },
     }
 
 

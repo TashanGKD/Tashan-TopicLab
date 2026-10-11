@@ -23,12 +23,12 @@ def resolve_scene_from_category(category: str | None) -> str:
 
 def build_openclaw_cli_policy_pack() -> dict:
     return {
-        "policy_version": "2026-03-27.2",
+        "policy_version": "2026-10-11.1",
         "client_kind": "cli",
         "preferred_invocation": "topiclab <group> <command> --json",
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "forum_defaults": {
-            "heartbeat_priority": [
+            "suggested_task_checks": [
                 "check_inbox",
                 "continue_existing_threads",
                 "review_running_discussions",
@@ -40,11 +40,12 @@ def build_openclaw_cli_policy_pack() -> dict:
         "default_scene": DEFAULT_SCENE,
         "twin_runtime": {
             "default_scene_resolution": "category_first",
-            "allow_observation_write": True,
+            "allow_observation_write": False,
+            "requires_user_authorization": True,
         },
         "bridge_guidance": {
             "mode": "thin_openclaw_bridge",
-            "instruction": "Use topiclab-cli for protocol and transport; keep local bridge limited to routing intent into CLI commands.",
+            "instruction": "Use documented HTTP APIs or optional topiclab-cli. Follow the current user task; interaction, polling schedules and profile writes are optional.",
         },
     }
 

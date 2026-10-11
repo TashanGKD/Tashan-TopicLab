@@ -19,6 +19,7 @@ jobs:
     outputs:
       run_frontend: ${{ steps.diff.outputs.run_frontend }}
       run_api: ${{ steps.diff.outputs.run_api }}
+      run_topiclab_backend: ${{ steps.diff.outputs.run_topiclab_backend }}
       run_agent_sdk: ${{ steps.diff.outputs.run_agent_sdk }}
       run_docker: ${{ steps.diff.outputs.run_docker }}
       run_worldweave: ${{ steps.diff.outputs.run_worldweave }}
@@ -33,6 +34,7 @@ jobs:
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "run_frontend=true" >> "$GITHUB_OUTPUT"
             echo "run_api=true" >> "$GITHUB_OUTPUT"
+            echo "run_topiclab_backend=true" >> "$GITHUB_OUTPUT"
             echo "run_agent_sdk=true" >> "$GITHUB_OUTPUT"
             echo "run_docker=true" >> "$GITHUB_OUTPUT"
             echo "run_worldweave=true" >> "$GITHUB_OUTPUT"
@@ -46,12 +48,21 @@ jobs:
           if ! git rev-parse "$BASE" &>/dev/null; then
             echo "run_frontend=true" >> "$GITHUB_OUTPUT"
             echo "run_api=true" >> "$GITHUB_OUTPUT"
+            echo "run_topiclab_backend=true" >> "$GITHUB_OUTPUT"
             echo "run_agent_sdk=true" >> "$GITHUB_OUTPUT"
             echo "run_docker=true" >> "$GITHUB_OUTPUT"
             echo "run_worldweave=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+
           CHANGED=$(git diff --name-only "$BASE" HEAD 2>/dev/null || echo "")
+
+          # TopicLab backend: auth, topics, Hub catalogs, Zvec sidecar, and their tests
+          if echo "$CHANGED" | grep -qE '^topiclab-backend/|^docker-compose\.(yml|yaml)|^\.github/workflows/(ci|deploy)\.yml|^\.critic-research-revision$|^deploy/topiclink-zvec\.lock\.json$|^scripts/(topiclink_zvec_release|sync_science_(skill|mcp)_catalog|verify_critic_runtime)\.py$|^backend$'; then
+            echo "run_topiclab_backend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_topiclab_backend=false" >> "$GITHUB_OUTPUT"
+          fi
 
           # Frontend: frontend/**, root config that affects frontend
           if echo "$CHANGED" | grep -qE '^frontend/|^vite\.config\.|^tsconfig\.json'; then
@@ -75,18 +86,19 @@ jobs:
           fi
 
           # Docker: docker-compose, Dockerfiles, deploy
-          if echo "$CHANGED" | grep -qE '^docker-compose\.(yml|yaml)|^\.github/workflows/deploy\.yml|^scripts/deploy-clawarcade-reviewer\.sh|/(Dockerfile([^/]+)?|\.dockerignore)'; then
+          if echo "$CHANGED" | grep -qE '^docker-compose\.(yml|yaml)|^\.github/workflows/deploy\.yml|^\.critic-research-revision$|^deploy/topiclink-zvec\.lock\.json$|^scripts/(deploy-clawarcade-reviewer\.sh|topiclink_zvec_release\.py|verify_critic_runtime\.py)$|/(Dockerfile([^/]+)?|\.dockerignore)'; then
             echo "run_docker=true" >> "$GITHUB_OUTPUT"
           else
             echo "run_docker=false" >> "$GITHUB_OUTPUT"
           fi
 
           # WorldWeave: submodule pointer, deployment image, or same-origin proxy contract
-          if echo "$CHANGED" | grep -qE '^worldweave$|^docker/worldweave\.Dockerfile|^\.github/workflows/ci\.yml|^frontend/(nginx(\.root)?\.conf|nginx\.conf\.template|vite\.config\.ts|src/pages/(SourceFeedPage\.tsx|__tests__/(WorldWeaveProxyConfig|ViteWorldWeaveProxyConfig|SourceFeedPage)\.test\.(ts|tsx)))$'; then
+          if echo "$CHANGED" | grep -qE '^worldweave$|^\.github/workflows/ci\.yml|^frontend/(Dockerfile|nginx(\.root)?\.conf|nginx\.conf\.template|vite\.config\.ts|src/pages/(SourceFeedPage\.tsx|__tests__/(WorldWeaveProxyConfig|ViteWorldWeaveProxyConfig|SourceFeedPage)\.test\.(ts|tsx)))$'; then
             echo "run_worldweave=true" >> "$GITHUB_OUTPUT"
           else
             echo "run_worldweave=false" >> "$GITHUB_OUTPUT"
           fi
+
   # ─────────────────────────────────────────────────────────────────────────
   # Layer 1: Frontend build (compile + typecheck)
   # ─────────────────────────────────────────────────────────────────────────
@@ -107,10 +119,16 @@ jobs:
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install and build
+      - name: Install, test Hub routes, and build
         run: |
           cd frontend
           npm ci
+          npm test -- --run \
+            src/__tests__/AppArcadeRoute.test.tsx \
+            src/pages/__tests__/AppsSkillLibraryPage.test.tsx \
+            src/pages/__tests__/MCPHubPage.test.tsx \
+            src/pages/__tests__/MCPHubProfilePage.test.tsx \
+            src/utils/mcpHubPresentation.test.ts
           npm run build
 
   # ─────────────────────────────────────────────────────────────────────────
@@ -141,6 +159,60 @@ jobs:
             src/pages/__tests__/WorldWeaveProxyConfig.test.ts \
             src/pages/__tests__/ViteWorldWeaveProxyConfig.test.ts \
             src/pages/__tests__/SourceFeedPage.test.tsx
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Layer 1: TopicLab Hub catalogs and Critic Worker tests
+  # ─────────────────────────────────────────────────────────────────────────
+  skillhub-critic-tests:
+    name: TopicLab Hubs and Critic
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.run_topiclab_backend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize SkillHub seed submodules over HTTPS
+        run: |
+          git submodule update --init backend
+          git -C backend \
+            -c url.https://github.com/.insteadOf=git@github.com: \
+            submodule update --init --recursive
+
+      - name: Checkout locked Critic runtime
+        run: |
+          CRITIC_RESEARCH_REVISION="$(tr -d '[:space:]' < .critic-research-revision)"
+          git init .runtime/tashan-research-skills
+          git -C .runtime/tashan-research-skills remote add origin https://github.com/TashanGKD/tashan-research-skills.git
+          git -C .runtime/tashan-research-skills fetch --depth 1 origin "$CRITIC_RESEARCH_REVISION"
+          git -C .runtime/tashan-research-skills checkout --detach FETCH_HEAD
+          python scripts/verify_critic_runtime.py --runtime .runtime/tashan-research-skills
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run Hub catalog and Critic tests
+        working-directory: topiclab-backend
+        run: |
+          uv sync --locked --group dev
+          uv run python scripts/build_science_mcp_catalog_db.py
+          uv run python scripts/build_science_mcp_catalog_db.py --check
+          uv run python -m pytest \
+            tests/test_critic_runner.py \
+            tests/test_critic_worker.py \
+            tests/test_model_usage_quota.py \
+            tests/test_science_mcp_catalog.py \
+            tests/test_science_mcp_catalog_sync.py \
+            tests/test_science_mcp_hub_api.py \
+            tests/test_science_skill_catalog_sync.py \
+            tests/test_skill_hub_api.py \
+            -q --tb=short
 
   # ─────────────────────────────────────────────────────────────────────────
   # Layer 1: WorldWeave unit tests and build
@@ -216,6 +288,45 @@ jobs:
             --with python-dotenv --with claude-agent-sdk --with anthropic --with openai \
             --with pytest --with pytest-asyncio --with httpx \
             pytest tests/test_api.py -v --tb=short
+
+  topiclab-backend-tests:
+    name: TopicLab backend
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.run_topiclab_backend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize Resonnet submodule
+        run: git submodule update --init backend
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run TopicLink and topics contract tests
+        working-directory: topiclab-backend
+        env:
+          TOPICLAB_TESTING: "1"
+        run: |
+          uv run --frozen --group dev python -m pytest \
+            tests/test_agent_identity_api.py \
+            tests/test_agent_identity_manifest.py \
+            tests/test_agent_identity_service.py \
+            tests/test_deploy_proxy.py::test_frontend_proxies_agent_identity_manifest_to_topiclab_backend \
+            tests/test_deploy_proxy.py::test_compose_defaults_to_the_topiclab_modelscope_connected_app \
+            tests/test_topiclink_api.py \
+            tests/test_topiclink_zvec_migration.py \
+            tests/test_topiclink_zvec_release_manager.py \
+            tests/test_runtime_safety.py \
+            tests/test_topics_api.py \
+            -q
 
   # ─────────────────────────────────────────────────────────────────────────
   # Layer 1: Backend unit tests (Agent SDK, mocked)
@@ -309,7 +420,7 @@ jobs:
     needs: [detect-changes]
     if: needs.detect-changes.outputs.run_docker == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
@@ -318,4 +429,9 @@ jobs:
 
       - name: Build images
         run: |
+          cp .env.example .env
+          export PIP_INDEX_URL=https://pypi.org/simple
+          export PIP_TRUSTED_HOST=pypi.org
+          export PIP_TIMEOUT=60
+          export PIP_RETRIES=2
           docker compose build --no-cache

@@ -113,7 +113,7 @@ describe('InspirationAdminNeedsPage', () => {
       { includePrivate: true, limit: 50, offset: 0 },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
-    expect(screen.getByText('只给管理员看的线索')).toBeInTheDocument()
+    expect(await screen.findByText('只给管理员看的线索')).toBeInTheDocument()
     expect(screen.getByText('hidden@example.com')).toBeInTheDocument()
     expect(screen.getByText('我想提交一条只给管理员看的灵感共创线索。')).toBeInTheDocument()
     expect(screen.getByText('公开线索')).toBeInTheDocument()

@@ -24,7 +24,7 @@ async def request_json(method: str, path: str, *, json_body: dict | None = None,
         method.upper(),
         url,
         json=json_body,
-        headers=headers,
+        headers={**(headers or {}), **({"X-TopicLab-Executor-Token": os.getenv("TOPICLAB_EXECUTOR_TOKEN", "")} if path.startswith("/executor/") else {})},
         params=params,
         timeout=timeout,
     )
@@ -41,7 +41,7 @@ async def request_bytes(method: str, path: str, *, headers: dict | None = None, 
     response = await client.request(
         method.upper(),
         url,
-        headers=headers,
+        headers={**(headers or {}), **({"X-TopicLab-Executor-Token": os.getenv("TOPICLAB_EXECUTOR_TOKEN", "")} if path.startswith("/executor/") else {})},
         params=params,
         timeout=timeout,
     )

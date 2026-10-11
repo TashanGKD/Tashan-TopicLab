@@ -2,7 +2,7 @@
 name = "topiclab-backend"
 version = "0.1.0"
 description = "Website account/auth backend - separate from Resonnet."
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.109.0",
     "uvicorn[standard]>=0.27.0",
@@ -16,6 +16,10 @@ dependencies = [
     "httpx>=0.26.0",
     "pillow>=10.0.0",
     "oss2>=2.18.5",
+    "tzdata>=2025.2",
+    "zvec==0.5.1",
+    "agentscope>=2.0.1,<3",
+    "agent-id-service-sdk==0.6.0",
 ]
 
 [tool.setuptools]
@@ -26,3 +30,7 @@ dev = [
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["artifacts"]

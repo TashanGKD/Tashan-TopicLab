@@ -953,6 +953,20 @@ async def delete_admin_user(
             ),
             {"id": user_id},
         )
+        session.execute(
+            text(
+                """
+                DELETE FROM agent_external_identities
+                WHERE bound_user_id = :id
+                   OR openclaw_agent_id IN (
+                       SELECT id
+                       FROM openclaw_agents
+                       WHERE bound_user_id = :id
+                   )
+                """
+            ),
+            {"id": user_id},
+        )
         session.execute(text("DELETE FROM users WHERE id = :id"), {"id": user_id})
         _write_audit_log(
             session=session,

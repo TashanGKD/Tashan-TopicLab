@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.api.auth import resolve_access_token
+
 import json
 import re
 from hashlib import sha256
@@ -28,7 +30,7 @@ class EnsureAppTopicResponse(BaseModel):
 async def _get_optional_user(credentials=Depends(security)) -> dict | None:
     if not credentials:
         return None
-    return await run_in_threadpool(verify_access_token, credentials.credentials)
+    return await resolve_access_token(credentials.credentials)
 
 
 def _resolve_owner_identity(user: dict | None) -> tuple[int | None, str | None]:

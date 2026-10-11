@@ -1191,8 +1191,8 @@ export default function TopicLinkDetailPage() {
       try {
         await topicsApi.setTopicLinkPresence(id, { persona_name: topicLinkViewerProfile?.agentName })
         markResident()
-      } catch {
-        markResident()
+      } catch (err) {
+        handleApiError(err, '分身暂时没派出去，请稍后再试')
       }
       return
     }

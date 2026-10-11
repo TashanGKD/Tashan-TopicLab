@@ -1,6 +1,7 @@
 """Website backend - account/auth service. Separate from Resonnet."""
 
 import logging
+import asyncio
 import os
 import sys
 import traceback
@@ -35,10 +36,15 @@ from app.api import aminer as aminer_router
 from app.api import apps as apps_router
 from app.api import admin as admin_router
 from app.api import agent4s as agent4s_router
+from app.api import agent_identity as agent_identity_router
+from app.api import agent_runs as agent_runs_router
+from app.api import agent_credentials as agent_credentials_router
+from app.api import agent_discovery as agent_discovery_router
 from app.api import auth as auth_router
 from app.api import feedback as feedback_router
 from app.api import inspiration as inspiration_router
 from app.api import literature as literature_router
+from app.api import mcp_hub as mcp_hub_router
 from app.api import openclaw as openclaw_router
 from app.api import openclaw_plugin as openclaw_plugin_router
 from app.api import openclaw_routes as openclaw_dedicated_router
@@ -77,6 +83,10 @@ async def lifespan(app: FastAPI):
             from app.storage.database.youth_ted_store import ensure_youth_ted_schema_and_seed
             init_auth_tables()
             init_topic_tables()
+            try:
+                topiclink_router.initialize_topiclink_storage()
+            except Exception as e2:
+                logging.getLogger(__name__).warning("TopicLink Zvec initialization failed: %s", e2)
             ensure_site_assets_schema_and_seed()
             ensure_youth_ted_schema_and_seed()
             ensure_inspiration_schema_and_seed()
@@ -91,9 +101,15 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logging.getLogger(__name__).warning(f"Auth tables init skipped: {e}")
 
-    yield
-    await topiclink_router.stop_topiclink_metadata_worker()
-    await close_shared_async_clients()
+    from app.services.agent_runs import recovery_loop
+    recovery = asyncio.create_task(recovery_loop())
+    try:
+        yield
+    finally:
+        recovery.cancel()
+        await asyncio.gather(recovery, return_exceptions=True)
+        await topiclink_router.stop_topiclink_metadata_worker()
+        await close_shared_async_clients()
 
 app = FastAPI(
     title="TopicLab Backend (Account)",
@@ -130,7 +146,7 @@ class ActorAuditMiddleware:
 
         clear_authenticated_actor_context()
         request = Request(scope)
-        request_id = f"req_{uuid4().hex}"
+        request_id = scope.get("state", {}).get("request_id") or f"req_{uuid4().hex}"
         scope.setdefault("state", {})["audit_request_id"] = request_id
 
         content_type = request.headers.get("content-type")
@@ -219,6 +235,12 @@ class ActorAuditMiddleware:
                     "query": sanitize_query_params(request.query_params),
                     "body": summarize_request_body(bytes(captured_body), content_type) if should_capture_body else None,
                     "content_type": content_type,
+                    "authentication": {
+                        "auth_type": actor.get("auth_type"),
+                        "credential_type": actor.get("credential_type"),
+                        "external_agent_id": actor.get("external_agent_id"),
+                        "external_issuer": actor.get("external_issuer"),
+                    },
                 }
                 result = {
                     "status_code": status_code,
@@ -276,6 +298,7 @@ app.include_router(topiclink_router.router, prefix="/api/v1", tags=["topiclink-v
 app.include_router(skills_router.router, tags=["skills"])
 app.include_router(skills_router.router, prefix="/api/v1", tags=["skills-v1"])
 app.include_router(skill_hub_router.router, prefix="/api/v1", tags=["skill-hub-v1"])
+app.include_router(mcp_hub_router.router, prefix="/api/v1", tags=["mcp-hub-v1"])
 app.include_router(openclaw_router.router, prefix="/api/v1", tags=["openclaw"])
 app.include_router(openclaw_plugin_router.router, prefix="/api/v1", tags=["openclaw-plugin"])
 app.include_router(openclaw_dedicated_router.router, prefix="/api/v1", tags=["openclaw-dedicated"])
@@ -283,10 +306,29 @@ app.include_router(openclaw_twin_runtime_router.router, prefix="/api/v1", tags=[
 app.include_router(feedback_router.router, prefix="/api/v1", tags=["feedback-v1"])
 app.include_router(site_router.router, prefix="/api/v1", tags=["site-v1"])
 app.include_router(agent4s_router.router, prefix="/api/v1", tags=["agent4s-v1"])
+app.include_router(agent_discovery_router.router, prefix="/api/v1")
+app.include_router(agent_credentials_router.router, prefix="/api/v1")
+app.include_router(agent_runs_router.router, prefix="/api/v1")
+app.include_router(agent_identity_router.router, prefix="/api/v1", tags=["agent-identity-v1"])
 app.include_router(youth_ted_router.router, prefix="/api/v1", tags=["youth-ted-v1"])
 app.include_router(inspiration_router.router, prefix="/api/v1", tags=["inspiration-v1"])
 app.include_router(admin_router.router, tags=["admin"])
 
+
+# Canonical Agent routes keep older OpenClaw clients working through aliases.
+from fastapi.routing import APIRouter, APIRoute
+from app.services.agent_requests import AgentMutationRoute
+canonical_agents = APIRouter(route_class=AgentMutationRoute)
+for legacy_router in (openclaw_router.router, openclaw_dedicated_router.router, openclaw_twin_runtime_router.router, openclaw_plugin_router.router):
+    for route in legacy_router.routes:
+        if isinstance(route, APIRoute) and route.path.startswith('/openclaw/'):
+            relative_path = route.path[len('/openclaw/'):]
+            if relative_path.startswith('agents/'):
+                relative_path = 'instances/' + relative_path[len('agents/'):]
+            canonical_agents.add_api_route('/agents/' + relative_path, route.endpoint,
+                methods=list(route.methods), response_model=route.response_model, status_code=route.status_code,
+                dependencies=route.dependencies, response_class=route.response_class, tags=['agents'])
+app.include_router(canonical_agents, prefix='/api/v1')
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
@@ -294,6 +336,8 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     log = logging.getLogger(__name__)
     log.error("Unhandled error on %s %s: %s", request.method, request.url.path, exc)
     log.debug(traceback.format_exc())
+    if request.url.path.startswith("/api/v1/agents/"):
+        return agent_error(request, 500, {"code":"internal_error","message":"Service temporarily unavailable","retryable":False})
     return JSONResponse(
         status_code=500,
         content={"detail": "服务暂时不可用，请稍后重试。若问题持续，请联系管理员。"},
@@ -303,6 +347,38 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "topiclab-backend"}
+
+
+@app.get("/.well-known/manifest")
+def agent_identity_manifest(request: Request):
+    client_id = os.getenv("AGENTID_CLIENT_ID", "").strip()
+    public_base_url = os.getenv("AGENTID_PUBLIC_BASE_URL", "").strip().rstrip("/")
+    if not public_base_url:
+        public_base_url = str(request.base_url).rstrip("/")
+
+    return {
+        "service": "他山世界",
+        "api_version": "1.1.0",
+        "skill_url": f"{public_base_url}/api/v1/agents/skill.md",
+        "capabilities_url": f"{public_base_url}/api/v1/agents/capabilities",
+        "openapi_url": f"{public_base_url}/api/v1/agents/openapi.json",
+        "agent_identity": {
+            "supported": bool(client_id),
+            "provider": "modelscope",
+            "issuer": "https://www.modelscope.cn/openapi/v1",
+            "client_id": client_id,
+            "onboarding_mode": "preferred" if client_id else "disabled",
+            "token_transport": {
+                "type": "bearer",
+                "header": "Authorization",
+            },
+            "bootstrap_url": f"{public_base_url}/api/v1/agent-identity/bootstrap",
+            "existing_agent_binding": {
+                "url": f"{public_base_url}/api/v1/agent-identity/bind",
+                "topiclab_key_header": "X-TopicLab-Agent-Key",
+            },
+        },
+    }
 
 
 @app.get("/health/ready")
@@ -317,3 +393,66 @@ def ready_health():
             content={"status": "not_ready", "service": "topiclab-backend", "database": "error"},
         )
     return {"status": "ready", "service": "topiclab-backend", "database": "ok"}
+
+
+@app.middleware("http")
+async def scoped_agent_credentials(request: Request, call_next):
+    token = request.headers.get('Authorization', '').removeprefix('Bearer ').strip()
+    if token.startswith('tlag_'):
+        from app.services.agent_credentials import verify, check_scope
+        from starlette.concurrency import run_in_threadpool
+        from fastapi import HTTPException
+        actor = await run_in_threadpool(verify, token)
+        if not actor:
+            return agent_error(request, 401, {'code': 'credential_expired_or_revoked', 'retryable': False})
+        try:
+            check_scope(actor, request.method, request.url.path)
+        except HTTPException as exc:
+            return agent_error(request, exc.status_code, exc.detail)
+    response = await call_next(request)
+    if token or request.url.query:
+        if request.url.path.startswith('/api/v1/agents/'):
+            response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+@app.middleware('http')
+async def agent_response_metadata(request: Request, call_next):
+    import re
+    from uuid import uuid4
+    candidate = request.headers.get('X-Request-ID', '')
+    request.state.request_id = candidate if re.fullmatch(r'[A-Za-z0-9_-]{8,64}', candidate) else uuid4().hex
+    response = await call_next(request)
+    response.headers['X-Request-ID'] = request.state.request_id
+    response.headers['X-Agent-API-Version'] = '1.1.0'
+    if request.url.path.startswith('/api/v1/openclaw/'):
+        response.headers['Deprecation'] = 'true'
+        response.headers['Link'] = '</api/v1/agents/capabilities>; rel="successor-version"'
+    if response.status_code in {429, 502, 503, 504}:
+        response.headers.setdefault('Retry-After', '2')
+    return response
+
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
+
+def agent_error(request, status, detail, headers=None):
+    structured = detail if isinstance(detail, dict) else {}
+    code = structured.get('code') or {400:'invalid_request',401:'authentication_required',403:'permission_denied',404:'not_found',409:'conflict',410:'expired',422:'validation_error',429:'rate_limited',503:'service_unavailable'}.get(status, 'request_failed')
+    return JSONResponse(status_code=status, headers=headers, content={'detail': detail,
+        'error': {'code': code, 'message': structured.get('message') or (detail if isinstance(detail, str) else code),
+                  'request_id': getattr(request.state, 'request_id', None),
+                  'retryable': structured.get('retryable', request.method == 'GET' and status in {429,502,503,504})}})
+
+@app.exception_handler(StarletteHTTPException)
+async def agent_http_error(request: Request, exc: StarletteHTTPException):
+    if request.url.path.startswith('/api/v1/agents/'):
+        return agent_error(request, exc.status_code, exc.detail, exc.headers)
+    return await http_exception_handler(request, exc)
+
+@app.exception_handler(RequestValidationError)
+async def agent_validation_error(request: Request, exc: RequestValidationError):
+    if request.url.path.startswith('/api/v1/agents/'):
+        detail = [{'loc': list(item['loc']), 'type': item['type'], 'msg': item['msg']} for item in exc.errors()]
+        return agent_error(request, 422, detail)
+    return await request_validation_exception_handler(request, exc)

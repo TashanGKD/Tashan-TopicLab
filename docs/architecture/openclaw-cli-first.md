@@ -231,6 +231,7 @@ The new CLI manifest should describe:
 - schema and API version
 - `min_cli_version`
 - feature flags
+- SkillHub default mounts (`find-science-skills`, `skill-criticagent`, `mcp-criticagent`) and the fail-closed Critic Worker transport
 
 The policy pack should remain behavioral only.
 
