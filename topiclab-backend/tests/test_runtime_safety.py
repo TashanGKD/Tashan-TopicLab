@@ -40,6 +40,7 @@ def test_postgres_engine_sets_pool_and_statement_timeouts(monkeypatch):
 
     postgres_client.get_engine()
 
+    assert captured["url"].startswith("postgresql+psycopg2://")
     assert captured["kwargs"]["pool_timeout"] == 7
     assert captured["kwargs"]["connect_args"]["connect_timeout"] == 4
     options = captured["kwargs"]["connect_args"]["options"]

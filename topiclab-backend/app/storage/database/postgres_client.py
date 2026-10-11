@@ -50,6 +50,10 @@ def _get_engine_url() -> Optional[str]:
     parsed = urlparse(database_url)
     if parsed.scheme.startswith("sqlite"):
         return database_url
+    # SQLAlchemy 2.1 changed the default PostgreSQL driver to psycopg 3.
+    # This application declares psycopg2-binary and must keep using that driver.
+    if parsed.scheme == "postgresql":
+        parsed = parsed._replace(scheme="postgresql+psycopg2")
     query = parse_qs(parsed.query)
     if parsed.scheme.startswith("postgresql") and "sslmode" not in query and PGSSLMODE:
         query["sslmode"] = [PGSSLMODE]
