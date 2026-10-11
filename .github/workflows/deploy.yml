@@ -253,7 +253,7 @@ jobs:
               && [ "$(docker inspect -f '{{.State.Running}}' "$CURRENT_ZVEC_ID")" = "true" ] \
               && [ "$ZVEC_ACTIVE_RESOLVED" = "$ZVEC_RELEASE_HOST_PATH" ]; then
               ZVEC_WAS_RUNNING=true
-              if docker compose exec -T topiclink-zvec python -c "import json, urllib.request; payload=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=15)); count=int(payload.get('doc_count') or 0); assert count >= $ZVEC_MIN_DOC_COUNT, payload; print(payload)"; then
+              if docker compose exec -T topiclink-zvec python -c "import json, urllib.request; payload=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=15)); assert payload.get('status') == 'ready' and payload.get('zvec') == 'ok', payload; print(payload)"; then
                 echo "[deploy] Active TopicLink Zvec release is ready"
               else
                 echo "::warning::TopicLink Zvec active release is unhealthy; reinstalling it from the verified archive."

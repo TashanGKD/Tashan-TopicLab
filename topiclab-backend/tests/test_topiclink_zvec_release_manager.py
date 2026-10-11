@@ -315,3 +315,24 @@ def test_deploy_repairs_unhealthy_active_release_before_activation_and_restart()
     assert '"$ZVEC_MANAGER" prepare --force' in workflow
     assert "TopicLink Zvec active release is unhealthy; reinstalling" in workflow
     assert "docker compose start topiclink-zvec || true" in workflow
+
+
+@pytest.mark.parametrize("count", [0, 128, 2386])
+def test_deploy_accepts_healthy_active_cache_after_ttl_pruning(count, monkeypatch):
+    import urllib.request
+
+    workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "deploy.yml").read_text(
+        encoding="utf-8"
+    )
+    probe_line = next(
+        line for line in workflow.splitlines()
+        if "if docker compose exec -T topiclink-zvec python -c" in line
+    )
+    probe = probe_line.split('python -c "', 1)[1].rsplit('"; then', 1)[0]
+    payload = {"status": "ready", "service": "topiclink-zvec", "zvec": "ok", "doc_count": count}
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *args, **kwargs: io.StringIO(json.dumps(payload)))
+    exec(probe)
+
+    payload["status"] = "not_ready"
+    with pytest.raises(AssertionError):
+        exec(probe)
