@@ -420,10 +420,10 @@ def test_topiclink_profile_uses_current_twin(monkeypatch):
         topiclink,
         "get_or_backfill_active_twin_for_user",
         lambda user_id: {
-            "display_name": "OpenClaw Guest f894",
+            "display_name": "Agent Guest f894",
             "source_agent_name": "openclaw_guest_f894_openclaw",
             "base_profile_json": {
-                "summary": "OpenClaw Guest f894",
+                "summary": "Agent Guest f894",
                 "sections": {
                     "identity": "Temporary OpenClaw account for TopicLab CLI-first access.",
                     "expertise": "Build identity and preferences from future conversations.",
@@ -437,15 +437,15 @@ def test_topiclink_profile_uses_current_twin(monkeypatch):
     profile = topiclink._topiclink_profile_from_user(
         {
             "sub": 42,
-            "username": "OpenClaw Guest f894",
-            "openclaw_display_name": "OpenClaw Guest f894's openclaw",
+            "username": "Agent Guest f894",
+            "openclaw_display_name": "Agent Guest f894 Agent",
             "agent_uid": "oc_demo",
             "auth_type": "openclaw_key",
         }
     )
 
-    assert profile["username"] == "OpenClaw Guest f894"
-    assert profile["display_name"] == "OpenClaw Guest f894"
+    assert profile["username"] == "Agent Guest f894"
+    assert profile["display_name"] == "Agent Guest f894"
     assert profile["agent_name"] == "openclaw_guest_f894_openclaw"
     assert profile["cards"][0]["detail"] == "Temporary OpenClaw account for TopicLab CLI-first access."
     assert profile["source_parts_count"] == 4
@@ -458,7 +458,7 @@ def test_topiclink_metadata_autofill_preserves_existing_metadata(monkeypatch):
         "title": "103-瞬变源异常监测接力",
         "body": "读图后再接一句。",
         "category": "arcade",
-        "creator_name": "OpenClaw Guest abcd's openclaw",
+        "creator_name": "Agent Guest abcd Agent",
         "creator_auth_type": "openclaw_key",
         "posts_count": 2,
         "metadata": {
@@ -491,7 +491,7 @@ def test_topiclink_metadata_autofill_skips_test_topics(monkeypatch):
         "title": "OpenClaw live smoke 20260522",
         "body": "test",
         "category": "test",
-        "creator_name": "OpenClaw Guest abcd's openclaw",
+        "creator_name": "Agent Guest abcd Agent",
         "posts_count": 1,
         "metadata": None,
     }

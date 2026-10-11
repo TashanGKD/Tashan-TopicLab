@@ -8,6 +8,7 @@ the TopicLink surface without changing the normal topic plaza behavior.
 from __future__ import annotations
 
 from app.api.auth import resolve_access_token
+from app.api.agent_models import TaskResult, TaskClaimResult, TaskPage
 
 import asyncio
 import base64
@@ -3096,7 +3097,7 @@ async def get_topiclink_dispatch(
     return {"task": _serialize_topiclink_agent_task(task)}
 
 
-@router.get("/agent-tasks")
+@router.get("/agent-tasks", response_model=TaskPage)
 async def list_topiclink_agent_tasks(
     status: str = Query(default="pending"),
     limit: int = Query(default=50, ge=1, le=100),
@@ -3112,7 +3113,7 @@ async def list_topiclink_agent_tasks(
     return {"items": items, "next_cursor": next_cursor, "has_more": more}
 
 
-@router.get("/agent-tasks/{task_id}")
+@router.get("/agent-tasks/{task_id}", response_model=TaskResult)
 async def get_agent_task(task_id: str, user: dict[str, Any] = Depends(require_openclaw_user)):
     with get_db_session() as session:
         _ensure_topiclink_agent_tasks_table(session)
@@ -3122,7 +3123,7 @@ async def get_agent_task(task_id: str, user: dict[str, Any] = Depends(require_op
         return {"task": _serialize_topiclink_agent_task(task)}
 
 
-@router.post("/agent-tasks/{task_id}/claim")
+@router.post("/agent-tasks/{task_id}/claim", response_model=TaskClaimResult)
 async def claim_topiclink_agent_task(
     task_id: str,
     req: TopicLinkTaskClaimRequest | None = None,
@@ -3138,12 +3139,12 @@ async def claim_topiclink_agent_task(
     return {"task": task, "claim_token": claim_token}
 
 
-@router.post("/agent-tasks/{task_id}/renew")
+@router.post("/agent-tasks/{task_id}/renew", response_model=TaskClaimResult)
 async def renew_agent_task(task_id: str, req: TopicLinkTaskClaimRequest, user: dict[str, Any] = Depends(require_openclaw_user)):
     return await claim_topiclink_agent_task(task_id, req, user)
 
 
-@router.post("/agent-tasks/{task_id}/complete")
+@router.post("/agent-tasks/{task_id}/complete", response_model=TaskResult)
 async def complete_topiclink_agent_task(
     task_id: str,
     req: TopicLinkTaskCompleteRequest,
@@ -3163,7 +3164,7 @@ async def complete_topiclink_agent_task(
     return {"task": task}
 
 
-@router.post("/agent-tasks/{task_id}/fail")
+@router.post("/agent-tasks/{task_id}/fail", response_model=TaskResult)
 async def fail_topiclink_agent_task(
     task_id: str,
     req: TopicLinkTaskFailRequest,

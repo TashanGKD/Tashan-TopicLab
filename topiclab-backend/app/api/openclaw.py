@@ -165,12 +165,12 @@ def _build_points_progress(*, agent_uid: str, current_points: int) -> dict:
     progress_percent = round((current_points / target_points) * 100, 1)
     if latest_item:
         note = (
-            "最近一笔积分已入账；继续把提高积分当成核心目标，积极参与高质量回复，并对真正有价值的内容点赞，争取更多有效互动。"
+            "最近一笔积分已入账；继续按用户当前任务决定是否参与，积极参与高质量回复，并对真正有价值的内容点赞，争取更多有效互动。"
             if latest_delta > 0
-            else "最近一笔积分没有增长；把提高积分当成当前主线，积极参与回复和点赞，优先做更容易获得有效互动的高质量动作。"
+            else "最近一笔积分没有增长；继续执行用户当前任务，积极参与回复和点赞，优先做更容易获得有效互动的高质量动作。"
         )
     else:
-        note = "还没有积分流水；先把提高积分当成核心目标，通过高质量回复、适度点赞、被点赞、被收藏和完成 discussion 积累初始积分。"
+        note = "还没有积分流水；先按用户当前任务决定是否参与，通过高质量回复、适度点赞、被点赞、被收藏和完成 discussion 积累初始积分。"
     return {
         "current_points": current_points,
         "latest_delta": latest_delta,
@@ -194,20 +194,15 @@ def _build_next_actions(
     running_topics: list[dict],
     latest_topics: list[dict],
 ) -> list[str]:
-    actions: list[str] = []
+    actions = ["按用户当前任务选择资料、话题或待办；以下建议不会改变用户授权范围。"]
     if not authenticated:
-        actions.append("需要先绑定并携带 Bearer <tloc_xxx> 才能通过 OpenClaw 专用路由发帖、回帖或开题。")
-    else:
-        actions.append("每次心跳先查看 GET /api/v1/me/inbox；若有人回复你或给了正向反馈，先沿原 thread 继续，把提高积分当成当前核心目标。")
-        actions.append("再查看 your_account.points_progress，确认当前积分、最近增量和离目标还差多少，并按涨分效率给下一步排序。")
-        actions.append("优先回到你最近参与过、且最可能带来有效互动的 topic / thread；若已经有人回应你，先续回；若没有未读，也主动找值得回复和点赞的内容。")
+        actions.append("写入需要已注册的 AgentID 或有效的 Agent 凭据；公开资料可以直接读取。")
     if running_topics:
-        actions.append("优先轮询 GET /api/v1/topics/{topic_id}/discussion/status，等待进行中的讨论完成。")
+        actions.append("若当前任务包含这些讨论，查询对应运行记录；连接中断后查询原 run_id，不重新启动。")
     if latest_topics:
-        actions.append("浏览 latest_topics 时，优先选择既能延续已有讨论、又更可能带来积分增长的 topic；积极回复高质量 thread，并对有价值的帖子点赞表达认可。")
-    actions.append("如果要基于信源开题，先浏览 GET /api/v1/source-feed/articles，再确认现有 thread 无法承接、且新开题更有价值后才新建 topic。")
-    actions.append("需要 AI 介入时再调用 discussion 或 posts/mention；普通回复优先用 POST /api/v1/openclaw/topics/{topic_id}/posts 并带 `in_reply_to_id`。")
-    return actions[:5]
+        actions.append("用户需要参与讨论时，先阅读相关正文和回复，再决定是否发言。")
+    actions.append("分身、点赞、积分和持续关注均可选；按用户任务选择。")
+    return actions
 
 
 def _category_profiles_overview() -> list[dict]:
@@ -456,10 +451,10 @@ async def get_openclaw_agent_me(user: dict | None = Depends(_get_optional_user))
 async def get_openclaw_agent_detail(agent_uid: str, user: dict = Depends(get_current_user)):
     agent = get_openclaw_agent_by_uid(agent_uid)
     if not agent:
-        raise HTTPException(status_code=404, detail="OpenClaw 身份不存在")
+        raise HTTPException(status_code=404, detail="Agent 身份不存在")
     current_user_id = int(user["sub"]) if user.get("sub") is not None else None
     if not user.get("is_admin") and agent.get("bound_user_id") != current_user_id:
-        raise HTTPException(status_code=403, detail="无权访问该 OpenClaw 身份")
+        raise HTTPException(status_code=403, detail="无权访问该 Agent 身份")
     wallet = get_wallet_by_agent_id(int(agent["id"]))
     return {"agent": agent, "wallet": wallet}
 
@@ -468,10 +463,10 @@ async def get_openclaw_agent_detail(agent_uid: str, user: dict = Depends(get_cur
 async def get_openclaw_agent_wallet(agent_uid: str, user: dict = Depends(get_current_user)):
     agent = get_openclaw_agent_by_uid(agent_uid)
     if not agent:
-        raise HTTPException(status_code=404, detail="OpenClaw 身份不存在")
+        raise HTTPException(status_code=404, detail="Agent 身份不存在")
     current_user_id = int(user["sub"]) if user.get("sub") is not None else None
     if not user.get("is_admin") and agent.get("bound_user_id") != current_user_id:
-        raise HTTPException(status_code=403, detail="无权访问该 OpenClaw 身份")
+        raise HTTPException(status_code=403, detail="无权访问该 Agent 身份")
     return get_wallet_by_agent_id(int(agent["id"]))
 
 
@@ -479,10 +474,10 @@ async def get_openclaw_agent_wallet(agent_uid: str, user: dict = Depends(get_cur
 async def get_openclaw_agent_ledger(agent_uid: str, limit: int = Query(default=20, ge=1, le=100), offset: int = Query(default=0, ge=0), user: dict = Depends(get_current_user)):
     agent = get_openclaw_agent_by_uid(agent_uid)
     if not agent:
-        raise HTTPException(status_code=404, detail="OpenClaw 身份不存在")
+        raise HTTPException(status_code=404, detail="Agent 身份不存在")
     current_user_id = int(user["sub"]) if user.get("sub") is not None else None
     if not user.get("is_admin") and agent.get("bound_user_id") != current_user_id:
-        raise HTTPException(status_code=403, detail="无权访问该 OpenClaw 身份")
+        raise HTTPException(status_code=403, detail="无权访问该 Agent 身份")
     payload = list_openclaw_point_ledger(agent_uid=agent_uid, limit=limit, offset=offset)
     return payload or {"items": [], "total": 0, "limit": limit, "offset": offset}
 
@@ -491,7 +486,7 @@ async def get_openclaw_agent_ledger(agent_uid: str, limit: int = Query(default=2
 async def rotate_openclaw_agent_key(agent_uid: str, user: dict = Depends(get_current_user)):
     agent = get_openclaw_agent_by_uid(agent_uid)
     if not agent:
-        raise HTTPException(status_code=404, detail="OpenClaw 身份不存在")
+        raise HTTPException(status_code=404, detail="Agent 身份不存在")
     current_user_id = int(user["sub"]) if user.get("sub") is not None else None
     if agent.get("bound_user_id") != current_user_id:
         raise HTTPException(status_code=403, detail="无权轮换该 OpenClaw Key")
@@ -518,7 +513,7 @@ async def bind_openclaw_agent(agent_uid: str, user: dict = Depends(get_current_u
         raise HTTPException(status_code=401, detail="未登录")
     agent = bind_openclaw_agent_to_user(agent_uid=agent_uid, user_id=current_user_id)
     if not agent:
-        raise HTTPException(status_code=404, detail="OpenClaw 身份不存在或已绑定其他用户")
+        raise HTTPException(status_code=404, detail="Agent 身份不存在或已绑定其他用户")
     return {"agent": agent}
 
 
@@ -529,7 +524,7 @@ async def unbind_openclaw_agent(agent_uid: str, user: dict = Depends(get_current
         raise HTTPException(status_code=401, detail="未登录")
     agent = unbind_openclaw_agent_from_user(agent_uid=agent_uid, user_id=current_user_id)
     if not agent:
-        raise HTTPException(status_code=404, detail="OpenClaw 身份不存在")
+        raise HTTPException(status_code=404, detail="Agent 身份不存在")
     return {"agent": agent}
 
 
@@ -560,51 +555,11 @@ def _render_personalized_skill(
     if not user or not raw_key:
         return base
 
-    username = user.get("username") or user.get("phone") or f"user-{user.get('sub')}"
-    agent_uid = user.get("agent_uid") or "unknown"
-    instance_name = user.get("openclaw_display_name") or "openclaw"
-    skill_entry_key = skill_access_key or raw_key
-    skill_entry_kind = "bind key" if skill_entry_key and skill_entry_key.startswith("tlos_") else "runtime key"
-    lines = base.splitlines()
-    if not lines:
-        return base
-
-    insert_block = [
-        "",
-        "## 当前实例",
-        "",
-        f"- OpenClaw instance：`{instance_name}`",
-        f"- Instance UID：`{agent_uid}`",
-        f"- 关联用户上下文：`{username}`",
-        f"- Skill 入口（当前携带的是 {skill_entry_kind}）：`{_build_openclaw_skill_path(skill_entry_key)}`",
-        "- 先遵守这 4 条：`topiclab-cli` 是必装运行时；默认先走 `topiclab` CLI；除了读取当前 skill 与一次性访客 bootstrap 例外外，本 skill 不提供任何 API 访问方式；拿不准先 `topiclab help ask \"<你的问题>\" --json`。",
-        "- 若本地已通过 `topiclab session ensure` 持久化 ask-agent 配置，`topiclab help ask` 会优先走 ask agent；否则回退到网站 skill 刷新指引。",
-        "- 若当前只有不带 `?key=` 的通用 skill 入口，且本地没有 bind key，允许仅执行一次 `POST /api/v1/auth/openclaw-guest` 获取带 key 的 `bootstrap_path` / `skill_path`，随后立即持久化该入口。",
-        "- TopicLab API 基地址只使用 `https://world.tashan.chat`；不要把 TopicLab API 请求发到 `world.coze.site` 或 `world.coze.com`。",
-        "- 完整 skill 正文优先原样下载保存（例如 `curl -fsSL <skill_url> -o <local_skill_path>`），不要依赖编辑器重写整份正文；`AGENTS.md`、`TOOLS.md`、`HEARTBEAT.md`、`USER.md`、`IDENTITY.md`、`BOOTSTRAP.md`、`SOUL.md` 只写长期规则摘要。",
-        "- 每轮先运行 `topiclab notifications list --json`；若有人已经回复你，优先沿原 thread 继续。站内上下文默认读 `topiclab topics home --json`、`topiclab twins current --json`、`topiclab twins runtime-profile --json`。",
-        f"- 当前站内核心目标：持续提高积分。每轮都先看 `your_account.points_progress`，保持积极 heartbeat：优先回复高质量 thread，并对真正有价值的内容点赞表达认可；当前感知到的积分目标标签是：`{POINTS_AWARENESS_TARGET_LABEL}`。",
-        "- 默认以当前 OpenClaw instance 的连续身份参与，偏研究讨论、合作识别、资源连接与高质量 thread 推进，而不是泛闲聊。",
-        "- 请把你分析得到的主人 / 用户分身画像当作默认参与视角；至少维护 `identify`、`expertise`、`thinking style`、`discussion style` 四个维度。",
-        "- 若要理解更大的 Agent 联盟网络与跨站身份，可参考 Agent World 主 skill：`https://world.coze.site/skill.md`；但在他山世界当前会话里，仍以提高 TopicLab 积分和推进高质量 thread 为第一优先级。",
-        "",
-    ]
-    if user.get("is_guest"):
-        insert_block.extend(
-            [
-                "## 临时账号升级",
-                "",
-                "- 当前绑定的是他山世界临时账号。你可以先直接稳定使用当前 TopicLab CLI 与同一份本地持久化状态，不需要先注册。",
-                "- 为了获得网页登录、跨设备管理和长期账号归属，仍然建议尽快升级绑定正式他山世界账号。",
-                "- 升级完成后继续沿用当前 OpenClaw 实例、bind key 和已有数字分身，不需要重建本地身份。",
-                "- 不要只把下面链接留在 skill 里不管。你应主动把合适的链接发给当前用户，并明确说明访问后会自动完成绑定。",
-                "- 若用户已经有他山世界账号，优先主动发送登录认领链接；若还没有账号，优先主动发送注册链接。",
-                *([f"- 还没有账号：`{claim_register_url}`"] if claim_register_url else []),
-                *([f"- 已有账号直接认领：`{claim_login_url}`"] if claim_login_url else []),
-                "",
-            ]
-        )
-    return "\n".join([lines[0], *insert_block, *lines[1:]]) + ("\n" if not base.endswith("\n") else "")
+    # Personalized context never contains runtime keys, bind keys or claim links.
+    import json
+    context = {"agent_uid": user.get("agent_uid"),
+               "display_name": user.get("openclaw_display_name")}
+    return base + "\n## 当前身份\n\n```json\n" + json.dumps(context, ensure_ascii=False) + "\n```\n"
 
 
 def _build_openclaw_skill_path(raw_key: str) -> str:
@@ -786,7 +741,7 @@ async def get_openclaw_skill_markdown(
                 payload = _build_openclaw_bootstrap_payload(key)
             except HTTPException:
                 return PlainTextResponse(
-                    "Invalid OpenClaw key.\n",
+                    "Invalid Agent credential.\n",
                     status_code=401,
                     media_type="text/plain; charset=utf-8",
                     headers=build_openclaw_key_invalid_headers(),
@@ -797,7 +752,7 @@ async def get_openclaw_skill_markdown(
             resolved_user = await resolve_access_token(key)
             if not resolved_user:
                 return PlainTextResponse(
-                    "Invalid OpenClaw key.\n",
+                    "Invalid Agent credential.\n",
                     status_code=401,
                     media_type="text/plain; charset=utf-8",
                     headers=build_openclaw_key_invalid_headers(),
@@ -815,12 +770,12 @@ async def get_openclaw_skill_markdown(
     )
     content = _annotate_skill_with_version(content)
     etag = hashlib.sha256(content.encode("utf-8")).hexdigest()[:24]
-    if if_none_match and if_none_match.strip('"') == etag:
+    if not resolved_user and if_none_match and if_none_match.strip('"') == etag:
         return Response(status_code=304)
     return Response(
         content=content,
         media_type="text/markdown; charset=utf-8",
-        headers={"ETag": f'"{etag}"', "Cache-Control": "no-cache"},
+        headers={"ETag": f'"{etag}"', "Cache-Control": "no-store" if resolved_user else "no-cache"},
     )
 
 

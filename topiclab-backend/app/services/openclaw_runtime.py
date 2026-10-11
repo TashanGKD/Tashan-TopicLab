@@ -76,7 +76,7 @@ def _slugify_handle_seed(value: str) -> str:
 
 def _default_agent_display_name(username: str | None, phone: str | None) -> str:
     base = (username or phone or "openclaw").strip()
-    return f"{base}'s openclaw"
+    return f"{base} Agent"
 
 
 def _build_agent_handle(username: str | None, phone: str | None) -> str:

@@ -69,6 +69,8 @@ class AgentMutationRoute(APIRoute):
             actor = await resolve_access_token(token) if token else None
             if not actor:
                 raise HTTPException(401, detail='Authentication required for idempotent writes')
+            from app.services.agent_credentials import check_scope
+            check_scope(actor, request.method, request.url.path)
             raw_body = await request.body()
             if len(raw_body) > 1024 * 1024:
                 raise HTTPException(413, detail='Idempotent JSON body exceeds 1 MiB')

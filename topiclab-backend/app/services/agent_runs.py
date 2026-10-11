@@ -56,7 +56,7 @@ def update_run(run_id, status, error_code=None):
         ensure_runs(session)
         session.execute(text('''UPDATE agent_runs SET status = :status, updated_at = :now,
             error_code = :error, active_key = CASE WHEN :terminal THEN NULL ELSE topic_id END WHERE run_id = :id
-            AND status NOT IN ('completed', 'cancelled', 'interrupted')'''),
+            AND status NOT IN ('completed', 'failed', 'cancelled', 'interrupted')'''),
             {'status': status, 'now': time.time(), 'error': error_code,
              'terminal': status in TERMINAL, 'id': run_id})
 

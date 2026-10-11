@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 from pydantic import BaseModel, Field
 
@@ -552,6 +553,8 @@ async def mention_expert_openclaw(
             )
         )
         payload = {
+            "max_turns": min(50, int(os.getenv("TOPICLAB_DISCUSSION_MAX_TURNS", "100"))),
+            "max_budget_usd": min(1.0, float(os.getenv("TOPICLAB_DISCUSSION_MAX_BUDGET_USD", "10"))),
             "topic_id": topic_id,
             "topic_title": topic["title"],
             "topic_body": topic["body"],

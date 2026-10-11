@@ -19,6 +19,7 @@ from typing import Any
 
 import httpx
 from app.services.agent_requests import AgentMutationRoute
+from app.api.agent_models import DiscussionState
 from app.services import agent_runs
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import FileResponse, Response
@@ -975,7 +976,7 @@ def _resolve_author_name(requested_author: str, user: dict | None) -> str:
     actual = _row_user_name(int(user_id))
     if user.get("auth_type") == "openclaw_key":
         base_name = actual or user.get("username") or user.get("phone") or ""
-        return f"{base_name}'s openclaw" if base_name else "openclaw"
+        return user.get("openclaw_display_name") or (f"{base_name} Agent" if base_name else "Agent")
     base_name = actual or requested_author or user.get("username") or user.get("phone") or ""
     return base_name
 
@@ -2474,6 +2475,8 @@ async def mention_expert_endpoint(
     req: MentionExpertRequest,
     user: dict | None = Depends(_get_optional_user),
 ):
+    if not user:
+        raise HTTPException(401, 'Authentication required for a paid expert reply')
     topic = get_topic(topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
@@ -2534,6 +2537,8 @@ async def mention_expert_endpoint(
         ), user_post)
     )
     payload = {
+        "max_turns": min(50, int(os.getenv("TOPICLAB_DISCUSSION_MAX_TURNS", "100"))),
+        "max_budget_usd": min(1.0, float(os.getenv("TOPICLAB_DISCUSSION_MAX_BUDGET_USD", "10"))),
         "topic_id": topic_id,
         "topic_title": topic["title"],
         "topic_body": topic["body"],
@@ -2695,7 +2700,15 @@ def delete_post_endpoint(
     return {"ok": True, "topic_id": topic_id, "post_id": post_id, "deleted_count": deleted_count}
 
 
-@router.post("/internal/discussion-snapshot/{topic_id}", status_code=204)
+def require_executor_callback(x_topiclab_executor_token: str | None = Header(default=None)):
+    configured = os.getenv('TOPICLAB_EXECUTOR_TOKEN', '').strip()
+    if not configured:
+        raise HTTPException(503, 'Executor callback authentication is not configured')
+    if not x_topiclab_executor_token or not secrets.compare_digest(configured, x_topiclab_executor_token):
+        raise HTTPException(401, 'Executor callback authentication required')
+
+
+@router.post("/internal/discussion-snapshot/{topic_id}", status_code=204, dependencies=[Depends(require_executor_callback)])
 def push_discussion_snapshot_endpoint(topic_id: str, req: DiscussionSnapshotPushRequest):
     """Receive snapshot from Resonnet executor during discussion. Updates DB per-round."""
     _invalidate_status_cache(topic_id)
@@ -2713,10 +2726,12 @@ def push_discussion_snapshot_endpoint(topic_id: str, req: DiscussionSnapshotPush
     return Response(status_code=204)
 
 
-@router.post("/topics/{topic_id}/discussion", status_code=202)
+@router.post("/topics/{topic_id}/discussion", status_code=202, response_model=DiscussionState)
 async def start_discussion_endpoint(topic_id: str, req: StartDiscussionRequest, user: dict | None = Depends(_get_optional_user)):
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required")
+    if not os.getenv('TOPICLAB_EXECUTOR_TOKEN', '').strip():
+        raise HTTPException(503, detail={'code':'executor_not_configured', 'message':'Executor service credential must be configured before starting a paid run', 'retryable':False})
     topic = get_topic(topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
@@ -2814,10 +2829,10 @@ async def cancel_discussion_endpoint(topic_id: str, user: dict | None = Depends(
         raise HTTPException(409, detail="Run already ended or cannot be cancelled")
     agent_runs.update_run(run['run_id'], 'cancelled')
     set_discussion_status(topic_id, "failed")
-    if topic.get("creator_openclaw_agent_id"):
+    if user.get("openclaw_agent_id"):
         record_activity_event(
-            openclaw_agent_id=int(topic["creator_openclaw_agent_id"]),
-            bound_user_id=topic.get("creator_user_id"),
+            openclaw_agent_id=int(user["openclaw_agent_id"]),
+            bound_user_id=int(user["sub"]),
             event_type="discussion.cancelled",
             action_name="cancel_discussion",
             target_type="topic",
@@ -2833,7 +2848,7 @@ async def cancel_discussion_endpoint(topic_id: str, user: dict | None = Depends(
     return {"status": "failed", "result": topic.get("discussion_result"), "progress": None}
 
 
-@router.get("/topics/{topic_id}/discussion/status")
+@router.get("/topics/{topic_id}/discussion/status", response_model=DiscussionState)
 async def get_discussion_status_endpoint(topic_id: str):
     now = time.time()
     cached = _status_cache.get(topic_id)

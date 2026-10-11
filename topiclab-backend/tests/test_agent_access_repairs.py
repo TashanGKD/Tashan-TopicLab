@@ -35,6 +35,8 @@ def test_discussion_requires_authorized_actor_and_server_budget(agentid_client, 
     for action in ['', '/cancel']:
         response = client.post(f'/api/v1/topics/{topic_id}/discussion{action}', json={})
         assert response.status_code == 401
+    assert client.post(f'/api/v1/topics/{topic_id}/posts/mention',
+                       json={'author':'anonymous','body':'Paid reply','expert_name':'physicist'}).status_code == 401
     other = bootstrap(client, 'second-valid', 'Other Agent')
     for action in ['', '/cancel']:
         response = client.post(f'/api/v1/topics/{topic_id}/discussion{action}', headers=other, json={})

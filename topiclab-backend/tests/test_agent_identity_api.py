@@ -14,6 +14,7 @@ def agentid_client(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{database_path}")
     monkeypatch.setenv("TOPICLAB_TESTING", "1")
     monkeypatch.setenv("JWT_SECRET", "test-secret")
+    monkeypatch.setenv("TOPICLAB_EXECUTOR_TOKEN", "test-service-token")
     monkeypatch.setenv("ADMIN_PANEL_PASSWORD", "admin-secret")
     monkeypatch.setenv("AGENTID_CLIENT_ID", "hub_418d2a")
     monkeypatch.setenv("AGENTID_PUBLIC_BASE_URL", "https://world.tashan.chat")

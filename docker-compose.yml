@@ -24,7 +24,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "${TOPICLAB_BACKEND_PORT:-8001}:8000"
+      - "${TOPICLAB_BACKEND_BIND_ADDRESS:-127.0.0.1}:${TOPICLAB_BACKEND_PORT:-8001}:8000"
     volumes:
       - ${WORKSPACE_PATH:-./workspace}:/app/workspace
       - ${LIBS_PATH:-./backend/libs}:/app/libs:ro
@@ -115,7 +115,7 @@ services:
     env_file:
       - ${ENV_FILE:-.env}
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:${BACKEND_PORT:-8000}:8000"
     environment:
       - WORKSPACE_BASE=/app/workspace
     volumes:

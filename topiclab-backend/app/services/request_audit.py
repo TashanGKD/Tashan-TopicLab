@@ -127,6 +127,8 @@ def _looks_sensitive_key(key: str | None) -> bool:
     if not key:
         return False
     lowered = key.lower()
+    if lowered in {"invitation", "access_token", "operation_key", "claim_token"}:
+        return True
     if lowered in _SENSITIVE_KEYS:
         return True
     return any(fragment in lowered for fragment in _SENSITIVE_QUERY_KEY_FRAGMENTS)
