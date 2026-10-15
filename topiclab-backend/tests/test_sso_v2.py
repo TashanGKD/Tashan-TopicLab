@@ -166,12 +166,13 @@ def test_shared_profile_write_version_idempotency_and_client_isolation(setup):
     code,v=grant(c,uid); login=redeem(c,code,v)
     payload=dict(client_id=c['client_id'],client_secret=c['client_secret'],session_token=login['session_token'],
                  expected_version=1,idempotency_key=secrets.token_hex(16),changes={'real_name':'Synthetic Name','display_name':'Unified nickname',
-                 'email':'profile@example.invalid','organization':'Synthetic Lab','identities':['学生'],'city':'测试城市','bio':'Synthetic bio'})
+                 'email':'profile@example.invalid','organization':'Synthetic Lab','identities':['学生'],'city':'测试城市','bio':'Synthetic bio','department':'Synthetic Department','major_code':'0702','major':'Physics','research_interest':'Synthetic interest','research_direction':'Synthetic direction','job_position':'Researcher','identity_description':'Synthetic identity','personal_introduction':'x'*5000})
     result=client.post('/auth/sso/profile/update',json=payload)
     assert result.status_code==200, result.text
     profile=result.json()['user']['profile']
     assert profile['version']==2 and profile['real_name']=='Synthetic Name'
     assert profile['display_name']=='Unified nickname'
+    assert profile['department']=='Synthetic Department' and len(profile['personal_introduction'])==5000
     again=client.post('/auth/sso/profile/update',json=payload)
     assert again.status_code==200 and again.json()['user']['profile']['version']==2
     assert client.post('/auth/sso/profile/update',json={**payload,'changes':{'real_name':'Different'}}).status_code==409

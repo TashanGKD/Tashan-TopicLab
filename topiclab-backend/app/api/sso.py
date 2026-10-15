@@ -73,6 +73,14 @@ class ProfileChanges(BaseModel):
     identities: list[str] | None = Field(default=None,min_length=1,max_length=10)
     city: str | None = Field(default=None,min_length=1,max_length=80)
     bio: str | None = Field(default=None,max_length=200)
+    department: str | None = Field(default=None,max_length=300)
+    major_code: str | None = Field(default=None,max_length=80)
+    major: str | None = Field(default=None,max_length=300)
+    research_interest: str | None = Field(default=None,max_length=2000)
+    research_direction: str | None = Field(default=None,max_length=2000)
+    job_position: str | None = Field(default=None,max_length=300)
+    identity_description: str | None = Field(default=None,max_length=2000)
+    personal_introduction: str | None = Field(default=None,max_length=5000)
 
     @field_validator('identities')
     @classmethod

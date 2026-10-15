@@ -12,7 +12,7 @@ import time
 from urllib.parse import urlsplit
 
 from fastapi import HTTPException
-from sqlalchemy import text
+from sqlalchemy import text, inspect
 from sqlalchemy.exc import IntegrityError
 
 from app.storage.database.postgres_client import get_db_session
@@ -20,6 +20,7 @@ from app.storage.database.postgres_client import get_db_session
 CODE_TTL = 120
 SESSION_TTL = 8 * 3600
 RECHECK_SECONDS = 60
+EXTENDED_PROFILE_FIELDS = {'department':300,'major_code':80,'major':300,'research_interest':2000,'research_direction':2000,'job_position':300,'identity_description':2000,'personal_introduction':5000}
 
 
 def digest(value: str) -> str:
@@ -69,6 +70,10 @@ def apply_schema(session):
     ]
     for statement in statements:
         session.execute(text(statement))
+    existing={column['name'] for column in inspect(session.connection()).get_columns('user_profiles')}
+    for name,length in EXTENDED_PROFILE_FIELDS.items():
+        if name not in existing:
+            session.execute(text(f'ALTER TABLE user_profiles ADD COLUMN {name} VARCHAR({length})'))
 
 
 def origin(value: str) -> str:
@@ -148,7 +153,8 @@ def rotate_client(client_id: str) -> dict:
 def _user(db, user_id: int):
     row = db.execute(text('''SELECT u.id,u.username,u.phone,u.is_guest,
         COALESCE(up.version,1) AS profile_version,up.real_name,up.email,up.organization,
-        up.identities,up.city,up.bio,up.avatar_url AS profile_avatar_url,
+        up.identities,up.city,up.bio,up.department,up.major_code,up.major,up.research_interest,up.research_direction,
+        up.job_position,up.identity_description,up.personal_introduction,up.avatar_url AS profile_avatar_url,
         (SELECT o.avatar_url FROM oauth_accounts o WHERE o.user_id=u.id
          AND o.avatar_url IS NOT NULL AND o.avatar_url<>''
          ORDER BY o.updated_at DESC,o.id DESC LIMIT 1) AS avatar_url,
@@ -174,6 +180,7 @@ def _identity(row):
         avatar = None
     # Display name reuses users.username; identity/role flags are never writable profile fields.
     profile = {key: row.get(key) for key in ('real_name','email','organization','city','bio')}
+    profile.update({key:row.get(key) for key in EXTENDED_PROFILE_FIELDS})
     profile.update(display_name=row['username'], avatar_url=avatar,
                    identities=json.loads(row.get('identities') or '[]'), version=row.get('profile_version',1))
     phone=row.get('phone')
@@ -279,7 +286,7 @@ def update_profile(client_id, client_secret, token, expected_version, request_ke
             applied = prior['applied_version']
         else:
             # Only explicit allowed fields reach SQL. No phone, role or credential changes.
-            allowed = {'real_name','email','organization','identities','city','bio','display_name'}
+            allowed = {'real_name','email','organization','identities','city','bio','display_name'} | set(EXTENDED_PROFILE_FIELDS)
             if set(changes)-allowed:
                 raise HTTPException(422, '不支持的统一资料字段')
             updates = {key:value for key,value in changes.items() if key!='display_name'}

@@ -303,3 +303,7 @@ The `JWT_SECRET` is shared across TopicLab, tashan-world, ai-org-builder, and ot
 换票及会话复核返回 `user.profile`。`POST /auth/sso/profile/update` 使用网站凭据和本人会话，接收 `expected_version`、`idempotency_key`、`changes`，可选完整本地请求摘要 `context_hash`。更新、版本递增和 `sso_profile_writes` 幂等记录同事务提交。返回最新资料及本次请求原始 `applied_version`；旧请求重放不会回滚新资料。跨站凭据或撤销会话不能修改资料，普通字段更新不修改密码、手机号、权限或认证策略版本。
 
 资料及更新内容在请求审计中脱敏。数据库变更为新增表及展示名长度扩容，不删除旧账号。没有统一头像时可使用现有已关联第三方账号的 HTTPS 头像；不会传播第三方访问令牌。各接入平台应按 tashan-auth 的字段映射规则处理同义字段、缓存和旧资料冲突，优先调整接入平台。
+
+### Academic profile extensions
+
+The shared profile additionally stores `department` (300), `major_code` (80), `major` (300), `research_interest` (2000), `research_direction` (2000), `job_position` (300), `identity_description` (2000), and `personal_introduction` (5000). Limits are characters. These are nullable, additive columns on `user_profiles`; the schema initializer checks existing columns before adding them. Existing user IDs, profile versions and business records are retained. Major code and name, research interest and direction, and long introduction and short biography remain distinct. They use the existing versioned and idempotent update endpoint and never confer privileges.
