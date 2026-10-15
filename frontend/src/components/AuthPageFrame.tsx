@@ -19,13 +19,11 @@ export default function AuthPageFrame({ unified, title, children }: {
           <header className="mb-8 text-center">
             <div aria-hidden="true" className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-xl font-bold text-white">山</div>
             <p className="text-2xl font-semibold tracking-wide">他山统一认证</p>
-            <p className="mt-2 text-sm text-slate-500">一个他山账号，登录各个网站</p>
           </header>
         )}
         <div className={unified ? 'rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm' : 'border border-gray-200 rounded-lg p-6'}>
           {children}
         </div>
-        {unified && <p className="mt-6 text-center text-xs leading-6 text-slate-500">与他山世界共用账号，无需重复注册</p>}
       </div>
     </div>
   );
