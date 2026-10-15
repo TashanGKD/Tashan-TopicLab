@@ -166,13 +166,20 @@ def test_shared_profile_write_version_idempotency_and_client_isolation(setup):
     code,v=grant(c,uid); login=redeem(c,code,v)
     payload=dict(client_id=c['client_id'],client_secret=c['client_secret'],session_token=login['session_token'],
                  expected_version=1,idempotency_key=secrets.token_hex(16),changes={'real_name':'Synthetic Name','display_name':'Unified nickname',
-                 'email':'profile@example.invalid','organization':'Synthetic Lab','identities':['学生'],'city':'测试城市','bio':'Synthetic bio','department':'Synthetic Department','major_code':'0702','major':'Physics','research_interest':'Synthetic interest','research_direction':'Synthetic direction','job_position':'Researcher','identity_description':'Synthetic identity','personal_introduction':'x'*5000})
+                 'email':'profile@example.invalid','organization':'Synthetic Lab','identities':['学生'],'city':'测试城市','bio':'Synthetic bio','department':'Synthetic Department','major_code':'0702','major':'Physics','research_interest':'Synthetic interest','research_direction':'Synthetic direction','job_position':'Researcher','identity_description':'Synthetic identity','personal_introduction':'x'*5000,'education_stage':'Synthetic education_stage','major_research_direction':'Synthetic major_research_direction','postdoc_station':'Synthetic postdoc_station','discipline_field':'Synthetic discipline_field','supervisor':'Synthetic supervisor','professional_title_level':'Synthetic professional_title_level','specific_title':'Synthetic specific_title'})
     result=client.post('/auth/sso/profile/update',json=payload)
     assert result.status_code==200, result.text
     profile=result.json()['user']['profile']
     assert profile['version']==2 and profile['real_name']=='Synthetic Name'
     assert profile['display_name']=='Unified nickname'
     assert profile['department']=='Synthetic Department' and len(profile['personal_introduction'])==5000
+    assert profile['education_stage'] == 'Synthetic education_stage'
+    assert profile['major_research_direction'] == 'Synthetic major_research_direction'
+    assert profile['postdoc_station'] == 'Synthetic postdoc_station'
+    assert profile['discipline_field'] == 'Synthetic discipline_field'
+    assert profile['supervisor'] == 'Synthetic supervisor'
+    assert profile['professional_title_level'] == 'Synthetic professional_title_level'
+    assert profile['specific_title'] == 'Synthetic specific_title'
     again=client.post('/auth/sso/profile/update',json=payload)
     assert again.status_code==200 and again.json()['user']['profile']['version']==2
     assert client.post('/auth/sso/profile/update',json={**payload,'changes':{'real_name':'Different'}}).status_code==409

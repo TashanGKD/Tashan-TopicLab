@@ -82,6 +82,14 @@ class ProfileChanges(BaseModel):
     identity_description: str | None = Field(default=None,max_length=2000)
     personal_introduction: str | None = Field(default=None,max_length=5000)
 
+    education_stage: str | None = Field(default=None,max_length=500)
+    major_research_direction: str | None = Field(default=None,max_length=2000)
+    postdoc_station: str | None = Field(default=None,max_length=2000)
+    discipline_field: str | None = Field(default=None,max_length=2000)
+    supervisor: str | None = Field(default=None,max_length=2000)
+    professional_title_level: str | None = Field(default=None,max_length=2000)
+    specific_title: str | None = Field(default=None,max_length=2000)
+
     @field_validator('identities')
     @classmethod
     def valid_identities(cls,value):

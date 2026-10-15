@@ -20,7 +20,7 @@ from app.storage.database.postgres_client import get_db_session
 CODE_TTL = 120
 SESSION_TTL = 8 * 3600
 RECHECK_SECONDS = 60
-EXTENDED_PROFILE_FIELDS = {'department':300,'major_code':80,'major':300,'research_interest':2000,'research_direction':2000,'job_position':300,'identity_description':2000,'personal_introduction':5000}
+EXTENDED_PROFILE_FIELDS = {'department':300,'major_code':80,'major':300,'research_interest':2000,'research_direction':2000,'job_position':300,'identity_description':2000,'personal_introduction':5000,'education_stage':500,'major_research_direction':2000,'postdoc_station':2000,'discipline_field':2000,'supervisor':2000,'professional_title_level':2000,'specific_title':2000}
 
 
 def digest(value: str) -> str:
@@ -154,7 +154,7 @@ def _user(db, user_id: int):
     row = db.execute(text('''SELECT u.id,u.username,u.phone,u.is_guest,
         COALESCE(up.version,1) AS profile_version,up.real_name,up.email,up.organization,
         up.identities,up.city,up.bio,up.department,up.major_code,up.major,up.research_interest,up.research_direction,
-        up.job_position,up.identity_description,up.personal_introduction,up.avatar_url AS profile_avatar_url,
+        up.job_position,up.identity_description,up.personal_introduction,up.education_stage,up.major_research_direction,up.postdoc_station,up.discipline_field,up.supervisor,up.professional_title_level,up.specific_title,up.avatar_url AS profile_avatar_url,
         (SELECT o.avatar_url FROM oauth_accounts o WHERE o.user_id=u.id
          AND o.avatar_url IS NOT NULL AND o.avatar_url<>''
          ORDER BY o.updated_at DESC,o.id DESC LIMIT 1) AS avatar_url,
