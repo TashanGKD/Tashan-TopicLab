@@ -38,7 +38,7 @@ describe('SSO navigation',()=>{
     expect(start.mock.calls[0][1]).toBe('/me');
   });
   it('registration and recovery retain the shell without a requesting site', async()=>{
-    vi.spyOn(authApi, 'getRegisterConfig').mockResolvedValue({registration_requires_sms:false});
+    vi.spyOn(authApi, 'getRegisterConfig').mockResolvedValue({registration_requires_sms:false,skip_sms_until:null});
     render(<MemoryRouter initialEntries={['/sso/register']}><Register/></MemoryRouter>);
     expect(screen.getByText('他山统一认证')).toBeTruthy();
     expect(screen.getByRole('link',{name:'立即登录'}).getAttribute('href')).toBe('/sso/login');
