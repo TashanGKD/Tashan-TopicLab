@@ -1,11 +1,14 @@
+import { authPath } from '../utils/sso';
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { authApi } from '../api/auth';
 
 type Step = 'phone' | 'reset';
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const loginPath = authPath('/login', new URLSearchParams(location.search));
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
@@ -82,7 +85,7 @@ export default function ForgotPassword() {
     try {
       await authApi.resetPassword(phone, code, newPassword);
       showMessage('success', '密码重置成功，即将跳转登录');
-      setTimeout(() => navigate('/login'), 1500);
+      setTimeout(() => navigate(loginPath), 1500);
     } catch (err: unknown) {
       showMessage('error', err instanceof Error ? err.message : '重置失败');
     } finally {
@@ -189,7 +192,7 @@ export default function ForgotPassword() {
 
           <div className="mt-4 text-center text-sm text-gray-500 font-serif">
             想起来了？{' '}
-            <Link to="/login" className="hover:underline" style={{ color: 'var(--text-primary)' }}>返回登录</Link>
+            <Link to={loginPath} className="hover:underline" style={{ color: 'var(--text-primary)' }}>返回登录</Link>
           </div>
         </div>
       </div>

@@ -1,0 +1,53 @@
+name: Deploy unified login
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: deploy-${{ github.repository }}
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[auth-only]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Verify and build login pages
+        working-directory: frontend
+        run: |
+          npm ci
+          npm test -- src/pages/SsoFlow.test.tsx
+          npm run build
+      - name: Prepare immutable code bundle
+        run: |
+          printf '%s\n' "$GITHUB_SHA" > revision
+          tar -czf auth-release.tgz revision scripts/deploy/auth-only.sh frontend/dist topiclab-backend/app topiclab-backend/main.py
+      - name: Deploy only account API and frontend
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          target="$DEPLOY_USER@$DEPLOY_HOST"
+          remote="/var/tmp/tashan-auth-$GITHUB_SHA"
+          ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$target" "mkdir -p '$remote'"
+          scp -i ~/.ssh/id_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes auth-release.tgz "$target:$remote/release.tgz"
+          ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$target" "tar -xzf '$remote/release.tgz' -C '$remote' && bash '$remote/scripts/deploy/auth-only.sh' '$remote'"
+      - name: Verify public account routes
+        run: |
+          curl --fail --silent --show-error --retry 3 https://world.tashan.chat/login -o /dev/null
+          test "$(curl --silent --show-error -o /dev/null -w '%{http_code}' https://world.tashan.chat/api/admin/sso/clients)" = 401

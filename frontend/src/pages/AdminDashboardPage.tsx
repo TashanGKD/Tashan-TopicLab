@@ -694,6 +694,7 @@ export default function AdminDashboardPage() {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
+              <button type="button" onClick={() => navigate('/admin/sso')} className="rounded-full bg-white/10 px-4 py-2 text-sm">网站登录接入</button>
               {[
                 ['community_observability', '社区观测'],
                 ['users', '用户'],

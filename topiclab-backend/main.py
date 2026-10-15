@@ -53,6 +53,7 @@ from app.api import site as site_router
 from app.api import skill_hub as skill_hub_router
 from app.api import skills as skills_router
 from app.api import source_feed as source_feed_router
+from app.api import sso as sso_router
 from app.api import topiclink as topiclink_router
 from app.api import topics as topics_router
 from app.api import youth_ted as youth_ted_router
@@ -155,7 +156,8 @@ class ActorAuditMiddleware:
             content_length = int(content_length_header) if content_length_header else None
         except ValueError:
             content_length = None
-        should_capture_body = should_capture_request_body(content_type, content_length)
+        sensitive_sso = request.url.path.startswith(('/auth/sso/', '/api/v1/auth/sso/', '/admin/sso/'))
+        should_capture_body = not sensitive_sso and should_capture_request_body(content_type, content_length)
 
         captured_body = bytearray()
         captured_response_body = bytearray()
@@ -197,7 +199,7 @@ class ActorAuditMiddleware:
                     response_content_length = int(content_length_header) if content_length_header else None
                 except ValueError:
                     response_content_length = None
-                capture_response_body = should_capture_response_body(response_content_type, response_content_length)
+                capture_response_body = not sensitive_sso and should_capture_response_body(response_content_type, response_content_length)
             elif message["type"] == "http.response.body" and capture_response_body:
                 chunk = message.get("body", b"")
                 remaining = max(0, 32 * 1024 - len(captured_response_body))
@@ -284,6 +286,8 @@ app.add_middleware(ActorAuditMiddleware)
 
 app.include_router(auth_router.router, prefix="/auth", tags=["auth"])
 app.include_router(auth_router.router, prefix="/api/v1/auth", tags=["auth-v1"])
+app.include_router(sso_router.router, prefix="/auth", tags=["sso"])
+app.include_router(sso_router.router, prefix="/api/v1/auth", tags=["sso-v1"])
 app.include_router(apps_router.router, prefix="/api/v1", tags=["apps-v1"])
 app.include_router(source_feed_router.router, prefix="/source-feed", tags=["source-feed"])
 app.include_router(source_feed_router.router, prefix="/api/v1/source-feed", tags=["source-feed-v1"])
@@ -313,6 +317,7 @@ app.include_router(agent_identity_router.router, prefix="/api/v1", tags=["agent-
 app.include_router(youth_ted_router.router, prefix="/api/v1", tags=["youth-ted-v1"])
 app.include_router(inspiration_router.router, prefix="/api/v1", tags=["inspiration-v1"])
 app.include_router(admin_router.router, tags=["admin"])
+app.include_router(sso_router.admin_router, tags=["sso-admin"])
 
 
 # Canonical Agent routes keep older OpenClaw clients working through aliases.

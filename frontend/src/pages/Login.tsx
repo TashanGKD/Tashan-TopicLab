@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { authPath } from '../utils/sso';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { authApi, tokenManager } from '../api/auth';
 
@@ -8,16 +9,50 @@ export default function Login() {
   const searchParams = new URLSearchParams(location.search);
   const from = searchParams.get('next') || (location.state as { from?: string } | null)?.from || '/';
   const claimToken = searchParams.get('openclaw_claim');
+  const ssoClientId = searchParams.get('sso_client');
+  const ssoRedirect = searchParams.get('sso_redirect');
+  const ssoState = searchParams.get('sso_state');
+  const ssoChallenge = searchParams.get('sso_code_challenge');
+  const ssoActive = Boolean(ssoClientId && ssoRedirect);
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [watchaLoading, setWatchaLoading] = useState(false);
+  const [ssoHandingOff, setSsoHandingOff] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const ssoAutoAttempted = useRef(false);
 
   const showMessage = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 3000);
   };
+
+  const completeSsoHandoff = async (token: string): Promise<boolean> => {
+    if (!ssoActive || !ssoClientId || !ssoRedirect) return false;
+    setSsoHandingOff(true);
+    try {
+      const { code } = await authApi.ssoAuthorize(token, ssoClientId, ssoRedirect, ssoState, ssoChallenge);
+      const target = new URL(ssoRedirect);
+      target.searchParams.set('code', code);
+      if (ssoState) target.searchParams.set('state', ssoState);
+      window.location.replace(target.toString());
+      return true;
+    } catch (err: unknown) {
+      setSsoHandingOff(false);
+      showMessage('error', err instanceof Error ? err.message : '跨站登录授权失败');
+      return false;
+    }
+  };
+
+  // When arriving with sso_* parameters while already logged in, hand off immediately.
+  useEffect(() => {
+    if (!ssoActive || ssoAutoAttempted.current) return;
+    const existingToken = tokenManager.get();
+    if (!existingToken) return;
+    ssoAutoAttempted.current = true;
+    void completeSsoHandoff(existingToken);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,6 +75,10 @@ export default function Login() {
         tokenManager.setUser(data.user);
         window.dispatchEvent(new CustomEvent('auth-change'));
       }
+      if (data.token && ssoActive) {
+        await completeSsoHandoff(data.token);
+        return;
+      }
       showMessage('success', data.claim_status === 'claimed' ? '登录成功，已自动绑定你的智能体临时账号。' : '登录成功！');
       setTimeout(() => navigate(from), 1000);
     } catch (err: unknown) {
@@ -58,13 +97,28 @@ export default function Login() {
   const handleWatchaLogin = async () => {
     setWatchaLoading(true);
     try {
-      const data = await authApi.startWatchaLogin(buildWatchaCallbackUri(), from, claimToken);
+      const data = await authApi.startWatchaLogin(buildWatchaCallbackUri(), ssoActive ? authPath('/login', searchParams) : from, claimToken);
       window.location.assign(data.authorization_url);
     } catch (err: unknown) {
       showMessage('error', err instanceof Error ? err.message : '观猹登录暂时不可用');
       setWatchaLoading(false);
     }
   };
+
+  const registerLinkTo = authPath('/register', searchParams);
+
+  if (ssoActive && ssoHandingOff) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <div className="border border-gray-200 rounded-lg p-6 text-center">
+            <h1 className="text-xl font-serif font-bold mb-2">正在返回原网站</h1>
+            <p className="text-sm text-gray-500">登录成功，正在为你跳转，请稍候...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
@@ -74,6 +128,12 @@ export default function Login() {
           <p className="text-sm text-gray-500 text-center mb-6">
             {claimToken ? '登录后会自动认领你的智能体临时账号' : '登录您的账号'}
           </p>
+
+          {ssoActive && (
+            <div className="mb-4 p-3 rounded-lg text-sm bg-blue-50 text-blue-700">
+              你正在使用他山账号登录其他网站。登录或注册成功后，会自动返回该网站。
+            </div>
+          )}
 
           {message && (
             <div className={`mb-4 p-3 rounded-lg text-sm ${
@@ -152,10 +212,10 @@ export default function Login() {
           </button>
 
           <div className="mt-4 flex justify-between text-sm text-gray-500 font-serif">
-            <Link to="/forgot-password" className="hover:underline" style={{ color: 'var(--text-primary)' }}>忘记密码？</Link>
+            <Link to={authPath('/forgot-password', searchParams)} className="hover:underline" style={{ color: 'var(--text-primary)' }}>忘记密码？</Link>
             <span>
               还没有账号？{' '}
-              <Link to="/register" state={{ from }} className="hover:underline" style={{ color: 'var(--text-primary)' }}>立即注册</Link>
+              <Link to={registerLinkTo} state={{ from }} className="hover:underline" style={{ color: 'var(--text-primary)' }}>立即注册</Link>
             </span>
           </div>
         </div>

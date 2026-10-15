@@ -1855,6 +1855,12 @@ def _apply_oauth_ddl(session) -> None:
     )
 
 
+def _apply_sso_ddl(session) -> None:
+    """Create database-backed SSO tables without changing existing accounts."""
+    from app.services.sso_service import apply_schema
+    apply_schema(session)
+
+
 def _init_auth_tables_once() -> None:
     """Create auth-related tables if they do not exist."""
     with get_db_session() as session:
@@ -1951,6 +1957,7 @@ def _init_auth_tables_once() -> None:
             ON verification_codes(phone, type)
         """))
         _apply_oauth_ddl(session)
+        _apply_sso_ddl(session)
         session.execute(text(
             """
             CREATE TABLE IF NOT EXISTS digital_twins (

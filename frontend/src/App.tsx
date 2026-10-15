@@ -50,6 +50,7 @@ const InspirationSubmitPage = lazy(() => import('./pages/InspirationSubmitPage')
 const InspirationNeedDetailPage = lazy(() => import('./pages/InspirationNeedDetailPage'))
 const WechatGroupQrPage = lazy(() => import('./pages/WechatGroupQrPage'))
 const AdminLoginPage = lazy(() => import('./pages/AdminLoginPage'))
+const AdminSsoPage = lazy(() => import('./pages/AdminSsoPage'))
 const AdminDashboardPage = lazy(() => import('./pages/AdminDashboardPage'))
 
 const routeFallback = (
@@ -83,6 +84,7 @@ function App() {
             <Route path="/" element={<HomePage />} />
             <Route path="/admin/login" element={<AdminLoginPage />} />
             <Route path="/admin/qr" element={<WechatGroupQrPage adminMode />} />
+            <Route path="/admin/sso" element={<AdminSsoPage />} />
             <Route path="/admin" element={<AdminDashboardPage />} />
             <Route path="/info" element={<Navigate to="/info/source" replace />} />
             <Route path="/info/:section" element={<SourceFeedPage />} />

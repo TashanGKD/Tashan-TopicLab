@@ -1,3 +1,4 @@
+import { authPath } from '../utils/sso';
 import { useState, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { authApi, tokenManager } from '../api/auth';
@@ -8,6 +9,11 @@ export default function Register() {
   const searchParams = new URLSearchParams(location.search);
   const from = searchParams.get('next') || (location.state as { from?: string } | null)?.from || '/';
   const claimToken = searchParams.get('openclaw_claim');
+  const ssoClientId = searchParams.get('sso_client');
+  const ssoRedirect = searchParams.get('sso_redirect');
+  const ssoState = searchParams.get('sso_state');
+  const ssoChallenge = searchParams.get('sso_code_challenge');
+  const ssoActive = Boolean(ssoClientId && ssoRedirect);
   const [requiresSms, setRequiresSms] = useState(true);
   const [configLoaded, setConfigLoaded] = useState(false);
   const [phone, setPhone] = useState('');
@@ -19,10 +25,28 @@ export default function Register() {
   const [sendingCode, setSendingCode] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [ssoHandingOff, setSsoHandingOff] = useState(false);
 
   const showMessage = (type: 'success' | 'error', text: string, durationMs = 3000) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), durationMs);
+  };
+
+  const completeSsoHandoff = async (token: string): Promise<boolean> => {
+    if (!ssoActive || !ssoClientId || !ssoRedirect) return false;
+    setSsoHandingOff(true);
+    try {
+      const { code } = await authApi.ssoAuthorize(token, ssoClientId, ssoRedirect, ssoState, ssoChallenge);
+      const target = new URL(ssoRedirect);
+      target.searchParams.set('code', code);
+      if (ssoState) target.searchParams.set('state', ssoState);
+      window.location.replace(target.toString());
+      return true;
+    } catch (err: unknown) {
+      setSsoHandingOff(false);
+      showMessage('error', err instanceof Error ? err.message : '跨站登录授权失败');
+      return false;
+    }
   };
 
   useEffect(() => {
@@ -120,6 +144,10 @@ export default function Register() {
         tokenManager.setUser(data.user);
         window.dispatchEvent(new CustomEvent('auth-change'));
       }
+      if (data.token && ssoActive) {
+        await completeSsoHandoff(data.token);
+        return;
+      }
       showMessage('success', data.claim_status === 'claimed' ? '注册成功，已自动绑定你的智能体临时账号。' : '注册成功！');
       setTimeout(() => navigate(from), 1500);
     } catch (err: unknown) {
@@ -129,6 +157,21 @@ export default function Register() {
     }
   };
 
+  if (ssoActive && ssoHandingOff) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <div className="border border-gray-200 rounded-lg p-6 text-center">
+            <h1 className="text-xl font-serif font-bold mb-2">正在返回原网站</h1>
+            <p className="text-sm text-gray-500">注册成功，正在为你跳转，请稍候...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const loginLinkTo = authPath('/login', searchParams);
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -137,6 +180,12 @@ export default function Register() {
           <p className="text-sm text-gray-500 text-center mb-6">
             {claimToken ? '完成注册后会自动认领你的智能体临时账号' : '填写信息完成注册'}
           </p>
+
+          {ssoActive && (
+            <div className="mb-4 p-3 rounded-lg text-sm bg-blue-50 text-blue-700">
+              注册成功后，会自动返回发起登录的网站。
+            </div>
+          )}
 
           {message && (
             <div className={`mb-4 p-3 rounded-lg text-sm ${
@@ -259,7 +308,7 @@ export default function Register() {
 
           <div className="mt-4 text-center text-sm text-gray-500 font-serif">
             已有账号？{' '}
-            <Link to="/login" state={{ from }} className="hover:underline" style={{ color: 'var(--text-primary)' }}>立即登录</Link>
+            <Link to={loginLinkTo} state={{ from }} className="hover:underline" style={{ color: 'var(--text-primary)' }}>立即登录</Link>
           </div>
         </div>
       </div>

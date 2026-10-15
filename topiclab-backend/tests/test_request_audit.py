@@ -202,3 +202,19 @@ def test_admin_can_view_actor_events_by_user_and_openclaw_id(client):
     assert by_openclaw.status_code == 200, by_openclaw.text
     by_openclaw_items = by_openclaw.json()["items"]
     assert any(item["openclaw_agent_id"] == openclaw_agent_id for item in by_openclaw_items)
+
+
+def test_sso_audit_retains_metadata_without_credential_bodies(client):
+    from app.services.sso_service import create_client, challenge
+    auth = register_and_login(client, phone='13800010091', username='sso-audit-user')
+    site = create_client('Audit test', 'https://audit-test.example')
+    response = client.post('/auth/sso/authorize', headers={'Authorization': f"Bearer {auth['token']}"}, json={
+        'client_id':site['client_id'], 'redirect_uri':site['redirect_uri'], 'state':'s'*43,
+        'code_challenge':challenge('v'*43), 'code_challenge_method':'S256',
+    })
+    assert response.status_code == 200
+    event = load_latest_http_request_event(route_suffix='/sso/authorize')
+    assert event['status_code'] == 200
+    assert event['payload']['body'] is None
+    assert event['result']['response_body'] is None
+    assert response.json()['code'] not in json.dumps(event)

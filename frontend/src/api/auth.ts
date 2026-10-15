@@ -32,6 +32,11 @@ export interface WatchaOAuthStartResponse {
   state: string;
 }
 
+export interface SsoAuthorizeResponse {
+  code: string;
+  expires_in: number;
+}
+
 export interface SendCodeResponse {
   message: string;
   dev_code?: string;
@@ -153,6 +158,21 @@ export const authApi = {
     });
     if (!res.ok) {
       throw new Error(await readApiError(res, '观猹登录失败'));
+    }
+    return res.json();
+  },
+
+  ssoAuthorize: async (token: string, clientId: string, redirectUri: string, state: string | null, challenge: string | null): Promise<SsoAuthorizeResponse> => {
+    const res = await fetch(`${API_BASE}/auth/sso/authorize`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ client_id: clientId, redirect_uri: redirectUri, state, code_challenge: challenge, code_challenge_method: 'S256' }),
+    });
+    if (!res.ok) {
+      throw new Error(await readApiError(res, '跨站登录授权失败'));
     }
     return res.json();
   },

@@ -407,7 +407,7 @@ export interface AdminTwinObservationListParams {
   offset?: number
 }
 
-async function adminRequest<T>(path: string, init?: RequestInit): Promise<T> {
+export async function adminRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const token = adminPanelTokenManager.get()
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
