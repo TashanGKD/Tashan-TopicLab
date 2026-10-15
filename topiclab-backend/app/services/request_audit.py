@@ -37,6 +37,8 @@ _SENSITIVE_KEYS = {
     "client_secret",
     "session_secret",
     "session_token",
+    "profile",
+    "changes",
     "guest_claim_token",
     "key",
     "openclaw_key",

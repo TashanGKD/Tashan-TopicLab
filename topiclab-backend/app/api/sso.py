@@ -2,7 +2,7 @@
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from fastapi.routing import APIRoute
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -64,6 +64,31 @@ class SessionRequest(ClientCredentials):
     session_token: str = Field(min_length=32, max_length=256)
 
 
+class ProfileChanges(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    display_name: str | None = Field(default=None,max_length=80)
+    real_name: str | None = Field(default=None,min_length=1,max_length=80)
+    email: str | None = Field(default=None,min_length=3,max_length=180,pattern=r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
+    organization: str | None = Field(default=None,min_length=1,max_length=160)
+    identities: list[str] | None = Field(default=None,min_length=1,max_length=10)
+    city: str | None = Field(default=None,min_length=1,max_length=80)
+    bio: str | None = Field(default=None,max_length=200)
+
+    @field_validator('identities')
+    @classmethod
+    def valid_identities(cls,value):
+        if value is not None and (len(value)!=len(set(value)) or any(not 1<=len(v.strip())<=80 for v in value)):
+            raise ValueError('身份标签必须非空、不重复且不超过80字')
+        return value
+
+
+class ProfileUpdateRequest(SessionRequest):
+    expected_version: int = Field(ge=1,le=9007199254740990,strict=True)
+    idempotency_key: str = Field(min_length=1,max_length=128,pattern=r'^[A-Za-z0-9_.:-]+$')
+    changes: ProfileChanges
+    context_hash: str = Field(default='',max_length=64,pattern=r'^(?:[a-f0-9]{64})?$')
+
+
 class CreateClient(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     origin: str = Field(min_length=1, max_length=2048)
@@ -93,6 +118,15 @@ async def check(req: SessionRequest):
 @router.post('/sso/session/revoke')
 async def revoke(req: SessionRequest):
     return await run_in_threadpool(service.revoke_session, req.client_id, req.client_secret, req.session_token)
+
+
+@router.post('/sso/profile/update')
+async def update_profile(req: ProfileUpdateRequest):
+    changes=req.changes.model_dump(exclude_unset=True)
+    if any(value is None for value in changes.values()):
+        raise HTTPException(422,'请提交具体字段值')
+    return await run_in_threadpool(service.update_profile,req.client_id,req.client_secret,req.session_token,
+                                  req.expected_version,req.idempotency_key,changes,req.context_hash)
 
 
 @admin_router.get('/clients')

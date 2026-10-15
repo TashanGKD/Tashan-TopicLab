@@ -5,6 +5,7 @@ import base64
 import hashlib
 import hmac
 import ipaddress
+import json
 import re
 import secrets
 import time
@@ -31,7 +32,21 @@ def challenge(verifier: str) -> str:
 
 def apply_schema(session):
     # Epoch timestamps and integer status flags behave identically in SQLite and PostgreSQL.
+    if session.bind.dialect.name=='postgresql':
+        length=session.execute(text("""SELECT character_maximum_length FROM information_schema.columns
+            WHERE table_schema=current_schema() AND table_name='users' AND column_name='username'""")).scalar()
+        if length is not None and length<80:
+            session.execute(text('ALTER TABLE users ALTER COLUMN username TYPE VARCHAR(80)'))
     statements = [
+        '''CREATE TABLE IF NOT EXISTS user_profiles (
+          user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          version INTEGER NOT NULL DEFAULT 1, real_name VARCHAR(80), email VARCHAR(180),
+          organization VARCHAR(160), identities TEXT NOT NULL DEFAULT '[]',
+          city VARCHAR(80), bio VARCHAR(200), avatar_url TEXT)''',
+        '''CREATE TABLE IF NOT EXISTS sso_profile_writes (
+          client_id VARCHAR(64) NOT NULL, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          request_key VARCHAR(128) NOT NULL, request_hash VARCHAR(64) NOT NULL,
+          applied_version INTEGER NOT NULL, PRIMARY KEY(client_id,user_id,request_key))''',
         '''CREATE TABLE IF NOT EXISTS sso_clients_v2 (
           client_id VARCHAR(64) PRIMARY KEY, name VARCHAR(100) NOT NULL,
           origin TEXT NOT NULL UNIQUE, redirect_uri TEXT NOT NULL,
@@ -131,16 +146,40 @@ def rotate_client(client_id: str) -> dict:
 
 
 def _user(db, user_id: int):
-    row = db.execute(text('''SELECT u.id,u.username,u.is_guest,
+    row = db.execute(text('''SELECT u.id,u.username,u.phone,u.is_guest,
+        COALESCE(up.version,1) AS profile_version,up.real_name,up.email,up.organization,
+        up.identities,up.city,up.bio,up.avatar_url AS profile_avatar_url,
+        (SELECT o.avatar_url FROM oauth_accounts o WHERE o.user_id=u.id
+         AND o.avatar_url IS NOT NULL AND o.avatar_url<>''
+         ORDER BY o.updated_at DESC,o.id DESC LIMIT 1) AS avatar_url,
         COALESCE(p.enabled,1) AS enabled, COALESCE(p.version,1) AS version
-        FROM users u LEFT JOIN sso_user_policy p ON p.user_id=u.id WHERE u.id=:id'''), {'id': user_id}).mappings().first()
+        FROM users u LEFT JOIN sso_user_policy p ON p.user_id=u.id
+        LEFT JOIN user_profiles up ON up.user_id=u.id WHERE u.id=:id'''), {'id': user_id}).mappings().first()
     if not row or row['is_guest'] or not row['enabled']:
         raise HTTPException(403, '该账号不能使用跨站登录')
     return row
 
 
 def _identity(row):
-    return {'user_id': row['id'], 'username': row['username'], 'is_guest': False}
+    avatar = row.get('profile_avatar_url') or row.get('avatar_url')
+    if isinstance(avatar, str):
+        try:
+            parsed = urlsplit(avatar)
+            if (len(avatar)>2048 or parsed.scheme!='https' or not parsed.hostname
+                    or parsed.username or parsed.password or any(c.isspace() or c=='\\' for c in avatar)):
+                avatar = None
+        except ValueError:
+            avatar = None
+    else:
+        avatar = None
+    # Display name reuses users.username; identity/role flags are never writable profile fields.
+    profile = {key: row.get(key) for key in ('real_name','email','organization','city','bio')}
+    profile.update(display_name=row['username'], avatar_url=avatar,
+                   identities=json.loads(row.get('identities') or '[]'), version=row.get('profile_version',1))
+    phone=row.get('phone')
+    profile['phone']=phone if isinstance(phone,str) and re.fullmatch(r'(?:\+86)?1[0-9]{10}',phone) else None
+    return {'user_id': row['id'], 'username': row['username'], 'is_guest': False,
+            'avatar_url': avatar, 'profile': profile}
 
 
 def user_policy(user_id: int, enabled: bool | None = None) -> dict:
@@ -200,21 +239,61 @@ def exchange(client_id: str, client_secret: str, code: str, redirect_uri: str, v
             'recheck_seconds': RECHECK_SECONDS}
 
 
+def _session_user(db, client_id, client_secret, token):
+    c = _client(db, client_id, client_secret)
+    record = db.execute(text('''SELECT * FROM sso_sessions_v2 WHERE token_hash=:hash
+      AND client_id=:cid AND client_version=:cv AND expires_at>:now'''),
+      dict(hash=digest(token), cid=client_id, cv=c['version'], now=int(time.time()))).mappings().first()
+    if not record:
+        raise HTTPException(401, '统一认证会话已失效')
+    u = _user(db, record['user_id'])
+    if u['version'] != record['user_version']:
+        raise HTTPException(401, '统一认证会话已撤销')
+    return u, record
+
+
 def validate_session(client_id: str, client_secret: str, token: str) -> dict:
     with get_db_session() as db:
-        c = _client(db, client_id, client_secret)
-        record = db.execute(text('''SELECT * FROM sso_sessions_v2 WHERE token_hash=:hash
-          AND client_id=:cid AND client_version=:cv AND expires_at>:now'''),
-          dict(hash=digest(token), cid=client_id, cv=c['version'], now=int(time.time()))).mappings().first()
-        if not record:
-            return {'active': False}
+        # Invalid client credentials still fail closed rather than looking like logout.
+        _client(db, client_id, client_secret)
         try:
-            u = _user(db, record['user_id'])
+            u, record = _session_user(db, client_id, client_secret, token)
         except HTTPException:
             return {'active': False}
-        if u['version'] != record['user_version']:
-            return {'active': False}
         return {'active': True, 'user': _identity(u), 'expires_at': record['expires_at']}
+
+
+def update_profile(client_id, client_secret, token, expected_version, request_key, changes, context_hash=''):
+    request_hash = digest(json.dumps({'version':expected_version,'changes':changes,'context':context_hash},sort_keys=True,ensure_ascii=False))
+    with get_db_session() as db:
+        u, record = _session_user(db, client_id, client_secret, token)
+        uid = u['id']
+        db.execute(text('INSERT INTO user_profiles(user_id) VALUES (:uid) ON CONFLICT(user_id) DO NOTHING'),dict(uid=uid))
+        # Serialize writes before checking the idempotency key, including simultaneous retries.
+        db.execute(text('UPDATE user_profiles SET version=version WHERE user_id=:uid'),dict(uid=uid))
+        prior = db.execute(text('''SELECT request_hash,applied_version FROM sso_profile_writes
+            WHERE client_id=:cid AND user_id=:uid AND request_key=:key'''),dict(cid=client_id,uid=uid,key=request_key)).mappings().first()
+        if prior:
+            if prior['request_hash'] != request_hash:
+                raise HTTPException(409, 'IDEMPOTENCY_CONFLICT')
+            applied = prior['applied_version']
+        else:
+            # Only explicit allowed fields reach SQL. No phone, role or credential changes.
+            allowed = {'real_name','email','organization','identities','city','bio','display_name'}
+            if set(changes)-allowed:
+                raise HTTPException(422, '不支持的统一资料字段')
+            updates = {key:value for key,value in changes.items() if key!='display_name'}
+            if 'identities' in updates: updates['identities']=json.dumps(updates['identities'],ensure_ascii=False)
+            assignments = ''.join(', '+key+'=:'+key for key in updates)
+            applied = db.execute(text('UPDATE user_profiles SET version=version+1'+assignments+
+                ' WHERE user_id=:uid AND version=:expected RETURNING version'),
+                dict(uid=uid,expected=expected_version,**updates)).scalar()
+            if applied is None: raise HTTPException(409, 'VERSION_CONFLICT')
+            if 'display_name' in changes:
+                db.execute(text('UPDATE users SET username=:name WHERE id=:uid'),dict(uid=uid,name=changes['display_name']))
+            db.execute(text('''INSERT INTO sso_profile_writes(client_id,user_id,request_key,request_hash,applied_version)
+                VALUES (:cid,:uid,:key,:hash,:version)'''),dict(cid=client_id,uid=uid,key=request_key,hash=request_hash,version=applied))
+        return {'active':True,'user':_identity(_user(db,uid)),'expires_at':record['expires_at'],'applied_version':applied}
 
 
 def revoke_session(client_id: str, client_secret: str, token: str) -> dict:

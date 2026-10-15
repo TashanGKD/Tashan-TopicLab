@@ -295,3 +295,11 @@ The `JWT_SECRET` is shared across TopicLab, tashan-world, ai-org-builder, and ot
 | Date | Version | Notes |
 |------|---------|-------|
 | 2026-04-08 | v1.0 | Initial document. Covers existing auth system + forgot password implementation + SMS template fix |
+
+## 跨站统一资料（2026-10-15）
+
+通用资料由他山账号统一维护，接入平台通过 SSO 后端接口读写。`users.username` 继续作为展示名，长度扩展到80；新的一对一 `user_profiles` 表存放真实姓名、联系邮箱、单位、身份标签、城市、简介、统一头像地址和资料版本。原 `users.phone` 是只读登录手机号，不从资料接口换绑；身份标签不授予任何系统角色。
+
+换票及会话复核返回 `user.profile`。`POST /auth/sso/profile/update` 使用网站凭据和本人会话，接收 `expected_version`、`idempotency_key`、`changes`，可选完整本地请求摘要 `context_hash`。更新、版本递增和 `sso_profile_writes` 幂等记录同事务提交。返回最新资料及本次请求原始 `applied_version`；旧请求重放不会回滚新资料。跨站凭据或撤销会话不能修改资料，普通字段更新不修改密码、手机号、权限或认证策略版本。
+
+资料及更新内容在请求审计中脱敏。数据库变更为新增表及展示名长度扩容，不删除旧账号。没有统一头像时可使用现有已关联第三方账号的 HTTPS 头像；不会传播第三方访问令牌。各接入平台应按 tashan-auth 的字段映射规则处理同义字段、缓存和旧资料冲突，优先调整接入平台。

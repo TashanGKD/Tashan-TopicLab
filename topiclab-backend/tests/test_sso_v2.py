@@ -54,7 +54,7 @@ def test_callback_pkce_single_use_and_minimal_identity(setup):
     with pytest.raises(HTTPException): redeem(c,code,v,redirect_uri=other['redirect_uri'])
     with pytest.raises(HTTPException): redeem(other,code,v)
     data=redeem(c,code,v)
-    assert set(data['user'])=={'user_id','username','is_guest'}
+    assert set(data['user'])=={'user_id','username','is_guest','avatar_url','profile'}
     assert svc.validate_session(c['client_id'],c['client_secret'],data['session_token'])['active']
     with pytest.raises(HTTPException): redeem(c,code,v)
     svc.revoke_session(c['client_id'],c['client_secret'],data['session_token'])
@@ -136,3 +136,64 @@ def test_validation_errors_do_not_echo_credentials(setup):
     assert response.status_code==422
     assert response.headers['cache-control']=='no-store'
     assert 'private' not in response.text and 'sensitive-code' not in response.text
+
+
+def test_sso_profile_returns_existing_avatar_without_private_provider_fields(setup):
+    _,_,c,uid=setup
+    with get_db_session() as db:
+        db.execute(text('''INSERT INTO oauth_accounts
+            (user_id,provider,provider_user_id,nickname,avatar_url,email,phone,access_token)
+            VALUES (:uid,'synthetic',:pid,'Provider nickname',:avatar,'private@example.invalid','private-phone','private-token')'''),
+            dict(uid=uid,pid=secrets.token_hex(8),avatar='https://images.example/avatar.png'))
+    code,v=grant(c,uid)
+    data=redeem(c,code,v)
+    assert data['user']['avatar_url']=='https://images.example/avatar.png'
+    assert data['user']['profile']['display_name']=='SSO test'
+    assert data['user']['profile']['email'] is None
+    assert svc.validate_session(c['client_id'],c['client_secret'],data['session_token'])['user']==data['user']
+    assert 'private-' not in str(data)
+
+
+@pytest.mark.parametrize('avatar',['javascript:alert(1)','http://images.example/a','https://user:pass@images.example/a','https://[invalid','https://images.example/a\\b'])
+def test_sso_ignores_invalid_avatar_without_blocking_identity(avatar):
+    result=svc._identity(dict(id=42,username='Synthetic',avatar_url=avatar))
+    assert result['user_id']==42
+    assert result['avatar_url'] is None
+
+
+def test_shared_profile_write_version_idempotency_and_client_isolation(setup):
+    client,_,c,uid=setup
+    code,v=grant(c,uid); login=redeem(c,code,v)
+    payload=dict(client_id=c['client_id'],client_secret=c['client_secret'],session_token=login['session_token'],
+                 expected_version=1,idempotency_key=secrets.token_hex(16),changes={'real_name':'Synthetic Name','display_name':'Unified nickname',
+                 'email':'profile@example.invalid','organization':'Synthetic Lab','identities':['学生'],'city':'测试城市','bio':'Synthetic bio'})
+    result=client.post('/auth/sso/profile/update',json=payload)
+    assert result.status_code==200, result.text
+    profile=result.json()['user']['profile']
+    assert profile['version']==2 and profile['real_name']=='Synthetic Name'
+    assert profile['display_name']=='Unified nickname'
+    again=client.post('/auth/sso/profile/update',json=payload)
+    assert again.status_code==200 and again.json()['user']['profile']['version']==2
+    assert client.post('/auth/sso/profile/update',json={**payload,'changes':{'real_name':'Different'}}).status_code==409
+    assert client.post('/auth/sso/profile/update',json={**payload,'idempotency_key':secrets.token_hex(16)}).status_code==409
+    assert client.post('/auth/sso/profile/update',json={**payload,'changes':{'phone':'13800000000'}}).status_code==422
+    other=svc.create_client('Other profile site','https://'+secrets.token_hex(6)+'.example')
+    assert client.post('/auth/sso/profile/update',json={**payload,'client_id':other['client_id'],'client_secret':other['client_secret']}).status_code==401
+    code2,v2=grant(other,uid); login2=redeem(other,code2,v2)
+    assert login2['user']['profile']==profile
+    changed=client.post('/auth/sso/profile/update',json={**payload,'client_id':other['client_id'],'client_secret':other['client_secret'],
+        'session_token':login2['session_token'],'expected_version':2,'idempotency_key':secrets.token_hex(16),'changes':{'city':'新城市'}})
+    assert changed.status_code==200
+    replay=client.post('/auth/sso/profile/update',json=payload).json()
+    assert replay['applied_version']==2 and replay['user']['profile']['version']==3
+    assert replay['user']['profile']['city']=='新城市'
+    svc.revoke_session(c['client_id'],c['client_secret'],login['session_token'])
+    assert client.post('/auth/sso/profile/update',json=payload).status_code==401
+
+
+def test_shared_profile_content_is_not_copied_to_request_audit():
+    from app.services.request_audit import sanitize_for_audit
+    result=sanitize_for_audit({'changes':{'real_name':'private-name','email':'private@example.invalid'},
+                               'user':{'profile':{'phone':'private-phone','bio':'private-bio'}}})
+    assert 'private-' not in str(result)
+    assert 'private@example' not in str(result)
