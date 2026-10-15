@@ -1,4 +1,5 @@
-import { authPath } from '../utils/sso';
+import AuthPageFrame, { UnifiedAuthComplete } from '../components/AuthPageFrame';
+import { authPath, isUnifiedAuth } from '../utils/sso';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { authApi, tokenManager } from '../api/auth';
@@ -7,6 +8,8 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
+  const unified = isUnifiedAuth(location.pathname, searchParams);
+  const [complete, setComplete] = useState(false);
   const from = searchParams.get('next') || (location.state as { from?: string } | null)?.from || '/';
   const claimToken = searchParams.get('openclaw_claim');
   const ssoClientId = searchParams.get('sso_client');
@@ -79,6 +82,10 @@ export default function Login() {
         await completeSsoHandoff(data.token);
         return;
       }
+      if (data.token && unified) {
+        setComplete(true);
+        return;
+      }
       showMessage('success', data.claim_status === 'claimed' ? '登录成功，已自动绑定你的智能体临时账号。' : '登录成功！');
       setTimeout(() => navigate(from), 1000);
     } catch (err: unknown) {
@@ -95,9 +102,10 @@ export default function Login() {
   };
 
   const handleWatchaLogin = async () => {
+    if (unified) return;
     setWatchaLoading(true);
     try {
-      const data = await authApi.startWatchaLogin(buildWatchaCallbackUri(), ssoActive ? authPath('/login', searchParams) : from, claimToken);
+      const data = await authApi.startWatchaLogin(buildWatchaCallbackUri(), ssoActive ? authPath('/login', searchParams, unified) : from, claimToken);
       window.location.assign(data.authorization_url);
     } catch (err: unknown) {
       showMessage('error', err instanceof Error ? err.message : '观猹登录暂时不可用');
@@ -105,28 +113,26 @@ export default function Login() {
     }
   };
 
-  const registerLinkTo = authPath('/register', searchParams);
+  const registerLinkTo = authPath('/register', searchParams, unified);
+
+  if (complete) return <UnifiedAuthComplete />;
 
   if (ssoActive && ssoHandingOff) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="w-full max-w-md">
-          <div className="border border-gray-200 rounded-lg p-6 text-center">
+      <AuthPageFrame unified={unified} title="正在返回原网站">
+          <div className="text-center">
             <h1 className="text-xl font-serif font-bold mb-2">正在返回原网站</h1>
             <p className="text-sm text-gray-500">登录成功，正在为你跳转，请稍候...</p>
           </div>
-        </div>
-      </div>
+      </AuthPageFrame>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="border border-gray-200 rounded-lg p-6">
+    <AuthPageFrame unified={unified} title="登录">
           <h1 className="text-xl font-serif font-bold text-center mb-2">登录</h1>
           <p className="text-sm text-gray-500 text-center mb-6">
-            {claimToken ? '登录后会自动认领你的智能体临时账号' : '登录您的账号'}
+            {claimToken ? '登录后会自动认领你的智能体临时账号' : unified ? '使用他山账号继续' : '登录您的账号'}
           </p>
 
           {ssoActive && (
@@ -190,6 +196,7 @@ export default function Login() {
             </button>
           </form>
 
+          {!unified && <>
           <div className="my-5 flex items-center gap-3">
             <div className="h-px flex-1 bg-gray-200" />
             <span className="text-xs text-gray-400 font-serif">或</span>
@@ -210,16 +217,15 @@ export default function Login() {
             />
             {watchaLoading ? '正在前往观猹...' : '使用观猹登录'}
           </button>
+          </>}
 
           <div className="mt-4 flex justify-between text-sm text-gray-500 font-serif">
-            <Link to={authPath('/forgot-password', searchParams)} className="hover:underline" style={{ color: 'var(--text-primary)' }}>忘记密码？</Link>
+            <Link to={authPath('/forgot-password', searchParams, unified)} className="hover:underline" style={{ color: 'var(--text-primary)' }}>忘记密码？</Link>
             <span>
               还没有账号？{' '}
               <Link to={registerLinkTo} state={{ from }} className="hover:underline" style={{ color: 'var(--text-primary)' }}>立即注册</Link>
             </span>
           </div>
-        </div>
-      </div>
-    </div>
+    </AuthPageFrame>
   );
 }

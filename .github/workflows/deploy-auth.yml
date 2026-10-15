@@ -24,7 +24,7 @@ jobs:
         working-directory: frontend
         run: |
           npm ci
-          npm test -- src/pages/SsoFlow.test.tsx
+          npm test -- src/pages/SsoFlow.test.tsx src/utils/layoutChrome.test.ts
           npm run build
       - name: Prepare immutable code bundle
         run: |
@@ -50,4 +50,5 @@ jobs:
       - name: Verify public account routes
         run: |
           curl --fail --silent --show-error --retry 3 https://world.tashan.chat/login -o /dev/null
+          curl --fail --silent --show-error --retry 3 https://world.tashan.chat/sso/login -o /dev/null
           test "$(curl --silent --show-error -o /dev/null -w '%{http_code}' https://world.tashan.chat/api/admin/sso/clients)" = 401

@@ -1,4 +1,5 @@
-import { authPath } from '../utils/sso';
+import AuthPageFrame from '../components/AuthPageFrame';
+import { authPath, isUnifiedAuth } from '../utils/sso';
 import { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { authApi } from '../api/auth';
@@ -8,7 +9,9 @@ type Step = 'phone' | 'reset';
 export default function ForgotPassword() {
   const navigate = useNavigate();
   const location = useLocation();
-  const loginPath = authPath('/login', new URLSearchParams(location.search));
+  const searchParams = new URLSearchParams(location.search);
+  const unified = isUnifiedAuth(location.pathname, searchParams);
+  const loginPath = authPath('/login', searchParams, unified);
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
@@ -94,9 +97,7 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="border border-gray-200 rounded-lg p-6">
+    <AuthPageFrame unified={unified} title="重置密码">
           <h1 className="text-xl font-serif font-bold text-center mb-2">重置密码</h1>
           <p className="text-sm text-gray-500 text-center mb-6">
             {step === 'phone' ? '输入手机号获取验证码' : `验证码已发送至 ${phone}`}
@@ -194,8 +195,6 @@ export default function ForgotPassword() {
             想起来了？{' '}
             <Link to={loginPath} className="hover:underline" style={{ color: 'var(--text-primary)' }}>返回登录</Link>
           </div>
-        </div>
-      </div>
-    </div>
+    </AuthPageFrame>
   );
 }

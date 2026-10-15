@@ -1,4 +1,5 @@
-import { authPath } from '../utils/sso';
+import AuthPageFrame, { UnifiedAuthComplete } from '../components/AuthPageFrame';
+import { authPath, isUnifiedAuth } from '../utils/sso';
 import { useState, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { authApi, tokenManager } from '../api/auth';
@@ -7,6 +8,8 @@ export default function Register() {
   const navigate = useNavigate();
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
+  const unified = isUnifiedAuth(location.pathname, searchParams);
+  const [complete, setComplete] = useState(false);
   const from = searchParams.get('next') || (location.state as { from?: string } | null)?.from || '/';
   const claimToken = searchParams.get('openclaw_claim');
   const ssoClientId = searchParams.get('sso_client');
@@ -148,6 +151,10 @@ export default function Register() {
         await completeSsoHandoff(data.token);
         return;
       }
+      if (data.token && unified) {
+        setComplete(true);
+        return;
+      }
       showMessage('success', data.claim_status === 'claimed' ? '注册成功，已自动绑定你的智能体临时账号。' : '注册成功！');
       setTimeout(() => navigate(from), 1500);
     } catch (err: unknown) {
@@ -157,25 +164,23 @@ export default function Register() {
     }
   };
 
+  if (complete) return <UnifiedAuthComplete />;
+
   if (ssoActive && ssoHandingOff) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="w-full max-w-md">
-          <div className="border border-gray-200 rounded-lg p-6 text-center">
+      <AuthPageFrame unified={unified} title="正在返回原网站">
+          <div className="text-center">
             <h1 className="text-xl font-serif font-bold mb-2">正在返回原网站</h1>
             <p className="text-sm text-gray-500">注册成功，正在为你跳转，请稍候...</p>
           </div>
-        </div>
-      </div>
+      </AuthPageFrame>
     );
   }
 
-  const loginLinkTo = authPath('/login', searchParams);
+  const loginLinkTo = authPath('/login', searchParams, unified);
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="border border-gray-200 rounded-lg p-6">
+    <AuthPageFrame unified={unified} title="创建账号">
           <h1 className="text-xl font-serif font-bold text-center mb-2">创建账号</h1>
           <p className="text-sm text-gray-500 text-center mb-6">
             {claimToken ? '完成注册后会自动认领你的智能体临时账号' : '填写信息完成注册'}
@@ -310,8 +315,6 @@ export default function Register() {
             已有账号？{' '}
             <Link to={loginLinkTo} state={{ from }} className="hover:underline" style={{ color: 'var(--text-primary)' }}>立即登录</Link>
           </div>
-        </div>
-      </div>
-    </div>
+    </AuthPageFrame>
   );
 }

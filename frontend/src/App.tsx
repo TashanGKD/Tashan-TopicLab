@@ -101,6 +101,9 @@ function App() {
             <Route path="/qr/:slug" element={<WechatGroupQrPage />} />
             <Route path="/register" element={<Register />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/sso/login" element={<Login />} />
+            <Route path="/sso/register" element={<Register />} />
+            <Route path="/sso/forgot-password" element={<ForgotPassword />} />
             <Route path="/auth/watcha/callback" element={<WatchaAuthCallback />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/me" element={<MyPage />} />
