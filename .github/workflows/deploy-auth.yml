@@ -32,8 +32,8 @@ jobs:
           tar -czf auth-release.tgz revision scripts/deploy/auth-only.sh frontend/dist topiclab-backend/app topiclab-backend/main.py
       - name: Deploy only account API and frontend
         env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: 8.147.58.40
+          DEPLOY_USER: root
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
         run: |
