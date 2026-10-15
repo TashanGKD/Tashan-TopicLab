@@ -1,3 +1,4 @@
+import AuthPasswordInput from '../components/AuthPasswordInput';
 import AuthPageFrame, { UnifiedAuthComplete } from '../components/AuthPageFrame';
 import { authPath, isUnifiedAuth } from '../utils/sso';
 import { useEffect, useRef, useState } from 'react';
@@ -130,7 +131,7 @@ export default function Login() {
 
   return (
     <AuthPageFrame unified={unified} title="登录">
-          <h1 className="text-xl font-serif font-bold text-center mb-2">登录</h1>
+          <h1 className="text-xl font-serif font-bold text-center mb-2">{unified ? '欢迎回来' : '登录'}</h1>
           <p className="text-sm text-gray-500 text-center mb-6">
             {claimToken ? '登录后会自动认领你的智能体临时账号' : unified ? '使用他山账号继续' : '登录您的账号'}
           </p>
@@ -142,7 +143,7 @@ export default function Login() {
           )}
 
           {message && (
-            <div className={`mb-4 p-3 rounded-lg text-sm ${
+            <div role="alert" className={`mb-4 p-3 rounded-lg text-sm ${
               message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
             }`}>
               {message.text}
@@ -151,9 +152,13 @@ export default function Login() {
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-sm font-serif mb-2" style={{ color: 'var(--text-primary)' }}>手机号</label>
+              <label htmlFor="login-phone" className="block text-sm font-serif mb-2" style={{ color: 'var(--text-primary)' }}>手机号</label>
               <input
                 type="tel"
+                id="login-phone"
+                aria-label="手机号"
+                autoComplete="tel"
+                inputMode="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="请输入手机号"
@@ -164,9 +169,13 @@ export default function Login() {
             </div>
 
             <div>
-              <label className="block text-sm font-serif" style={{ color: 'var(--text-primary)' }}>密码</label>
-              <input
+              <label htmlFor="login-password" className="block text-sm font-serif" style={{ color: 'var(--text-primary)' }}>密码</label>
+              <AuthPasswordInput
+                unified={unified}
                 type="password"
+                id="login-password"
+                aria-label="密码"
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="请输入密码"
@@ -219,7 +228,7 @@ export default function Login() {
           </button>
           </>}
 
-          <div className="mt-4 flex justify-between text-sm text-gray-500 font-serif">
+          <div className="auth-form-links mt-4 flex justify-between text-sm text-gray-500 font-serif">
             <Link to={authPath('/forgot-password', searchParams, unified)} className="hover:underline" style={{ color: 'var(--text-primary)' }}>忘记密码？</Link>
             <span>
               还没有账号？{' '}

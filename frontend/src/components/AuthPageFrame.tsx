@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react';
+import './UnifiedAuth.css';
 
 export default function AuthPageFrame({ unified, title, children }: {
   unified: boolean;
@@ -12,16 +13,23 @@ export default function AuthPageFrame({ unified, title, children }: {
     return () => { document.title = previous; };
   }, [unified, title]);
 
+  if (unified) return (
+    <div className="unified-auth">
+      <div className="unified-auth__shapes" aria-hidden="true"><i /><i /><i /></div>
+      <div className="unified-auth__container">
+        <header className="unified-auth__header">
+          <img src={`${import.meta.env.BASE_URL}auth-center/logo_horizontal.png`} alt="他山" width="160" height="76" />
+          <p>他山统一认证</p>
+        </header>
+        <div className="unified-auth__card">{children}</div>
+      </div>
+    </div>
+  );
+
   return (
-    <div className={`min-h-screen flex items-center justify-center px-4 py-10 ${unified ? 'bg-slate-50 text-slate-900' : ''}`}>
+    <div className="min-h-screen flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-md">
-        {unified && (
-          <header className="mb-8 text-center">
-            <div aria-hidden="true" className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-xl font-bold text-white">山</div>
-            <p className="text-2xl font-semibold tracking-wide">他山统一认证</p>
-          </header>
-        )}
-        <div className={unified ? 'rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm' : 'border border-gray-200 rounded-lg p-6'}>
+        <div className="border border-gray-200 rounded-lg p-6">
           {children}
         </div>
       </div>

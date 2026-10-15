@@ -1,3 +1,4 @@
+import AuthPasswordInput from '../components/AuthPasswordInput';
 import AuthPageFrame, { UnifiedAuthComplete } from '../components/AuthPageFrame';
 import { authPath, isUnifiedAuth } from '../utils/sso';
 import { useState, useEffect } from 'react';
@@ -193,7 +194,7 @@ export default function Register() {
           )}
 
           {message && (
-            <div className={`mb-4 p-3 rounded-lg text-sm ${
+            <div role="alert" className={`mb-4 p-3 rounded-lg text-sm ${
               message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
             }`}>
               {message.text}
@@ -202,9 +203,12 @@ export default function Register() {
 
           <form onSubmit={handleRegister} className="space-y-4">
             <div>
-              <label className="block text-sm font-serif mb-2" style={{ color: 'var(--text-primary)' }}>用户名 *</label>
+              <label htmlFor="register-username" className="block text-sm font-serif mb-2" style={{ color: 'var(--text-primary)' }}>用户名 *</label>
               <input
                 type="text"
+                id="register-username"
+                aria-label="用户名"
+                autoComplete="nickname"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="请输入用户名"
@@ -215,9 +219,13 @@ export default function Register() {
             </div>
 
             <div>
-              <label className="block text-sm font-serif mb-2" style={{ color: 'var(--text-primary)' }}>手机号 *</label>
+              <label htmlFor="register-phone" className="block text-sm font-serif mb-2" style={{ color: 'var(--text-primary)' }}>手机号 *</label>
               <input
                 type="tel"
+                id="register-phone"
+                aria-label="手机号"
+                autoComplete="tel"
+                inputMode="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="请输入手机号"
@@ -229,10 +237,14 @@ export default function Register() {
 
             {requiresSms && (
               <div>
-                <label className="block text-sm font-serif mb-2" style={{ color: 'var(--text-primary)' }}>验证码 *</label>
+                <label htmlFor="register-code" className="block text-sm font-serif mb-2" style={{ color: 'var(--text-primary)' }}>验证码 *</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
+                    id="register-code"
+                    aria-label="验证码"
+                    autoComplete="one-time-code"
+                    inputMode="numeric"
                     value={code}
                     onChange={(e) => setCode(e.target.value)}
                     placeholder="请输入验证码"
@@ -267,9 +279,13 @@ export default function Register() {
             )}
 
             <div>
-              <label className="block text-sm font-serif text-black mb-2">密码 *</label>
-              <input
+              <label htmlFor="register-password" className="block text-sm font-serif text-black mb-2">密码 *</label>
+              <AuthPasswordInput
+                unified={unified}
                 type="password"
+                id="register-password"
+                aria-label="密码"
+                autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="请输入密码（至少6位）"
@@ -279,9 +295,13 @@ export default function Register() {
             </div>
 
             <div>
-              <label className="block text-sm font-serif mb-2" style={{ color: 'var(--text-primary)' }}>确认密码 *</label>
-              <input
+              <label htmlFor="register-confirmPassword" className="block text-sm font-serif mb-2" style={{ color: 'var(--text-primary)' }}>确认密码 *</label>
+              <AuthPasswordInput
+                unified={unified}
                 type="password"
+                id="register-confirmPassword"
+                aria-label="确认密码"
+                autoComplete="new-password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="请再次输入密码"

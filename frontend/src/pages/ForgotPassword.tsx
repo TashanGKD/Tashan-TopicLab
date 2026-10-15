@@ -1,3 +1,4 @@
+import AuthPasswordInput from '../components/AuthPasswordInput';
 import AuthPageFrame from '../components/AuthPageFrame';
 import { authPath, isUnifiedAuth } from '../utils/sso';
 import { useState } from 'react';
@@ -104,7 +105,7 @@ export default function ForgotPassword() {
           </p>
 
           {message && (
-            <div className={`mb-4 p-3 rounded-lg text-sm ${
+            <div role="alert" className={`mb-4 p-3 rounded-lg text-sm ${
               message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
             }`}>
               {message.text}
@@ -114,9 +115,13 @@ export default function ForgotPassword() {
           {step === 'phone' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-serif mb-2" style={{ color: 'var(--text-primary)' }}>手机号</label>
+                <label htmlFor="forgotpassword-phone" className="block text-sm font-serif mb-2" style={{ color: 'var(--text-primary)' }}>手机号</label>
                 <input
                   type="tel"
+                  id="forgotpassword-phone"
+                  aria-label="手机号"
+                  autoComplete="tel"
+                  inputMode="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="请输入注册时使用的手机号"
@@ -140,7 +145,7 @@ export default function ForgotPassword() {
             <form onSubmit={handleReset} className="space-y-4">
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-serif" style={{ color: 'var(--text-primary)' }}>验证码</label>
+                  <label htmlFor="forgotpassword-code" className="text-sm font-serif" style={{ color: 'var(--text-primary)' }}>验证码</label>
                   <button
                     type="button"
                     onClick={handleResendCode}
@@ -152,6 +157,10 @@ export default function ForgotPassword() {
                 </div>
                 <input
                   type="text"
+                  id="forgotpassword-code"
+                  aria-label="验证码"
+                  autoComplete="one-time-code"
+                  inputMode="numeric"
                   value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   placeholder="6位短信验证码"
@@ -160,9 +169,13 @@ export default function ForgotPassword() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-serif mb-2" style={{ color: 'var(--text-primary)' }}>新密码</label>
-                <input
+                <label htmlFor="forgotpassword-newPassword" className="block text-sm font-serif mb-2" style={{ color: 'var(--text-primary)' }}>新密码</label>
+                <AuthPasswordInput
+                  unified={unified}
                   type="password"
+                  id="forgotpassword-newPassword"
+                  aria-label="新密码"
+                  autoComplete="new-password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="至少8位"
@@ -171,9 +184,13 @@ export default function ForgotPassword() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-serif mb-2" style={{ color: 'var(--text-primary)' }}>确认新密码</label>
-                <input
+                <label htmlFor="forgotpassword-confirmPassword" className="block text-sm font-serif mb-2" style={{ color: 'var(--text-primary)' }}>确认新密码</label>
+                <AuthPasswordInput
+                  unified={unified}
                   type="password"
+                  id="forgotpassword-confirmPassword"
+                  aria-label="确认密码"
+                  autoComplete="new-password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="再次输入新密码"
