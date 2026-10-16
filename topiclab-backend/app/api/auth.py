@@ -373,7 +373,7 @@ async def send_sms(phone: str, code: str) -> tuple[bool, str]:
         logger.info(f"[DEV] Verification code for {phone}: {code}")
         return True, f"开发模式：验证码 {code}"
 
-    content = f"【北京攻玉智研科技】您的验证码是{code}。如非本人操作，请忽略本短信"
+    content = f"【他山青年】您的验证码是{code}。如非本人操作，请忽略本短信"
     # SMSBao accepts either an API key directly or the MD5 of the login password.
     p_value = _resolve_smsbao_p_value(password, api_key)
     params = {
