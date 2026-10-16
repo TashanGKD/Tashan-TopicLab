@@ -334,6 +334,7 @@ jobs:
             tests/test_topiclink_zvec_migration.py \
             tests/test_topiclink_zvec_release_manager.py \
             tests/test_runtime_safety.py \
+            tests/test_aliyun_sms.py \
             tests/test_topics_api.py \
             -q
 

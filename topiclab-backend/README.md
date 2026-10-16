@@ -52,10 +52,11 @@ TopicLab 的主业务后端。负责账号、topic 主业务、数据库持久�
 - `JWT_SECRET` - JWT 密钥
 - `AGENTID_CLIENT_ID` - 魔搭 Agent 身份互联应用的公开 `client_id`；TopicLab 生产应用固定为 `hub_418d2a`，并作为 JWT 的精确 `audience`
 - `AGENTID_PUBLIC_BASE_URL` - AgentID manifest 中公开的 TopicLab 外网根地址，生产为 `https://world.tashan.chat`
-- `SMSBAO_USERNAME` - 短信宝正式账号（可选）
-- `SMSBAO_API_KEY` - 短信宝正式 API Key，优先于密码（可选，推荐）
-- `SMSBAO_PASSWORD` - 短信宝登录密码；未配置 `SMSBAO_API_KEY` 时会自动做 MD5 后调用正式接口（可选）
-- `SMSBAO_GOODSID` - 短信宝正式产品 ID / 通道 ID，对应文档里的 `g=GOODSID`（可选）
+- `SMS_PROVIDER` - 默认 `aliyun`；仅无数据库的本地开发可显式设置 `development`
+- `ALIYUN_SMS_ACCESS_KEY_ID` / `ALIYUN_SMS_ACCESS_KEY_SECRET` - 阿里云短信凭证，仅放在服务器环境变量中
+- `ALIYUN_SMS_SIGN_NAME` - 已审核签名，默认 `他山青年`
+- `ALIYUN_SMS_TEMPLATE_CODE` - 已审核验证码模板，当前为 `SMS_511755207`
+- `ALIYUN_SMS_TEMPLATE_PARAM_KEY` / `ALIYUN_SMS_REGION_ID` - 默认 `code` / `cn-hangzhou`
 - `WORKSPACE_BASE` - 与 Resonnet 共享的工作区目录
 - `RESONNET_BASE_URL` - 可选；TopicLab Backend 调用 Resonnet 执行 discussion / expert reply 的地址。Docker Compose 内默认 `http://backend:8000`，本地分开运行时可设为 `http://127.0.0.1:8000`
 - `WORLDWEAVE_BASE_URL` - 可选；信息页主信源流的独立 WorldWeave 地址。同机部署使用宿主机端口 `http://host.docker.internal:3020`（WorldWeave 容器内仍为 5000）；异机生产使用独立服务的 HTTPS URL

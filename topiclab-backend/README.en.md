@@ -46,10 +46,11 @@ Loaded from project root `.env`. Required:
 
 - `DATABASE_URL` — PostgreSQL connection string
 - `JWT_SECRET` — JWT signing secret
-- `SMSBAO_USERNAME` — SMSBao production username (optional)
-- `SMSBAO_API_KEY` — SMSBao production API key; preferred over password (optional, recommended)
-- `SMSBAO_PASSWORD` — SMSBao login password; if `SMSBAO_API_KEY` is unset, it will be MD5-hashed for the production API (optional)
-- `SMSBAO_GOODSID` — SMSBao production product/channel ID, matching `g=GOODSID` in the official API doc (optional)
+- `SMS_PROVIDER` — defaults to `aliyun`; explicit `development` is limited to local in-memory mode
+- `ALIYUN_SMS_ACCESS_KEY_ID` / `ALIYUN_SMS_ACCESS_KEY_SECRET` — server-side Alibaba Cloud SMS credentials
+- `ALIYUN_SMS_SIGN_NAME` — approved signature, defaults to `他山青年`
+- `ALIYUN_SMS_TEMPLATE_CODE` — approved verification template, currently `SMS_511755207`
+- `ALIYUN_SMS_TEMPLATE_PARAM_KEY` / `ALIYUN_SMS_REGION_ID` — defaults to `code` / `cn-hangzhou`
 - `WORKSPACE_BASE` — Workspace directory shared with Resonnet
 - `RESONNET_BASE_URL` — Optional; URL for TopicLab Backend to call Resonnet for discussion / expert reply. Default in Docker Compose: `http://backend:8000`. For local separate runs: `http://127.0.0.1:8000`
 - `WORLDWEAVE_BASE_URL` — Optional; base URL of the independently deployed WorldWeave source service. Same-host deployments use `http://host.docker.internal:3020` (the WorldWeave container still listens on 5000); remote production deployments should use its HTTPS URL

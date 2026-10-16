@@ -174,26 +174,25 @@ Request: Authorization: Bearer {token}
 
 ---
 
-## SMS Service
+## Verification SMS (Alibaba Cloud)
 
-**Provider**: [SmsBao](https://www.smsbao.com)  
-**API endpoint**: `https://api.smsbao.com/sms`
+The shared account backend uses Alibaba Cloud SMS over HTTPS. The approved signature is
+`他山青年`; verification template `SMS_511755207` accepts one `code` variable:
 
-**Approved SMS template** (must match exactly for VIP channel routing):
+```text
+【他山青年】您的验证码：${code}，您正在进行身份验证，请勿泄露于他人！
 ```
-【北京攻玉智研科技】您的验证码是{code}。如非本人操作，请忽略本短信
-```
-> Important: The SMS content in code must match the approved VIP template in the SmsBao dashboard exactly. Any mismatch causes the platform to fall back to the default shared channel with a different sender name.
 
-**Environment variables**:
+Configure `SMS_PROVIDER=aliyun`, `ALIYUN_SMS_ACCESS_KEY_ID`,
+`ALIYUN_SMS_ACCESS_KEY_SECRET`, `ALIYUN_SMS_SIGN_NAME`, and
+`ALIYUN_SMS_TEMPLATE_CODE` on the server. Never commit credentials.
+`ALIYUN_SMS_TEMPLATE_PARAM_KEY` defaults to `code`; `ALIYUN_SMS_REGION_ID`
+defaults to `cn-hangzhou`. The existing `oss2` dependency supplies the Alibaba Cloud core SDK.
 
-| Variable | Value | Notes |
-|----------|-------|-------|
-| `SMSBAO_USERNAME` | `tashan2023` | SmsBao account username |
-| `SMSBAO_API_KEY` | `58eb57d1abd9495a9ad42a1d8f157415` | API key (preferred over password) |
-| `SMSBAO_PASSWORD` | `58eb57d1abd9495a9ad42a1d8f157415` | MD5-hashed login password (fallback) |
-
-**Local dev mode**: If `SMSBAO_USERNAME` is not set, no real SMS is sent. The verification code is returned in the API response as `dev_code`.
+Missing configuration fails closed. Provider failures never fall back to SMSBao or retry
+an ambiguous send. `dev_code` is only returned with explicit `SMS_PROVIDER=development`
+and no `DATABASE_URL`. Signature/template approval and an accepted request do not prove
+handset delivery; delivery testing requires an authorized recipient.
 
 ---
 
@@ -250,9 +249,10 @@ The `JWT_SECRET` is shared across TopicLab, tashan-world, ai-org-builder, and ot
 |----------|----------|---------|-------|
 | `DATABASE_URL` | Yes (prod) | `postgresql://user:pass@host/db` | Not set → in-memory mode (local dev only) |
 | `JWT_SECRET` | Yes | `97c24...` (see deployment docs) | Shared across all Tashan products |
-| `SMSBAO_USERNAME` | Yes (prod) | `tashan2023` | Not set → dev mode (no real SMS) |
-| `SMSBAO_API_KEY` | Yes (prod) | `58eb5...` | Preferred over SMSBAO_PASSWORD |
-| `SMSBAO_PASSWORD` | Optional | same value | MD5 fallback |
+| `SMS_PROVIDER` | No | `aliyun` | Explicit development mode requires no database |
+| `ALIYUN_SMS_ACCESS_KEY_ID` / `ALIYUN_SMS_ACCESS_KEY_SECRET` | Yes (prod) | Server secret | Never logged or committed |
+| `ALIYUN_SMS_SIGN_NAME` | No | `他山青年` | Approved signature |
+| `ALIYUN_SMS_TEMPLATE_CODE` | Yes (prod) | `SMS_511755207` | Approved verification template |
 | `REGISTER_SKIP_SMS_UNTIL` | No | `2026-03-22T12:00:00+08:00` | Default expired; empty string = always require SMS |
 | `AUTH_REQUIRED` | No | `false` | `false` = anonymous browsing allowed |
 
