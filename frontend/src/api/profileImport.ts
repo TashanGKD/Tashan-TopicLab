@@ -36,6 +36,7 @@ export interface ProfileFieldView {
   label: string
   value: string | null
   source: string | null
+  source_label: string | null
   source_updated_at: string | null
   adopted_at: number | null
 }
@@ -47,11 +48,12 @@ export interface HistoryItem {
   status: string
   consent_version: string
   field_scope: string[]
+  field_scope_labels: string[]
   granted_at: number
   expires_at: number
   cancelled_at: number | null
   completed_at: number | null
-  adopted_fields: { field: string; source: string; source_updated_at: string | null }[]
+  adopted_fields: { field: string; label: string; source: string; source_label: string | null; source_updated_at: string | null }[]
 }
 
 const get = async <T>(url: string): Promise<T> => (await api.get<T>(url)).data

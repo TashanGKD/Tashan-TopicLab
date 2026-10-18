@@ -123,7 +123,10 @@ def _source_config(source: str) -> dict:
     if url and secret:
         try:
             parsed = urlsplit(url)
-            available = parsed.scheme == 'https' and bool(parsed.hostname) and not parsed.username and not parsed.password
+            # HTTPS is required. Loopback HTTP is allowed only with an explicit local-evidence switch.
+            loopback = os.getenv('PROFILE_SOURCE_ALLOW_LOOPBACK_HTTP') == '1' and parsed.hostname in {'127.0.0.1', 'localhost', '::1'}
+            available = (parsed.scheme == 'https' or (parsed.scheme == 'http' and loopback)) \
+                and bool(parsed.hostname) and not parsed.username and not parsed.password
         except ValueError:
             available = False
     return {'source': source, 'label': meta['label'], 'activity': meta['activity'],
@@ -163,6 +166,8 @@ def current_profile(user_id: int) -> dict:
     return {'profile': profile,
             'fields': [{'field': f, 'label': FIELD_LABELS[f], 'value': profile[f],
                         'source': sources.get(f, {}).get('source'),
+                        'source_label': ('本人填写' if sources.get(f, {}).get('source') == 'user'
+                                         else SOURCES.get(sources.get(f, {}).get('source', ''), {}).get('label')),
                         'source_updated_at': sources.get(f, {}).get('source_updated_at'),
                         'adopted_at': sources.get(f, {}).get('adopted_at')} for f in IMPORT_FIELDS]}
 
@@ -429,8 +434,13 @@ def history(user_id: int, limit: int = 20) -> dict:
                 'label': SOURCES.get(row['source'], {}).get('label', row['source']),
                 'status': row['status'], 'consent_version': row['consent_version'],
                 'field_scope': json.loads(row['field_scope'] or '[]'),
+                'field_scope_labels': [FIELD_LABELS.get(f, f) for f in json.loads(row['field_scope'] or '[]')],
                 'granted_at': row['granted_at'], 'expires_at': row['expires_at'],
                 'cancelled_at': row['cancelled_at'], 'completed_at': row['completed_at'],
-                'adopted_fields': [dict(s) for s in stamps],
+                'adopted_fields': [{'field': s['field'], 'label': FIELD_LABELS.get(s['field'], s['field']),
+                                    'source': s['source'],
+                                    'source_label': ('本人填写' if s['source'] == 'user'
+                                                     else SOURCES.get(s['source'], {}).get('label', s['source'])),
+                                    'source_updated_at': s['source_updated_at']} for s in stamps],
             })
         return {'items': items, 'sources': list_sources()['sources']}

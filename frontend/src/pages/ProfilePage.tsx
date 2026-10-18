@@ -327,7 +327,42 @@ export default function ProfilePage() {
                 <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
                   来源活动：{preview.activity}；核对后再保存到个人资料。未勾选的项目不会改变。
                 </p>
-                <div className="overflow-x-auto rounded-[var(--radius-md)] border" style={cardStyle}>
+                <div className="space-y-3 sm:hidden">
+                  {(preview.fields ?? []).map((field: ImportField) => (
+                    <div key={field.field} className="rounded-[var(--radius-md)] border p-3" style={cardStyle}>
+                      <label className="flex items-center gap-2 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(adopt[field.field])}
+                          disabled={!field.source_value}
+                          onChange={(event) => setAdopt((prev) => ({ ...prev, [field.field]: event.target.checked }))}
+                        />
+                        {field.label}
+                      </label>
+                      {field.note === 'combined_field' ? (
+                        <p className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>来源为组合字段，保留原文</p>
+                      ) : null}
+                      <p className="mt-2 text-xs" style={{ color: 'var(--text-secondary)' }}>当前：{field.current || '未填写'}</p>
+                      <div className="mt-2">
+                        {field.source_value ? (
+                          <input
+                            aria-label={`${field.label}来源值`}
+                            className="w-full rounded-[var(--radius-sm)] border px-2 py-2 text-sm"
+                            style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                            value={draft[field.field] ?? ''}
+                            onChange={(event) => setDraft((prev) => ({ ...prev, [field.field]: event.target.value }))}
+                          />
+                        ) : (
+                          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>来源未填写</p>
+                        )}
+                      </div>
+                      <p className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                        来源时间：{formatSourceTime(field.source_updated_at)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <div className="hidden overflow-x-auto rounded-[var(--radius-md)] border sm:block" style={cardStyle}>
                   <table className="w-full min-w-[640px] text-sm">
                     <thead>
                       <tr style={{ color: 'var(--text-secondary)' }}>
@@ -410,9 +445,9 @@ export default function ProfilePage() {
                 <dt className="text-xs" style={{ color: 'var(--text-secondary)' }}>{field.label}</dt>
                 <dd className="mt-1 text-sm" style={{ color: 'var(--text-primary)' }}>{field.value || '未填写'}</dd>
                 <p className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                  {field.source === 'user' || !field.source
+                  {!field.source || field.source === 'user'
                     ? '由你填写或尚未记录来源'
-                    : `来自 ${field.source}${field.source_updated_at ? `（来源时间 ${formatSourceTime(field.source_updated_at)}）` : '（来源未提供时间）'}`}
+                    : `来自 ${field.source_label ?? field.source}${field.source_updated_at ? `（来源时间 ${formatSourceTime(field.source_updated_at)}）` : '（来源未提供时间）'}`}
                 </p>
               </div>
             ))}
@@ -435,11 +470,11 @@ export default function ProfilePage() {
                     </span>
                   </div>
                   <p className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                    授权时间 {formatTime(item.granted_at)}；用途：导入个人资料；范围：{item.field_scope.join('、') || '无'}；文案版本 {item.consent_version}
+                    授权时间 {formatTime(item.granted_at)}；用途：导入个人资料；范围：{(item.field_scope_labels?.length ? item.field_scope_labels : item.field_scope).join('、') || '无'}；文案版本 {item.consent_version}
                   </p>
                   {item.adopted_fields.length ? (
                     <p className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                      已采用：{item.adopted_fields.map((f) => `${f.field}（${f.source}）`).join('、')}
+                      已采用：{item.adopted_fields.map((f) => `${f.label}（${f.source_label ?? f.source}）`).join('、')}
                     </p>
                   ) : null}
                 </li>
