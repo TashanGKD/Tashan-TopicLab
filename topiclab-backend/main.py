@@ -54,6 +54,7 @@ from app.api import skill_hub as skill_hub_router
 from app.api import skills as skills_router
 from app.api import source_feed as source_feed_router
 from app.api import sso as sso_router
+from app.api import profile_hub as profile_hub_router
 from app.api import topiclink as topiclink_router
 from app.api import topics as topics_router
 from app.api import youth_ted as youth_ted_router
@@ -156,7 +157,7 @@ class ActorAuditMiddleware:
             content_length = int(content_length_header) if content_length_header else None
         except ValueError:
             content_length = None
-        sensitive_sso = request.url.path.startswith(('/auth/sso/', '/api/v1/auth/sso/', '/admin/sso/'))
+        sensitive_sso = request.url.path.startswith(('/auth/sso/', '/api/v1/auth/sso/', '/admin/sso/', '/api/v1/profile-hub/'))
         should_capture_body = not sensitive_sso and should_capture_request_body(content_type, content_length)
 
         captured_body = bytearray()
@@ -288,6 +289,7 @@ app.include_router(auth_router.router, prefix="/auth", tags=["auth"])
 app.include_router(auth_router.router, prefix="/api/v1/auth", tags=["auth-v1"])
 app.include_router(sso_router.router, prefix="/auth", tags=["sso"])
 app.include_router(sso_router.router, prefix="/api/v1/auth", tags=["sso-v1"])
+app.include_router(profile_hub_router.router, prefix="/api/v1", tags=["profile-hub-v1"])
 app.include_router(apps_router.router, prefix="/api/v1", tags=["apps-v1"])
 app.include_router(source_feed_router.router, prefix="/source-feed", tags=["source-feed"])
 app.include_router(source_feed_router.router, prefix="/api/v1/source-feed", tags=["source-feed-v1"])

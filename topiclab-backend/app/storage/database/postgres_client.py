@@ -1861,6 +1861,12 @@ def _apply_sso_ddl(session) -> None:
     apply_schema(session)
 
 
+def _apply_profile_hub_ddl(session) -> None:
+    """Create candidate/aggregation tables; existing profile columns stay untouched."""
+    from app.services.profile_hub_service import apply_schema
+    apply_schema(session)
+
+
 def _init_auth_tables_once() -> None:
     """Create auth-related tables if they do not exist."""
     with get_db_session() as session:
@@ -1958,6 +1964,7 @@ def _init_auth_tables_once() -> None:
         """))
         _apply_oauth_ddl(session)
         _apply_sso_ddl(session)
+        _apply_profile_hub_ddl(session)
         session.execute(text(
             """
             CREATE TABLE IF NOT EXISTS digital_twins (
