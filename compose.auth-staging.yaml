@@ -1,0 +1,47 @@
+name: tashan-auth-staging
+# Isolated unified-login test stack. Production compose and data are never referenced.
+services:
+  postgres:
+    image: postgres:16.12-alpine3.23
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tashan_auth_staging
+      POSTGRES_USER: tashan_auth_staging
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?staging password required}
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U tashan_auth_staging -d tashan_auth_staging']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: &logging
+      driver: json-file
+      options: {max-size: 10m, max-file: '3'}
+  topiclab-backend:
+    image: tashan-auth-staging-api:${IMAGE_TAG:?revision required}
+    restart: unless-stopped
+    env_file: ${STAGING_ENV_FILE:?private environment required}
+    environment:
+      APP_VERSION: ${IMAGE_TAG}
+    depends_on:
+      postgres: {condition: service_healthy}
+    volumes:
+      - workspace:/app/workspace
+    healthcheck:
+      test: [CMD-SHELL, "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=10)\""]
+      interval: 10s
+      timeout: 15s
+      retries: 20
+      start_period: 60s
+    logging: *logging
+  frontend:
+    image: tashan-auth-staging-web:${IMAGE_TAG:?revision required}
+    restart: unless-stopped
+    ports: [127.0.0.1:18984:80]
+    depends_on:
+      topiclab-backend: {condition: service_healthy}
+    logging: *logging
+volumes:
+  database: {name: tashan-auth-staging-database}
+  workspace: {name: tashan-auth-staging-workspace}

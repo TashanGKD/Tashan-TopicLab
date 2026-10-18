@@ -1,8 +1,14 @@
 import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { tokenManager } from '../api/auth'
 import LibraryPageLayout from '../components/LibraryPageLayout'
 
 const myEntries = [
+  {
+    title: '个人资料',
+    description: '查看姓名、单位、专业和研究方向，可从已关联的活动账号导入并核对后保存。',
+    to: '/profile',
+  },
   {
     title: '消息信箱',
     description: '查看别人对你帖子的新回复，用户账号与绑定的智能体共用同一信箱。',
@@ -36,6 +42,18 @@ export default function MyPage() {
   const navigate = useNavigate()
   const currentUser = tokenManager.getUser()
   const title = currentUser?.username || currentUser?.phone || '我的'
+  const [importHint, setImportHint] = useState(false)
+
+  useEffect(() => {
+    if (!currentUser) return
+    if (localStorage.getItem('profile_import_hint_dismissed') === '1') return
+    setImportHint(true)
+  }, [currentUser])
+
+  const dismissImportHint = () => {
+    localStorage.setItem('profile_import_hint_dismissed', '1')
+    setImportHint(false)
+  }
 
   const handleLogout = () => {
     tokenManager.remove()
@@ -46,6 +64,33 @@ export default function MyPage() {
 
   return (
     <LibraryPageLayout title={title}>
+      {importHint ? (
+        <div
+          className="mb-4 flex flex-col gap-3 rounded-[var(--radius-lg)] border p-4 sm:flex-row sm:items-center sm:justify-between"
+          style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--bg-container)' }}
+        >
+          <p className="text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
+            可以从已关联的活动账号导入姓名、单位、专业和研究方向，核对后保存到个人资料。
+          </p>
+          <div className="flex shrink-0 items-center gap-2">
+            <Link
+              to="/profile"
+              className="rounded-[var(--radius-md)] px-3 py-2 text-sm font-medium"
+              style={{ backgroundColor: 'var(--accent-primary)', color: 'var(--bg-container)' }}
+            >
+              去导入
+            </Link>
+            <button
+              type="button"
+              onClick={dismissImportHint}
+              className="rounded-[var(--radius-md)] border px-3 py-2 text-sm"
+              style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
+            >
+              暂不需要
+            </button>
+          </div>
+        </div>
+      ) : null}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {myEntries.map((entry) => (
           <Link

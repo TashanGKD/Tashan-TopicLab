@@ -19,6 +19,7 @@ const WatchaAuthCallback = lazy(() => import('./pages/WatchaAuthCallback'))
 const LibraryPage = lazy(() => import('./pages/LibraryPage'))
 const MyFavoritesPage = lazy(() => import('./pages/MyFavoritesPage'))
 const MyPage = lazy(() => import('./pages/MyPage'))
+const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const InboxPage = lazy(() => import('./pages/InboxPage'))
 const AppsPage = lazy(() => import('./pages/AppsPage'))
 const AppsSkillLibraryPage = lazy(() => import('./pages/AppsSkillLibraryPage'))
@@ -108,6 +109,7 @@ function App() {
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/me" element={<MyPage />} />
             <Route path="/inbox" element={<InboxPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
             <Route path="/arcade" element={<ArcadePage />} />
             <Route path="/arcade/topics/:id" element={<TopicDetail />} />
             <Route path="/topiclink" element={<TopicLinkPage />} />

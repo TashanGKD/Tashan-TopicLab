@@ -1,0 +1,92 @@
+name: Deploy unified login staging
+
+# Publishes an isolated unified-login stack for cross-site profile import testing.
+# It never touches the production compose project, database or volumes.
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Deploy the staging stack or inspect it
+        type: choice
+        options: [deploy, inspect]
+        default: deploy
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tashan-auth-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: inputs.operation != 'inspect'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Verify and build the login pages
+        working-directory: frontend
+        run: |
+          npm ci
+          npm test -- src/pages/SsoFlow.test.tsx src/utils/layoutChrome.test.ts
+          npm run build
+      - name: Build backend and frontend images
+        run: |
+          docker build -t "tashan-auth-staging-api:$GITHUB_SHA" topiclab-backend
+          docker build -t "tashan-auth-staging-web:$GITHUB_SHA" frontend
+          docker pull postgres:16.12-alpine3.23
+          docker save "tashan-auth-staging-api:$GITHUB_SHA" "tashan-auth-staging-web:$GITHUB_SHA" postgres:16.12-alpine3.23 | gzip -1 > images.tar.gz
+          sha256sum images.tar.gz > images.tar.gz.sha256
+      - name: Deploy the isolated staging stack
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          DEPLOY_USER: ${{ secrets.STAGING_DEPLOY_USER }}
+          STAGING_ENV: ${{ secrets.AUTH_STAGING_ENV }}
+        run: |
+          set -euo pipefail
+          umask 077
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/staging-key
+          chmod 600 ~/.ssh/staging-key
+          printf '%s\n' '8.147.58.40 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDwKRUxy0Bo+IqdyImF2hS9z5yrFV3RgW03idKLhqYAK' > ~/.ssh/known_hosts
+          options=(-i ~/.ssh/staging-key -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=yes)
+          target="$DEPLOY_USER@8.147.58.40"
+          remote="/data/tashan-auth-staging-upload/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh "${options[@]}" "$target" "install -d -m 700 /data/tashan-auth-staging-upload && umask 077 && mkdir '$remote'"
+          printf '%s\n' "$STAGING_ENV" > "$RUNNER_TEMP/auth-staging.env"
+          scp "${options[@]}" images.tar.gz images.tar.gz.sha256 compose.auth-staging.yaml "$target:$remote/"
+          scp "${options[@]}" "$RUNNER_TEMP/auth-staging.env" "$target:$remote/auth-staging.env"
+          scp -r "${options[@]}" deploy/staging-auth "$target:$remote/"
+          ssh "${options[@]}" "$target" "bash '$remote/staging-auth/deploy.sh' '$remote' '$GITHUB_SHA'"
+      - name: Verify HTTPS delivery and the profile import API
+        run: |
+          curl -fsS --retry 5 --retry-all-errors --retry-delay 3 https://tashan-auth-staging.tashan.ac.cn/health/ready
+          test "$(curl -s -o /dev/null -w '%{http_code}' https://tashan-auth-staging.tashan.ac.cn/api/v1/profile-import/sources)" = 401
+          curl -fsS https://tashan-auth-staging.tashan.ac.cn/login -o /dev/null
+      - name: Remove runner credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/auth-staging.env" ~/.ssh/staging-key
+  inspect:
+    if: inputs.operation == 'inspect'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read staging resources only
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          DEPLOY_USER: ${{ secrets.STAGING_DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          umask 077
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/staging-key
+          printf '%s\n' '8.147.58.40 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDwKRUxy0Bo+IqdyImF2hS9z5yrFV3RgW03idKLhqYAK' > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/staging-key -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=yes "$DEPLOY_USER@8.147.58.40" 'bash -s' < deploy/staging-auth/inspect.sh
