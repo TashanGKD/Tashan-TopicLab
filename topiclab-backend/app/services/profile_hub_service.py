@@ -18,6 +18,7 @@ import os
 import re
 import secrets
 import time
+from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 from fastapi import HTTPException
@@ -300,6 +301,102 @@ def lookup_by_phone(phone_value, requester: str) -> dict:
         _event(db, user_id=uid, requester=requester, action='lookup',
                result='found' if found else 'not_found', phone_hash=phone_hash)
     return {'found': found, 'confirmed': confirmed, 'candidates': candidates}
+
+
+SOURCE_PRIORITY = {source: index for index, source in enumerate(
+    ['tashan-association', 'tashan-world', 'tashan-community', 'panshi-camp', 'panshi-forum'])}
+
+
+def latest_fields(current, candidates):
+    """Choose each nonempty field by source time, never by import time."""
+    options = list(candidates)
+    for field, value in (current or {}).get('fields', {}).items():
+        if isinstance(value, str) and value.strip():
+            provenance = (current or {}).get('sources', {}).get(field) or {}
+            options.append({'field': field, 'value': value, 'source_system': provenance.get('source', 'tashan-world'),
+                            'source_updated_at': provenance.get('source_updated_at'), 'id': provenance.get('candidate_id')})
+    def rank(item):
+        try:
+            stamp = datetime.fromisoformat(str(item.get('source_updated_at')).replace('Z', '+00:00'))
+            if stamp.tzinfo is None:
+                stamp = stamp.replace(tzinfo=timezone.utc)
+            timestamp = stamp.timestamp()
+        except (ValueError, TypeError, OverflowError):
+            timestamp = float('-inf')
+        return (timestamp, SOURCE_PRIORITY.get(item.get('source_system'), -1),
+                item.get('field_note') != 'combined_field', str(item.get('id') or ''), item.get('value', ''))
+    result = {}
+    for item in options:
+        field, value = item.get('field'), item.get('value')
+        if field not in PROFILE_FIELDS or not isinstance(value, str) or not value.strip():
+            continue
+        if field not in result or rank(item) > rank(result[field]):
+            result[field] = {**item, 'value': value.strip()}
+    return result
+
+
+def sync_by_identity(phone_value, requester, body):
+    """Trusted login identity -> latest profile, with optional successful registration writeback."""
+    phone = normalize_phone(phone_value)
+    if not phone:
+        raise HTTPException(422, '手机号格式不正确')
+    subject = body.get('subject')
+    if subject is not None and (not isinstance(subject, str) or not re.fullmatch(r'topiclab:[1-9][0-9]*', subject)):
+        raise HTTPException(422, '账号标识无效')
+    changes = _clean_changes(body['changes']) if body.get('changes') else {}
+    event_id = body.get('event_id')
+    if changes and (not isinstance(event_id, str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{8,128}', event_id)):
+        raise HTTPException(422, '同步记录标识无效')
+    stamp = body.get('source_updated_at')
+    if changes:
+        try:
+            parsed = datetime.fromisoformat(stamp.replace('Z', '+00:00'))
+            if parsed.tzinfo is None or parsed.timestamp() > time.time() + 300:
+                raise ValueError()
+        except (AttributeError, TypeError, ValueError):
+            raise HTTPException(422, '同步记录时间无效')
+    with get_db_session() as db:
+        if db.bind.dialect.name == 'postgresql':
+            db.execute(text('SELECT pg_advisory_xact_lock(:key)'),
+                       {'key': int.from_bytes(hashlib.sha256(phone.encode()).digest()[:8], 'big', signed=True)})
+        if subject:
+            uid = int(subject.split(':')[1])
+            user = db.execute(text('SELECT phone FROM users WHERE id=:uid AND is_guest=false'), {'uid': uid}).first()
+            if not user or normalize_phone(user.phone) != phone:
+                raise HTTPException(403, '账号与手机号不匹配')
+            external, owner_key = None, 'central:' + str(uid)
+        else:
+            uid, external, owner_key = _owner(db, phone)
+        current = _profile(db, uid, external, owner_key)
+        if changes:
+            for field, value in changes.items():
+                upsert_candidate(db, user_id=uid, source_system=requester, source_user_id=event_id,
+                                 field=field, value=value, source_updated_at=stamp, batch_id=digest(event_id)[:32],
+                                 phone=phone, phone_verified=True)
+        latest = latest_fields(current, _candidates(db, phone))
+        if not latest:
+            return {'found': False, 'profile': {}, 'version': (current or {}).get('version', 1)}
+        if not owner_key:
+            uid, external, owner_key = _owner(db, phone, create=True)
+        if uid:
+            db.execute(text('INSERT INTO user_profiles(user_id) VALUES (:uid) ON CONFLICT(user_id) DO NOTHING'), {'uid': uid})
+        table, column, identifier = ('user_profiles', 'user_id', uid) if uid else ('profile_hub_external_profiles', 'id', external)
+        values = {field: item['value'] for field, item in latest.items()}
+        changed = {field: value for field, value in values.items() if (current or {}).get('fields', {}).get(field) != value}
+        if changed:
+            assignments = ','.join(field + '=:' + field for field in changed)
+            db.execute(text(f'UPDATE {table} SET {assignments},version=version+1 WHERE {column}=:identifier'),
+                       {'identifier': identifier, **changed})
+        for field, item in latest.items():
+            db.execute(text('''INSERT INTO profile_hub_provenance(owner_key,field,source,source_updated_at,candidate_id,adopted_at)
+                VALUES (:owner,:field,:source,:at,:candidate,:now)
+                ON CONFLICT(owner_key,field) DO UPDATE SET source=:source,source_updated_at=:at,candidate_id=:candidate'''),
+                {'owner': owner_key, 'field': field, 'source': item['source_system'], 'at': item.get('source_updated_at'),
+                 'candidate': item.get('id'), 'now': _now()})
+        profile = _profile(db, uid, external, owner_key)
+        _event(db, user_id=uid, requester=requester, action='sync', result='saved' if changed else 'unchanged',
+               fields=changed, phone_hash=digest(phone))
+        return {'found': True, 'profile': values, 'version': profile['version']}
 
 
 # --------------------------------------------------------------------------- confirm

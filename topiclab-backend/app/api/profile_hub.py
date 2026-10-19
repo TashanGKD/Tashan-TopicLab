@@ -96,3 +96,10 @@ async def confirm(request: Request):
     client = _client(request)
     payload = await signed_body(request, client)
     return await run_in_threadpool(service.confirm_by_phone, payload.get('phone'), client, payload)
+
+
+@router.post('/sync')
+async def sync(request: Request):
+    client = _client(request)
+    payload = await signed_body(request, client)
+    return await run_in_threadpool(service.sync_by_identity, payload.get('phone'), client, payload)
