@@ -1,3 +1,4 @@
+import { useCaptcha } from '../hooks/useCaptcha';
 import AuthPasswordInput from '../components/AuthPasswordInput';
 import AuthPageFrame from '../components/AuthPageFrame';
 import { authPath, isUnifiedAuth } from '../utils/sso';
@@ -8,6 +9,7 @@ import { authApi } from '../api/auth';
 type Step = 'phone' | 'reset';
 
 export default function ForgotPassword() {
+  const captcha = useCaptcha("sms");
   const navigate = useNavigate();
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
@@ -45,7 +47,7 @@ export default function ForgotPassword() {
     }
     setLoading(true);
     try {
-      await authApi.sendCode(phone, 'reset_password');
+      await captcha.run(token => authApi.sendCode(phone, 'reset_password', token));
       setCodeSent(true);
       setStep('reset');
       startCountdown();
@@ -61,7 +63,7 @@ export default function ForgotPassword() {
     if (countdown > 0) return;
     setLoading(true);
     try {
-      await authApi.sendCode(phone, 'reset_password');
+      await captcha.run(token => authApi.sendCode(phone, 'reset_password', token));
       startCountdown();
       showMessage('success', '验证码已重新发送');
     } catch (err: unknown) {
@@ -99,6 +101,7 @@ export default function ForgotPassword() {
 
   return (
     <AuthPageFrame unified={unified} title="重置密码">
+          {captcha.element}
           <h1 className="text-xl font-serif font-bold text-center mb-2">重置密码</h1>
           <p className="text-sm text-gray-500 text-center mb-6">
             {step === 'phone' ? '输入手机号获取验证码' : `验证码已发送至 ${phone}`}
@@ -133,7 +136,7 @@ export default function ForgotPassword() {
               <button
                 type="button"
                 onClick={handleSendCode}
-                disabled={loading || !phone}
+                disabled={!captcha.ready || loading || !phone}
                 className="w-full py-2 rounded-lg text-sm font-serif font-medium bg-black text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors hover:bg-gray-900"
               >
                 {loading ? '发送中...' : '获取验证码'}
@@ -149,7 +152,7 @@ export default function ForgotPassword() {
                   <button
                     type="button"
                     onClick={handleResendCode}
-                    disabled={countdown > 0 || loading}
+                    disabled={!captcha.ready || countdown > 0 || loading}
                     className="text-xs text-gray-500 hover:text-black disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {countdown > 0 ? `重新发送 (${countdown}s)` : '重新发送'}

@@ -43,6 +43,8 @@ _SENSITIVE_KEYS = {
     "key",
     "openclaw_key",
     "password",
+    "captcha_verify_param",
+    "captchaverifyparam",
     "refresh_token",
     "skill_token",
     "token",

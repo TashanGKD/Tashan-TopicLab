@@ -131,7 +131,7 @@ jobs:
               echo "::error::DEPLOY_ENV secret is not set. Add it in repo Settings → Secrets."
               exit 1
             fi
-            echo "$DEPLOY_ENV" > .env
+            python3 scripts/deploy/write-env.py
 
             # Ignore inherited COMPOSE_FILE values and stale Compose overrides;
             # always operate on the versioned stack.

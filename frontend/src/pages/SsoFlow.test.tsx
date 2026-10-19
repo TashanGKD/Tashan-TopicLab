@@ -10,7 +10,7 @@ import { authPath } from '../utils/sso';
 import { siteConfiguration } from '../api/ssoAdmin';
 
 const params = new URLSearchParams({sso_client:'site-test',sso_redirect:'https://site.example/auth/callback',sso_state:'s'.repeat(43),sso_code_challenge:'c'.repeat(43),sso_code_challenge_method:'S256'});
-beforeEach(()=>{localStorage.clear();});
+beforeEach(()=>{localStorage.clear();vi.spyOn(authApi,"getCaptchaConfig").mockResolvedValue({enabled:false});});
 afterEach(()=>{cleanup();vi.restoreAllMocks();});
 describe('SSO navigation',()=>{
   it('preserves PKCE/state through registration and password recovery',()=>{
@@ -54,6 +54,7 @@ describe('SSO navigation',()=>{
     render(<MemoryRouter initialEntries={['/sso/login']}><Login/></MemoryRouter>);
     fireEvent.change(screen.getByPlaceholderText(/手机号/),{target:{value:'13800000000'}});
     fireEvent.change(screen.getByPlaceholderText(/密码/),{target:{value:'test-password'}});
+    await waitFor(()=>expect((screen.getByRole('button',{name:'登录'}) as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(screen.getByRole('button',{name:'登录'}));
     expect(await screen.findByText('已登录他山账号')).toBeTruthy();
     expect(screen.getByText('他山统一认证')).toBeTruthy();
@@ -71,6 +72,7 @@ describe('SSO navigation',()=>{
     render(<MemoryRouter initialEntries={[`/login?${params}`]}><Login/></MemoryRouter>);
     fireEvent.change(screen.getByPlaceholderText(/手机号/),{target:{value:'13800000000'}});
     fireEvent.change(screen.getByPlaceholderText(/密码/),{target:{value:'test-password'}});
+    await waitFor(()=>expect((screen.getByRole('button',{name:'登录'}) as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(screen.getByRole('button',{name:'登录'}));
     await waitFor(()=>expect(handoff).toHaveBeenCalledWith('test-token','site-test',params.get('sso_redirect'),params.get('sso_state'),params.get('sso_code_challenge')));
     expect(await screen.findByText('网站已停用')).toBeTruthy();

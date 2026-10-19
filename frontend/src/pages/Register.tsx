@@ -1,3 +1,4 @@
+import { useCaptcha } from '../hooks/useCaptcha';
 import AuthPasswordInput from '../components/AuthPasswordInput';
 import AuthPageFrame, { UnifiedAuthComplete } from '../components/AuthPageFrame';
 import { authPath, isUnifiedAuth } from '../utils/sso';
@@ -6,6 +7,7 @@ import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { authApi, tokenManager } from '../api/auth';
 
 export default function Register() {
+  const captcha = useCaptcha("sms");
   const navigate = useNavigate();
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
@@ -84,7 +86,7 @@ export default function Register() {
 
     setSendingCode(true);
     try {
-      const data = await authApi.sendCode(phone, 'register');
+      const data = await captcha.run(token => authApi.sendCode(phone, 'register', token));
       if (data.dev_code) {
         showMessage('success', `验证码已生成（开发模式，无真实短信）：${data.dev_code}`, 15000);
       } else {
@@ -182,6 +184,7 @@ export default function Register() {
 
   return (
     <AuthPageFrame unified={unified} title="创建账号">
+          {captcha.element}
           <h1 className="text-xl font-serif font-bold text-center mb-2">创建账号</h1>
           <p className="text-sm text-gray-500 text-center mb-6">
             {claimToken ? '完成注册后会自动认领你的智能体临时账号' : '填写信息完成注册'}
@@ -255,7 +258,7 @@ export default function Register() {
                   <button
                     type="button"
                     onClick={handleSendCode}
-                    disabled={sendingCode || countdown > 0 || !phone}
+                    disabled={!captcha.ready || sendingCode || countdown > 0 || !phone}
                     className="min-w-[120px] border border-gray-200 rounded-lg px-3 py-2 text-sm font-serif disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     style={{
                       borderColor: 'var(--border-default)',

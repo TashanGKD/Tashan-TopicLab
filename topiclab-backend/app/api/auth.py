@@ -32,6 +32,7 @@ from app.services.openclaw_runtime import (
     verify_openclaw_api_key as verify_openclaw_api_key_db,
 )
 from app.services.request_audit import set_authenticated_actor_context
+from app.services.captcha import public_config as captcha_public_config, require_captcha
 from app.services.sms import development_sms_enabled, send_verification_sms
 from app.services.twin_runtime import create_or_update_active_twin_for_user, get_or_backfill_active_twin_for_user
 from app.storage.database.topic_store import _invalidate_read_cache
@@ -135,6 +136,7 @@ def register_sms_bypass_active() -> bool:
 security = HTTPBearer(auto_error=False)
 # Request Models
 class SendCodeRequest(BaseModel):
+    captcha_verify_param: Optional[str] = Field(default=None, max_length=32768)
     phone: str = Field(..., pattern=r"^1[3-9]\d{9}$", description="手机号")
     type: str = Field(default="register", description="验证码类型: register/login/reset_password")
 
@@ -148,6 +150,7 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
+    captcha_verify_param: Optional[str] = Field(default=None, max_length=32768)
     phone: str = Field(..., pattern=r"^1[3-9]\d{9}$", description="手机号")
     password: str = Field(..., min_length=6, description="密码")
     claim_token: Optional[str] = Field(default=None, max_length=128, description="Agent 临时账号认领 token")
@@ -1910,8 +1913,14 @@ async def finish_watcha_oauth(req: WatchaOAuthCallbackRequest):
     )
 
 
+@router.get("/captcha-config")
+async def captcha_config():
+    return captcha_public_config()
+
+
 @router.post("/send-code")
 async def send_verification_code(req: SendCodeRequest):
+    await require_captcha("sms", req.captcha_verify_param)
     code = generate_code()
 
     if DATABASE_CONFIGURED:
@@ -2071,6 +2080,7 @@ async def register(req: RegisterRequest):
 
 @router.post("/login")
 async def login(req: LoginRequest):
+    await require_captcha("login", req.captcha_verify_param)
     if DATABASE_CONFIGURED:
         with get_db_session() as session:
             row = session.execute(
