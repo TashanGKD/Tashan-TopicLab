@@ -34,7 +34,7 @@ FIELD_LABELS = {
 }
 FIELD_LIMITS = {'real_name': 80, 'organization': 160, 'major': 300, 'research_direction': 2000}
 CANDIDATE_FIELDS = PROFILE_FIELDS
-SOURCE_SYSTEMS = ('panshi-camp', 'panshi-forum')
+SOURCE_SYSTEMS = ('tashan-association', 'tashan-world', 'tashan-community', 'panshi-camp', 'panshi-forum')
 CLOCK_SKEW = 300
 PHONE = re.compile(r'^1[3-9][0-9]{9}$')
 
@@ -105,6 +105,49 @@ def apply_schema(session):
     ]
     for statement in statements:
         session.execute(text(statement))
+    # Additive migration: retain the first implementation's tables for rollback.
+    # Historical candidates must not depend on owning a central login account.
+    for statement in [
+        '''CREATE TABLE IF NOT EXISTS profile_hub_source_people (
+          source_system VARCHAR(32) NOT NULL, source_user_id VARCHAR(256) NOT NULL,
+          phone VARCHAR(20), phone_verified BOOLEAN, central_user_id INTEGER REFERENCES users(id),
+          source_updated_at VARCHAR(40), imported_at BIGINT NOT NULL, batch_id VARCHAR(32) NOT NULL,
+          PRIMARY KEY(source_system,source_user_id))''',
+        '''CREATE TABLE IF NOT EXISTS profile_hub_candidates (
+          id VARCHAR(32) PRIMARY KEY, user_id INTEGER REFERENCES users(id), phone VARCHAR(20),
+          phone_verified BOOLEAN, source_system VARCHAR(32) NOT NULL,
+          source_user_id VARCHAR(256) NOT NULL, field VARCHAR(32) NOT NULL,
+          value TEXT NOT NULL, value_hash VARCHAR(64) NOT NULL,
+          source_updated_at VARCHAR(40), field_note VARCHAR(32), imported_at BIGINT NOT NULL,
+          batch_id VARCHAR(32) NOT NULL,
+          UNIQUE(source_system, source_user_id, field, value_hash))''',
+        '''CREATE TABLE IF NOT EXISTS profile_hub_external_profiles (
+          id VARCHAR(32) PRIMARY KEY, phone VARCHAR(20) NOT NULL UNIQUE,
+          version INTEGER NOT NULL DEFAULT 1, real_name TEXT, organization TEXT,
+          major TEXT, research_direction TEXT)''',
+        '''CREATE TABLE IF NOT EXISTS profile_hub_confirmations (
+          owner_key VARCHAR(64) NOT NULL, idempotency_key VARCHAR(128) NOT NULL,
+          request_hash VARCHAR(64) NOT NULL, applied_version INTEGER NOT NULL,
+          response_json TEXT NOT NULL, created_at BIGINT NOT NULL,
+          PRIMARY KEY(owner_key,idempotency_key))''',
+        '''CREATE TABLE IF NOT EXISTS profile_hub_provenance (
+          owner_key VARCHAR(64) NOT NULL, field VARCHAR(32) NOT NULL,
+          source VARCHAR(32) NOT NULL, source_updated_at VARCHAR(40),
+          candidate_id VARCHAR(32), adopted_at BIGINT NOT NULL,
+          PRIMARY KEY(owner_key,field))''',
+        'CREATE INDEX IF NOT EXISTS idx_hub_candidates_phone ON profile_hub_candidates(phone,field)',
+        '''INSERT INTO profile_hub_candidates
+          (id,user_id,phone,source_system,source_user_id,field,value,value_hash,
+           source_updated_at,field_note,imported_at,batch_id)
+          SELECT c.id,c.user_id,u.phone,c.source_system,c.source_user_id,c.field,c.value,c.value_hash,
+           c.source_updated_at,c.field_note,c.imported_at,c.batch_id
+          FROM profile_source_candidates c JOIN users u ON u.id=c.user_id WHERE true
+          ON CONFLICT DO NOTHING''',
+        '''INSERT INTO profile_hub_provenance(owner_key,field,source,source_updated_at,adopted_at)
+          SELECT 'central:' || CAST(user_id AS TEXT),field,source,source_updated_at,adopted_at
+          FROM profile_field_sources WHERE true ON CONFLICT DO NOTHING''',
+    ]:
+        session.execute(text(statement))
 
 
 def _now() -> int:
@@ -132,22 +175,28 @@ def record_import_batch(session, source_system: str, mode: str, summary: dict) -
     return batch_id
 
 
-def upsert_candidate(session, *, user_id: int, source_system: str, source_user_id: str, field: str,
+def upsert_candidate(session, *, user_id: int | None, source_system: str, source_user_id: str, field: str,
                      value: str, source_updated_at: str | None, batch_id: str,
-                     field_note: str | None = None) -> bool:
+                     field_note: str | None = None, phone: str | None = None,
+                     phone_verified: bool | None = None) -> bool:
     """Insert one candidate; returns False when the same value already exists (idempotent)."""
     if field not in CANDIDATE_FIELDS:
         raise ValueError(f'unsupported field {field}')
     value = (value or '').strip()
     if not value:
         return False
-    result = session.execute(text('''INSERT INTO profile_source_candidates
-        (id,user_id,source_system,source_user_id,field,value,value_hash,source_updated_at,field_note,imported_at,batch_id)
-        VALUES (:id,:uid,:source,:source_user,:field,:value,:hash,:updated,:note,:now,:batch)
-        ON CONFLICT (user_id,source_system,source_user_id,field,value_hash) DO NOTHING'''),
+    if not source_user_id or len(source_user_id) > 256:
+        raise ValueError('source_user_id is required and must be at most 256 characters')
+    if not phone and user_id:
+        phone = session.execute(text('SELECT phone FROM users WHERE id=:uid'), {'uid': user_id}).scalar()
+    value = value[:FIELD_LIMITS[field]]
+    result = session.execute(text('''INSERT INTO profile_hub_candidates
+        (id,user_id,phone,phone_verified,source_system,source_user_id,field,value,value_hash,source_updated_at,field_note,imported_at,batch_id)
+        VALUES (:id,:uid,:phone,:verified,:source,:source_user,:field,:value,:hash,:updated,:note,:now,:batch)
+        ON CONFLICT (source_system,source_user_id,field,value_hash) DO NOTHING'''),
         dict(id=secrets.token_hex(16), uid=user_id, source=source_system, source_user=source_user_id,
              field=field, value=value[:FIELD_LIMITS[field]], hash=digest(value), updated=source_updated_at,
-             note=field_note, now=_now(), batch=batch_id))
+             note=field_note, now=_now(), batch=batch_id, phone=normalize_phone(phone), verified=phone_verified))
     return bool(result.rowcount)
 
 
@@ -169,7 +218,7 @@ def find_user_for_import(session, *, phone: str | None, subject: str | None):
 def import_summary(session, source_system: str) -> dict:
     rows = session.execute(text('''SELECT field,COUNT(*) AS n,COUNT(DISTINCT user_id) AS users,
         SUM(CASE WHEN source_updated_at IS NULL THEN 1 ELSE 0 END) AS unknown_time
-        FROM profile_source_candidates WHERE source_system=:source GROUP BY field'''),
+        FROM profile_hub_candidates WHERE source_system=:source GROUP BY field'''),
         {'source': source_system}).mappings()
     return {row['field']: {'rows': row['n'], 'users': row['users'], 'unknown_time': row['unknown_time']}
             for row in rows}
@@ -194,26 +243,63 @@ def _confirmed(db, user_id: int) -> dict:
     }
 
 
+def _owner(db, phone, create=False):
+    # Once an external profile exists it stays stable. A later central registration
+    # must not silently merge identities or hide that profile.
+    external = db.execute(text('SELECT id FROM profile_hub_external_profiles WHERE phone=:phone'),
+                          {'phone': phone}).scalar()
+    if external:
+        return None, external, 'external:' + external
+    uid = db.execute(text('SELECT id FROM users WHERE phone=:phone AND is_guest=false'),
+                     {'phone': phone}).scalar()
+    if uid:
+        return uid, None, 'central:' + str(uid)
+    if create:
+        db.execute(text('''INSERT INTO profile_hub_external_profiles(id,phone) VALUES (:id,:phone)
+            ON CONFLICT(phone) DO NOTHING'''), {'id': secrets.token_hex(16), 'phone': phone})
+        external = db.execute(text('SELECT id FROM profile_hub_external_profiles WHERE phone=:phone'),
+                              {'phone': phone}).scalar_one()
+        return None, external, 'external:' + external
+    return None, None, None
+
+
+def _profile(db, uid, external, owner_key):
+    if uid:
+        result = _confirmed(db, uid)
+    elif external:
+        row = db.execute(text('SELECT * FROM profile_hub_external_profiles WHERE id=:id'),
+                         {'id': external}).mappings().one()
+        result = {'version': row['version'], 'fields': {f: row[f] for f in PROFILE_FIELDS}, 'sources': {}}
+    else:
+        return None
+    rows = db.execute(text('''SELECT field,source,source_updated_at,candidate_id,adopted_at
+        FROM profile_hub_provenance WHERE owner_key=:owner'''), {'owner': owner_key}).mappings()
+    result['sources'].update({r['field']: dict(r) for r in rows})
+    return result
+
+
+def _candidates(db, phone):
+    # Explicitly unverified source numbers remain in the private inventory, but
+    # are not disclosed to a phone holder. Unknown status remains visibly unknown.
+    return [dict(r) for r in db.execute(text('''SELECT id,source_system,source_user_id,field,value,
+        source_updated_at,field_note,imported_at,phone_verified FROM profile_hub_candidates
+        WHERE phone=:phone AND (phone_verified IS NULL OR phone_verified=true)
+        ORDER BY field,source_updated_at DESC NULLS LAST,imported_at DESC'''), {'phone': phone}).mappings()]
+
+
 def lookup_by_phone(phone_value, requester: str) -> dict:
     phone = normalize_phone(phone_value)
     phone_hash = digest(phone) if phone else None
     if not phone:
         raise HTTPException(422, '手机号格式不正确')
     with get_db_session() as db:
-        user = db.execute(text('''SELECT id,phone,is_guest FROM users WHERE phone=:phone'''),
-                          {'phone': phone}).mappings().first()
-        if not user or user['is_guest']:
-            _event(db, user_id=None, requester=requester, action='lookup', result='not_found', phone_hash=phone_hash)
-            return {'found': False, 'confirmed': None, 'candidates': []}
-        confirmed = _confirmed(db, user['id'])
-        rows = db.execute(text('''SELECT source_system,source_user_id,field,value,source_updated_at,
-            field_note,imported_at FROM profile_source_candidates WHERE user_id=:uid
-            ORDER BY field, source_updated_at DESC NULLS LAST, imported_at DESC'''),
-            {'uid': user['id']}).mappings()
-        candidates = [dict(row) for row in rows]
-        _event(db, user_id=user['id'], requester=requester, action='lookup', result='found', phone_hash=phone_hash)
-    return {'found': True, 'confirmed': confirmed, 'candidates': candidates,
-            'phone_verified': True}
+        uid, external, key = _owner(db, phone)
+        confirmed = _profile(db, uid, external, key)
+        candidates = _candidates(db, phone)
+        found = bool(confirmed or candidates)
+        _event(db, user_id=uid, requester=requester, action='lookup',
+               result='found' if found else 'not_found', phone_hash=phone_hash)
+    return {'found': found, 'confirmed': confirmed, 'candidates': candidates}
 
 
 # --------------------------------------------------------------------------- confirm
@@ -240,6 +326,22 @@ def _clean_changes(changes) -> dict:
 
 
 def confirm_by_phone(phone_value, requester: str, body: dict) -> dict:
+    # Failures must be audited after the failed transaction has rolled back.
+    try:
+        return _confirm_by_phone(phone_value, requester, body)
+    except HTTPException as exc:
+        phone = normalize_phone(phone_value)
+        with get_db_session() as db:
+            uid, _, _ = _owner(db, phone) if phone else (None, None, None)
+            _event(db, user_id=uid, requester=requester, action='confirm',
+                   result={409: 'conflict', 422: 'invalid'}.get(exc.status_code, 'failed'),
+                   fields=[f for f in (body.get('changes') or {}) if f in PROFILE_FIELDS]
+                   if isinstance(body.get('changes'), dict) else [],
+                   phone_hash=digest(phone) if phone else None)
+        raise
+
+
+def _confirm_by_phone(phone_value, requester: str, body: dict) -> dict:
     phone = normalize_phone(phone_value)
     phone_hash = digest(phone) if phone else None
     if not phone:
@@ -251,42 +353,60 @@ def confirm_by_phone(phone_value, requester: str, body: dict) -> dict:
     if not isinstance(key, str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{8,128}', key):
         raise HTTPException(422, '请求标识无效')
     changes = _clean_changes(body.get('changes'))
-    request_hash = digest(json.dumps({'version': expected, 'changes': changes}, sort_keys=True, ensure_ascii=False))
+    adoptions = body.get('adoptions', {})
+    if not isinstance(adoptions, dict) or any(f not in changes or not isinstance(v, str) for f, v in adoptions.items()):
+        raise HTTPException(422, '来源选择无效')
+    request_hash = digest(json.dumps({'version': expected, 'changes': changes, 'adoptions': adoptions},
+                                     sort_keys=True, ensure_ascii=False))
     now = _now()
     with get_db_session() as db:
-        user = db.execute(text('SELECT id,is_guest FROM users WHERE phone=:phone'), {'phone': phone}).mappings().first()
-        if not user or user['is_guest']:
-            _event(db, user_id=None, requester=requester, action='confirm', result='not_found', phone_hash=phone_hash)
-            raise HTTPException(404, '没有找到对应的统一账号')
-        uid = user['id']
-        prior = db.execute(text('''SELECT request_hash,applied_version FROM profile_hub_writes
-            WHERE user_id=:uid AND idempotency_key=:key'''), {'uid': uid, 'key': key}).mappings().first()
+        # Serialize confirmations for a phone in PostgreSQL, including first save.
+        if db.bind.dialect.name == 'postgresql':
+            db.execute(text('SELECT pg_advisory_xact_lock(:key)'),
+                       {'key': int.from_bytes(hashlib.sha256(phone.encode()).digest()[:8], 'big', signed=True)})
+        uid, external, owner_key = _owner(db, phone, create=True)
+        previous = _profile(db, uid, external, owner_key)
+        prior = db.execute(text('''SELECT request_hash,response_json FROM profile_hub_confirmations
+            WHERE owner_key=:owner AND idempotency_key=:key'''), {'owner': owner_key, 'key': key}).mappings().first()
         if prior:
             if prior['request_hash'] != request_hash:
-                _event(db, user_id=uid, requester=requester, action='confirm', result='idempotency_conflict',
-                       fields=changes.keys(), phone_hash=phone_hash)
                 raise HTTPException(409, 'IDEMPOTENCY_CONFLICT')
-            return {'version': prior['applied_version'], **_confirmed(db, uid), 'replay': True}
-        db.execute(text('INSERT INTO user_profiles(user_id) VALUES (:uid) ON CONFLICT(user_id) DO NOTHING'), {'uid': uid})
+            return {**json.loads(prior['response_json']), 'replay': True}
+        available = {c['id']: c for c in _candidates(db, phone)}
+        for field, candidate_id in adoptions.items():
+            candidate = available.get(candidate_id)
+            if not candidate or candidate['field'] != field or candidate['value'] != changes[field]:
+                raise HTTPException(422, '来源资料已变化，请重新选择')
+        if uid:
+            db.execute(text('INSERT INTO user_profiles(user_id) VALUES (:uid) ON CONFLICT(user_id) DO NOTHING'), {'uid': uid})
+        table, id_column, identifier = ('user_profiles', 'user_id', uid) if uid else ('profile_hub_external_profiles', 'id', external)
         assignments = ''.join(', ' + field + '=:' + field for field in changes)
-        applied = db.execute(text('UPDATE user_profiles SET version=version+1' + assignments +
-                                  ' WHERE user_id=:uid AND version=:expected RETURNING version'),
-                             dict(uid=uid, expected=expected, **changes)).scalar()
+        applied = db.execute(text(f'UPDATE {table} SET version=version+1' + assignments +
+                                  f' WHERE {id_column}=:identifier AND version=:expected RETURNING version'),
+                             dict(identifier=identifier, expected=expected, **changes)).scalar()
         if applied is None:
-            _event(db, user_id=uid, requester=requester, action='confirm', result='version_conflict',
-                   fields=changes.keys(), phone_hash=phone_hash)
             raise HTTPException(409, 'VERSION_CONFLICT')
         for field in changes:
-            db.execute(text('''INSERT INTO profile_field_sources(user_id,field,source,source_updated_at,adopted_at)
-                VALUES (:uid,:field,:source,:at,:now)
-                ON CONFLICT(user_id,field) DO UPDATE SET source=:source,source_updated_at=:at,adopted_at=:now'''),
-                dict(uid=uid, field=field, source=requester, at=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(now)), now=now))
-        db.execute(text('''INSERT INTO profile_hub_writes(user_id,idempotency_key,request_hash,applied_version,created_at)
-            VALUES (:uid,:key,:hash,:version,:now)'''),
-            dict(uid=uid, key=key, hash=request_hash, version=applied, now=now))
+            candidate = available.get(adoptions.get(field))
+            if not candidate and previous and previous['fields'].get(field) == changes[field] and field in previous['sources']:
+                continue
+            db.execute(text('''INSERT INTO profile_hub_provenance
+                (owner_key,field,source,source_updated_at,candidate_id,adopted_at)
+                VALUES (:owner,:field,:source,:at,:candidate,:now)
+                ON CONFLICT(owner_key,field) DO UPDATE SET source=:source,source_updated_at=:at,
+                candidate_id=:candidate,adopted_at=:now'''),
+                dict(owner=owner_key, field=field, source=candidate['source_system'] if candidate else requester,
+                     at=candidate['source_updated_at'] if candidate else time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(now)),
+                     candidate=candidate['id'] if candidate else None, now=now))
+        response = {**_profile(db, uid, external, owner_key), 'replay': False}
+        db.execute(text('''INSERT INTO profile_hub_confirmations
+            (owner_key,idempotency_key,request_hash,applied_version,response_json,created_at)
+            VALUES (:owner,:key,:hash,:version,:response,:now)'''),
+            dict(owner=owner_key, key=key, hash=request_hash, version=applied,
+                 response=json.dumps(response, ensure_ascii=False), now=now))
         _event(db, user_id=uid, requester=requester, action='confirm', result='saved',
                fields=changes.keys(), phone_hash=phone_hash)
-        return {'version': applied, **_confirmed(db, uid), 'replay': False}
+        return response
 
 
 # --------------------------------------------------------------------------- request auth

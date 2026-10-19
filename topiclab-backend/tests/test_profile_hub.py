@@ -86,8 +86,8 @@ def test_confirm_writes_with_version_provenance_and_idempotency():
     assert replay['replay'] is True and replay['version'] == 2
 
     with get_db_session() as db:
-        rows = db.execute(text('SELECT field,source FROM profile_field_sources WHERE user_id=:uid'),
-                          {'uid': uid}).mappings()
+        rows = db.execute(text('SELECT field,source FROM profile_hub_provenance WHERE owner_key=:key'),
+                          {'key': 'central:' + str(uid)}).mappings()
         provenance = {r['field']: r['source'] for r in rows}
         events = db.execute(text("SELECT action,result,field_names FROM profile_hub_events WHERE user_id=:uid"),
                             {'uid': uid}).mappings()
@@ -129,11 +129,12 @@ def test_confirm_rejects_fields_outside_the_whitelist_and_empty_values():
 
 def test_confirm_does_not_touch_an_account_without_that_phone():
     _user('13900009005')
-    with pytest.raises(HTTPException) as exc:
-        hub.confirm_by_phone('13900009006', 'panshi-forum',
-                             {'expected_version': 1, 'idempotency_key': 'forum-confirm-0006',
-                              'changes': {'real_name': '张三'}})
-    assert exc.value.status_code == 404
+    result = hub.confirm_by_phone('13900009006', 'panshi-forum',
+                                 {'expected_version': 1, 'idempotency_key': 'forum-confirm-0006',
+                                  'changes': {'real_name': '张三'}})
+    assert result['fields']['real_name'] == '张三'
+    with get_db_session() as db:
+        assert db.execute(text("SELECT count(*) FROM users WHERE phone='13900009006'")).scalar() == 0
     assert _confirmed(_user('13900009005'))['real_name'] is None
 
 
@@ -170,17 +171,17 @@ def test_import_is_idempotent_and_keeps_candidates_separate(tmp_path, monkeypatc
     assert dry['records_matched_by_binding'] == 1
     assert dry['records_matched_by_phone'] == 1
     assert dry['records_without_central_account'] == 1
-    assert dry['unknown_source_time'] == 1
+    assert dry['unknown_source_time'] == 2
     assert dry['candidate_rows_new'] == 0  # dry-run never writes
 
     applied = importer.run('camp-export', export=str(export), apply=True)
-    assert applied['candidate_rows_new'] == 4
+    assert applied['candidate_rows_new'] == 6
     again = importer.run('camp-export', export=str(export), apply=True)
     assert again['candidate_rows_new'] == 0
-    assert again['candidate_rows_duplicate'] == 4
+    assert again['candidate_rows_duplicate'] == 6
 
     with get_db_session() as db:
-        rows = db.execute(text('''SELECT field,value,field_note,source_updated_at FROM profile_source_candidates
+        rows = db.execute(text('''SELECT field,value,field_note,source_updated_at FROM profile_hub_candidates
             WHERE user_id=:uid'''), {'uid': bound_uid}).mappings()
         stored = {r['field']: r for r in rows}
     assert stored['research_direction']['value'] == '人工智能；材料计算'
