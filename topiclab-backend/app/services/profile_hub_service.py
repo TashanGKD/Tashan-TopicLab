@@ -200,10 +200,15 @@ def upsert_candidate(session, *, user_id: int | None, source_system: str, source
         existing = session.execute(text('''SELECT id,source_updated_at FROM profile_hub_candidates
             WHERE source_system=:source AND source_user_id=:person AND field=:field AND value_hash=:hash'''),
             {'source': source_system, 'person': source_user_id, 'field': field, 'hash': digest(value)}).mappings().one()
-        if source_timestamp(source_updated_at) > source_timestamp(existing['source_updated_at']):
-            session.execute(text('''UPDATE profile_hub_candidates SET source_updated_at=:stamp,
-                imported_at=:now,batch_id=:batch WHERE id=:id'''),
-                {'stamp': source_updated_at, 'now': _now(), 'batch': batch_id, 'id': existing['id']})
+        stamp = (source_updated_at if source_timestamp(source_updated_at) > source_timestamp(existing['source_updated_at'])
+                 else existing['source_updated_at'])
+        # Identity metadata describes the source person, independently of the
+        # timestamp of this particular historical field value.
+        session.execute(text('''UPDATE profile_hub_candidates SET source_updated_at=:stamp,
+            user_id=:uid,phone=:phone,phone_verified=:verified,
+            imported_at=:now,batch_id=:batch WHERE id=:id'''),
+            {'stamp': stamp, 'uid': user_id, 'phone': normalize_phone(phone), 'verified': phone_verified,
+             'now': _now(), 'batch': batch_id, 'id': existing['id']})
     return bool(result.rowcount)
 
 

@@ -223,6 +223,10 @@ def run(source: str, *, dsn=None, export=None, sqlite=None, phone_map=None, sour
             if not phone and not subject:
                 report['records_without_phone'] += 1
             user_id = users.get(subject, {}).get('id') if subject else None
+            if user_id and phone and hub.normalize_phone(users[str(user_id)]['phone']) != phone:
+                # A trusted binding cannot be attributed to a different phone
+                # holder. Do not include either identity in error output.
+                raise ValueError('Source subject and phone do not match the central account')
             matched_by = 'binding' if user_id else 'phone'
             user_id = user_id or by_phone.get(phone)
             if not user_id:
@@ -246,6 +250,13 @@ def run(source: str, *, dsn=None, export=None, sqlite=None, phone_map=None, sour
                     source_updated_at=:updated,imported_at=:now,batch_id=:batch'''),
                     {'source': source_system, 'id': source_user_id, 'phone': phone, 'verified': verified,
                      'uid': user_id, 'updated': iso(record.get('updated_at')), 'now': hub._now(), 'batch': batch_id})
+                # Reconcile every historical value, including values absent
+                # from the current source snapshot.
+                db.execute(text('''UPDATE profile_hub_candidates SET phone=:phone,
+                    phone_verified=:verified,user_id=:uid
+                    WHERE source_system=:source AND source_user_id=:person'''),
+                    {'phone': phone, 'verified': verified, 'uid': user_id,
+                     'source': source_system, 'person': source_user_id})
             items = [{**item, 'stamp': iso(record.get('updated_at'))} for item in candidates_for(source_system, record)]
             for historical in record.get('historical_profiles', []):
                 if not isinstance(historical, dict):
@@ -302,6 +313,13 @@ def run(source: str, *, dsn=None, export=None, sqlite=None, phone_map=None, sour
                     WHERE EXCLUDED.source_updated_at IS NOT NULL AND
                     (profile_hub_candidates.source_updated_at IS NULL OR EXCLUDED.source_updated_at::timestamptz>profile_hub_candidates.source_updated_at::timestamptz)""",list(candidate_rows.values()),page_size=500)
             finally:cursor.close()
+            db.execute(text('''UPDATE profile_hub_candidates AS candidate
+                SET phone=person.phone,phone_verified=person.phone_verified,user_id=person.central_user_id
+                FROM profile_hub_source_people AS person
+                WHERE candidate.source_system=person.source_system
+                  AND candidate.source_user_id=person.source_user_id
+                  AND person.source_system=:source AND person.batch_id=:batch'''),
+                {'source': source_system, 'batch': batch_id})
         report['batch_id'] = batch_id
         if apply:
             db.execute(text('UPDATE profile_import_batches SET finished_at=:now, summary=:summary WHERE id=:id'),
