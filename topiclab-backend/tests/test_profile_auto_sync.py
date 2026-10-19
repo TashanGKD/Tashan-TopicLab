@@ -42,3 +42,10 @@ def test_signed_subject_must_match_real_central_identity():
     result=hub.sync_by_identity('13900008102','panshi-forum',{'subject':f'topiclab:{uid}','changes':{'real_name':'Own Name'},'event_id':'registration:central:1','source_updated_at':'2026-10-18T00:00:00Z'})
     assert result['profile']=={'real_name':'Own Name'}
     with get_db_session() as db:assert db.execute(text('SELECT real_name FROM user_profiles WHERE user_id=:id'),{'id':uid}).scalar()=='Own Name'
+
+def test_repeated_value_keeps_its_newest_source_time():
+    with get_db_session() as db:
+        for stamp in ['2026-09-01T00:00:00Z','2026-10-01T00:00:00Z','2026-08-01T00:00:00Z']:
+            hub.upsert_candidate(db,user_id=None,phone='13900008104',source_system='panshi-camp',source_user_id='same-person',field='organization',value='Institute',source_updated_at=stamp,batch_id='test')
+        stamps=db.execute(text("SELECT source_updated_at FROM profile_hub_candidates WHERE phone='13900008104'")).scalars().all()
+        assert stamps==['2026-10-01T00:00:00Z']

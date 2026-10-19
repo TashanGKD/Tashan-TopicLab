@@ -198,6 +198,14 @@ def upsert_candidate(session, *, user_id: int | None, source_system: str, source
         dict(id=secrets.token_hex(16), uid=user_id, source=source_system, source_user=source_user_id,
              field=field, value=value[:FIELD_LIMITS[field]], hash=digest(value), updated=source_updated_at,
              note=field_note, now=_now(), batch=batch_id, phone=normalize_phone(phone), verified=phone_verified))
+    if not result.rowcount:
+        existing = session.execute(text('''SELECT id,source_updated_at FROM profile_hub_candidates
+            WHERE source_system=:source AND source_user_id=:person AND field=:field AND value_hash=:hash'''),
+            {'source': source_system, 'person': source_user_id, 'field': field, 'hash': digest(value)}).mappings().one()
+        if source_timestamp(source_updated_at) > source_timestamp(existing['source_updated_at']):
+            session.execute(text('''UPDATE profile_hub_candidates SET source_updated_at=:stamp,
+                imported_at=:now,batch_id=:batch WHERE id=:id'''),
+                {'stamp': source_updated_at, 'now': _now(), 'batch': batch_id, 'id': existing['id']})
     return bool(result.rowcount)
 
 
@@ -307,6 +315,16 @@ SOURCE_PRIORITY = {source: index for index, source in enumerate(
     ['tashan-association', 'tashan-world', 'tashan-community', 'panshi-camp', 'panshi-forum'])}
 
 
+def source_timestamp(value):
+    try:
+        stamp = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=timezone.utc)
+        return stamp.timestamp()
+    except (ValueError, TypeError, OverflowError):
+        return float('-inf')
+
+
 def latest_fields(current, candidates):
     """Choose each nonempty field by source time, never by import time."""
     options = list(candidates)
@@ -316,14 +334,7 @@ def latest_fields(current, candidates):
             options.append({'field': field, 'value': value, 'source_system': provenance.get('source', 'tashan-world'),
                             'source_updated_at': provenance.get('source_updated_at'), 'id': provenance.get('candidate_id')})
     def rank(item):
-        try:
-            stamp = datetime.fromisoformat(str(item.get('source_updated_at')).replace('Z', '+00:00'))
-            if stamp.tzinfo is None:
-                stamp = stamp.replace(tzinfo=timezone.utc)
-            timestamp = stamp.timestamp()
-        except (ValueError, TypeError, OverflowError):
-            timestamp = float('-inf')
-        return (timestamp, SOURCE_PRIORITY.get(item.get('source_system'), -1),
+        return (source_timestamp(item.get('source_updated_at')), SOURCE_PRIORITY.get(item.get('source_system'), -1),
                 item.get('field_note') != 'combined_field', str(item.get('id') or ''), item.get('value', ''))
     result = {}
     for item in options:
