@@ -1,0 +1,39 @@
+name: tashan-profile-hub-staging
+services:
+  db:
+    image: postgres:16.12-alpine3.23
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tashan_profile_hub_staging
+      POSTGRES_USER: hub_staging
+      POSTGRES_PASSWORD: ${HUB_DATABASE_PASSWORD:?required}
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U hub_staging -d tashan_profile_hub_staging"]
+      interval: 3s
+      retries: 20
+    mem_limit: 256m
+  api:
+    image: tashan-profile-hub-staging:${PROFILE_HUB_REVISION:?required}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:18912:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg2://hub_staging:${HUB_DATABASE_PASSWORD}@db:5432/tashan_profile_hub_staging
+      PROFILE_HUB_FORUM_SECRET: ${PROFILE_HUB_FORUM_SECRET:?required}
+      PROFILE_HUB_ENVIRONMENT: staging
+      PROFILE_HUB_REVISION: ${PROFILE_HUB_REVISION}
+      DB_POOL_SIZE: 2
+      DB_POOL_MAX_OVERFLOW: 2
+    mem_limit: 384m
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+volumes:
+  database:
+    name: tashan-profile-hub-staging-database

@@ -338,6 +338,47 @@ jobs:
             tests/test_topics_api.py \
             -q
 
+  profile-hub-tests:
+    name: Profile hub (SQLite and PostgreSQL)
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.run_topiclab_backend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: profile_hub_test
+          POSTGRES_USER: profile_hub_test
+          POSTGRES_PASSWORD: profile_hub_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U profile_hub_test -d profile_hub_test"
+          --health-interval 3s --health-timeout 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run profile and SSO regressions on both database paths
+        working-directory: topiclab-backend
+        env:
+          TOPICLAB_TESTING: '1'
+          TOPICLAB_ALLOW_NON_SQLITE_TEST_DB: '1'
+        run: |
+          tests=(
+            tests/test_profile_hub.py
+            tests/test_profile_hub_regressions.py
+            tests/test_profile_auto_sync.py
+            tests/test_profile_hub_review_fixes.py
+            tests/test_community_profile_hub.py
+            tests/test_sso_v2.py
+          )
+          DATABASE_URL=sqlite:///profile-hub-ci.sqlite uv run --frozen --group dev python -m pytest -q "${tests[@]}"
+          DATABASE_URL=postgresql+psycopg2://profile_hub_test:profile_hub_test@127.0.0.1:5432/profile_hub_test \
+            uv run --frozen --group dev python -m pytest -q "${tests[@]}"
+
   # ─────────────────────────────────────────────────────────────────────────
   # Layer 1: Backend unit tests (Agent SDK, mocked)
   # ─────────────────────────────────────────────────────────────────────────
