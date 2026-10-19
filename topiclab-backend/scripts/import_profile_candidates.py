@@ -199,6 +199,20 @@ def run(source: str, *, dsn=None, export=None, sqlite=None, phone_map=None, sour
     seen: dict[tuple[int, str], set[str]] = {}
 
     with get_db_session() as db:
+        # Load indexes once rather than querying remotely for every source field.
+        users={str(r['id']):dict(r) for r in db.execute(text('SELECT id,phone FROM users WHERE is_guest=false')).mappings()}
+        by_phone={r['phone']:r['id'] for r in users.values() if r['phone']}
+        current_by_phone={}
+        for row in db.execute(text('SELECT u.phone,p.real_name,p.organization,p.major,p.research_direction FROM user_profiles p JOIN users u ON u.id=p.user_id')).mappings():
+            current_by_phone[row['phone']]=dict(row)
+        for row in db.execute(text('SELECT phone,real_name,organization,major,research_direction FROM profile_hub_external_profiles')).mappings():
+            current_by_phone[row['phone']]=dict(row)
+        stored_values={}
+        for row in db.execute(text('SELECT phone,field,value FROM profile_hub_candidates')).mappings():
+            stored_values.setdefault((row['phone'],row['field']),set()).add(row['value'])
+        bulk = apply and db.bind.dialect.name == 'postgresql'
+        people_rows={};candidate_rows={}
+        known_candidates=set(tuple(r) for r in db.execute(text('SELECT source_system,source_user_id,field,value_hash FROM profile_hub_candidates'))) if bulk else set()
         batch_id = hub.record_import_batch(db, source_system, 'apply', {}) if apply else None
         for record in records:
             phone = hub.normalize_phone(record.get('phone'))
@@ -208,18 +222,22 @@ def run(source: str, *, dsn=None, export=None, sqlite=None, phone_map=None, sour
                 subject = subject.split(':', 1)[1]
             if not phone and not subject:
                 report['records_without_phone'] += 1
-            user_id, matched_by = hub.find_user_for_import(db, phone=phone, subject=subject)
+            user_id = users.get(subject, {}).get('id') if subject else None
+            matched_by = 'binding' if user_id else 'phone'
+            user_id = user_id or by_phone.get(phone)
             if not user_id:
                 report['records_without_central_account'] += 1
             else:
                 report['records_matched_by_binding' if matched_by == 'binding' else 'records_matched_by_phone'] += 1
             if not phone and user_id:
-                phone = db.execute(text('SELECT phone FROM users WHERE id=:uid'), {'uid': user_id}).scalar()
+                phone = users[str(user_id)]['phone']
             source_user_id = str(record.get('source_user_id') or '').strip()
             if not source_user_id or len(source_user_id) > 256:
                 raise ValueError('Every source record needs a stable source_user_id of at most 256 characters')
             verified = record.get('phone_verified') if isinstance(record.get('phone_verified'), bool) else None
-            if apply:
+            if bulk:
+                people_rows[source_user_id]=(source_system,source_user_id,phone,verified,user_id,iso(record.get('updated_at')),hub._now(),batch_id)
+            elif apply:
                 db.execute(text('''INSERT INTO profile_hub_source_people
                     (source_system,source_user_id,phone,phone_verified,central_user_id,source_updated_at,imported_at,batch_id)
                     VALUES (:source,:id,:phone,:verified,:uid,:updated,:now,:batch)
@@ -246,19 +264,22 @@ def run(source: str, *, dsn=None, export=None, sqlite=None, phone_map=None, sour
                 identity = phone or source_system + ':' + source_user_id
                 slot = (identity, item['field'])
                 if slot not in seen:
-                    stored = db.execute(text('SELECT value FROM profile_hub_candidates WHERE phone=:phone AND field=:field'),
-                                        {'phone': phone, 'field': item['field']}).scalars()
-                    seen[slot] = set(stored)
-                    uid, external, owner_key = hub._owner(db, phone)
-                    current = hub._profile(db, uid, external, owner_key)
-                    if current and current['fields'].get(item['field']):
-                        seen[slot].add(current['fields'][item['field']])
+                    seen[slot] = set(stored_values.get((phone,item['field']),set()))
+                    current = current_by_phone.get(phone) or {}
+                    if current.get(item['field']):seen[slot].add(current[item['field']])
                 values = seen[slot]
                 if values and item['value'] not in values:
                     report['conflicts'] += 1
                     report['conflict_fields'][item['field']] = report['conflict_fields'].get(item['field'], 0) + 1
                 values.add(item['value'])
-                if apply:
+                if bulk:
+                    value=item['value'][:hub.FIELD_LIMITS[item['field']]]
+                    key=(source_system,source_user_id,item['field'],hub.digest(value))
+                    created=key not in known_candidates;known_candidates.add(key)
+                    report['candidate_rows_new' if created else 'candidate_rows_duplicate']+=1
+                    row=(hub.secrets.token_hex(16),user_id,phone,verified,source_system,source_user_id,item['field'],value,key[3],item['stamp'],item['note'],hub._now(),batch_id)
+                    if key not in candidate_rows or hub.source_timestamp(row[9])>hub.source_timestamp(candidate_rows[key][9]):candidate_rows[key]=row
+                elif apply:
                     created = hub.upsert_candidate(
                         db, user_id=user_id, source_system=source_system,
                         source_user_id=source_user_id, phone=phone,
@@ -266,6 +287,21 @@ def run(source: str, *, dsn=None, export=None, sqlite=None, phone_map=None, sour
                         field=item['field'], value=item['value'], source_updated_at=item['stamp'],
                         batch_id=batch_id, field_note=item['note'])
                     report['candidate_rows_new' if created else 'candidate_rows_duplicate'] += 1
+        if bulk:
+            from psycopg2.extras import execute_values
+            cursor=db.connection().connection.cursor()
+            try:
+                execute_values(cursor,"""INSERT INTO profile_hub_source_people
+                    (source_system,source_user_id,phone,phone_verified,central_user_id,source_updated_at,imported_at,batch_id) VALUES %s
+                    ON CONFLICT(source_system,source_user_id) DO UPDATE SET phone=EXCLUDED.phone,phone_verified=EXCLUDED.phone_verified,
+                    central_user_id=EXCLUDED.central_user_id,source_updated_at=EXCLUDED.source_updated_at,imported_at=EXCLUDED.imported_at,batch_id=EXCLUDED.batch_id""",list(people_rows.values()),page_size=500)
+                execute_values(cursor,"""INSERT INTO profile_hub_candidates
+                    (id,user_id,phone,phone_verified,source_system,source_user_id,field,value,value_hash,source_updated_at,field_note,imported_at,batch_id) VALUES %s
+                    ON CONFLICT(source_system,source_user_id,field,value_hash) DO UPDATE SET
+                    source_updated_at=EXCLUDED.source_updated_at,imported_at=EXCLUDED.imported_at,batch_id=EXCLUDED.batch_id
+                    WHERE EXCLUDED.source_updated_at IS NOT NULL AND
+                    (profile_hub_candidates.source_updated_at IS NULL OR EXCLUDED.source_updated_at::timestamptz>profile_hub_candidates.source_updated_at::timestamptz)""",list(candidate_rows.values()),page_size=500)
+            finally:cursor.close()
         report['batch_id'] = batch_id
         if apply:
             db.execute(text('UPDATE profile_import_batches SET finished_at=:now, summary=:summary WHERE id=:id'),

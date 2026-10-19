@@ -1,13 +1,11 @@
 """Unified profile hub: candidate aggregation, phone lookup and confirmed profile writes.
 
-Design notes
-------------
-* A phone number only finds candidate material. It never merges accounts, never
-  transfers business records and never becomes the identity key.
-* Imported candidates live in their own table and are never treated as confirmed
-  values. Only an explicit user confirmation writes ``user_profiles``.
-* Every write carries the caller (source site), the profile version and an
-  idempotency key; provenance and source time are decided on the server.
+Automatic profile rules
+-----------------------
+* Only basic profile fields are shared; activity records and accounts stay separate.
+* Latest nonempty source values win per field; import time is never source time.
+* Signed login synchronization and successful forum registration writeback require
+  no confirmation UI. Legacy explicit-write endpoints remain for compatibility.
 """
 from __future__ import annotations
 

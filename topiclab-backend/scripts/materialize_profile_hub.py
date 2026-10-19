@@ -21,6 +21,7 @@ def main():
     for source in hub.SOURCE_SYSTEMS:
         result=importer.run('profile-export',source_system=source,export='/imports/'+source+'.json',apply=apply)
         summaries.append(result)
+        print(json.dumps({"sourceCompleted":source,"mode":("apply" if apply else "dry-run"),"records":result["records_read"]}),flush=True)
     print(json.dumps({'imports':summaries},ensure_ascii=False))
     if not apply:return
     with get_db_session() as db:
@@ -29,6 +30,7 @@ def main():
     for phone in phones:
         result=hub.sync_by_identity(phone,'panshi-forum',{})
         count+=int(result['found'])
+        if (phones.index(phone)+1)%100==0:print(json.dumps({'profilesProcessed':phones.index(phone)+1,'profilesWithFields':count}),flush=True)
     with get_db_session() as db:
         sources=[dict(r) for r in db.execute(text('SELECT source_system,count(*) AS records,count(DISTINCT phone) AS phones FROM profile_hub_source_people GROUP BY source_system')).mappings()]
         candidates=db.execute(text('SELECT count(*) FROM profile_hub_candidates')).scalar()
