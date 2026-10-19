@@ -101,3 +101,20 @@ def test_cannot_adopt_someone_elses_candidate(tmp_path):
             'idempotency_key': 'wrong-person-adoption', 'changes': {candidate['field']: candidate['value']},
             'adoptions': {candidate['field']: candidate['id']}})
     assert error.value.status_code == 422
+
+
+def test_application_only_fields_and_unlinked_association_records_are_retained(tmp_path):
+    path=tmp_path/'source.json'
+    path.write_text(json.dumps([{'source_user_id':'application-only','phone':'13900008007',
+        'historical_profiles':[{'name':'From application','major':'Physics',
+            'research_direction':'Materials','major_research_direction':'Physics / Materials',
+            'updated_at':'2026-08-01T00:00:00Z'}]}]),encoding='utf-8')
+    importer.run('profile-export',source_system='panshi-camp',export=str(path),apply=True)
+    result=hub.lookup_by_phone('13900008007','panshi-forum')
+    assert {r['field'] for r in result['candidates']} == {'real_name','major','research_direction'}
+    assert all(r['source_updated_at']=='2026-08-01T00:00:00Z' for r in result['candidates'])
+    path.write_text(json.dumps([{'source_user_id':'contact:1','name':'Unlinked contact'}]),encoding='utf-8')
+    report=importer.run('profile-export',source_system='tashan-association',export=str(path),apply=True)
+    assert report['records_without_phone']==1 and report['candidate_rows_new']==1
+    with get_db_session() as db:
+        assert db.execute(text("SELECT phone FROM profile_hub_source_people WHERE source_system='tashan-association' AND source_user_id='contact:1'")).scalar() is None

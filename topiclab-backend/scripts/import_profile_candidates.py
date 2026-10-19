@@ -73,9 +73,16 @@ def read_camp_postgres(dsn: str, limit: int | None) -> list[dict]:
                    u.phone_normalized AS phone,
                    p.name, p.organization, p.major_research_direction,
                    p.updated_at,
+                   a.core_fields->>'name' AS application_name,
+                   a.core_fields->>'organization' AS application_organization,
+                   a.core_fields->>'major' AS major,
+                   a.core_fields->>'researchDirection' AS research_direction,
+                   a.core_fields->>'majorResearchDirection' AS application_combined,
+                   a.updated_at AS application_updated_at,
                    l.subject
               FROM users u
               LEFT JOIN user_profiles p ON u.id = p.user_id
+              LEFT JOIN applications a ON a.user_id = u.id
               LEFT JOIN tashan_identity_links l ON l.user_id = u.id
              WHERE u.disabled_at IS NULL
              ORDER BY p.updated_at DESC NULLS LAST
@@ -83,7 +90,14 @@ def read_camp_postgres(dsn: str, limit: int | None) -> list[dict]:
         if limit:
             query += f' LIMIT {int(limit)}'
         for row in connection.execute(text(query)).mappings():
-            rows.append(dict(row))
+            record = dict(row)
+            # Preserve both the profile and the application version when they differ.
+            record['historical_profiles'] = [{
+                'name': record.pop('application_name'), 'organization': record.pop('application_organization'),
+                'major': record.pop('major'), 'research_direction': record.pop('research_direction'),
+                'major_research_direction': record.pop('application_combined'),
+                'updated_at': record.pop('application_updated_at'), 'note': 'application_snapshot'}]
+            rows.append(record)
     engine.dispose()
     return rows
 
@@ -135,6 +149,8 @@ def candidates_for(source_system: str, record: dict) -> list[dict]:
         # The camp stores major and research direction in one combined column.
         mapping = (('real_name', record.get('name'), None),
                    ('organization', record.get('organization'), None),
+                   ('major', record.get('major'), None),
+                   ('research_direction', record.get('research_direction'), None),
                    ('research_direction', record.get('major_research_direction'), 'combined_field'))
     else:
         mapping = (('real_name', record.get('name'), None),
@@ -212,7 +228,12 @@ def run(source: str, *, dsn=None, export=None, sqlite=None, phone_map=None, sour
                     source_updated_at=:updated,imported_at=:now,batch_id=:batch'''),
                     {'source': source_system, 'id': source_user_id, 'phone': phone, 'verified': verified,
                      'uid': user_id, 'updated': iso(record.get('updated_at')), 'now': hub._now(), 'batch': batch_id})
-            items = candidates_for(source_system, record)
+            items = [{**item, 'stamp': iso(record.get('updated_at'))} for item in candidates_for(source_system, record)]
+            for historical in record.get('historical_profiles', []):
+                if not isinstance(historical, dict):
+                    raise ValueError('historical_profiles must contain profile objects')
+                items.extend({**item, 'stamp': iso(historical.get('updated_at'))}
+                             for item in candidates_for(source_system, historical))
             present = {item['field'] for item in items}
             for field in hub.CANDIDATE_FIELDS:
                 if field not in present:
@@ -242,7 +263,7 @@ def run(source: str, *, dsn=None, export=None, sqlite=None, phone_map=None, sour
                         db, user_id=user_id, source_system=source_system,
                         source_user_id=source_user_id, phone=phone,
                         phone_verified=record.get('phone_verified') if isinstance(record.get('phone_verified'), bool) else None,
-                        field=item['field'], value=item['value'], source_updated_at=stamp,
+                        field=item['field'], value=item['value'], source_updated_at=item['stamp'],
                         batch_id=batch_id, field_note=item['note'])
                     report['candidate_rows_new' if created else 'candidate_rows_duplicate'] += 1
         report['batch_id'] = batch_id

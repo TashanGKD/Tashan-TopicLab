@@ -39,5 +39,8 @@ if test "$ready" != true; then
   exit 1
 fi
 "${compose[@]}" exec -T api python scripts/verify_profile_hub_staging.py
+if test -s "$bundle/synthetic-phone"; then
+  "${compose[@]}" exec -T api python scripts/seed_profile_hub_staging.py < "$bundle/synthetic-phone"
+fi
 printf '%s\n' "$revision" > "$base/accepted-revision"
 cat "$base/health.json"

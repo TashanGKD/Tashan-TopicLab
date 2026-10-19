@@ -6,6 +6,7 @@ COPY topiclab-backend/app ./app
 COPY topiclab-backend/scripts/import_profile_candidates.py ./scripts/import_profile_candidates.py
 COPY topiclab-backend/profile_hub_staging.py .
 COPY topiclab-backend/scripts/verify_profile_hub_staging.py ./scripts/
+COPY topiclab-backend/scripts/seed_profile_hub_staging.py ./scripts/
 COPY topiclab-backend/tests/test_profile_hub_regressions.py ./tests/
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 RUN python -c "import fastapi, uvicorn, sqlalchemy, psycopg2"
