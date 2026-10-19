@@ -270,11 +270,17 @@ def validate_session(client_id: str, client_secret: str, token: str) -> dict:
         return {'active': True, 'user': _identity(u), 'expires_at': record['expires_at']}
 
 
-def update_profile(client_id, client_secret, token, expected_version, request_key, changes, context_hash=''):
+def update_profile(client_id, client_secret, token, expected_version, request_key, changes, context_hash='', *, profile_source=None):
     request_hash = digest(json.dumps({'version':expected_version,'changes':changes,'context':context_hash},sort_keys=True,ensure_ascii=False))
     with get_db_session() as db:
         u, record = _session_user(db, client_id, client_secret, token)
         uid = u['id']
+        if profile_source:
+            from app.services import profile_hub_service as hub
+            phone = hub.normalize_phone(u.get('phone'))
+            if phone and db.bind.dialect.name == 'postgresql':
+                db.execute(text('SELECT pg_advisory_xact_lock(:key)'),
+                    {'key': int.from_bytes(hashlib.sha256(phone.encode()).digest()[:8], 'big', signed=True)})
         db.execute(text('INSERT INTO user_profiles(user_id) VALUES (:uid) ON CONFLICT(user_id) DO NOTHING'),dict(uid=uid))
         # Serialize writes before checking the idempotency key, including simultaneous retries.
         db.execute(text('UPDATE user_profiles SET version=version WHERE user_id=:uid'),dict(uid=uid))
@@ -300,6 +306,20 @@ def update_profile(client_id, client_secret, token, expected_version, request_ke
                 db.execute(text('UPDATE users SET username=:name WHERE id=:uid'),dict(uid=uid,name=changes['display_name']))
             db.execute(text('''INSERT INTO sso_profile_writes(client_id,user_id,request_key,request_hash,applied_version)
                 VALUES (:cid,:uid,:key,:hash,:version)'''),dict(cid=client_id,uid=uid,key=request_key,hash=request_hash,version=applied))
+            if profile_source:
+                # Record freshness in the same transaction; retries cannot make old edits newer.
+                stamp = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+                event = digest(client_id+':'+str(uid)+':'+request_key)
+                for field, value in changes.items():
+                    if field not in hub.PROFILE_FIELDS or not isinstance(value,str) or not value.strip():
+                        continue
+                    if phone:
+                        hub.upsert_candidate(db,user_id=uid,source_system=profile_source,source_user_id=event,
+                            field=field,value=value.strip(),source_updated_at=stamp,batch_id=event[:32],phone=phone,phone_verified=True)
+                    db.execute(text('''INSERT INTO profile_hub_provenance(owner_key,field,source,source_updated_at,adopted_at)
+                        VALUES (:owner,:field,:source,:stamp,:now) ON CONFLICT(owner_key,field)
+                        DO UPDATE SET source=:source,source_updated_at=:stamp,candidate_id=NULL,adopted_at=:now'''),
+                        {'owner':'central:'+str(uid),'field':field,'source':profile_source,'stamp':stamp,'now':int(time.time())})
         return {'active':True,'user':_identity(_user(db,uid)),'expires_at':record['expires_at'],'applied_version':applied}
 
 
