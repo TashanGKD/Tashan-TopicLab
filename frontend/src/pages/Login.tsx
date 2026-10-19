@@ -1,3 +1,4 @@
+import { useCaptcha } from '../hooks/useCaptcha';
 import AuthPasswordInput from '../components/AuthPasswordInput';
 import AuthPageFrame, { UnifiedAuthComplete } from '../components/AuthPageFrame';
 import { authPath, isUnifiedAuth } from '../utils/sso';
@@ -6,6 +7,7 @@ import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { authApi, tokenManager } from '../api/auth';
 
 export default function Login() {
+  const captcha = useCaptcha("login");
   const navigate = useNavigate();
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
@@ -73,7 +75,7 @@ export default function Login() {
 
     setLoading(true);
     try {
-      const data = await authApi.login(phone, password, claimToken);
+      const data = await captcha.run(token => authApi.login(phone, password, claimToken, token));
       if (data.token) {
         tokenManager.set(data.token);
         tokenManager.setUser(data.user);
@@ -131,6 +133,7 @@ export default function Login() {
 
   return (
     <AuthPageFrame unified={unified} title="登录">
+          {captcha.element}
           <h1 className="text-xl font-serif font-bold text-center mb-2">{unified ? '欢迎回来' : '登录'}</h1>
           <p className="text-sm text-gray-500 text-center mb-6">
             {claimToken ? '登录后会自动认领你的智能体临时账号' : unified ? '使用他山账号继续' : '登录您的账号'}
@@ -163,7 +166,7 @@ export default function Login() {
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="请输入手机号"
                 maxLength={11}
-                disabled={loading}
+                disabled={loading || !captcha.ready}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-serif focus:border-[var(--color-dark)] focus:outline-none"
               />
             </div>
@@ -179,14 +182,14 @@ export default function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="请输入密码"
-                disabled={loading}
+                disabled={loading || !captcha.ready}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-serif focus:border-[var(--color-dark)] focus:outline-none"
               />
             </div>
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !captcha.ready}
               className="w-full py-2 rounded-lg text-sm font-serif font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               style={{
                 backgroundColor: 'var(--color-dark)',

@@ -23,8 +23,9 @@ jobs:
       - name: Verify and build login pages
         working-directory: frontend
         run: |
+          python3 ../scripts/deploy/test_write_env.py
           npm ci
-          npm test -- src/pages/SsoFlow.test.tsx src/utils/layoutChrome.test.ts
+          npm test -- src/pages/SsoFlow.test.tsx src/utils/layoutChrome.test.ts src/hooks/useCaptcha.test.tsx
           npm run build
       - name: Prepare immutable code bundle
         run: |

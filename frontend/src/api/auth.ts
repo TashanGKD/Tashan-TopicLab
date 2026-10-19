@@ -93,7 +93,19 @@ function isInvalidAuthStatus(status: number) {
   return status === 401 || status === 403
 }
 
+export interface CaptchaConfig {
+  enabled: boolean;
+  prefix?: string;
+  region?: "cn" | "sgp";
+  scenes?: { sms: string; login: string };
+}
+
 export const authApi = {
+  getCaptchaConfig: async (): Promise<CaptchaConfig> => {
+    const res = await fetch(`${API_BASE}/auth/captcha-config`);
+    if (!res.ok) throw new Error("安全验证配置加载失败，请刷新重试");
+    return res.json();
+  },
   getRegisterConfig: async (): Promise<RegisterConfigResponse> => {
     const res = await fetch(`${API_BASE}/auth/register-config`);
     if (!res.ok) {
@@ -102,14 +114,14 @@ export const authApi = {
     return res.json();
   },
 
-  sendCode: async (phone: string, type: 'register' | 'login' | 'reset_password' = 'register'): Promise<SendCodeResponse> => {
+  sendCode: async (phone: string, type: 'register' | 'login' | 'reset_password' = 'register', captchaVerifyParam?: string): Promise<SendCodeResponse> => {
     const res = await fetch(`${API_BASE}/auth/send-code`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, type }),
+      body: JSON.stringify({ phone, type, captcha_verify_param: captchaVerifyParam }),
     });
     if (!res.ok) {
-      throw new Error(await readApiError(res, '发送验证码失败'));
+      throw new AuthApiError(await readApiError(res, '发送验证码失败'), res.status);
     }
     return res.json();
   },
@@ -126,14 +138,14 @@ export const authApi = {
     return res.json();
   },
 
-  login: async (phone: string, password: string, claimToken?: string | null): Promise<AuthResponse> => {
+  login: async (phone: string, password: string, claimToken?: string | null, captchaVerifyParam?: string): Promise<AuthResponse> => {
     const res = await fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, password, claim_token: claimToken ?? null }),
+      body: JSON.stringify({ phone, password, claim_token: claimToken ?? null, captcha_verify_param: captchaVerifyParam }),
     });
     if (!res.ok) {
-      throw new Error(await readApiError(res, '登录失败'));
+      throw new AuthApiError(await readApiError(res, '登录失败'), res.status);
     }
     return res.json();
   },
