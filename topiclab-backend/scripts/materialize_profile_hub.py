@@ -1,6 +1,7 @@
 """Private real-data import. Output aggregate counts only, never row values."""
 import json,os,sys
 from pathlib import Path
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from sqlalchemy import text,inspect
 from app.storage.database.postgres_client import get_db_session
 from app.services import profile_hub_service as hub
@@ -10,7 +11,7 @@ def main():
     if os.environ.get('PROFILE_HUB_ENVIRONMENT')!='production':raise RuntimeError('Production import requires explicit environment')
     if '--backup' in sys.argv:
         with get_db_session() as db:
-            rows=[dict(r) for r in db.execute(text('SELECT * FROM user_profiles')).mappings()]
+            rows=[dict(r) for r in db.execute(text('SELECT user_id,version,real_name,organization,major,research_direction FROM user_profiles')).mappings()]
         path=Path('/backup/user-profiles-before.json')
         with path.open('x') as file:json.dump(rows,file,ensure_ascii=False,default=str)
         path.chmod(0o600)
